@@ -64,7 +64,7 @@ export function Tabs<K extends string>({ items, active, onChange, idPrefix, aria
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(item.key)}
             onKeyDown={(e) => onKeyDown(e, index)}
-            className={`flex items-center gap-1.5 px-3.5 py-2.5 -mb-px text-sm whitespace-nowrap border-b-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 rounded-t-md ${
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 -mb-px text-sm whitespace-nowrap border-b-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 ${
               selected
                 ? "border-[#c9a84c] text-foreground font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"

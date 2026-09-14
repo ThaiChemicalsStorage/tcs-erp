@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection, WithId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, requireUser, type AuthContext } from "./auth.js";
@@ -11,10 +11,9 @@ import { generatePairingCode, PAIRING_CODE_TTL_MS } from "./lineHandler.js";
 /**
  * Customer master data API (added 2026-07-14, replacing the earlier — wrong — "issuer company"
  * quotation feature). Entry point: `api/handlers/customers.ts`. Briefly (2026-07-14, same day)
- * folded into the `company-profiles` serverless function instead of getting its own file, to stay
- * under Vercel Hobby's 12-function cap — once the Company Profiles module itself was removed later
- * the same day (see docs/MODULES/CompanyProfiles.md "Removed"), that function slot freed up and
- * this logic got its own dedicated `api/handlers/customers.ts` file again.
+ * folded into the `company-profiles` handler file — once the Company Profiles module itself was
+ * removed later the same day (see docs/MODULES/CompanyProfiles.md "Removed"), this logic got its
+ * own dedicated `api/handlers/customers.ts` file again.
  */
 
 /** The one place a customer document becomes a client response — strips the server-only
@@ -64,7 +63,7 @@ async function writeCustomerAuditEntry(
   });
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   const customers = await customersCollection();
   await ensureCustomerIndexes(customers);
 
@@ -122,7 +121,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const objectId = toObjectId(id);
   const customers = await customersCollection();
 
@@ -159,7 +158,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleArchive(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "customers:archive");
 
@@ -187,7 +186,7 @@ async function handleArchive(req: VercelRequest, res: VercelResponse, id: string
  * consumes it). Gated by `customers:edit` OR `service:edit` — the flow is driven from the Service
  * Report editor by field/service staff, who typically hold service permissions rather than
  * customer-admin ones. Re-issuing replaces any outstanding code. */
-async function handleLinePairing(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleLinePairing(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   if (!roleHasPermission(ctx.role, "customers:edit") && !roleHasPermission(ctx.role, "service:edit")) {
@@ -208,7 +207,7 @@ async function handleLinePairing(req: VercelRequest, res: VercelResponse, id: st
   res.status(200).json({ code, expiresAt });
 }
 
-export async function handleCustomers(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleCustomers(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/customers");
 
   if (parts.length === 0) return handleList(req, res);

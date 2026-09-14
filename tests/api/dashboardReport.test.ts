@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../../api/_lib/httpTypes.js";
 import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat } from "../../src/lib/quoteMath";
 
 /**
@@ -16,8 +16,8 @@ const PASSWORD = "TestPassw0rd!";
 let mongod: MongoMemoryServer;
 let client: MongoClient;
 let db: Db;
-let authHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
-let dashboardHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
+let authHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
+let dashboardHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
 let adminCookie = "";
 let adminUserId = "";
 
@@ -30,13 +30,13 @@ function makeReqRes(method: string, url: string, body: unknown, reqCookie: strin
     method, url, body, query,
     headers: { "x-forwarded-for": "10.0.0.1", cookie: reqCookie },
     socket: { remoteAddress: "10.0.0.1" },
-  } as unknown as VercelRequest;
+  } as unknown as ApiRequest;
   const res = {
     status(code: number) { captured.statusCode = code; return this; },
     json(payload: unknown) { captured.body = payload; return this; },
     setHeader(name: string, value: string) { captured.headers[name.toLowerCase()] = value; return this; },
     end() { return this; },
-  } as unknown as VercelResponse;
+  } as unknown as ApiResponse;
   return { req, res, captured };
 }
 

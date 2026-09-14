@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError } from "../_lib/http.js";
 import { requireUser, requirePermission } from "../_lib/auth.js";
 import { auditLogCollection, withStringId } from "../_lib/collections.js";
 import { nowIso } from "../../src/lib/products.js";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     if (req.method === "GET") {
       await requirePermission(req, "auditLog:view");

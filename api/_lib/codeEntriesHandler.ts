@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection, WithId } from "mongodb";
 import { MongoServerError } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
@@ -110,7 +110,7 @@ function readDraft(body: unknown, partial: boolean): Partial<CodeEntryFields> {
   return out;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   const codes = await codeEntriesCollection();
   await ensureCodeIndexes(codes);
 
@@ -165,7 +165,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
  * **รหัสที่มีอยู่แล้วถูกข้าม ไม่ทับของเดิม** เพราะการนำเข้าซ้ำเป็นเรื่องปกติ (เจ้าของอาจส่งไฟล์ที่
  * เพิ่มบัญชีใหม่มาให้อีกรอบ) และการทับจะกลืนชื่อที่แอดมินแก้เอง — คืนจำนวนที่สร้าง/ข้ามให้หน้าจอบอกผู้ใช้
  */
-async function handleImport(req: VercelRequest, res: VercelResponse) {
+async function handleImport(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "codeRegister:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -204,7 +204,7 @@ async function handleImport(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ created, skipped });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const objectId = toObjectId(id);
   const codes = await codeEntriesCollection();
 
@@ -233,7 +233,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleArchive(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "codeRegister:archive");
   const objectId = toObjectId(id);
@@ -250,7 +250,7 @@ async function handleArchive(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ code: publicCode });
 }
 
-export async function handleCodeEntries(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleCodeEntries(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/code-entries");
 
   if (parts.length === 0) return handleList(req, res);

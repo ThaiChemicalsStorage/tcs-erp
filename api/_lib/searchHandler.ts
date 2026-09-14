@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError } from "./http.js";
 import { requireUser, type AuthContext } from "./auth.js";
 import {
@@ -23,8 +23,7 @@ import {
 /**
  * Global Search (added 2026-07-14) — powers the top navigation search box. Entry point:
  * `api/handlers/customers.ts` dispatches `/api/search` here on the raw pathname, sharing that
- * function file rather than getting its own (Vercel Hobby's 12-function cap is fully used — see
- * docs/ARCHITECTURE.md), the same established pattern that file itself used to share with the
+ * handler file rather than getting its own (see docs/ARCHITECTURE.md), the same established pattern that file itself used to share with the
  * now-removed `company-profiles.ts`.
  *
  * Every category is independently RBAC-filtered server-side (`roleHasPermission()`) — a category
@@ -555,7 +554,7 @@ async function findExactMatch(query: string, ctx: AuthContext): Promise<ExactMat
   }
 }
 
-export async function handleSearch(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<void> {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
 

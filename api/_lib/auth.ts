@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { parseCookie, stringifySetCookie } from "cookie";
@@ -100,7 +100,7 @@ export async function startSession(userId: string, userAgent: string): Promise<s
 }
 
 /** กดออกจากระบบเอง — ยกเลิกเฉพาะเซสชันของเครื่องนี้ ไม่แตะเครื่องอื่น (ซึ่งตอนนี้ก็ไม่มีอยู่แล้ว) */
-export async function endSession(req: VercelRequest): Promise<void> {
+export async function endSession(req: ApiRequest): Promise<void> {
   const claims = readSessionClaims(req);
   if (!claims?.sid) return;
   const sessions = await sessionsCollection();
@@ -110,7 +110,7 @@ export async function endSession(req: VercelRequest): Promise<void> {
   );
 }
 
-export function issueSessionCookie(res: VercelResponse, userId: string, sessionId: string) {
+export function issueSessionCookie(res: ApiResponse, userId: string, sessionId: string) {
   const token = jwt.sign({ sub: userId, sid: sessionId }, getJwtSecret(), { expiresIn: `${SESSION_DAYS}d` });
   res.setHeader(
     "Set-Cookie",
@@ -118,7 +118,7 @@ export function issueSessionCookie(res: VercelResponse, userId: string, sessionI
   );
 }
 
-export function clearSessionCookie(res: VercelResponse) {
+export function clearSessionCookie(res: ApiResponse) {
   res.setHeader("Set-Cookie", stringifySetCookie({ name: COOKIE_NAME, value: "", ...cookieOptions(0) }));
 }
 
@@ -132,14 +132,14 @@ export function clearSessionCookie(res: VercelResponse) {
  * หายไปเงียบ ๆ ที่ request ถัดไป แล้วผู้ใช้จะหลุดออกจากระบบเองโดยไม่มีใครรู้สาเหตุ (จดกับดักข้อนี้
  * ไว้ใน TODO.md ตั้งแต่ก่อนเริ่มทำ)
  */
-export function refreshSessionCookie(req: VercelRequest, res: VercelResponse) {
+export function refreshSessionCookie(req: ApiRequest, res: ApiResponse) {
   const claims = readSessionClaims(req);
   if (!claims?.userId || !claims.sid) return;
   issueSessionCookie(res, claims.userId, claims.sid);
 }
 
 /** `{ sub, sid }` ของ token ปัจจุบัน — `null` ถ้าไม่มีคุกกี้ ลายเซ็นไม่ผ่าน หรือไม่มี `sid` */
-function readSessionClaims(req: VercelRequest): { userId: string; sid: string } | null {
+function readSessionClaims(req: ApiRequest): { userId: string; sid: string } | null {
   const token = readSessionToken(req);
   if (!token) return null;
   let payload: JwtPayload;
@@ -160,7 +160,7 @@ function readSessionClaims(req: VercelRequest): { userId: string; sid: string } 
  * `"superseded"` = บัญชีนี้ถูกเข้าสู่ระบบจากเครื่องอื่น · `null` = เหตุผลธรรมดา (หมดอายุ/ไม่เคยล็อกอิน/
  * กดออกเอง) ซึ่งไม่ต้องอธิบายอะไรเป็นพิเศษ
  */
-export async function signedOutReason(req: VercelRequest): Promise<"superseded" | null> {
+export async function signedOutReason(req: ApiRequest): Promise<"superseded" | null> {
   const claims = readSessionClaims(req);
   if (!claims) return null;
   const sessions = await sessionsCollection();
@@ -168,7 +168,7 @@ export async function signedOutReason(req: VercelRequest): Promise<"superseded" 
   return row?.revokedReason === "superseded" ? "superseded" : null;
 }
 
-function readSessionToken(req: VercelRequest): string | null {
+function readSessionToken(req: ApiRequest): string | null {
   const raw = req.headers.cookie;
   if (!raw) return null;
   return parseCookie(raw)[COOKIE_NAME] ?? null;
@@ -184,7 +184,7 @@ export interface AuthContext {
  * claims — this is what makes deactivating/editing a user take effect immediately instead of
  * only after their token expires.
  */
-export async function getAuthContext(req: VercelRequest): Promise<AuthContext | null> {
+export async function getAuthContext(req: ApiRequest): Promise<AuthContext | null> {
   const claims = readSessionClaims(req);
   if (!claims || !ObjectId.isValid(claims.userId)) return null;
   const userId = claims.userId;
@@ -203,13 +203,13 @@ export async function getAuthContext(req: VercelRequest): Promise<AuthContext | 
   return { user: toPublicUser(doc), role: findRole(roleList, doc.roleKey) };
 }
 
-export async function requireUser(req: VercelRequest): Promise<AuthContext> {
+export async function requireUser(req: ApiRequest): Promise<AuthContext> {
   const ctx = await getAuthContext(req);
   if (!ctx) throw new HttpError(401, "Not authenticated");
   return ctx;
 }
 
-export async function requirePermission(req: VercelRequest, permission: Permission): Promise<AuthContext> {
+export async function requirePermission(req: ApiRequest, permission: Permission): Promise<AuthContext> {
   const ctx = await requireUser(req);
   if (!roleHasPermission(ctx.role, permission)) {
     throw new HttpError(403, "Forbidden");
@@ -223,7 +223,7 @@ export async function requirePermission(req: VercelRequest, permission: Permissi
  * Named distinctly from `quotationTemplatesHandler.ts`'s own module-local `requireAnyPermission()`
  * (different shape: sync, takes an already-resolved AuthContext) — same "any of" idea, unrelated
  * code, deliberately not sharing a name to avoid confusing the two at a glance. */
-export async function requireOneOfPermissions(req: VercelRequest, permissions: Permission[]): Promise<AuthContext> {
+export async function requireOneOfPermissions(req: ApiRequest, permissions: Permission[]): Promise<AuthContext> {
   const ctx = await requireUser(req);
   if (!permissions.some((p) => roleHasPermission(ctx.role, p))) {
     throw new HttpError(403, "Forbidden");

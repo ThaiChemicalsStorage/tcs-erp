@@ -94,8 +94,8 @@ about deposit-billing status on every job, and reconcile a month's documents whe
 
 ## 5. Existing System Investigation (done before coding — findings)
 
-- Backend: `api/_lib/arHandler.ts` (mounted from `api/handlers/quotes.ts`, `server/app.ts`,
-  `vercel.json` — `/api/ar-documents` subpaths need no new mounting), `api/_lib/documentNumbering.ts`
+- Backend: `api/_lib/arHandler.ts` (mounted from `api/handlers/quotes.ts` via `server/app.ts`'s
+  `API_ROUTES` — `/api/ar-documents` subpaths need no new mounting), `api/_lib/documentNumbering.ts`
   (atomic Buddhist-year counters), `api/_lib/collections.ts` (`ArDocumentFields`, never-delete rule).
 - Frontend: `src/lib/accounting.ts` (domain lib), `src/pages/accounting/AccountingPage.tsx`
   (job-centric page), `ArDocumentPrintDocument.tsx` (multi-copy print frame, reusable for RE as-is).

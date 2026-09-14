@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
@@ -208,7 +208,7 @@ const approvalConfig: ApprovalConfig<ProductionOrderFields & { _id: string }> = 
   respond: (res, doc) => res.status(200).json({ productionOrder: toClient(doc) }),
 };
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
@@ -226,7 +226,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ productionOrders: docs.map(toSummary) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:create");
   if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
@@ -289,7 +289,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ productionOrder: toClient(doc) });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") {
     await requirePermission(req, "productionOrder:view");
     res.status(200).json({ productionOrder: toClient(await loadOrThrow(id)) });
@@ -300,7 +300,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "productionOrder:edit");
   const doc = await loadOrThrow(id);
   if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
@@ -348,7 +348,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
  *
  * ผู้สั่งผลิต/ผู้อนุมัติ ไม่อยู่ในนี้: ผู้สั่งผลิตเป็นข้อมูลตอนสร้าง ส่วนผู้อนุมัติระบบเขียนเองตอนกดอนุมัติ
  */
-async function handleSignatories(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleSignatories(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:edit");
   const doc = await loadOrThrow(id);
@@ -390,7 +390,7 @@ function matchingScopeItemIds(scopeItems: unknown, lines: ProductionOrderLine[])
     .filter(Boolean);
 }
 
-async function handleRefreshFromScope(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRefreshFromScope(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:edit");
   if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
@@ -436,7 +436,7 @@ async function nextProductionOrderRevision(counters: Collection<CounterFields>, 
  *
  * ช่องเซ็นทุกช่องถูกล้าง และ `revisionNote` **ไม่สืบทอด** มาจากฉบับก่อน (ตรงกับ Scope of Work)
  */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:create");
   const source = await loadOrThrow(id);
@@ -491,7 +491,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   res.status(201).json({ productionOrder: toClient(created) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "productionOrder:delete");
   const doc = await loadOrThrow(id);
   if (!isOwnerOf(ctx, doc) && !roleHasPermission(ctx.role, "productionOrder:finalize")) throw new HttpError(403, "Forbidden");
@@ -501,7 +501,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:print");
   const doc = await loadOrThrow(id);
@@ -509,7 +509,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true });
 }
 
-export async function handleProductionOrder(req: VercelRequest, res: VercelResponse) {
+export async function handleProductionOrder(req: ApiRequest, res: ApiResponse) {
   await requireUser(req);
   const parts = getPathSegments(req, "/api/production-orders");
   if (parts.length === 0) {

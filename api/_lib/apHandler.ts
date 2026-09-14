@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { ObjectId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission } from "./auth.js";
@@ -24,7 +24,7 @@ function toClient(doc: { _id: ObjectId } & Record<string, unknown>): ApEntry {
   return withStringId(doc) as unknown as ApEntry;
 }
 
-function readMonth(req: VercelRequest, required: boolean): string {
+function readMonth(req: ApiRequest, required: boolean): string {
   const month = typeof req.query.month === "string" ? req.query.month.trim() : "";
   if (!month) {
     if (required) throw new HttpError(400, "กรุณาระบุเดือน (YYYY-MM)");
@@ -48,7 +48,7 @@ function monthRange(month: string): { $gte: string; $lt: string } {
   return { $gte: `${month}-01`, $lt: `${String(nextY).padStart(4, "0")}-${String(nextM).padStart(2, "0")}-01` };
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "ap:view");
   const month = readMonth(req, false);
@@ -68,7 +68,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 }
 
 /** ยอดรวมของเดือน + ยอดค้างต่อผู้ขาย — ท้ายตารางทะเบียนภาษีซื้อ และหัวตารางทะเบียนเจ้าหนี้ */
-async function handleSummary(req: VercelRequest, res: VercelResponse) {
+async function handleSummary(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "ap:view");
   const month = readMonth(req, true);
@@ -105,7 +105,7 @@ async function handleSummary(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ summary });
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ap:manage");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -141,7 +141,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ apEntry: toClient(updated!) });
 }
 
-export async function handleApEntries(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleApEntries(req: ApiRequest, res: ApiResponse): Promise<void> {
   await requireUser(req);
   const parts = getPathSegments(req, "/api/ap-entries");
 

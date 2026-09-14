@@ -47,10 +47,8 @@ export interface WorkbookFingerprint {
   sheets: WorkbookSheetFingerprint[];
 }
 
-/** `process.cwd()` is the project root both for local `npm`/`vercel dev` runs and inside the
- * deployed Vercel function's bundled filesystem — `vercel.json`'s
- * `functions["api/handlers/jobtypes.ts"].includeFiles` bundles this exact workbook file alongside
- * that function specifically so this path resolves there too. */
+/** `process.cwd()` is the project root both for local `npm run dev` and inside the Docker image,
+ * which copies `public/` next to the sources (see Dockerfile) — so this path resolves in both. */
 function resolveWorkbookPath(): string {
   return path.join(process.cwd(), WORKBOOK_RELATIVE_PATH);
 }

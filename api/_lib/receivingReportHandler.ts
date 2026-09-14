@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
@@ -122,7 +122,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:view");
   const purchaseOrderId = typeof req.query.purchaseOrderId === "string" ? req.query.purchaseOrderId : "";
@@ -147,7 +147,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
  * ถ้าใบสั่งซื้อนั้นมีใบรับสินค้าอยู่แล้วตอบ **409 พร้อม `receivingReportId` ของใบเดิม** ไม่ใช่
  * error เปล่า ๆ — หน้าจอจะได้พาไปเปิดใบเดิมต่อได้ทันที (เจ้าของเคาะไว้ว่า 1 PO = 1 RR)
  */
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:create");
   // ต้องมีสิทธิ์ดูใบสั่งซื้อด้วย ไม่งั้นปุ่มสร้างจะกลายเป็นช่องอ่านเนื้อหาใบสั่งซื้อที่ตัวเองไม่มีสิทธิ์ดู
@@ -228,7 +228,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ receivingReport: toClient(doc) });
 }
 
-async function handleGet(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "receivingReport:view");
   const doc = await loadOrThrow(id);
@@ -241,7 +241,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse, id: string) {
  * **บรรทัดสินค้าและรอบการรับแก้ผ่าน PATCH ไม่ได้เลย** — บรรทัดเป็น snapshot ของใบสั่งซื้อ ส่วนรอบรับ
  * ผูกกับสต๊อกและหนี้ที่ลงบัญชีไปแล้ว ถ้าปล่อยให้แก้ตรงนี้ ตัวเลขในใบกับในบัญชีจะเดินคนละทางทันที
  */
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -280,7 +280,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ receivingReport: toClient(updated) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:delete");
   const doc = await loadOrThrow(id);
@@ -295,7 +295,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(204).end();
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:print");
   const doc = await loadOrThrow(id);
@@ -316,7 +316,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
  * — ตามได้จาก `stock_movements` ที่ประทับ `sourceId` ของใบไว้ทุกแถว และแก้ด้วยการปรับสต๊อกด้วยมือ
  * ระบบนี้ไม่มี transaction เพราะ MongoDB ที่โฮสต์เองเป็น standalone (ดู ARCHITECTURE.md)
  */
-async function handlePostBatch(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:receive");
   const doc = await loadOrThrow(id);
@@ -455,7 +455,7 @@ async function handlePostBatch(req: VercelRequest, res: VercelResponse, id: stri
  * ⚠️ **การย้อนสต๊อกใช้ต้นทุนถัวเฉลี่ย ณ ตอนย้อน ไม่ใช่ราคาที่รับเข้ามา** — ถ้าระหว่างนั้นมีการรับ
  * ของตัวเดียวกันที่ราคาอื่นเข้ามา มูลค่าสต๊อกหลังย้อนจะไม่กลับไปเท่าเดิมเป๊ะ ๆ ยอด **จำนวน** ถูกเสมอ
  */
-async function handleDeleteBatch(req: VercelRequest, res: VercelResponse, id: string, batchId: string) {
+async function handleDeleteBatch(req: ApiRequest, res: ApiResponse, id: string, batchId: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:receive");
   const doc = await loadOrThrow(id);
@@ -511,7 +511,7 @@ const attachmentConfig: AttachmentConfig<ReceivingReportFields & { _id: string }
   respond: async (res, id) => { res.status(200).json({ receivingReport: toClient(await loadOrThrow(id)) }); },
 };
 
-export async function handleReceivingReport(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleReceivingReport(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/receiving-reports");
 
   // ดาวน์โหลดไฟล์แนบเปิดได้โดยไม่ต้องล็อกอิน (คุมด้วย key ใน URL) จึงต้องมาก่อน requireUser

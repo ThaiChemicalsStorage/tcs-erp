@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import type { Collection, WithId } from "mongodb";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission, hashPassword, verifyPassword } from "../_lib/auth.js";
@@ -30,7 +30,7 @@ async function countUsersWithSuperAdminRole(users: Collection<UserFields>, roleL
   return users.countDocuments({ roleKey: { $in: superAdminKeys } });
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "GET") {
     // Any authenticated user can see the full directory (phone/email/department/position/profile
     // picture/signature image, everything but passwordHash) — matches Phase 1 behavior, where the
@@ -107,7 +107,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requireUser(req);
   const isSelf = ctx.user.id === id;
   const canManage = roleHasPermission(ctx.role, "users:manage");
@@ -209,7 +209,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     const parts = getPathSegments(req, "/api/users");
 

@@ -1,6 +1,6 @@
 # Module: Role Management
 
-> Added 2026-07-08 as part of the RBAC/approval-workflow/notification system; migrated 2026-07-09 to real server-side enforcement (Vercel Functions + MongoDB Atlas) — see [RBAC.md](../RBAC.md) for the full model, which is genuinely unbypassable via devtools now, not a client-side simulation.
+> Added 2026-07-08 as part of the RBAC/approval-workflow/notification system; migrated 2026-07-09 to real server-side enforcement (Node.js API + MongoDB) — see [RBAC.md](../RBAC.md) for the full model, which is genuinely unbypassable via devtools now, not a client-side simulation.
 
 ## Purpose
 

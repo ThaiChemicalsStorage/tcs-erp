@@ -1,6 +1,6 @@
 # Module: User Management
 
-> Added 2026-07-08 as part of the RBAC/approval-workflow/notification system; migrated 2026-07-09 to real server-side enforcement (Vercel Functions + MongoDB Atlas, bcrypt-hashed passwords) — see [RBAC.md](../RBAC.md) for the full model, which is genuinely unbypassable via devtools now, not a client-side simulation.
+> Added 2026-07-08 as part of the RBAC/approval-workflow/notification system; migrated 2026-07-09 to real server-side enforcement (Node.js API + MongoDB, bcrypt-hashed passwords) — see [RBAC.md](../RBAC.md) for the full model, which is genuinely unbypassable via devtools now, not a client-side simulation.
 
 ## Purpose
 

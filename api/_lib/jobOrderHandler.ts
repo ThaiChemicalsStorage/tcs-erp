@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
@@ -126,7 +126,7 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "jobOrder:view");
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
@@ -140,7 +140,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ jobOrders: docs.map(toSummary) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "jobOrder:create");
   if (!roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
@@ -204,7 +204,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ jobOrder: toClient({ ...doc, _id: id }) });
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "jobOrder:view");
   const doc = await loadOrThrow(id);
@@ -227,7 +227,7 @@ const DATE_FIELDS: { key: keyof JobOrderFields; label: string }[] = [
   { key: "documentRecipientAt", label: "วันที่รับเอกสาร" },
 ];
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -291,7 +291,7 @@ const approvalConfig: ApprovalConfig<JobOrderFields & { _id: string }> = {
   respond: (res, doc) => res.status(200).json({ jobOrder: toClient(doc) }),
 };
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "jobOrder:print");
   const doc = await loadOrThrow(id);
@@ -320,7 +320,7 @@ async function nextJobOrderRevision(counters: Collection<CounterFields>, root: s
  *
  * เช็คลิสต์ขอบเขตงานสืบทอดมาทั้งหมด เพราะเป็นเนื้อหาของเอกสาร ไม่ใช่ข้อมูลการดำเนินงาน
  */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "jobOrder:create");
   const source = await loadOrThrow(id);
@@ -375,7 +375,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   res.status(201).json({ jobOrder: toClient(created) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "jobOrder:delete");
   const doc = await loadOrThrow(id);
@@ -390,7 +390,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
@@ -409,7 +409,7 @@ const attachmentConfig: AttachmentConfig<JobOrderFields & { _id: string }> = {
   respond: async (res, id) => { res.status(200).json({ jobOrder: toClient(await loadOrThrow(id)) }); },
 };
 
-export async function handleJobOrder(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleJobOrder(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/job-orders");
 
   if (parts.length === 0) {

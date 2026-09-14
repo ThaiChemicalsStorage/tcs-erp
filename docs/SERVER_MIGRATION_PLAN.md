@@ -8,8 +8,8 @@
 >
 > **✅ Migration COMPLETE as of ~2026-08-07** (confirmed by the owner 2026-08-14, live for about a
 > week by then): the app runs on a **self-hosted VPS at https://www.huma-erp.com/ (HTTPS)**, database is
-> **self-hosted MongoDB** (Option 2 in step D below, not Atlas), and the **Vercel demo is no longer
-> used**. Steps C–H below are marked done accordingly. Exact per-step confirmation detail (which
+> **self-hosted MongoDB** (Option 2 in step D below, not Atlas), and the **Vercel demo is gone** —
+> every Vercel artifact was removed from the repo 2026-09-14. Steps C–H below are marked done accordingly. Exact per-step confirmation detail (which
 > process manager, whether the demo database data was kept or a fresh Setup Wizard run) was not
 > individually re-verified line-by-line — the owner confirmed the outcome (live ~1 week, VPS +
 > domain + local DB + manual updated), not each checklist box individually.
@@ -19,12 +19,14 @@
 - **The Vercel deployment (https://tcs-erp-nine.vercel.app) was a demo/trial only** — the owner's
   words: "ที่จริงระบบนี้ไม่ได้จะขึ้น vercel นะ...แค่อยากลองระบบเฉยๆ" and "จริงๆแล้วไม่ได้ deploy
   ขึ้น vercel จริงๆ มันแค่ demo". **Real production hosting is now a self-hosted VPS** with its own
-  domain + HTTPS + self-hosted MongoDB, live since ~2026-08-07 — the Vercel demo is decommissioned.
+  domain + HTTPS + self-hosted MongoDB, live since ~2026-08-07 — the Vercel demo is decommissioned
+  and, since 2026-09-14, nothing Vercel-related remains in the repo.
 - Development now targets the real production host directly (local dev via `npm run dev` still
   works the same way regardless of where the deployed instance runs).
 - **Standing rule from 2026-07-24 onward:** every new feature must use portable building blocks
-  only (MongoDB, plain Node logic, standard REST). **Never couple new work to Vercel-specific
-  services** (Blob, KV, Edge Config, Cron, etc.) unless explicitly agreed case-by-case first.
+  only (MongoDB, plain Node logic, standard REST). **Never couple new work to a hosting
+  provider's managed services** (blob stores, KV, edge config, managed cron, etc.) unless explicitly
+  agreed case-by-case first.
 
 ## Lesson Already Learned
 
@@ -42,33 +44,30 @@ and CHANGELOG.md 2026-07-24.
 | Database (MongoDB) | ✅ | Was Atlas pre-cutover; **now self-hosted MongoDB** on the production VPS (confirmed 2026-08-14) |
 | File attachments | ✅ | Stored in MongoDB (`scope_attachment_files`) — travel with the DB |
 | Email | ✅ (nothing to migrate) | **Removed entirely 2026-08-07** — document recipients get in-app notifications only; no email env var, no SMTP port, no provider. (Resend and the brief same-day per-user Gmail SMTP are both gone) |
-| Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not Vercel-coupled (`secure` cookie requires HTTPS on the new host) |
-| **API layer — 12 function files in `api/handlers/` + `vercel.json` rewrites** | ✅ (2026-08-06) | The thin Express wrapper exists: `server/app.ts` mounts the unchanged handlers on the same routing table. Both runtimes work from one codebase. |
+| Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not host-coupled (`secure` cookie requires HTTPS) |
+| **API layer — `api/` handlers** | ✅ (2026-08-06) | `server/app.ts` routes them via its `API_ROUTES` table. The old `vercel.json` rewrites and `@vercel/node` types were removed 2026-09-14 (handlers now use `ApiRequest`/`ApiResponse` from `api/_lib/httpTypes.ts`, same shape). |
 
 The good news: nearly all business logic lives in `api/_lib/` and is transport-agnostic, and the
 req/res surface the handlers use (`req.query`, `req.body`, `res.status().json()`,
-`res.setHeader()`, `res.send()`) is ~100% Express-compatible (`VercelRequest`/`VercelResponse` are
-type-only imports, erased at runtime). **The API does not need a rewrite — only a thin new shell
+`res.setHeader()`, `res.send()`) is ~100% Express-compatible (the req/res types are type-only
+imports, erased at runtime — since 2026-09-14 the local `ApiRequest`/`ApiResponse`). **The API does not need a rewrite — only a thin new shell
 around the existing handlers.**
 
 ## The Migration Plan (3 steps — ✅ ALL DONE 2026-08-06, on the owner's go-ahead)
 
 1. ✅ **Add an Express server** (`server/index.ts` + `server/app.ts` + `server/env.ts`): mounts the
-   existing 12 handler entry points via a routing table replicating `vercel.json`'s rewrites,
+   existing 12 handler entry points via a routing table (`API_ROUTES`, first path segment → handler),
    `express.json()` with a 25 MB limit (raised from the planned ~5 MB once the Service module's
    4 MB photos shipped), and serves the built frontend from `dist/` with an SPA fallback.
    The side benefit landed too: `npm run dev` now runs the full stack locally (Express API +
-   Vite with an `/api` proxy) — no `vercel dev` needed. Integration-tested over real HTTP in
+   Vite with an `/api` proxy). Integration-tested over real HTTP in
    `tests/api/expressServer.test.ts`. See [ARCHITECTURE.md](./ARCHITECTURE.md) "Standalone
    Express server".
 2. ✅ **`.env.example`** — documents every variable: `MONGODB_URI`, `MONGODB_DB`, `JWT_SECRET`,
    `NODE_ENV`, `PORT`, `APP_URL`. (No email var — `RESEND_API_KEY`/`EMAIL_FROM` and their brief
    2026-08-07 replacement `EMAIL_CRED_SECRET` are all gone; email sending was removed.)
 3. ✅ **[DEPLOYMENT.md](./DEPLOYMENT.md)** — the real-server install guide (PM2/systemd,
-   nginx/Caddy + HTTPS, Atlas-vs-self-hosted + backups, copying env values from Vercel).
-
-Steps 1–2 are non-destructive to the Vercel demo (the same code keeps deploying to Vercel
-unchanged; the Express entry is an additional way to run it, not a replacement).
+   nginx/Caddy + HTTPS, Atlas-vs-self-hosted + backups).
 
 ## Go-Live Checklist — EVERYTHING to do when moving to the real server
 
@@ -86,7 +85,7 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 > this step: no sender domain, DNS records, provider account, env var, or SMTP port is needed.
 > A company domain is still nice-to-have for the app URL itself (step C), just not email-related.
 
-1. ~~**Get a company domain** — the free `*.vercel.app` URL can never be an email sender domain.~~
+1. ~~**Get a company domain** — the old free demo URL could never be an email sender domain.~~
 2. ~~**Verify the domain with Resend** (SPF/DKIM DNS records).~~
 3. ~~**Set `EMAIL_FROM`** — until done, sending only reaches the Resend account owner's own
    address (sandbox sender `onboarding@resend.dev`, discovered 2026-07-24).~~
@@ -94,7 +93,7 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 ### B. Build the portable server shell (the 3-step plan above)
 
 Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — see
-"The Migration Plan" section. Non-destructive to the Vercel demo.
+"The Migration Plan" section. ✅ Done 2026-08-06.
 
 ### C. Server machine setup — ✅ DONE
 
@@ -161,24 +160,26 @@ was not walked point-by-point in this doc-only pass:
 
 ### H. Decommission the demo — ✅ DONE
 
-- The Vercel demo is no longer used (owner confirmed 2026-08-14, "vercel ไม่ใช้"). Whether the
-  Vercel project itself was deleted outright or just left idle/unused, and whether the unused
-  Vercel Blob store was cleaned up, was not itemized in the confirmation — low-stakes either way
-  since neither costs anything or receives traffic now.
-- `docs/ARCHITECTURE.md` and this file were updated 2026-08-14 to describe the real host as
-  current (this pass).
+- The Vercel demo stopped being used at the cutover (owner confirmed 2026-08-14, "vercel ไม่ใช้").
+- **2026-09-14 — every Vercel artifact removed from the repo** on the owner's instruction
+  ("ลบให้หมดทุกอย่างจริงๆที่เกี่ยวกับ vercel เพราะตอนนี้ deploy บน server ไม่ได้ยุ่งเกี่ยวอะไรแล้ว"):
+  `vercel.json` deleted, `@vercel/node` uninstalled (handlers typed with `ApiRequest`/`ApiResponse`
+  from `api/_lib/httpTypes.ts`), the `.vercel/.env.development.local` fallback dropped from
+  `server/env.ts` (local dev reads `.env` only), the `VERCEL_ENV` check dropped from
+  `api/_lib/mongodb.ts`, and the `.vercel` ignore entries removed. Whether the Vercel *project*
+  (and any old Blob store) still exists on vercel.com is an owner account matter, not the repo's.
 
 ### Optional post-migration upgrades (only possible on the real server)
 
 - **Notification push via SSE** — 2026-07-24: the client polls `GET /api/notifications` every
-  45 s (see MODULES/Notifications.md), because Vercel serverless can't hold a connection open.
-  Once the Express server exists, an SSE endpoint can push notifications instantly instead;
+  45 s (see MODULES/Notifications.md), a choice made while the app still ran serverless. The
+  Express server can now host an SSE endpoint that pushes notifications instantly instead;
   the polling code is the fallback either way, so this is an enhancement, not a blocker.
-- **Raise the 2 MB attachment limit** — it was sized to Vercel's ~4.5 MB request-body cap; on the
-  Express server the `express.json` limit is ours to choose (mind MongoDB's 16 MB document cap —
+- **Raise the 2 MB attachment limit** — it was sized to the old serverless host's ~4.5 MB
+  request-body cap; on the Express server the `express.json` limit is ours to choose (mind MongoDB's 16 MB document cap —
   base64 inflates payloads ×4/3, so ~10 MB files is a comfortable ceiling).
 
 ## Related Documents
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — current architecture (Vercel Functions + MongoDB)
-- [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments" — the de-Vercel-ing precedent
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — current architecture (Express + self-hosted MongoDB)
+- [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments" — the portability precedent

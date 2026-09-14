@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { WithId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
@@ -298,7 +298,7 @@ async function loadScopeOrThrow(scopeOfWorkId: string): Promise<WithId<ScopeOfWo
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "project:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
@@ -320,7 +320,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ projects: docs.map(toSummary) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "project:create");
   // Reading the source Scope of Work's full content requires :view too — same defense-in-depth
@@ -365,14 +365,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ project: toClient(created) });
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "project:view");
   const doc = await loadProjectOrThrow(id);
   res.status(200).json({ project: toClient(doc) });
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadProjectOrThrow(id);
@@ -404,7 +404,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
  * created yet) — once a sub-document exists, reassigning the branch here would silently orphan a
  * real record's back-link, so it's rejected instead: delete/cancel the sub-document first.
  */
-async function handleItemUpdate(req: VercelRequest, res: VercelResponse, id: string, itemId: string) {
+async function handleItemUpdate(req: ApiRequest, res: ApiResponse, id: string, itemId: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadProjectOrThrow(id);
@@ -432,7 +432,7 @@ async function handleItemUpdate(req: VercelRequest, res: VercelResponse, id: str
   res.status(200).json({ project: toClient(updated) });
 }
 
-async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRefresh(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadProjectOrThrow(id);
@@ -457,7 +457,7 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ project: toClient(updated) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "project:delete");
   const doc = await loadProjectOrThrow(id);
@@ -471,14 +471,14 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleProject(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleProject(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/projects");
 
   if (parts.length === 0) {

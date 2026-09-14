@@ -4,7 +4,43 @@
 
 ---
 
-## 2026-09-14 (absolute latest) — แดชบอร์ดแยกแท็บตามแผนก + แท็บภาพรวม
+## 2026-09-14b (absolute latest) — ลบทุกอย่างที่เกี่ยวกับ Vercel ออกจากระบบ
+
+เจ้าของสั่ง *"ลบให้หมดทุกอย่างจริงๆที่เกี่ยวกับ vercel เพราะตอนนี้ deploy บน server ไม่ได้ยุ่งเกี่ยวอะไรแล้ว"*
+· production รันบน Express บน VPS ของตัวเองมาตั้งแต่ ~2026-08-07 ของที่เหลือเป็นซากที่ไม่มีใครใช้
+
+### ที่ถอดออก
+
+- **`vercel.json`** — ลบทิ้ง · ตารางเส้นทางจริงคือ `API_ROUTES` ใน `server/app.ts` ที่เดียว (กันไว้ด้วย
+  `tests/serverRouteTable.test.ts` เหมือนเดิม)
+- **แพ็กเกจ `@vercel/node`** — uninstall · handler ทั้ง 43 ไฟล์ใน `api/` + `server/app.ts` + เทสต์ 13 ไฟล์
+  เปลี่ยนไปใช้ `ApiRequest`/`ApiResponse` จาก **`api/_lib/httpTypes.ts`** ที่นิยามรูปเดิมทุกช่อง
+  (เปลี่ยนแค่ชื่อชนิด พฤติกรรมไม่เปลี่ยน — เป็น `import type` ทั้งหมด ไม่มีผลตอน runtime)
+- **ทางอ่าน env จาก `.vercel/.env.development.local`** — `server/env.ts` อ่าน `.env` ไฟล์เดียว · ย้าย
+  `MONGODB_URI` ของเครื่อง dev ไปไว้ใน `.env` ก่อนลบโฟลเดอร์ `.vercel/` ในเครื่อง
+- **ตัวเช็ก `VERCEL_ENV`** ใน `api/_lib/mongodb.ts` — เหลือแค่ `NODE_ENV !== "production"`
+- **ค่า fallback ของ `APP_URL`** ในลิงก์อนุมัติรายงานบริการ เปลี่ยนจากโดเมน Vercel เดิมเป็น
+  `https://www.huma-erp.com` (production ตั้ง `APP_URL` ไว้อยู่แล้ว ปกติไม่ได้ใช้ค่านี้)
+- บรรทัด `.vercel` ใน `.gitignore`/`.dockerignore` · คอมเมนต์ใน CI, `.env.example` และคอมเมนต์ในโค้ดราว
+  30 จุดที่อ้าง "12-function cap" / Vercel Blob / `vercel dev` — เขียนใหม่ตามความจริงปัจจุบัน
+- skill `check-prod` เขียนใหม่ให้ตรวจเว็บจริงบน VPS + CI แทนการเช็กสถานะ deploy บน Vercel · สิทธิ์ MCP ของ
+  Vercel ใน `.claude/settings.local.json` ถอดออก
+- เอกสารที่อธิบายระบบปัจจุบัน (CLAUDE.md, PRODUCT.md, ARCHITECTURE, API, DEPLOYMENT,
+  SERVER_MIGRATION_PLAN ขั้น H ฯลฯ) แก้ให้ไม่เหลือ Vercel เป็นของที่ยังอยู่ · บันทึกย้อนหลัง
+  (CHANGELOG, SESSION_LOG, reviews) คงไว้ตามกติกา append-only
+
+### ที่ตั้งใจเหลือไว้
+
+คำว่า Vercel ในสคริปต์ของเครื่องมือตรวจดีไซน์ `impeccable` (`.github/skills/`, `.claude/skills/`) — เป็นชื่อ
+สไตล์ฟอนต์และชื่อโฟลเดอร์ที่เครื่องมือข้ามตอนสแกน ไม่เกี่ยวกับการ deploy ของระบบนี้ · โปรเจกต์บนเว็บ
+vercel.com (ถ้ายังมี) เป็นบัญชีของเจ้าของ ต้องลบเองที่นั่น
+
+### ตรวจแล้ว
+
+typecheck (web + api) · `npm test` 61 ไฟล์ 765 ผ่าน · `npm run dev` ของเจ้าของยังตอบ `/api/auth/session` 200
+หลังเปลี่ยน env loader
+
+## 2026-09-14 — แดชบอร์ดแยกแท็บตามแผนก + แท็บภาพรวม
 
 เจ้าของสั่ง *"หน้า Dashboard อยากให้ทำให้ดูง่ายขึ้นแยกแต่ละแผนกอย่างชัดเจนแต่ก็ยังมี Dashboard ที่ดูข้อมูล
 รวมได้ทุกอย่างอยู่ด้วย"* (ต่อจากที่จดไว้ใน TODO 2026-09-11) แล้วเลือกเอง 3 ข้อ: **แท็บในหน้าแดชบอร์ด** ·

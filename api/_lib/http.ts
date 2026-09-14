@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { refreshSessionCookie } from "./auth.js";
 
 /**
@@ -21,11 +21,11 @@ export class HttpError extends Error {
   }
 }
 
-export function sendJson(res: VercelResponse, status: number, body: unknown) {
+export function sendJson(res: ApiResponse, status: number, body: unknown) {
   res.status(status).json(body);
 }
 
-export function sendError(res: VercelResponse, err: unknown) {
+export function sendError(res: ApiResponse, err: unknown) {
   if (err instanceof HttpError) {
     sendJson(res, err.status, { error: err.message, ...(err.code ? { code: err.code } : {}), ...(err.details ?? {}) });
     return;
@@ -35,10 +35,9 @@ export function sendError(res: VercelResponse, err: unknown) {
 }
 
 /**
- * Parses path segments after `prefix` from the raw URL rather than Vercel's synthetic catch-all
- * query param — the query key for a `[...segments]` route turned out to be the literal
- * `"...segments"` string (dots included) on Vercel's plain Functions runtime, not `segments` as
- * in Next.js. Parsing the URL directly sidesteps that (undocumented, surprising) convention.
+ * Parses path segments after `prefix` from the raw URL — handlers see the full original URL
+ * (server/app.ts routes on `req.url` without stripping the prefix), so this is the one place that
+ * turns `/api/<resource>/<id>/<action>` into segments.
  *
  * Each segment is `decodeURIComponent`-ed — document ids/business keys (e.g. a quotation's
  * `Q#260817-0001`, which contains a literal `#`) must be percent-encoded by the client to survive
@@ -46,7 +45,7 @@ export function sendError(res: VercelResponse, err: unknown) {
  * encoding before matching against a stored `_id`. A plain alphanumeric segment decodes to itself,
  * so this is a no-op for every id that didn't need encoding in the first place.
  */
-export function getPathSegments(req: VercelRequest, prefix: string): string[] {
+export function getPathSegments(req: ApiRequest, prefix: string): string[] {
   const pathname = (req.url ?? "").split("?")[0];
   const trimmed = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : pathname;
   return trimmed.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
@@ -62,15 +61,15 @@ export function getPathSegments(req: VercelRequest, prefix: string): string[] {
  * checks, validation, status gates, `updatedBy` — is identical to a manual save, so an auto-save
  * can never do something a manual save could not.
  */
-export function isAutoSaveRequest(req: VercelRequest): boolean {
+export function isAutoSaveRequest(req: ApiRequest): boolean {
   const raw = req.query?.autoSave;
   const value = Array.isArray(raw) ? raw[0] : raw;
   return value === "1" || value === "true";
 }
 
 export async function withErrorHandling(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
   handler: () => Promise<void>,
 ): Promise<void> {
   try {

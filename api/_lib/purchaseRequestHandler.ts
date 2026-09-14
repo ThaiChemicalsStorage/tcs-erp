@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection, Filter } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
@@ -146,7 +146,7 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:view");
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
@@ -189,7 +189,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ purchaseRequests: docs.map(toSummary) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:create");
 
@@ -285,7 +285,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ purchaseRequest: toClient({ ...doc, _id: id }) });
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "purchaseRequest:view");
   const doc = await loadOrThrow(id);
@@ -342,7 +342,7 @@ const DATE_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
   { key: "purchasingDeptAt", label: "วันที่ฝ่ายจัดซื้อ" },
 ];
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -497,7 +497,7 @@ function assertStoreIssuesStillCovered(
  * route จ่ายของของใบเบิก) · บันทึกได้ซ้ำ ถ้าเช็คผิดหรือของมาทีหลังก็กดใหม่ได้ แต่บรรทัดที่จ่ายของไปแล้ว
  * เปลี่ยนเป็น "ต้องซื้อ" ไม่ได้ เพราะของออกจากคลังไปแล้ว
  */
-async function handleStoreReview(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleStoreReview(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
@@ -572,7 +572,7 @@ async function handleStoreReview(req: VercelRequest, res: VercelResponse, id: st
  * เช็คยอดทั้งรอบก่อนเขียนแม้แต่แถวเดียว (ไม่งั้นบรรทัดท้าย ๆ ที่ของไม่พอจะทิ้งบรรทัดต้น ๆ ที่ตัดไปแล้วค้าง)
  * บรรทัดที่ยังไม่มีรหัสสินค้าจ่ายไม่ได้ — ต้องกด "ขอรหัสสินค้า" ให้สโตร์ตั้งรหัสก่อน
  */
-async function handleStoreIssue(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleStoreIssue(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
@@ -652,7 +652,7 @@ async function handleStoreIssue(req: VercelRequest, res: VercelResponse, id: str
  * ข้อจำกัด "เฉพาะรอบล่าสุด" เหมือนใบรับสินค้าและใบเบิก ด้วยเหตุผลเดียวกัน: ยกเลิกรอบกลาง ๆ แล้วลำดับ
  * ที่เหลือจะอ่านไม่ตรงกับบัญชีเดินสะพัดที่บันทึกไว้ตามลำดับจริง
  */
-async function handleCancelStoreIssue(req: VercelRequest, res: VercelResponse, id: string, batchId: string) {
+async function handleCancelStoreIssue(req: ApiRequest, res: ApiResponse, id: string, batchId: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
@@ -695,7 +695,7 @@ async function handleCancelStoreIssue(req: VercelRequest, res: VercelResponse, i
   res.status(200).json({ purchaseRequest: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:print");
   const doc = await loadOrThrow(id);
@@ -723,7 +723,7 @@ async function nextPurchaseRequestRevision(counters: Collection<CounterFields>, 
  * ฉบับแก้ไขมักเป็นการแก้ผู้ขาย/เงื่อนไข/จำนวน ไม่ใช่การเริ่มขอซื้อใหม่ตั้งแต่ต้น ส่วนช่องเซ็นและ
  * สถานะถูกล้างเหมือนกันทุกใบ
  */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:create");
   const source = await loadOrThrow(id);
@@ -776,7 +776,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   res.status(201).json({ purchaseRequest: toClient(created) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:delete");
   const doc = await loadOrThrow(id);
@@ -790,7 +790,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
@@ -810,7 +810,7 @@ const attachmentConfig: AttachmentConfig<PurchaseRequestFields & { _id: string }
   respond: async (res, id) => { res.status(200).json({ purchaseRequest: toClient(await loadOrThrow(id)) }); },
 };
 
-export async function handlePurchaseRequest(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handlePurchaseRequest(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/purchase-requests");
 
   if (parts.length === 0) {

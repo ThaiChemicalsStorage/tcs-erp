@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
 import { categoriesCollection, toObjectId, withStringId } from "../_lib/collections.js";
@@ -8,7 +8,7 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "GET") {
     // stock:view-only holders (e.g. accounting_user) need category names on the Stock page too —
     // same reasoning as GET /api/products, see that handler's comment.
@@ -41,7 +41,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "products:edit");
 
@@ -70,7 +70,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   res.status(200).json({ category: withStringId(updated) });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     const parts = getPathSegments(req, "/api/categories");
 

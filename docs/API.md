@@ -2,13 +2,13 @@
 
 ## Current State: Real REST API (standalone Express server, self-hosted)
 
-As of 2026-07-09 this project has a **real HTTP API** — originally Vercel Serverless Functions backed by MongoDB Atlas. **As of the ~2026-08-07 cutover**, the same `api/` handlers run under a standalone Express server (`server/`) on a self-hosted VPS with a real domain + HTTPS, backed by self-hosted MongoDB — the Vercel deployment is decommissioned. Served from the same domain as the frontend either way. The frontend calls it via `apiFetch<T>()` (`src/lib/apiClient.ts`) — a thin wrapper around `fetch` with `credentials: "include"` (so the session cookie is sent), JSON request/response handling, and an `ApiError` class thrown for any non-2xx response. Every domain lib file (`users.ts`, `roles.ts`, `session.ts`, `storage.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.ts`) exposes `fetchX()`/`createX()`/`updateX()`/etc. functions that call this API — the old `loadX()`/`saveX()` `localStorage` functions are gone.
+As of 2026-07-09 this project has a **real HTTP API** — served by a standalone Express server (`server/`) on a self-hosted VPS with a real domain + HTTPS, backed by self-hosted MongoDB (production since ~2026-08-07; before that the same handlers ran as serverless functions on a demo host). Served from the same domain as the frontend. The frontend calls it via `apiFetch<T>()` (`src/lib/apiClient.ts`) — a thin wrapper around `fetch` with `credentials: "include"` (so the session cookie is sent), JSON request/response handling, and an `ApiError` class thrown for any non-2xx response. Every domain lib file (`users.ts`, `roles.ts`, `session.ts`, `storage.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.ts`) exposes `fetchX()`/`createX()`/`updateX()`/etc. functions that call this API — the old `loadX()`/`saveX()` `localStorage` functions are gone.
 
-This supersedes the pre-2026-07-09 "no backend, plain function calls" state and the never-built "proposed future Next.js/Server Actions" design further down this file's history — see [ARCHITECTURE.md](./ARCHITECTURE.md) for why the actual stack (Vercel Functions + MongoDB) differs from that old proposal.
+This supersedes the pre-2026-07-09 "no backend, plain function calls" state and the never-built "proposed future Next.js/Server Actions" design further down this file's history — see [ARCHITECTURE.md](./ARCHITECTURE.md) for why the actual stack (Node.js REST API + MongoDB) differs from that old proposal.
 
 ### Routing mechanics (read [ARCHITECTURE.md](./ARCHITECTURE.md) for the full gotcha writeup)
 
-Routes are consolidated into 12 function files (`api/handlers/jobtypes.ts` added 2026-07-10) to stay under Vercel Hobby's 12-function cap: `api/company/index.ts`, `api/audit-log/index.ts`, and `api/dashboard/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,customers}.ts` each dispatch on parsed URL path segments. `vercel.json` `rewrites` map every `/api/<resource>` and `/api/<resource>/:path*` request to its one handler file — this is the real, tested routing mechanism in production, not Vercel's own dynamic-route folder convention. **This is still the cap** — 12 of 12 function slots used. Any future new resource must be added as a new dispatch branch inside an existing handler file, not a new file, unless the project moves off Vercel Hobby. `api/handlers/company-profiles.ts` (added 2026-07-13) briefly used the last slot for the now-removed Company Profiles module and, from 2026-07-14, for `/api/customers` (dispatched by pathname to `handleCustomers()`) too; both the module and that file are gone as of 2026-07-14 — `api/handlers/customers.ts` now occupies the slot on its own, see "Customers" below and [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md). `/api/quotation-templates*` (added 2026-07-14, see "Quotation Templates" below) shares `api/handlers/jobtypes.ts`'s slot the same way — still 12 of 12 used, no new file.
+`server/app.ts`'s `API_ROUTES` table maps the first path segment after `/api/` to a handler: `api/company/index.ts`, `api/audit-log/index.ts`, and `api/dashboard/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,customers}.ts` each dispatch on parsed URL path segments, and several of them serve more than one resource (checked on the raw pathname — e.g. `quotes.ts` also serves Scope of Work, Delivery Order and most later document modules). That grouping is a leftover of the Vercel Hobby 12-function cap the app lived under before the ~2026-08-07 cutover; **there is no function-count cap any more** (all Vercel artifacts, `vercel.json` included, were removed 2026-09-14), so a new resource may get its own handler file or a branch in an existing one. Either way it needs an `API_ROUTES` entry — `tests/serverRouteTable.test.ts` guards the table.
 
 ### Auth model (every route below)
 
@@ -48,8 +48,7 @@ Routes are consolidated into 12 function files (`api/handlers/jobtypes.ts` added
 
 ## Departments + Teams (`api/_lib/departmentsHandler.ts`, mounted at `/api/departments` and `/api/teams` via `api/handlers/roles.ts` — added 2026-08-14)
 
-Shares `roles.ts`'s function file rather than getting its own — Vercel Hobby's 12-function cap is
-still fully used (same sharing pattern Scope of Work/Delivery Order use inside `api/handlers/
+Shares `roles.ts`'s handler file (same sharing pattern Scope of Work/Delivery Order use inside `api/handlers/
 quotes.ts`). Mounted here specifically since both are Super-Admin-gated org-structure config, the
 same class as Role Management itself. See [RBAC.md](./RBAC.md) "Departments + Teams + Tiered
 Visibility" and [DATABASE.md](./DATABASE.md) for the `departments`/`teams` collection shapes.
@@ -92,11 +91,9 @@ No `DELETE /api/categories/:id` route exists — matches the pre-migration UI, w
 
 ## Stock (`api/_lib/stockHandler.ts`, mounted at `/api/stock-movements` via `api/handlers/products.ts` — added 2026-08-18)
 
-Shares `api/handlers/products.ts`'s function file (checked first on the raw pathname) rather than
-getting its own — same 12-function-slot-sharing convention as `/api/search` sharing
-`api/handlers/customers.ts`. `vercel.json` rewrites: `/api/stock-movements` and
-`/api/stock-movements/:path*` → `/api/handlers/products`; `server/app.ts`'s `API_ROUTES` table gets
-a matching `"stock-movements": productsHandler` entry. See [MODULES/Product.md](./MODULES/Product.md)
+Shares `api/handlers/products.ts`'s function file (checked first on the raw pathname) — same sharing convention as `/api/search` sharing
+`api/handlers/customers.ts`. `server/app.ts`'s `API_ROUTES` table has a
+`"stock-movements": productsHandler` entry. See [MODULES/Product.md](./MODULES/Product.md)
 "Stock" for the full feature writeup.
 
 | Method & Path | Auth | Notes |
@@ -118,16 +115,13 @@ No `DELETE` route — soft-deactivate only (`isActive: false`), same pattern as 
 
 ## Quotation Templates (`api/handlers/jobtypes.ts`, mounted at `/api/quotation-templates` — added 2026-07-14, extended 2026-07-15)
 
-Shares `api/handlers/jobtypes.ts`'s function file (checked first on the raw pathname, before
-falling through to the existing Job Type dispatch) rather than getting its own — Vercel Hobby's
-12-function cap is still fully used, the same established pattern `/api/search` uses by sharing
-`api/handlers/customers.ts`. `vercel.json` rewrites: `/api/quotation-templates` and
-`/api/quotation-templates/:path*` → `/api/handlers/jobtypes` (the wildcard already covers the new
-`/duplicate` sub-route below — no rewrite change needed for it). Backs the Create Quotation wizard
+Shares `api/handlers/jobtypes.ts`'s handler file (checked first on the raw pathname, before
+falling through to the existing Job Type dispatch) — the same established pattern `/api/search` uses by sharing
+`api/handlers/customers.ts`. `API_ROUTES` entry: `"quotation-templates"` → the jobtypes handler
+(covers every sub-route, incl. `/duplicate` below). Backs the Create Quotation wizard
 and the Template Management module — see
 [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md). `/api/scope-of-works*` (added
-2026-07-15, see "Scope of Work" below) shares `api/handlers/quotes.ts`'s slot the same way — still
-12 of 12 function slots used, no new file.
+2026-07-15, see "Scope of Work" below) shares `api/handlers/quotes.ts` the same way.
 
 | Method & Path | Auth | Notes |
 |---|---|---|
@@ -155,11 +149,10 @@ to v1.0 content — see `docs/TODO.md`.
 ## Scope of Work (`api/_lib/scopeOfWorkHandler.ts`, mounted at `/api/scope-of-works` via `api/handlers/quotes.ts` — added 2026-07-15, fixed against an independent Codex review the same day)
 
 Shares `api/handlers/quotes.ts`'s function file (checked first on the raw pathname, before falling
-through to the existing quote dispatch) rather than getting its own — Vercel Hobby's 12-function
-cap is still fully used, same established sharing pattern as `/api/quotation-templates` sharing
+through to the existing quote dispatch) — same established sharing pattern as `/api/quotation-templates` sharing
 `api/handlers/jobtypes.ts`. Mounted on the quotes handler specifically (not jobtypes.ts) since a
-Scope of Work always belongs to exactly one quotation. `vercel.json` rewrites: `/api/scope-of-works`
-and `/api/scope-of-works/:path*` → `/api/handlers/quotes`. See
+Scope of Work always belongs to exactly one quotation. `API_ROUTES` entry:
+`"scope-of-works"` → the quotes handler. See
 [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) for the full feature writeup and PDF mapping.
 
 | Method & Path | Auth | Notes |
@@ -186,8 +179,8 @@ and `/api/scope-of-works/:path*` → `/api/handlers/quotes`. See
 
 ## Receiving Report (`api/_lib/receivingReportHandler.ts`, mounted at `/api/receiving-reports` via `api/handlers/quotes.ts` — added 2026-09-03)
 
-The Store department's ใบรับสินค้า. Shares the quotes function file like every other document
-handler (the Vercel 12-function budget is full). Full model writeup in
+The Store department's ใบรับสินค้า. Shares the quotes handler file like every other document
+handler. Full model writeup in
 [MODULES/Store.md](./MODULES/Store.md).
 
 | Route | Permission | Notes |
@@ -224,9 +217,9 @@ Every row is written by the receiving-report receipt route.
 ## Delivery Order (`api/_lib/deliveryOrderHandler.ts`, mounted at `/api/delivery-orders` via `api/handlers/quotes.ts` — added 2026-07-23)
 
 Shares `api/handlers/quotes.ts`'s function file (checked on the raw pathname right after the Scope
-of Work check, before falling through to the plain quote dispatch) — same 12-function-slot-sharing
-convention Scope of Work and Quotation Templates already use. `vercel.json` rewrites:
-`/api/delivery-orders` and `/api/delivery-orders/:path*` → `/api/handlers/quotes`. See
+of Work check, before falling through to the plain quote dispatch) — same sharing
+convention Scope of Work and Quotation Templates already use. `API_ROUTES` entry:
+`"delivery-orders"` → the quotes handler. See
 [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md) for the full feature writeup and PDF mapping.
 
 | Method & Path | Auth | Notes |
@@ -369,13 +362,12 @@ Admin only by default. See [RBAC.md](./RBAC.md) "Project module".
 ## Service Templates + Service Reports (`api/_lib/serviceTemplateHandler.ts` + `api/_lib/serviceReportHandler.ts`, mounted at `/api/service-templates` and `/api/service-reports` via `api/handlers/customers.ts` — added 2026-08-06, Phase 1)
 
 Shares `api/handlers/customers.ts`'s function file (checked on the raw pathname, after `/api/search`
-and before falling through to the plain customers dispatch) — same 12-function-slot-sharing
-convention every other cap-driven mount in this app uses. Mounted on `customers.ts` rather than
+and before falling through to the plain customers dispatch) — same sharing
+convention as the other multi-resource handlers. Mounted on `customers.ts` rather than
 `quotes.ts` because a Service Report is created directly against a Customer, not derived from a
 quotation — see [MODULES/Service.md](./MODULES/Service.md) for the full feature writeup and the
-routing decision's reasoning. `vercel.json` rewrites: `/api/service-templates`,
-`/api/service-templates/:path*`, `/api/service-reports`, `/api/service-reports/:path*` →
-`/api/handlers/customers`.
+routing decision's reasoning. `API_ROUTES` entries: `"service-templates"` and
+`"service-reports"` → the customers handler.
 
 **Service Templates** (master checklist data, `service_templates` collection):
 
@@ -406,7 +398,7 @@ routing decision's reasoning. `vercel.json` rewrites: `/api/service-templates`,
 | `GET /api/service-reports/:id/approval?key=` | **none (capability key)** | **Added 2026-08-10** — the public approval page's data: customer-safe report view (engineer pre-resolved to a name, no internal ids), company name/logo, and approval state (incl. `expired`). Wrong/missing key → opaque 404. |
 | `POST /api/service-reports/:id/approval/respond` | **none (capability key in body)** | **Added 2026-08-10** — one response per link. `{decision:"approved"}` requires a signature data URL (written into the same on-site `customerSignatureDataUrl`/`SignedName`/`SignedAt` fields); `{decision:"rejected"}` requires `rejectReason`. Expired → `410`; already answered → `400`. Writes a customer-actor audit entry + `service_report_customer_approved`/`_rejected` bell notifications to sender/creator/engineer. |
 | `POST /api/customers/:id/line-pairing` | `customers:edit` **or** `service:edit` | **Added 2026-08-10** — issues the 24-hour `TCS-XXXXX` LINE pairing code (replaces any outstanding one; audit-logged). The code is server-only (`toPublicCustomer()` strips `linePairing`); customer responses expose `lineUserId` so the UI knows who's linked. |
-| `POST /api/line/webhook` | **none (LINE HMAC signature)** | **Added 2026-08-10, Express runtime only** — LINE platform events; verifies `x-line-signature` (HMAC-SHA256 over the RAW body, captured by `server/app.ts`). Matches typed pairing codes → sets `customers.lineUserId`, replies confirmation; unconfigured (`LINE_CHANNEL_SECRET` unset) it 200-acks quietly. No vercel.json rewrite on purpose — the demo can't verify raw-body signatures. |
+| `POST /api/line/webhook` | **none (LINE HMAC signature)** | **Added 2026-08-10** — LINE platform events; verifies `x-line-signature` (HMAC-SHA256 over the RAW body, captured by `server/app.ts`). Matches typed pairing codes → sets `customers.lineUserId`, replies confirmation; unconfigured (`LINE_CHANNEL_SECRET` unset) it 200-acks quietly. |
 
 **Not built yet** (see [MODULES/Service.md](./MODULES/Service.md) roadmap): mobile/iPad-specific
 UX, on-site acceptance flows beyond the SignaturePad, LINE OA rich-menu/status queries.
@@ -423,8 +415,8 @@ Client wrapper functions: `src/lib/serviceTemplates.ts`'s `fetchServiceTemplates
 
 Every route that used to live here (`GET/POST /api/company-profiles`, `GET/PATCH /api/company-profiles/:id`,
 `POST /api/company-profiles/:id/archive`, `POST /api/company-profiles/:id/set-default`) is gone.
-`vercel.json` has no rewrite rule for `/api/company-profiles*` anymore, and `api/handlers/company-profiles.ts`
-was deleted — the path now returns Vercel's plain 404 (no function matches it at all). This ERP only
+`API_ROUTES` has no `company-profiles` entry, and `api/handlers/company-profiles.ts`
+was deleted — the path now returns the server's JSON 404. This ERP only
 ever needs one issuer company; a module for managing several was unused scope. See
 [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the full removal writeup — the
 `company_profiles` MongoDB collection and any documents already in it were left untouched.
@@ -432,13 +424,11 @@ ever needs one issuer company; a module for managing several was unused scope. S
 ## Customers (`api/handlers/customers.ts`, mounted at `/api/customers` — added 2026-07-14)
 
 Its own dedicated function file as of 2026-07-14 — it briefly shared `company-profiles.ts`'s
-function slot (to stay under Vercel Hobby's 12-function cap) between 2026-07-14's Customer
+function slot (under the since-retired Vercel Hobby 12-function cap) between 2026-07-14's Customer
 Management pass and the same day's later Company Profiles removal, which freed that slot back up.
 The actual list/create/get/patch/archive logic lives in `api/_lib/customersHandler.ts`; the handler
-file itself is a thin wrapper. **This is now the 9th of 9 `handlers/` files and, with `company/`/
-`audit-log/`/`dashboard/`, the 12th and final function file under Vercel Hobby's 12-function cap** —
-any future new resource must be folded into an existing handler (a new `parts[N]` branch), not a
-new file, unless the project moves to a paid Vercel plan. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+file itself is a thin wrapper. The function cap behind that shuffle no longer exists — see
+"Routing mechanics" above and [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 | Method & Path | Auth | Notes |
 |---|---|---|
@@ -480,8 +470,7 @@ There is deliberately **no** `POST /api/notifications` (create-arbitrary-notific
 ## Global Search (`api/_lib/searchHandler.ts`, mounted at `/api/search` — added 2026-07-14)
 
 Shares `api/handlers/customers.ts`'s function file (checked first on the raw pathname, before
-falling through to the customers-only logic) rather than getting its own — Vercel Hobby's
-12-function cap is still fully used, the same established sharing pattern this file itself once
+falling through to the customers-only logic) — the same established sharing pattern this file itself once
 used with the now-removed `company-profiles.ts`. Replaces the topbar search box, which had never
 actually worked before this pass (a dead `<input>` with no `value`/`onChange` at all).
 
@@ -639,7 +628,7 @@ Every route funnels exceptions through `withErrorHandling()` (`api/_lib/http.ts`
 
 ## Superseded: the old proposed Next.js API design — NOT what got built
 
-If/when a hypothetical Next.js migration happened (the "Phase 2" plan, see [ARCHITECTURE.md](./ARCHITECTURE.md) "Superseded" section), the plan had been: an Auth.js route handler, Server Actions (not REST/JSON) for most mutations, Server Components/`queries/*.ts` for reads, and a coarse `middleware.ts` session check. **None of this was built.** The real API that shipped 2026-07-09 is a plain REST/JSON API over Vercel Serverless Functions, documented in full above. This paragraph is kept only as a historical record — do not write code against the old proposal.
+If/when a hypothetical Next.js migration happened (the "Phase 2" plan, see [ARCHITECTURE.md](./ARCHITECTURE.md) "Superseded" section), the plan had been: an Auth.js route handler, Server Actions (not REST/JSON) for most mutations, Server Components/`queries/*.ts` for reads, and a coarse `middleware.ts` session check. **None of this was built.** The real API that shipped 2026-07-09 is a plain REST/JSON API (today served by the standalone Express server), documented in full above. This paragraph is kept only as a historical record — do not write code against the old proposal.
 
 ## Production Order + shared document approval (added 2026-08-20)
 
@@ -740,10 +729,7 @@ the same `runCategory` discipline Global Search uses.
 > on 2026-08-28 and **removed the same day** at the owner's instruction. Those paths no longer exist —
 > see [MODULES/Purchasing.md](./MODULES/Purchasing.md) "Removed 2026-08-28".
 
-Mounted on `api/handlers/quotes.ts` — the Vercel 12-function budget is
-full, so a new `api/handlers/*.ts` file is not available. Every route below needs a matching
-rewrite pair in `vercel.json` **and** an `API_ROUTES` entry in `server/app.ts`; if those two
-disagree, local dev and production behave differently. See [MODULES/Purchasing.md](./MODULES/Purchasing.md).
+Mounted on `api/handlers/quotes.ts`, with an `API_ROUTES` entry in `server/app.ts` per resource. See [MODULES/Purchasing.md](./MODULES/Purchasing.md).
 
 ### Vendors (`api/_lib/vendorsHandler.ts`, mounted at `/api/vendors` via `api/handlers/customers.ts`)
 
@@ -817,7 +803,7 @@ whose `canEdit` hook is synchronous while this check reads the database). A call
 claim to the document is being a recipient of its linked Scope of Work gets `403` on PATCH, DELETE,
 rewrite and all four approval routes — **even holding `:edit`/`:finalize`/`:delete`** — matching
 Delivery Order's `assertNotDepartmentRecipientOnly()`. Owners and `:viewAll` holders are unaffected.
-(the Vercel 12-function budget is full). See [MODULES/CostControl.md](./MODULES/CostControl.md).
+See [MODULES/CostControl.md](./MODULES/CostControl.md).
 
 **The server never receives a file.** The browser parses the workbook, shows a preview the person
 corrects, and posts the corrected rows as ordinary JSON — so there is no multipart route, no

@@ -2,7 +2,7 @@
 
 ## Current State: MongoDB Atlas (real database, live)
 
-As of 2026-07-09 this project has a **real database**: MongoDB Atlas (free-tier M0 cluster), accessed exclusively from the Vercel Serverless Functions backend (`api/`) via a singleton connection per warm serverless instance (`api/_lib/mongodb.ts`). The frontend never talks to MongoDB directly — it calls the REST API (see [API.md](./API.md)), which reads/writes these collections. `MONGODB_URI` lives only in Vercel environment variables (production/preview/development), never committed to the repo.
+As of 2026-07-09 this project has a **real database**: MongoDB — self-hosted on the production VPS since the ~2026-08-07 cutover (MongoDB Atlas before that) — accessed exclusively from the backend (`api/`, run by the Express server in `server/`) via a module-scope singleton connection (`api/_lib/mongodb.ts`). The frontend never talks to MongoDB directly — it calls the REST API (see [API.md](./API.md)), which reads/writes these collections. `MONGODB_URI` lives only in `.env` (the server's own, or a developer's local one), never committed to the repo.
 
 This supersedes the pre-2026-07-09 `localStorage`-only persistence described lower in this file's Migration Notes — that description is now historical (it documents what the client-side shapes looked like before the migration, useful context for how each collection got its current shape) rather than current state.
 
@@ -468,7 +468,7 @@ Indexes (created defensively inside `api/_lib/customersHandler.ts`, same lazy-on
 pattern as `company_profiles`'/`job_types`' indexes): `{ isDeleted: 1 }`, `{ isActive: 1 }`,
 `{ companyName: 1 }`. No seed data — starts empty, per the "no fake customer data" requirement.
 
-**API**: `api/handlers/customers.ts` — its own dedicated serverless function as of 2026-07-14. It
+**API**: `api/handlers/customers.ts` — its own dedicated handler file as of 2026-07-14. It
 originally (2026-07-14, earlier the same day) shared the `company-profiles` serverless function
 (`vercel.json` rewrote `/api/customers[/:path*]` to `/api/handlers/company-profiles`, which checked
 the raw pathname first and delegated to `handleCustomers()` before falling through to its own

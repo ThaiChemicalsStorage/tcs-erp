@@ -1,4 +1,4 @@
-﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
+﻿import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import { Binary } from "mongodb";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
@@ -29,8 +29,8 @@ import { isLinePushConfigured, pushLineMessage, buildApprovalFlexMessage } from 
 /**
  * Service Report API (added 2026-08-06, Phase 1; photo attachments + print added the same day,
  * pulled forward from the original Phase 2/3 roadmap per direct user request via
- * `/impeccable design`) — mounted from `api/handlers/customers.ts` on the raw pathname (Vercel
- * Hobby's 12-function cap is fully used — see docs/ARCHITECTURE.md). Mounted on the customers
+ * `/impeccable design`) — mounted from `api/handlers/customers.ts` on the raw pathname (see
+ * docs/ARCHITECTURE.md). Mounted on the customers
  * handler (not quotes.ts) because a Service Report's one real relational anchor is
  * `customerId`/`customerSnapshot`, the same entity that file already owns — a Service Report is
  * created directly against a Customer, not derived from a quotation. See docs/MODULES/Service.md
@@ -272,7 +272,7 @@ async function toListItem(doc: ServiceReportFields & { _id: string }, engineerNa
   };
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "service:view");
   await ensureServiceReportIndexes();
@@ -301,7 +301,7 @@ async function loadReportOrThrow(id: string): Promise<ServiceReportFields & { _i
   return doc;
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   await requirePermission(req, "service:view");
   const doc = await loadReportOrThrow(id);
   res.status(200).json({ serviceReport: toServiceReport(doc) });
@@ -326,7 +326,7 @@ function buildDefaultChecklist(sections: ServiceChecklistSectionDef[]): ServiceC
   return mergeChecklist({ sections }, null, null);
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "service:create");
   await ensureServiceReportIndexes();
@@ -414,7 +414,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ serviceReport: toServiceReport({ ...doc, _id: id }) });
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadReportOrThrow(id);
@@ -544,7 +544,7 @@ function throwIfIncomplete(
 
 const STATUS_ACTIONS = new Set(["complete", "reopen", "cancel"]);
 
-async function handleStatusChange(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleStatusChange(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadReportOrThrow(id);
@@ -647,7 +647,7 @@ function findChecklistItemPath(
   return { section, itemIndex };
 }
 
-async function handlePhotoUpload(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePhotoUpload(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadReportOrThrow(id);
@@ -708,7 +708,7 @@ async function handlePhotoUpload(req: VercelRequest, res: VercelResponse, id: st
   res.status(200).json({ serviceReport: toServiceReport(updated) });
 }
 
-async function handlePhotoDelete(req: VercelRequest, res: VercelResponse, id: string, photoId: string) {
+async function handlePhotoDelete(req: ApiRequest, res: ApiResponse, id: string, photoId: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadReportOrThrow(id);
@@ -747,7 +747,7 @@ function encodeRfc5987(value: string): string {
 
 /** Deliberately NO session auth — same capability-token model as Scope of Work's attachment
  * download (`handleAttachmentDownload`): a wrong/missing key is an opaque 404. */
-async function handlePhotoDownload(req: VercelRequest, res: VercelResponse, id: string, photoId: string) {
+async function handlePhotoDownload(req: ApiRequest, res: ApiResponse, id: string, photoId: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const key = typeof req.query.key === "string" ? req.query.key : "";
   if (!key) throw new HttpError(404, "ไม่พบรูปภาพ");
@@ -783,14 +783,14 @@ function hashApprovalToken(token: string): string {
 }
 
 function approvalUrlFor(id: string, token: string): string {
-  const appUrl = (process.env.APP_URL || "https://tcs-erp-nine.vercel.app").replace(/\/+$/, "");
+  const appUrl = (process.env.APP_URL || "https://www.huma-erp.com").replace(/\/+$/, "");
   return `${appUrl}/approve?report=${encodeURIComponent(id)}&key=${encodeURIComponent(token)}`;
 }
 
 /** POST /api/service-reports/:id/send-approval — `service:edit` (like Scope of Work's send, this
  * distributes the document rather than changing it, so no ownership check and no Draft-only
  * lock; only Cancelled is blocked). Re-sending replaces the outstanding link (old token dies). */
-async function handleSendApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleSendApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "service:edit");
   const doc = await loadReportOrThrow(id);
@@ -911,7 +911,7 @@ async function buildApprovalPublicPayload(doc: ServiceReportFields & { _id: stri
 }
 
 /** GET /api/service-reports/:id/approval?key= — public (capability key IS the auth). */
-async function handleApprovalGet(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleApprovalGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const key = typeof req.query.key === "string" ? req.query.key : "";
   const { doc, approval, expired } = await loadReportForApprovalKey(id, key);
@@ -920,7 +920,7 @@ async function handleApprovalGet(req: VercelRequest, res: VercelResponse, id: st
 
 /** POST /api/service-reports/:id/approval/respond — public. Approve requires a signature (written
  * into the same on-site sign-off fields); reject requires a reason. One response per link. */
-async function handleApprovalRespond(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleApprovalRespond(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const body = (req.body ?? {}) as Record<string, unknown>;
   const key = typeof body.key === "string" ? body.key : "";
@@ -983,7 +983,7 @@ async function handleApprovalRespond(req: VercelRequest, res: VercelResponse, id
   res.status(200).json(await buildApprovalPublicPayload(updated, nextApproval, false));
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "service:print");
   const doc = await loadReportOrThrow(id);
@@ -991,7 +991,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true, serviceReport: toServiceReport(doc) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "service:delete");
   const doc = await loadReportOrThrow(id);
@@ -1003,14 +1003,14 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleServiceReport(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleServiceReport(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/service-reports");
   if (parts.length === 0) {
     if (req.method === "POST") return handleCreate(req, res);

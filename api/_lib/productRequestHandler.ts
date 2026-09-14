@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
@@ -43,7 +43,7 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productRequest:view");
   const requests = await productRequestsCollection();
@@ -54,7 +54,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ productRequests: docs.map(toClient) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productRequest:create");
 
@@ -105,7 +105,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ productRequest: toClient(created) });
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "productRequest:create");
   const doc = await loadOrThrow(id);
   if (doc.requestedBy !== ctx.user.id) throw new HttpError(403, "Forbidden");
@@ -184,7 +184,7 @@ async function backfillSourcePurchaseRequestLine(
  * สร้างสินค้า**ก่อน**อัปเดตสถานะคำขอ เพื่อว่าถ้ารหัสซ้ำ (409) คำขอจะยังคงเป็น Pending ให้แก้รหัสแล้ว
  * กดใหม่ได้ ไม่ใช่กลายเป็น Approved ทั้งที่ยังไม่มีสินค้าจริงในคลัง
  */
-async function handleApprove(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleApprove(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productRequest:review");
   const doc = await loadOrThrow(id);
@@ -283,7 +283,7 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ productRequest: toClient(await loadOrThrow(id)) });
 }
 
-async function handleReject(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleReject(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productRequest:review");
   const doc = await loadOrThrow(id);
@@ -319,7 +319,7 @@ async function handleReject(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ productRequest: toClient(await loadOrThrow(id)) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "productRequest:create");
   const doc = await loadOrThrow(id);
   const canReview = roleHasPermission(ctx.role, "productRequest:review");
@@ -330,7 +330,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") {
     await requirePermission(req, "productRequest:view");
     res.status(200).json({ productRequest: toClient(await loadOrThrow(id)) });
@@ -341,7 +341,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleProductRequest(req: VercelRequest, res: VercelResponse) {
+export async function handleProductRequest(req: ApiRequest, res: ApiResponse) {
   await requireUser(req);
   const parts = getPathSegments(req, "/api/product-requests");
   if (parts.length === 0) {

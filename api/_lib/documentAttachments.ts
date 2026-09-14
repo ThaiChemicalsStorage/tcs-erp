@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection } from "mongodb";
 import { Binary } from "mongodb";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -37,7 +37,7 @@ export interface AttachmentConfig<TDoc> {
   currentAttachments: (doc: TDoc) => DocumentAttachment[];
   writeAudit: (ctx: AuthContext, action: string, detail: string, doc: TDoc) => Promise<void>;
   /** ตอบกลับด้วยเอกสารที่อัปเดตแล้ว ในรูปแบบของโมดูลนั้น ๆ */
-  respond: (res: VercelResponse, id: string) => Promise<void>;
+  respond: (res: ApiResponse, id: string) => Promise<void>;
 }
 
 /**
@@ -56,7 +56,7 @@ async function ensureIndexes(files: Awaited<ReturnType<typeof documentAttachment
 }
 
 export async function handleAttachmentUpload<TDoc>(
-  req: VercelRequest, res: VercelResponse, id: string, cfg: AttachmentConfig<TDoc>,
+  req: ApiRequest, res: ApiResponse, id: string, cfg: AttachmentConfig<TDoc>,
 ): Promise<void> {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
@@ -130,7 +130,7 @@ export async function handleAttachmentUpload<TDoc>(
 }
 
 export async function handleAttachmentDelete<TDoc>(
-  req: VercelRequest, res: VercelResponse, id: string, attachmentId: string, cfg: AttachmentConfig<TDoc>,
+  req: ApiRequest, res: ApiResponse, id: string, attachmentId: string, cfg: AttachmentConfig<TDoc>,
 ): Promise<void> {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
@@ -181,7 +181,7 @@ function encodeRfc5987(value: string): string {
  * ไม่มี key ตอบ 404 ทึบ ๆ ไม่บอกว่ามีไฟล์อยู่จริงหรือเปล่า
  */
 export async function handleAttachmentDownload(
-  req: VercelRequest, res: VercelResponse, docType: string, id: string, attachmentId: string,
+  req: ApiRequest, res: ApiResponse, docType: string, id: string, attachmentId: string,
 ): Promise<void> {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const key = typeof req.query.key === "string" ? req.query.key : "";

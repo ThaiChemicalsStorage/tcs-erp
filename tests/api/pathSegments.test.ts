@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { VercelRequest } from "@vercel/node";
+import type { ApiRequest } from "../../api/_lib/httpTypes.js";
 import { getPathSegments } from "../../api/_lib/http.js";
 
 /**
@@ -14,8 +14,8 @@ import { getPathSegments } from "../../api/_lib/http.js";
  * `/api/quotes/Q%23260817-0001` resolves back to the literal `Q#260817-0001` id.
  */
 describe("getPathSegments", () => {
-  function req(url: string): VercelRequest {
-    return { url } as unknown as VercelRequest;
+  function req(url: string): ApiRequest {
+    return { url } as unknown as ApiRequest;
   }
 
   it("decodes a percent-encoded id segment back to its literal form (e.g. a quotation id containing '#')", () => {

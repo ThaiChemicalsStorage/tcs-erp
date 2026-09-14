@@ -13,8 +13,8 @@ import {
  */
 
 /**
- * Thailand is UTC+7, no DST. Vercel's Node runtime has no guaranteed local timezone (typically
- * UTC), and `issueDate`/`expiryDate`/`followUpDate` are Thailand-local business-date strings —
+ * Thailand is UTC+7, no DST. The server process has no guaranteed local timezone (a container is
+ * typically UTC), and `issueDate`/`expiryDate`/`followUpDate` are Thailand-local business-date strings —
  * so "today"/month-boundary math here must not use the server's ambient local `Date` getters
  * (wrong timezone) or mix a local constructor with `.toISOString()` (shifts the boundary by a
  * day for any positive-UTC-offset zone). Fix: shift by the fixed offset once, then always read

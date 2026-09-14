@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
@@ -143,7 +143,7 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseOrder:view");
   const purchaseRequestId = typeof req.query.purchaseRequestId === "string" ? req.query.purchaseRequestId : "";
@@ -162,7 +162,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ purchaseOrders: docs.map(toSummary) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseOrder:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -278,7 +278,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ purchaseOrder: toClient(doc) });
 }
 
-async function handleGet(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "purchaseOrder:view");
   const doc = await loadOrThrow(id);
@@ -307,7 +307,7 @@ const DATE_FIELDS: { key: keyof PurchaseOrderFields; label: string }[] = [
   { key: "neededByDate", label: "วันที่ต้องการรับของ" },
 ];
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -351,7 +351,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ purchaseOrder: toClient(updated) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseOrder:delete");
   const doc = await loadOrThrow(id);
@@ -361,7 +361,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(204).end();
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseOrder:print");
   const doc = await loadOrThrow(id);
@@ -370,7 +370,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
 }
 
 /** สร้างฉบับแก้ไข `-R{n}` จากใบที่อนุมัติแล้ว — ฉบับเดิมไม่ถูกแตะต้อง */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseOrder:create");
   const doc = await loadOrThrow(id);
@@ -423,7 +423,7 @@ const approvalConfig: ApprovalConfig<PurchaseOrderFields & { _id: string }> = {
   respond: (res, doc) => res.status(200).json({ purchaseOrder: toClient(doc) }),
 };
 
-export async function handlePurchaseOrder(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handlePurchaseOrder(req: ApiRequest, res: ApiResponse): Promise<void> {
   await requireUser(req);
   const parts = getPathSegments(req, "/api/purchase-orders");
 

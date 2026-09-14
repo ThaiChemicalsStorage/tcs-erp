@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission } from "../_lib/auth.js";
 import { jobTypesCollection, toObjectId, withStringId } from "../_lib/collections.js";
@@ -10,7 +10,7 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "GET") {
     await requirePermission(req, "quotations:view");
     await seedJobTypesIfEmpty();
@@ -43,7 +43,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "company:manage");
 
@@ -73,10 +73,10 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   res.status(200).json({ jobType: withStringId(updated) });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
-    // Quotation Templates (added 2026-07-14) shares this function file rather than getting its
-    // own — Vercel Hobby's 12-function cap is still fully used (see docs/ARCHITECTURE.md).
+    // Quotation Templates (added 2026-07-14) shares this handler file (both are routed here by
+    // server/app.ts `API_ROUTES`).
     // Checked first, on the raw pathname, before falling through to the Job Types logic below —
     // the same established sharing pattern api/handlers/customers.ts already uses for
     // `/api/search`. Thematically the closest existing handler: templates are keyed by Job Type.

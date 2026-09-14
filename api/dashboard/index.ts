@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError } from "../_lib/http.js";
 import { requirePermission } from "../_lib/auth.js";
 import { buildOwnershipClause, resolveVisibilityScope } from "../_lib/visibility.js";
@@ -143,7 +143,7 @@ type QuoteCalcDoc = Pick<
 // rationale) moved to api/_lib/dashboardShared.ts on 2026-09-14 so the per-department dashboard
 // uses the exact same day boundaries.
 
-function queryString(req: VercelRequest, key: string): string {
+function queryString(req: ApiRequest, key: string): string {
   const v = req.query[key];
   if (Array.isArray(v)) return v[0] ?? "";
   return v ?? "";
@@ -250,7 +250,7 @@ function periodEnd(kind: "month" | "quarter" | "year"): string {
   return endDate.toISOString().slice(0, 10);
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     // แดชบอร์ดแยกตามแผนก (2026-09-14) ใช้ route key "dashboard" เดียวกันใน server/app.ts — ต้องแยกทาง
     // ก่อนโค้ดของแดชบอร์ดขายข้างล่าง ซึ่งไม่ดู pathname เลยและจะตอบ payload ขายให้ทุก path
@@ -477,7 +477,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // are both worse (see the file-level comment above). Every quote has carried a real `lines`
     // array since the 2026-07-08 rewrite, so this should never fire in practice — but "should never"
     // isn't "cannot," and a prior draft of this documentation over-claimed the latter (Codex review
-    // flagged it). A `console.warn` here is grep-able in Vercel function logs without adding a new
+    // flagged it). A `console.warn` here is grep-able in the server logs without adding a new
     // response field/UI surface for what is expected to be a null set. See MODULES/Dashboard.md
     // "Pre-Tax Amount Rule" for the full data-quality note.
     const missingLinesCount = (docsRaw as QuoteCalcDoc[]).filter((q) => q.lines == null).length;

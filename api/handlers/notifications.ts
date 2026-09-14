@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser } from "../_lib/auth.js";
 import { notificationsCollection, toObjectId, withStringId } from "../_lib/collections.js";
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   // Real per-user filtering server-side — unlike the old localStorage simulation, other
   // users' notifications never leave the database.
@@ -13,7 +13,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ notifications: docs.map(withStringId) });
 }
 
-async function handleMarkAllRead(req: VercelRequest, res: VercelResponse) {
+async function handleMarkAllRead(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const notifications = await notificationsCollection();
@@ -21,7 +21,7 @@ async function handleMarkAllRead(req: VercelRequest, res: VercelResponse) {
   res.status(204).end();
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requireUser(req);
   const objectId = toObjectId(id);
   const notifications = await notificationsCollection();
@@ -45,7 +45,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     const parts = getPathSegments(req, "/api/notifications");
 

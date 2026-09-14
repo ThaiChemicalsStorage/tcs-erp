@@ -52,7 +52,7 @@ See [DATABASE.md](../DATABASE.md) for the full field shapes.
 
 `GET/POST /api/departments`, `PATCH /api/departments/:id`, `GET/POST /api/teams`,
 `PATCH /api/teams/:id` — see [API.md](../API.md) "Departments + Teams" section. Mounted inside
-`api/handlers/roles.ts` (Vercel Hobby's 12-function cap is still fully used), same pathname-dispatch
+`api/handlers/roles.ts`, same pathname-dispatch
 pattern Scope of Work/Delivery Order use inside `api/handlers/quotes.ts`.
 
 ## Permissions

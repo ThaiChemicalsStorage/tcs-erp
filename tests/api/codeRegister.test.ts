@@ -17,8 +17,8 @@ import type { AddressInfo } from "node:net";
  *      refused as a duplicate rather than creating a twin.
  *   3. **Import skips instead of overwriting** — re-importing the chart of accounts is expected
  *      (the owner may send a longer file later), and overwriting would eat names admins edited.
- *   4. **The route is mounted in server/app.ts** — a new route works on Vercel from `vercel.json`
- *      alone and 404s locally if the Express map is missed. A plain 401 here proves it is mapped.
+ *   4. **The route is mounted in server/app.ts** — a resource missing from `API_ROUTES` 404s before
+ *      any handler runs. A plain 401 here proves it is mapped.
  */
 
 let mongod: MongoMemoryServer;
@@ -77,7 +77,7 @@ afterAll(async () => {
 });
 
 describe("ทะเบียนรหัส — เส้นทางและสิทธิ์", () => {
-  it("เส้นทางถูก map ใน Express จริง ไม่ใช่แค่ vercel.json (ไม่มีคุกกี้ = 401 ไม่ใช่ 404)", async () => {
+  it("เส้นทางถูก map ใน Express จริง (ไม่มีคุกกี้ = 401 ไม่ใช่ 404)", async () => {
     const res = await fetch(`${baseUrl}/api/code-entries`);
     expect(res.status).toBe(401);
   });

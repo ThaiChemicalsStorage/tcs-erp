@@ -9,7 +9,7 @@
 ## What runs
 
 One Node.js process: `server/index.ts` (Express) serves both the REST API (the unchanged `api/`
-handlers, routed per the same table as `vercel.json`'s rewrites — see `server/app.ts`) and the
+handlers, routed via the `API_ROUTES` table in `server/app.ts`) and the
 built frontend from `dist/` with an SPA fallback. MongoDB is the only other moving part.
 
 ```
@@ -43,7 +43,7 @@ Required env values (full explanations in [.env.example](../.env.example)): `MON
 get in-app bell notifications only, so no email env var exists anymore (`EMAIL_CRED_SECRET`,
 which briefly replaced `RESEND_API_KEY`/`EMAIL_FROM` that morning, is gone too; a leftover value
 in `.env` is harmless and simply ignored). No outbound SMTP port is needed.
-When migrating from the Vercel demo, copy the values out of the Vercel project settings; keeping
+When rebuilding or moving the server, copy the values from the existing server's `.env`; keeping
 the same `JWT_SECRET` preserves live sessions, changing it just logs everyone out once.
 
 The process must run with the **project root as working directory** — the Quotation Templates
@@ -392,10 +392,9 @@ Backups under Docker (authenticated):
 `scripts/backup-to-gdrive.sh` automates — see [Backups → Google Drive (rclone)](#google-drive-rclone--the-configured-off-site-target-added-2026-09-11)
 rather than rolling a one-off cron line.
 
-## Relationship to the Vercel demo
+## History: the pre-cutover demo
 
-**Decommissioned as of the ~2026-08-07 cutover** — the Vercel deployment is no longer used
-(`vercel.json` + the `api/` file layout are left untouched, only as a fallback deploy target if
-ever needed again). Production runs solely on the standalone Express server described in this
-file, on a self-hosted VPS with a self-hosted MongoDB instance (not the old Atlas cluster the
-Vercel demo used). See [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step H.
+Before the ~2026-08-07 cutover the same handlers ran as a Vercel-hosted demo against MongoDB
+Atlas. Production runs solely on the standalone Express server described in this file, and every
+Vercel artifact (`vercel.json`, `@vercel/node`, the `.vercel` env fallback) was removed from the
+repo 2026-09-14. See [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step H.

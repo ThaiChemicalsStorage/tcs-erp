@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
 import {
@@ -269,7 +269,7 @@ async function notifyIfLowStock(params: {
 const DEFAULT_LIST_LIMIT = 200;
 const MAX_LIST_LIMIT = 2000;
 
-async function handleMovementsList(req: VercelRequest, res: VercelResponse) {
+async function handleMovementsList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "stock:view");
   const movements = await stockMovementsCollection();
@@ -284,7 +284,7 @@ async function handleMovementsList(req: VercelRequest, res: VercelResponse) {
 
 const MOVEMENT_KINDS: StockMovementKind[] = ["receive", "deduct", "adjust", "return"];
 
-async function handleMovementCreate(req: VercelRequest, res: VercelResponse) {
+async function handleMovementCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx: AuthContext = await requirePermission(req, "stock:adjust");
   const body = req.body ?? {};
@@ -309,7 +309,7 @@ async function handleMovementCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ movement });
 }
 
-export async function handleStock(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleStock(req: ApiRequest, res: ApiResponse): Promise<void> {
   // getPathSegments() already drops the prefix and any trailing slash, so a bare
   // /api/stock-movements (with or without one) is exactly the zero-segment case — routing it
   // through the same branch keeps POST from falling through to the list handler.

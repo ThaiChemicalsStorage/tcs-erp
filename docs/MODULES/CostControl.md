@@ -331,8 +331,8 @@ them ticked by hand in Role Management.**
 
 ## Routing
 
-`api/_lib/costControlHandler.ts`, mounted on `api/handlers/quotes.ts` (the Vercel 12-function budget
-is full), with matching entries in `vercel.json` and `server/app.ts`. The unique index on
+`api/_lib/costControlHandler.ts`, mounted on `api/handlers/quotes.ts`, with a matching
+`API_ROUTES` entry in `server/app.ts`. The unique index on
 `documentNumber` is created lazily by the handler, because `ensureIndexes()` only ever runs from the
 Setup Wizard.
 

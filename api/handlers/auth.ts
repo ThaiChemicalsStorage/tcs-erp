@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { usersCollection, loginAttemptsCollection, ensureIndexes, toPublicUser } from "../_lib/collections.js";
 import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext, startSession, endSession, signedOutReason } from "../_lib/auth.js";
@@ -11,7 +11,7 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function handleSession(req: VercelRequest, res: VercelResponse) {
+async function handleSession(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await getAuthContext(req);
   if (ctx) {
@@ -25,7 +25,7 @@ async function handleSession(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ user: null, needsSetup: count === 0, signedOutReason: signedOutBecause });
 }
 
-async function handleSetup(req: VercelRequest, res: VercelResponse) {
+async function handleSetup(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const users = await usersCollection();
   const existing = await users.estimatedDocumentCount();
@@ -101,16 +101,15 @@ async function ensureLoginAttemptIndexes(
   loginAttemptIndexesEnsured = true;
 }
 
-/** First hop of `x-forwarded-for` — on Vercel that's the real client IP (the platform sets it;
- * a client-supplied value is appended after, never first). Falls back to the socket address for
- * non-proxied local dev. */
-function requestIp(req: VercelRequest): string {
+/** First hop of `x-forwarded-for` — the real client IP as reported by the reverse proxy in front of
+ * the app (see docs/DEPLOYMENT.md). Falls back to the socket address for non-proxied local dev. */
+function requestIp(req: ApiRequest): string {
   const fwd = req.headers["x-forwarded-for"];
   const first = (Array.isArray(fwd) ? fwd[0] : fwd ?? "").split(",")[0].trim();
   return first || req.socket?.remoteAddress || "unknown";
 }
 
-async function handleLogin(req: VercelRequest, res: VercelResponse) {
+async function handleLogin(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const { identifier, password } = req.body ?? {};
   if (!identifier?.trim() || !password) throw new HttpError(400, "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน");
@@ -161,14 +160,14 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ user: toPublicUser(doc) });
 }
 
-async function handleLogout(req: VercelRequest, res: VercelResponse) {
+async function handleLogout(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   await endSession(req);
   clearSessionCookie(res);
   res.status(204).end();
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     const [path] = getPathSegments(req, "/api/auth");
 

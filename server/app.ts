@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../api/_lib/httpTypes.js";
 
 import authHandler from "../api/handlers/auth.js";
 import usersHandler from "../api/handlers/users.js";
@@ -16,11 +16,11 @@ import companyHandler from "../api/company/index.js";
 import auditLogHandler from "../api/audit-log/index.js";
 import dashboardHandler from "../api/dashboard/index.js";
 
-type ApiHandler = (req: VercelRequest, res: VercelResponse) => void | Promise<void>;
+type ApiHandler = (req: ApiRequest, res: ApiResponse) => void | Promise<void>;
 
 /**
- * First-path-segment → handler map, replicating vercel.json's rewrites exactly (the routing the
- * handlers were written against). Handlers that serve several resources dispatch internally on the
+ * First-path-segment → handler map — the one routing table for the API (a new resource needs an
+ * entry here; tests/serverRouteTable.test.ts fails if one is missed). Handlers that serve several resources dispatch internally on the
  * raw pathname (e.g. quotes.ts handles /api/scope-of-works), so the full original URL must reach
  * them untouched — which is why routing happens in a plain middleware on `req.url` instead of
  * Express path mounts (`app.use("/api/quotes", ...)` would strip the prefix from `req.url`).
@@ -77,8 +77,8 @@ const JSON_BODY_LIMIT = "25mb";
 export function createApp(): Express {
   const app = express();
   app.disable("x-powered-by");
-  // "simple" gives string | string[] query values, same shape Vercel's runtime produced —
-  // Express 5's default "extended" parser can produce nested objects the handlers never expect.
+  // "simple" gives string | string[] query values (the `ApiRequest.query` shape the handlers are
+  // written against) — Express 5's default "extended" parser can produce nested objects they never expect.
   app.set("query parser", "simple");
   // `verify` stashes the raw bytes for the LINE webhook's HMAC signature check
   // (api/_lib/lineHandler.ts) — the parsed body alone can't reproduce LINE's exact byte stream.
@@ -95,10 +95,10 @@ export function createApp(): Express {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    // VercelRequest/VercelResponse are type-only shapes over Node's req/res; everything the
+    // ApiRequest/ApiResponse are type-only shapes over Node's req/res; everything the
     // handlers actually use (url, method, headers, query, body, status().json(), setHeader(),
     // send(), end()) exists identically on Express's req/res.
-    Promise.resolve(handler(req as unknown as VercelRequest, res as unknown as VercelResponse)).catch(next);
+    Promise.resolve(handler(req as unknown as ApiRequest, res as unknown as ApiResponse)).catch(next);
   });
 
   // Built frontend + SPA fallback. dist/ is absent in API-only setups (tests, `npm run dev`

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient } from "mongodb";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../../api/_lib/httpTypes.js";
 import type { ServiceReport } from "../../src/lib/serviceReports";
 import type { ServiceChecklistSectionDef } from "../../src/lib/serviceTemplates";
 
@@ -17,8 +17,8 @@ const PASSWORD = "correct-horse-1";
 
 let mongod: MongoMemoryServer;
 let client: MongoClient;
-let authHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
-let customersHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
+let authHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
+let customersHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
 let sessionCookie = "";
 let reportId = "";
 let templateId = "";
@@ -27,19 +27,19 @@ let path = { sectionKey: "", groupKey: "", itemKey: "" };
 
 interface CapturedResponse { statusCode: number; body: unknown; headers: Record<string, string> }
 
-function makeReqRes(method: string, url: string, body?: unknown): { req: VercelRequest; res: VercelResponse; captured: CapturedResponse } {
+function makeReqRes(method: string, url: string, body?: unknown): { req: ApiRequest; res: ApiResponse; captured: CapturedResponse } {
   const captured: CapturedResponse = { statusCode: 0, body: undefined, headers: {} };
   const req = {
     method, url, body,
     headers: { "x-forwarded-for": "10.0.0.1", cookie: sessionCookie },
     socket: { remoteAddress: "10.0.0.1" },
-  } as unknown as VercelRequest;
+  } as unknown as ApiRequest;
   const res = {
     status(code: number) { captured.statusCode = code; return this; },
     json(payload: unknown) { captured.body = payload; return this; },
     setHeader(name: string, value: string) { captured.headers[name.toLowerCase()] = value; return this; },
     end() { return this; },
-  } as unknown as VercelResponse;
+  } as unknown as ApiResponse;
   return { req, res, captured };
 }
 

@@ -94,8 +94,7 @@ schema-only, untouched by this pass — not needed for the single-contact-per-cu
   — see [API.md](../API.md) "Customers." **Correction (2026-07-14)**: originally shared the
   `company-profiles` serverless function file (Vercel Hobby's 12-function cap was already reached);
   once Company Profiles was removed the same day, `customers.ts` got its own dedicated
-  `api/handlers/customers.ts` function file in its place — still exactly 12 of 12 function slots
-  used. See [ARCHITECTURE.md](../ARCHITECTURE.md) and [MODULES/CompanyProfiles.md](./CompanyProfiles.md).
+  `api/handlers/customers.ts` file in its place (that cap no longer applies — the app runs on its own Express server). See [ARCHITECTURE.md](../ARCHITECTURE.md) and [MODULES/CompanyProfiles.md](./CompanyProfiles.md).
 - Permissions: `customers:view/create/edit/archive` — Administrator gets all four by default; Sales
   User gets view/create/edit (no archive); Approver 1/2/Viewer get view-only. Not Super-Admin-locked
   — see [RBAC.md](../RBAC.md).

@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { ObjectId } from "mongodb";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission } from "../_lib/auth.js";
@@ -12,7 +12,7 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "GET") {
     // Every authenticated user needs the full role set client-side to evaluate hasPermission() —
     // this is how UI-level gating (sidebar visibility, button visibility) decides what to render.
@@ -56,7 +56,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, key: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, key: string) {
   await requirePermission(req, "roles:manage");
   const roles = await rolesCollection();
   const target = await roles.findOne({ key });
@@ -102,11 +102,10 @@ async function handleOne(req: VercelRequest, res: VercelResponse, key: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
-    // Departments + Teams (added 2026-08-14, Sales' 2-team visibility split) share this function
-    // file rather than getting their own — Vercel Hobby's 12-function cap is still fully used (see
-    // docs/ARCHITECTURE.md). Mounted here specifically (not e.g. users.ts) since both are
+    // Departments + Teams (added 2026-08-14, Sales' 2-team visibility split) share this handler
+    // file (routed here by server/app.ts `API_ROUTES`). Mounted here specifically (not e.g. users.ts) since both are
     // Super-Admin-gated org-structure config, the same class as Role Management itself. Checked
     // first, on the raw pathname, before falling through to the roles logic below — same
     // established sharing pattern Scope of Work/Delivery Order use inside api/handlers/quotes.ts.

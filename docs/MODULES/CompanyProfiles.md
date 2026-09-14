@@ -17,13 +17,13 @@ requirement (see "History" below).
   and every permission-boolean/render-case wiring it had in `src/App.tsx` — removed.
 - **API routes**: `GET/POST /api/company-profiles`, `GET/PATCH /api/company-profiles/:id`,
   `POST /api/company-profiles/:id/archive`, `POST /api/company-profiles/:id/set-default` — all gone.
-  `vercel.json` no longer has a rewrite rule for `/api/company-profiles*` at all, so hitting that
-  path (directly by URL, or via any old bookmark/link) now returns Vercel's plain 404 — there is no
-  function left that could serve it. `api/handlers/company-profiles.ts` and
+  `server/app.ts`'s `API_ROUTES` has no entry for `/api/company-profiles*`, so hitting that
+  path (directly by URL, or via any old bookmark/link) now returns the server's JSON 404 — there is
+  no handler left that could serve it. `api/handlers/company-profiles.ts` and
   `api/_lib/companyProfileValidation.ts` were deleted; the customer-data logic that used to share
-  that same serverless function (see [Customer.md](./Customer.md)) now has its own dedicated
-  `api/handlers/customers.ts` file, since removing this module freed the Vercel Hobby function slot
-  it had been folded into.
+  that same handler file (see [Customer.md](./Customer.md)) now has its own dedicated
+  `api/handlers/customers.ts` file, since removing this module freed the (then Vercel Hobby-capped)
+  function slot it had been folded into.
 - **Permissions**: `companyProfiles:view/create/edit/archive/delete/setDefault` removed from the
   `Permission` union, `ALL_PERMISSIONS`, `PERMISSION_LABELS`, `PERMISSION_LABEL_KEY`,
   `PERMISSION_GROUPS` (`src/lib/permissions.ts`), and from the Administrator default role's

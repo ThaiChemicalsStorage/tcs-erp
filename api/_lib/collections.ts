@@ -117,14 +117,13 @@ export async function scopeOfWorksCollection() {
   return db.collection<ScopeOfWorkFields>("scope_of_works");
 }
 
-/** Scope of Work attachment file BYTES (added 2026-07-24, reworked same day from Vercel Blob to
- * MongoDB after the user clarified the Vercel deployment is only a trial — the real hosting plan
- * is elsewhere, so file storage must travel with the database). One document per attached file,
+/** Scope of Work attachment file BYTES (added 2026-07-24, stored in MongoDB so file storage
+ * travels with the database rather than depending on a hosting platform's blob store). One document per attached file,
  * kept OUT of the scope_of_works documents so fetching a record never drags megabytes of file
  * data along. `data` is BSON Binary (raw bytes, no base64 overhead). `downloadKey` is a random
  * capability token — the download route serves the file to anyone presenting it (email recipients
- * have no app session in their mail client), same unguessable-URL security model Vercel Blob's
- * public URLs used. Size discipline lives in the upload route's limits (2 MB/file, 5 files/record
+ * have no app session in their mail client) — an unguessable-URL security model. Size discipline
+ * lives in the upload route's limits (2 MB/file, 5 files/record
  * — see src/lib/scopeOfWork.ts), which is what keeps the free Atlas tier from filling up. */
 export interface ScopeAttachmentFileFields {
   scopeOfWorkId: string;
@@ -172,9 +171,8 @@ export async function documentAttachmentFilesCollection() {
 /** Failed-login tracking for `POST /api/auth/login`'s rate limiting (added 2026-07-29 — closes the
  * long-standing "no login rate limiting" Known Gap; see docs/RBAC.md). One document per FAILED
  * attempt; successful logins delete the identifier's documents. MongoDB-backed deliberately (not
- * per-instance memory, which resets on every cold start and isn't shared across concurrent
- * serverless instances; not a Vercel KV-style service, per the no-Vercel-locked-services rule in
- * docs/SERVER_MIGRATION_PLAN.md). `createdAt` is a real BSON `Date` — unlike this codebase's usual
+ * process memory, which resets on every restart and isn't shared if more than one server process
+ * runs; not an external key-value service). `createdAt` is a real BSON `Date` — unlike this codebase's usual
  * ISO strings — because the TTL index that auto-purges old attempts only works on `Date` values. */
 export interface LoginAttemptFields {
   /** Lowercased login identifier (username or email) as typed — tracked per-target-account. */

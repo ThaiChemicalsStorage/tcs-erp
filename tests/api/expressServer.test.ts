@@ -6,8 +6,8 @@ import type { AddressInfo } from "node:net";
 /**
  * Integration test for the standalone Express server (server/app.ts) — real HTTP requests through
  * real routing, JSON body parsing, and cookie round-trips, against the same in-memory MongoDB
- * harness as loginRateLimit.test.ts. This is what guards the Vercel → Express migration: it proves
- * the unchanged api/ handlers behave identically when mounted under Express.
+ * harness as loginRateLimit.test.ts. It proves the api/ handlers behave correctly end-to-end when
+ * mounted under Express, not just when called directly with mock req/res.
  */
 
 let mongod: MongoMemoryServer;

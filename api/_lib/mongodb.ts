@@ -3,22 +3,18 @@ import { MongoClient, type Db } from "mongodb";
 
 const dbName = process.env.MONGODB_DB || "tcs_erp";
 
-// Local development only (`VERCEL_ENV` is always set on an actual Vercel deployment, and the
-// standalone Express server sets NODE_ENV=production on a real host — see .env.example) — some
-// local networks/firewalls/antivirus block Node's own DNS SRV lookups (`querySrv ECONNREFUSED`)
-// for the `mongodb+srv://` connection string even though the OS resolver (and every other DNS
-// lookup) works fine. Explicit public resolvers sidestep it; never applies in production, where
-// overriding the machine's resolver could itself break name resolution.
-if (!process.env.VERCEL_ENV && process.env.NODE_ENV !== "production") {
+// Local development only (the server sets NODE_ENV=production on a real host — see .env.example)
+// — some local networks/firewalls/antivirus block Node's own DNS SRV lookups (`querySrv
+// ECONNREFUSED`) for a `mongodb+srv://` connection string even though the OS resolver (and every
+// other DNS lookup) works fine. Explicit public resolvers sidestep it; never applies in production,
+// where overriding the machine's resolver could itself break name resolution.
+if (process.env.NODE_ENV !== "production") {
   setServers(["8.8.8.8", "1.1.1.1"]);
 }
 
 /**
- * One client per warm serverless instance, reused across invocations on that instance
- * (module scope survives between invocations, not just within one). Each Vercel Function
- * is bundled separately, so this is a singleton per-function-instance, not a single
- * process-wide connection — that's the correct shape for serverless (there's no shared
- * process to hold one connection across all functions).
+ * One MongoClient for the whole Express process, created on first use and reused by every request
+ * (the driver pools connections internally, `maxPoolSize` below).
  */
 let clientPromise: Promise<MongoClient> | undefined;
 

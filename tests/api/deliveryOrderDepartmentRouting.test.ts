@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient } from "mongodb";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../../api/_lib/httpTypes.js";
 
 /**
  * ส่งใบส่งมอบงานถึงแผนก (2026-08-20) — เจ้าของขอให้เซลล์ติ๊กส่งเอกสารให้แผนกที่เกี่ยวข้อง แล้วเอกสาร
@@ -19,9 +19,9 @@ const PASSWORD = "TestPassw0rd!";
 
 let mongod: MongoMemoryServer;
 let client: MongoClient;
-let authHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
-let quotesHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
-let rolesHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
+let authHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
+let quotesHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
+let rolesHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
 
 let salesCookie = "";
 let factoryCookie = "";
@@ -37,19 +37,19 @@ function makeReqRes(method: string, url: string, body: unknown, cookie: string) 
     method, url, body, query,
     headers: { "x-forwarded-for": "10.0.0.1", cookie },
     socket: { remoteAddress: "10.0.0.1" },
-  } as unknown as VercelRequest;
+  } as unknown as ApiRequest;
   const res = {
     status(code: number) { captured.statusCode = code; return this; },
     json(payload: unknown) { captured.body = payload; return this; },
     send(payload: unknown) { captured.body = payload; return this; },
     setHeader(name: string, value: string) { captured.headers[name.toLowerCase()] = value; return this; },
     end() { return this; },
-  } as unknown as VercelResponse;
+  } as unknown as ApiResponse;
   return { req, res, captured };
 }
 
 async function call(
-  handler: (req: VercelRequest, res: VercelResponse) => Promise<void>,
+  handler: (req: ApiRequest, res: ApiResponse) => Promise<void>,
   method: string, url: string, body?: unknown, cookie = salesCookie,
 ): Promise<CapturedResponse> {
   const { req, res, captured } = makeReqRes(method, url, body, cookie);

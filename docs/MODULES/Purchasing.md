@@ -87,12 +87,9 @@ would imply tax behaviour this document does not have.
 
 ## Routing
 
-ใบสั่งซื้อ mounts on **`api/handlers/quotes.ts`**, the documented overflow dispatch host —
-the Vercel 12-function budget is full (9 handlers + company + audit-log + dashboard), so a new
-`api/handlers/*.ts` file is not available. Adding a document is an import plus a two-line `if` on
-the pathname there, and matching entries in **both** `vercel.json` (two rewrites per route: bare and
-`:path*`) and `server/app.ts` (`API_ROUTES`). Keeping those two in sync is not optional — they are
-what makes local dev and production behave the same way.
+ใบสั่งซื้อ mounts on **`api/handlers/quotes.ts`**, the documented overflow dispatch host.
+Adding a document is an import plus a two-line `if` on the pathname there, plus an entry in
+`server/app.ts`'s `API_ROUTES` (`tests/serverRouteTable.test.ts` fails if one is missed).
 
 | Route | Actions |
 |---|---|
@@ -314,8 +311,8 @@ collections were created but never written to outside a local test.
 [CompanyProfiles.md](./CompanyProfiles.md): the four `src/lib`/`api/_lib` modules and both page
 folders were deleted; the collection accessors, types and 9 index declarations came out of
 `api/_lib/collections.ts`; the dispatch branches left `api/handlers/quotes.ts`, the `API_ROUTES`
-entries left `server/app.ts`, and the 4 rewrites left `vercel.json` (those paths now return a plain
-404 — no function is left behind them); `src/App.tsx` lost 11 wiring sites; the 14 permissions came
+entries left `server/app.ts` (those paths now return a plain
+404 — no handler is left behind them); `src/App.tsx` lost 11 wiring sites; the 14 permissions came
 out of all five tables in `src/lib/permissions.ts` plus `defaultRoles`; both search categories and
 their `GR-`/`BR-` fast paths came out of all five search files (Global Search went from 19 categories
 to 17); ~238 i18n keys went in both languages; and the manual lost chapters 17-18, with 19-25

@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
 import { productsCollection, categoriesCollection, auditLogCollection, toObjectId, withStringId, type ProductFields } from "../_lib/collections.js";
@@ -7,7 +7,7 @@ import { nowIso } from "../../src/lib/products.js";
 import { handleStock, backfillProductStockDefaults } from "../_lib/stockHandler.js";
 import { handleToolHoldings } from "../_lib/toolHoldingsHandler.js";
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "GET") {
     // stock:view-only holders (e.g. accounting_user) reach the Stock page without products:view —
     // it needs the product catalog to show stock levels, not full Product Library management.
@@ -77,7 +77,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
  * `stockQty`/`avgCost` เริ่มที่ 0 เสมอเหมือนการสร้างทีละตัว — ยอดสต๊อกเปลี่ยนได้ทาง
  * `POST /api/stock-movements` ทางเดียว ทุกการเปลี่ยนแปลงจึงมีแถว StockMovement กำกับ (ดู Product.md)
  */
-async function handleImport(req: VercelRequest, res: VercelResponse) {
+async function handleImport(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "products:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -177,7 +177,7 @@ async function handleImport(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ created, skipped, categoriesCreated });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const objectId = toObjectId(id);
   const products = await productsCollection();
 
@@ -229,7 +229,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     // Stock movements share this function slot with Products — see the multi-resource-sharing
     // convention documented in docs/CLAUDE.md (e.g. customers.ts also serves /api/search).

@@ -17,7 +17,7 @@ import type { AddressInfo } from "node:net";
  *      not approve it must not see it in their own inbox.
  *   3. **Only pending documents appear.** Drafts and approved documents must never leak in — this
  *      is the first route in the app that filters by `status` at all.
- *   4. **The route is mounted in server/app.ts**, not just `vercel.json`.
+ *   4. **The route is mounted in server/app.ts** (`API_ROUTES`).
  */
 
 let mongod: MongoMemoryServer;

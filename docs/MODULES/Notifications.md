@@ -1,6 +1,6 @@
 # Module: Notifications
 
-> Added 2026-07-08. Replaces the old decorative header bell (static gold dot, no data) with a real feed; migrated 2026-07-09 to real server-side delivery (Vercel Functions + MongoDB Atlas) — see [RBAC.md](../RBAC.md) for how this fits into the broader RBAC/approval-workflow system. This file was stale until the 2026-07-10 Codex review flagged the whole doc set for contradicting the real-backend migration — corrected throughout below, not just the specific lines called out.
+> Added 2026-07-08. Replaces the old decorative header bell (static gold dot, no data) with a real feed; migrated 2026-07-09 to real server-side delivery (Node.js API + MongoDB) — see [RBAC.md](../RBAC.md) for how this fits into the broader RBAC/approval-workflow system. This file was stale until the 2026-07-10 Codex review flagged the whole doc set for contradicting the real-backend migration — corrected throughout below, not just the specific lines called out.
 
 ## Purpose
 
@@ -34,7 +34,7 @@ Tell each user, specifically, when a quotation event relevant to them happens �
      status change must not fail because a notification could not be written. Zero recipients is a
      `console.warn`, since that is the silent failure that matters (usually: no role holds the
      approve permission yet).
-5. Real cross-user, cross-device delivery — another user's browser sees the new notification (and updated unread badge) the next time it fetches `GET /api/notifications`, no same-browser/same-session limitation. **2026-07-24 (direct user request — "ต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น")**: that fetch is now automatic — `App.tsx` polls `GET /api/notifications` every 45 seconds while signed in, plus an immediate refetch on window focus and on a hidden→visible tab transition (polling pauses while the tab is hidden, so a backgrounded tab costs nothing). Previously notifications were fetched once at boot only, so nothing new ever appeared without a full page reload. Polling was chosen over SSE/WebSocket deliberately: the Vercel serverless backend can't hold a connection open, and polling is fully portable to the future self-managed server — SSE is recorded as a possible post-migration upgrade in [SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md).
+5. Real cross-user, cross-device delivery — another user's browser sees the new notification (and updated unread badge) the next time it fetches `GET /api/notifications`, no same-browser/same-session limitation. **2026-07-24 (direct user request — "ต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น")**: that fetch is now automatic — `App.tsx` polls `GET /api/notifications` every 45 seconds while signed in, plus an immediate refetch on window focus and on a hidden→visible tab transition (polling pauses while the tab is hidden, so a backgrounded tab costs nothing). Previously notifications were fetched once at boot only, so nothing new ever appeared without a full page reload. Polling was chosen over SSE/WebSocket deliberately, while the backend still ran serverless (no long-lived connections) — it stays fully portable, and SSE is recorded as a possible upgrade now that the app runs on its own Express server in [SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md).
 
 ## Pages
 
@@ -87,7 +87,7 @@ None of its own — delivery is inherently role-based (see Business Flow), but r
 ## Future Improvements
 
 - A dedicated "view all notifications" page if the dropdown panel ever proves insufficient
-- True push delivery (SSE) once the app runs on the self-managed server — not viable on Vercel serverless (functions can't hold a connection open); the 45s polling above is the portable interim. See [SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md).
+- True push delivery (SSE) — possible now that the app runs on its own Express server; the 45s polling above was chosen while it still ran serverless and stays the fallback. See [SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md).
 - The "เปิดดูใน TCS ERP" link inside the Scope of Work document-recipient *email* (as opposed to the in-app notification, which already deep-links correctly via internal React state) still only opens the app's homepage — this app has no URL-based router (`App.tsx` holds a plain `activeNav` string, see [ARCHITECTURE.md](../ARCHITECTURE.md)), so a plain `<a href>` from an external email genuinely cannot restore in-memory navigation state on page load. Real deep-linking from an email would need URL/query-param-based routing added app-wide — a materially larger change than this pass, not attempted here.
 
 ## Known Issues

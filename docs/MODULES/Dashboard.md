@@ -284,7 +284,7 @@ This is the deliberately safer of the three options, but it can understate histo
 such a document exists, and nothing in the UI currently calls it out per-record. Every quote has
 carried a real `lines` array since the 2026-07-08 rewrite, so this is expected to be a null set in
 practice — not verified against production data in this sandboxed session (see PROJECT_STATUS.md
-"Known Risks"). `api/dashboard/index.ts` now emits a `console.warn` (grep-able in Vercel function
+"Known Risks"). `api/dashboard/index.ts` now emits a `console.warn` (grep-able in the server's
 logs) naming the affected count whenever this fires, as lightweight telemetry until a real
 per-record data-quality surface is worth building. If it ever fires against real data, treat it as
 a signal to inspect those specific quotes by hand (`db.quotes.find({ lines: { $exists: false } })`)

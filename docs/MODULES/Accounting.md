@@ -177,7 +177,7 @@ be built on top of the existing API without backend changes.
 `billingConditions`/`requiresReport`), `api/_lib/documentNumbering.ts` (Buddhist-year `{PREFIX}{YY}
 {MM}{SEQ}` atomic numbering), `api/_lib/arCalculations.ts` (pure calc functions), `api/_lib/
 arHandler.ts` (milestones/attachments/documents routes, mounted from `api/handlers/quotes.ts` +
-`server/app.ts` + `vercel.json`), 4 new `ar:*` permissions + a new `accounting_user` default role +
+`server/app.ts`), 4 new `ar:*` permissions + a new `accounting_user` default role +
 an `rbac_migrations` backfill entry, and a guard in `scopeOfWorkHandler.ts`'s `handleRewrite()`
 blocking Rewrite once any installment is billed. Also extended `src/lib/customers.ts`/
 `api/_lib/customerValidation.ts`/`api/_lib/customersHandler.ts` for the new Customer fields.

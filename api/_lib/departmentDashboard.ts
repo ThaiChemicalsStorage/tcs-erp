@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause, buildCostControlVisibilityClause } from "./visibility.js";
@@ -517,13 +517,13 @@ const BLOCK_BUILDERS: { [K in DepartmentKey]: (c: BlockContext) => Promise<Depar
 const VIEWS = new Set<string>(["overview", ...DEPARTMENT_KEYS]);
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function queryString(req: VercelRequest, key: string): string {
+function queryString(req: ApiRequest, key: string): string {
   const v = req.query?.[key];
   if (Array.isArray(v)) return v[0] ?? "";
   return typeof v === "string" ? v : "";
 }
 
-export async function handleDepartmentDashboard(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleDepartmentDashboard(req: ApiRequest, res: ApiResponse): Promise<void> {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "dashboard:view");
 

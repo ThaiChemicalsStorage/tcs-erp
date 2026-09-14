@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection, Filter } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
@@ -347,7 +347,7 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:view");
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
@@ -404,7 +404,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ materialRequisitions: summaries });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:create");
 
@@ -568,7 +568,7 @@ async function costByProductFor(lines: MaterialRequisitionLine[]): Promise<Recor
   return productCostBasis(lines.map((l) => l.productId).filter((id) => id && isObjectIdLike(id)));
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "materialRequisition:view");
   const doc = await loadOrThrow(id);
@@ -596,7 +596,7 @@ const DATE_FIELDS: { key: keyof MaterialRequisitionFields; label: string }[] = [
   { key: "costDeptAt", label: "วันที่แผนกต้นทุน" },
 ];
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -684,7 +684,7 @@ function linesWithDerivedWithdrawals(lines: MaterialRequisitionLine[], batches: 
  * ใบเก่าที่จ่ายไปแล้วก่อนมีระบบรอบ ถูกแปลงยอดเดิมเป็นรอบย้อนหลังแล้วเขียนลงฐานข้อมูล**พร้อมกับ**รอบใหม่
  * (`legacyIssueBatchesOf` ผ่าน `issueBatchesOf`) ยอดเดิมจึงไม่หายและไม่ถูกตัดสต๊อกซ้ำ
  */
-async function handlePostIssueBatch(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
@@ -784,7 +784,7 @@ async function handlePostIssueBatch(req: VercelRequest, res: VercelResponse, id:
  * ของทั้งรอบกลับเข้าคลังเป็น kind `return` · ยกเลิกไม่ได้ถ้าทีมคืนของมามากกว่าที่จะเหลือว่าจ่ายไป
  * (ไม่งั้นยอด "คืนของ" จะมากกว่ายอด "จ่ายแล้ว" ซึ่งเป็นสถานะที่กฎการคืนของห้ามไว้อยู่แล้ว)
  */
-async function handleCancelIssueBatch(req: VercelRequest, res: VercelResponse, id: string, batchId: string) {
+async function handleCancelIssueBatch(req: ApiRequest, res: ApiResponse, id: string, batchId: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
@@ -852,7 +852,7 @@ async function handleCancelIssueBatch(req: VercelRequest, res: VercelResponse, i
  * 2026-09-03: ต้องเป็นใบ Final (ก่อนหน้านี้ใบร่างก็บันทึกคืนได้ แค่ไม่แตะสต๊อก — ตอนนี้ของที่ยังไม่เคย
  * ถูกจ่ายไม่มีอะไรให้คืน) · คืนได้ไม่เกินที่จ่ายไปแล้วต่อบรรทัด · ลงบัญชีเป็น kind `return`
  */
-async function handleReturn(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleReturn(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadOrThrow(id);
@@ -972,7 +972,7 @@ const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }
   respond: (res, doc) => res.status(200).json({ materialRequisition: toClient(doc) }),
 };
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:print");
   const doc = await loadOrThrow(id);
@@ -1001,7 +1001,7 @@ async function nextMaterialRequisitionRevision(counters: Collection<CounterField
  * ยอดเบิก/ยอดคืน/ช่องเซ็นไม่สืบทอด — ฉบับใหม่เริ่มต้นเหมือนใบเบิกที่ยังไม่ได้เบิกจริง (ของที่ฉบับเดิม
  * จ่ายไปแล้วยังอยู่ในบัญชีสต๊อกภายใต้ฉบับเดิม ไม่ถูกย้ายหรือย้อน)
  */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:create");
   const source = await loadOrThrow(id);
@@ -1060,7 +1060,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   res.status(201).json({ materialRequisition: toClient(created) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:delete");
   const doc = await loadOrThrow(id);
@@ -1078,14 +1078,14 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleMaterialRequisition(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleMaterialRequisition(req: ApiRequest, res: ApiResponse): Promise<void> {
   // Defensive "seed on first request to this resource" — same pattern seedJobTypesIfEmpty()/
   // seedQuotationTemplatesIfEmpty() already established, guarded to run once per warm instance (see
   // ensureMaterialCatalogSeeded()'s own doc comment).

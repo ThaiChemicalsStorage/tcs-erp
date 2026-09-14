@@ -22,8 +22,8 @@ import type { AddressInfo } from "node:net";
  *   4. **Stock stays at zero.** Import may never set `stockQty`/`avgCost`: those move only through
  *      a StockMovement row (docs/MODULES/Product.md). A file column called "คงเหลือ" must not
  *      become an untraceable opening balance.
- *   5. **The route is mounted in `server/app.ts`** — a missed Express mapping 404s locally while
- *      still working on Vercel; a 401 without a cookie proves it is wired.
+ *   5. **The route is mounted in `server/app.ts`** — a missed Express mapping 404s; a 401 without
+ *      a cookie proves it is wired.
  */
 
 let mongod: MongoMemoryServer;

@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection, WithId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, requireUser, type AuthContext } from "./auth.js";
@@ -72,7 +72,7 @@ function sanitizeLines(raw: unknown): MaterialRequisitionTemplateLine[] {
   });
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   const templates = await materialRequisitionTemplatesCollection();
   await ensureIndexes(templates);
 
@@ -110,7 +110,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const objectId = toObjectId(id);
   const templates = await materialRequisitionTemplatesCollection();
 
@@ -154,7 +154,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleMaterialRequisitionTemplates(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleMaterialRequisitionTemplates(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/material-requisition-templates");
   if (parts.length === 0) return handleList(req, res);
   if (parts.length === 1) return handleOne(req, res, parts[0]);

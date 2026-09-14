@@ -301,9 +301,8 @@ details, since the toast itself is transient) — e.g. *"ชีต 'Wet scrubber
 template needs manual re-transcription. This is genuinely new capability: a workbook edit that
 would previously have gone completely unnoticed by the system now produces a real, visible signal.
 
-**Never fails the import.** If the workbook file can't be read in some environment (deploy target
-where `vercel.json`'s `functions["api/handlers/jobtypes.ts"].includeFiles` config wasn't honored,
-for instance), `fingerprintSourceWorkbook()` catches the error and returns `null` — the import still
+**Never fails the import.** If the workbook file can't be read in some environment (e.g. a container
+image built without `public/`), `fingerprintSourceWorkbook()` catches the error and returns `null` — the import still
 runs exactly as before, seed-content idempotency (`sourceHash`) is completely unaffected, and a
 single soft warning notes that workbook-change detection was skipped this run.
 
@@ -329,15 +328,9 @@ is the split point" judgment risk this pass was trying to avoid touching.
 
 ## API Endpoints
 
-Mounted by extending the existing `api/handlers/jobtypes.ts` Vercel function — this repo is at
-Vercel Hobby's 12-function cap, so new routes share an existing function file by checking the raw
+Mounted by extending the existing `api/handlers/jobtypes.ts` handler — new routes share that file by checking the raw
 `req.url` pathname before falling through to the existing Job Type dispatch, the same established
-pattern `/api/search` uses by sharing `api/handlers/customers.ts`. New `vercel.json` rewrites:
-
-```json
-{ "source": "/api/quotation-templates", "destination": "/api/handlers/jobtypes" },
-{ "source": "/api/quotation-templates/:path*", "destination": "/api/handlers/jobtypes" }
-```
+pattern `/api/search` uses by sharing `api/handlers/customers.ts`. `server/app.ts`'s `API_ROUTES` maps `"quotation-templates"` to the jobtypes handler.
 
 | Method & Path | Auth | Notes |
 |---|---|---|

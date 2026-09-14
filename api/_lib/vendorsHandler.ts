@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection, WithId } from "mongodb";
 import { MongoServerError } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
@@ -92,7 +92,7 @@ async function writeVendorAuditEntry(
   });
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   const vendors = await vendorsCollection();
   await ensureVendorIndexes(vendors);
 
@@ -144,7 +144,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const objectId = toObjectId(id);
   const vendors = await vendorsCollection();
 
@@ -183,7 +183,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 }
 
 /** เก็บถาวร/กู้คืน — soft-delete เสมอ ไม่เคยลบแถวจริง เพราะใบสั่งซื้อเก่าอ้างชื่อผู้ขายไว้ */
-async function handleArchive(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "vendor:archive");
 
@@ -205,7 +205,7 @@ async function handleArchive(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ vendor: publicVendor });
 }
 
-export async function handleVendors(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleVendors(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/vendors");
 
   if (parts.length === 0) return handleList(req, res);

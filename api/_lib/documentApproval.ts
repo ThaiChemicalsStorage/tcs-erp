@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection } from "mongodb";
 import { HttpError } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
@@ -103,7 +103,7 @@ export interface ApprovalConfig<TDoc extends ApprovableFields> {
     /** ข้อความสั้น ๆ บอกว่าเป็นใบของงานไหน เช่นรหัสงานหรือชื่อลูกค้า — วงเล็บต่อท้ายให้เอง */
     context?: (doc: TDoc) => string;
   };
-  respond: (res: VercelResponse, doc: TDoc) => void;
+  respond: (res: ApiResponse, doc: TDoc) => void;
 }
 
 /** ตัวกรอง `_id` — เอกสารกลุ่มนี้ใช้เลขที่เอกสารเป็น `_id` (string) ไม่ใช่ ObjectId */
@@ -121,7 +121,7 @@ async function applyStatusChange<TDoc extends ApprovableFields>(
 
 /** ร่าง → รออนุมัติ */
 export async function handleSubmitApproval<TDoc extends ApprovableFields>(
-  req: VercelRequest, res: VercelResponse, id: string, cfg: ApprovalConfig<TDoc>,
+  req: ApiRequest, res: ApiResponse, id: string, cfg: ApprovalConfig<TDoc>,
 ) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
@@ -168,7 +168,7 @@ async function notifyApprovers<TDoc extends ApprovableFields>(
 
 /** รออนุมัติ → อนุมัติแล้ว (ปุ่ม "อนุมัติ") */
 export async function handleApprove<TDoc extends ApprovableFields>(
-  req: VercelRequest, res: VercelResponse, id: string, cfg: ApprovalConfig<TDoc>,
+  req: ApiRequest, res: ApiResponse, id: string, cfg: ApprovalConfig<TDoc>,
 ) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, cfg.approvePermission);
@@ -201,7 +201,7 @@ export async function handleApprove<TDoc extends ApprovableFields>(
 
 /** รออนุมัติ → ร่าง (ผู้อนุมัติตีกลับ ต้องระบุเหตุผล) */
 export async function handleReject<TDoc extends ApprovableFields>(
-  req: VercelRequest, res: VercelResponse, id: string, cfg: ApprovalConfig<TDoc>,
+  req: ApiRequest, res: ApiResponse, id: string, cfg: ApprovalConfig<TDoc>,
 ) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, cfg.approvePermission);
@@ -219,7 +219,7 @@ export async function handleReject<TDoc extends ApprovableFields>(
 
 /** รออนุมัติ → ร่าง (ผู้ส่งขอถอนกลับมาแก้เอง ไม่ต้องมีสิทธิ์อนุมัติ) */
 export async function handleWithdrawApproval<TDoc extends ApprovableFields>(
-  req: VercelRequest, res: VercelResponse, id: string, cfg: ApprovalConfig<TDoc>,
+  req: ApiRequest, res: ApiResponse, id: string, cfg: ApprovalConfig<TDoc>,
 ) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);

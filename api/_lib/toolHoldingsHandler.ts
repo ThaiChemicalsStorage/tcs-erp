@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
 import {
@@ -83,7 +83,7 @@ function bangkokDayStartIso(day: string): string {
   return new Date(`${day}T00:00:00+07:00`).toISOString();
 }
 
-function query(req: VercelRequest, key: string): string {
+function query(req: ApiRequest, key: string): string {
   const v = req.query?.[key];
   return typeof v === "string" ? v.trim() : "";
 }
@@ -95,7 +95,7 @@ async function toolProductIds(): Promise<Map<string, { code: string; name: strin
 }
 
 /** filter ร่วมของทั้งสองโหมด — เฉพาะ movement ที่มาจากใบเบิกและเป็นสินค้าประเภทเครื่องมือ */
-function baseFilter(req: VercelRequest, productIds: string[]): Record<string, unknown> {
+function baseFilter(req: ApiRequest, productIds: string[]): Record<string, unknown> {
   const filter: Record<string, unknown> = {
     // ของที่ทีมถืออยู่มาได้สองทาง: จ่ายผ่านใบเบิก และจ่ายตรงจากหน้าเครื่องมือ — ต้องรวมทั้งคู่เสมอ
     sourceType: { $in: ["material_requisition", "tool_issue"] },
@@ -126,7 +126,7 @@ function baseFilter(req: VercelRequest, productIds: string[]): Record<string, un
   return filter;
 }
 
-async function handleHoldings(req: VercelRequest, res: VercelResponse, productMeta: Map<string, { code: string; name: string; unit: string }>) {
+async function handleHoldings(req: ApiRequest, res: ApiResponse, productMeta: Map<string, { code: string; name: string; unit: string }>) {
   const movements = await stockMovementsCollection();
   // ยอดถือครองไม่สนช่วงวันที่ — "ตอนนี้ถืออยู่เท่าไร" ต้องรวมตั้งแต่ต้น ช่วงวันที่มีไว้สำหรับรายงานเท่านั้น
   const filter = baseFilter(req, [...productMeta.keys()]);
@@ -157,7 +157,7 @@ async function handleHoldings(req: VercelRequest, res: VercelResponse, productMe
   res.status(200).json({ holdings });
 }
 
-async function handleReport(req: VercelRequest, res: VercelResponse, productMeta: Map<string, { code: string; name: string; unit: string }>) {
+async function handleReport(req: ApiRequest, res: ApiResponse, productMeta: Map<string, { code: string; name: string; unit: string }>) {
   const movements = await stockMovementsCollection();
   const filter = baseFilter(req, [...productMeta.keys()]);
   const docs = await movements.find(filter).sort({ createdAt: 1 }).limit(MAX_REPORT_ROWS).toArray();
@@ -188,7 +188,7 @@ async function handleReport(req: VercelRequest, res: VercelResponse, productMeta
  *
  * ตอนรับคืน ตรวจกับยอดที่ทีมนั้นถืออยู่จริงก่อนเสมอ ไม่งั้นจะ "คืน" ของที่ไม่เคยเบิกจนสต๊อกงอกเอง
  */
-async function handleIssue(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handleIssue(req: ApiRequest, res: ApiResponse): Promise<void> {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -294,7 +294,7 @@ async function writeToolAudit(ctx: AuthContext, mode: "issue" | "return", slipNu
     createdAt: nowIso(),
   });
 }
-export async function handleToolHoldings(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleToolHoldings(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/tool-holdings");
   // จ่าย/รับคืนเป็นการเขียนสต๊อกจริง จึงต้องมี stock:adjust ไม่ใช่ stock:view ของหน้าดูอย่างเดียว
   if (parts.length === 1 && parts[0] === "issue") return handleIssue(req, res);

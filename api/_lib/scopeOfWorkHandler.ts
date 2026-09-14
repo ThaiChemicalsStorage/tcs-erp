@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { WithId, ObjectId } from "mongodb";
 import { MongoServerError } from "mongodb";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -31,8 +31,8 @@ import type {
 
 /**
  * Scope of Work API (added 2026-07-15) — `api/handlers/quotes.ts` dispatches
- * `/api/scope-of-works` here on the raw pathname, sharing that function file rather than getting
- * its own (Vercel Hobby's 12-function cap is still fully used — see docs/ARCHITECTURE.md). Mounted
+ * `/api/scope-of-works` here on the raw pathname, sharing that handler file rather than getting
+ * its own (see docs/ARCHITECTURE.md). Mounted
  * from the quotes handler (not jobtypes.ts) since a Scope of Work is created from, and always
  * belongs to, exactly one quotation. See docs/MODULES/ScopeOfWork.md for the full feature writeup
  * and PDF-to-field mapping.
@@ -474,7 +474,7 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
   };
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:view");
   const quotationId = typeof req.query.quotationId === "string" ? req.query.quotationId : "";
@@ -518,7 +518,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
  * retryable allocation race). */
 const MAX_SCOPE_NUMBER_ATTEMPTS = 3;
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:create");
   if (!roleHasPermission(ctx.role, "quotations:view")) throw new HttpError(403, "Forbidden");
@@ -631,7 +631,7 @@ function throwIfIncomplete(validation: { valid: boolean; fieldErrors: Record<str
   });
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   await requirePermission(req, "scopeOfWork:view");
   const doc = await loadScopeOrThrow(id);
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(doc)) });
@@ -653,7 +653,7 @@ const FOLLOW_UP_FIELDS = new Set([
   "documentRecipientMessage",
 ]);
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
@@ -772,7 +772,7 @@ async function notifyScopeApprovalEvent(
 }
 
 
-async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleSubmitApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
@@ -803,7 +803,7 @@ async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id:
 
 /** `/finalize` now means "อนุมัติ" — kept under its original route name so the permission story
  * (`scopeOfWork:finalize`) and client function name stay unchanged. */
-async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleFinalize(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:finalize");
   const doc = await loadScopeOrThrow(id);
@@ -835,7 +835,7 @@ async function handleFinalize(req: VercelRequest, res: VercelResponse, id: strin
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
-async function handleRejectApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRejectApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:finalize");
   const doc = await loadScopeOrThrow(id);
@@ -859,7 +859,7 @@ async function handleRejectApproval(req: VercelRequest, res: VercelResponse, id:
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
-async function handleWithdrawApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleWithdrawApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
@@ -876,7 +876,7 @@ async function handleWithdrawApproval(req: VercelRequest, res: VercelResponse, i
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
-async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDuplicate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:create");
   // Reading the source record's full content requires `:view` too — `:create` alone shouldn't let
@@ -949,7 +949,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
  * already-rewritten `-R1` correctly advances to `-R2`, never `-R1-R1` — same guarantee Quotation's
  * Rewrite gives, via the same shared `getRevisionRoot()`. The source record is never modified.
  */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:create");
   // Same defense-in-depth as handleDuplicate — reading the source's full content needs `:view` too.
@@ -1019,7 +1019,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
  * been filling in by hand (drawingCode/deliveryDate/shippingContact/etc., checklistGroups,
  * paymentConditions percentages, seller/approver, secondaryCode) are left untouched — only the
  * fields this same action originally populated are refreshed. */
-async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRefresh(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
@@ -1060,10 +1060,8 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
 }
 
 // ─── Attachments (added 2026-07-24, reworked to MongoDB storage the same day) ──────────────────
-// Originally built on Vercel Blob; reworked after the user clarified the Vercel deployment is
-// only a trial and the real hosting plan is elsewhere — file bytes now live in the separate
-// `scope_attachment_files` MongoDB collection (see collections.ts) so attachments travel with
-// the database to any future host. The "กลัว db เต็ม" concern is answered with hard limits
+// File bytes live in the separate `scope_attachment_files` MongoDB collection (see
+// collections.ts) so attachments travel with the database, independent of the hosting platform. The "กลัว db เต็ม" concern is answered with hard limits
 // instead of external storage: 2 MB/file × 5 files/record (see src/lib/scopeOfWork.ts).
 // Managed only through these dedicated routes; `attachments` is deliberately NOT a PATCHable
 // field, so a stale client can't accidentally wipe the array (and with it, track of live files).
@@ -1093,7 +1091,7 @@ async function ensureAttachmentIndexes(
   attachmentIndexesEnsured = true;
 }
 
-async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleAttachmentUpload(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
@@ -1181,7 +1179,7 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
-async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, id: string, attachmentId: string) {
+async function handleAttachmentDelete(req: ApiRequest, res: ApiResponse, id: string, attachmentId: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
@@ -1214,7 +1212,7 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, i
  * content type instead: this route is unauthenticated and lives on the app's own origin, so
  * echoing an uploader-chosen `contentType` back with `inline` disposition would let any editor
  * store an HTML file that runs script (and reads the session token) in whoever opens the emailed
- * link. Vercel Blob never had this problem only because its public URLs were on a foreign origin. */
+ * link. (A separate-origin file host wouldn't have this problem; same-origin serving does.) */
 const INLINE_SAFE_CONTENT_TYPES = new Set([
   "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain",
 ]);
@@ -1228,9 +1226,9 @@ function encodeRfc5987(value: string): string {
 
 /** Serves an attachment's bytes. Deliberately NO session auth — access is gated by the random
  * `downloadKey` capability token baked into the URL instead, because these links go into recipient
- * emails and a mail client has no app session. The key is 24 random bytes (base64url), the same
- * unguessable-URL model Vercel Blob's public URLs use; a wrong/missing key is an opaque 404. */
-async function handleAttachmentDownload(req: VercelRequest, res: VercelResponse, id: string, attachmentId: string) {
+ * emails and a mail client has no app session. The key is 24 random bytes (base64url) — an
+ * unguessable-URL model; a wrong/missing key is an opaque 404. */
+async function handleAttachmentDownload(req: ApiRequest, res: ApiResponse, id: string, attachmentId: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const key = typeof req.query.key === "string" ? req.query.key : "";
   if (!key) throw new HttpError(404, "ไม่พบไฟล์แนบ");
@@ -1250,7 +1248,7 @@ async function handleAttachmentDownload(req: VercelRequest, res: VercelResponse,
   res.status(200).send(buffer);
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:print");
   const doc = await loadScopeOrThrow(id);
@@ -1285,7 +1283,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
  * `"Final"` record (unlike content edits, which are Draft-only) — it distributes the document,
  * it doesn't change it.
  */
-async function handleSendDocumentNotifications(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleSendDocumentNotifications(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:edit");
   const doc = await loadScopeOrThrow(id);
@@ -1379,7 +1377,7 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
  * after a quiet week is the whole point) and abuse stays traceable. Blocked with a clear 400 once
  * the record already has a PO number.
  */
-async function handleChasePo(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleChasePo(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:chasePo");
   const doc = await loadScopeOrThrow(id);
@@ -1432,7 +1430,7 @@ async function handleChasePo(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ ok: true, notifiedUserName: targetName });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:delete");
   const doc = await loadScopeOrThrow(id);
@@ -1446,14 +1444,14 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleScopeOfWork(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/scope-of-works");
 
   if (parts.length === 0) {

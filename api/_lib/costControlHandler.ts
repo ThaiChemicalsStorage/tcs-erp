@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
@@ -173,7 +173,7 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
@@ -199,7 +199,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 // ทั้ง create และ update จึงไม่รับคีย์พวกนี้อีกแล้ว ส่งมาก็ถูกละเลยเงียบ ๆ เหมือนคีย์แปลกปลอมอื่น ๆ
 // ค่าที่เอกสารเก่าเก็บไว้ใน MongoDB ไม่ได้ถูกลบ แค่ไม่มีใครอ่าน
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -260,7 +260,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ costControl: toClient(doc) });
 }
 
-async function handleGet(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "costControl:view");
   res.status(200).json({ costControl: toClient(await loadOrThrow(id)) });
@@ -274,7 +274,7 @@ const SHORT_TEXT_FIELDS: { key: keyof CostControlFields; label: string }[] = [
   { key: "approvedBy", label: "ผู้อนุมัติ" },
 ];
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -320,7 +320,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ costControl: toClient(await loadOrThrow(id)) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:delete");
   const doc = await loadOrThrow(id);
@@ -331,7 +331,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(204).end();
 }
 
-async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:print");
   const doc = await loadOrThrow(id);
@@ -339,7 +339,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true });
 }
 
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:create");
   const doc = await loadOrThrow(id);
@@ -394,7 +394,7 @@ const approvalConfig: ApprovalConfig<CostControlFields & { _id: string }> = {
 /** เส้นทางที่เขียนข้อมูล — ทุกตัวต้องผ่าน `assertNotScopeRecipientOnly()` ก่อน */
 const MUTATING_ACTIONS = new Set(["rewrite", "submit-approval", "approve", "finalize", "reject", "withdraw-approval"]);
 
-export async function handleCostControl(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleCostControl(req: ApiRequest, res: ApiResponse): Promise<void> {
   const ctx = await requireUser(req);
   const parts = getPathSegments(req, "/api/cost-controls");
 

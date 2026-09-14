@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { type WithId, Binary } from "mongodb";
 import { randomUUID } from "node:crypto";
 import { HttpError, getPathSegments } from "./http.js";
@@ -24,9 +24,8 @@ import { applyStockMovement, assertProductsHaveStock } from "./stockHandler.js";
 /**
  * Accounts Receivable API (added 2026-08-17, Phase 1 — see docs/MODULES/Accounting.md for the full
  * design writeup and the Phase 1/Phase 2 boundary). Mounted from `api/handlers/quotes.ts` on the raw
- * pathname (same "shares this function file" convention Scope of Work/Delivery Order already use —
- * see docs/ARCHITECTURE.md; the Vercel function-count cap no longer actually applies since
- * production is self-hosted Express, but the convention is kept for consistency).
+ * pathname (same "shares this handler file" layout Scope of Work/Delivery Order already use —
+ * see docs/ARCHITECTURE.md).
  *
  * Deliberately does NOT use a Mongo multi-document transaction for "issue AR+BI together" — no
  * transaction usage exists anywhere in this codebase and it's unconfirmed whether production Mongo
@@ -136,7 +135,7 @@ async function loadMilestoneOrThrow(id: string): Promise<WithId<ArMilestoneField
 
 // ─── Milestones ─────────────────────────────────────────────────────────────
 
-async function handleMilestonesList(req: VercelRequest, res: VercelResponse) {
+async function handleMilestonesList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "ar:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
@@ -149,7 +148,7 @@ async function handleMilestonesList(req: VercelRequest, res: VercelResponse) {
 /** GET returns-or-lazily-creates the milestone row for a given Scope of Work installment — the
  * wizard's first step calls this with `?scopeOfWorkId=&installmentId=` to open (and, if needed,
  * bootstrap) a milestone before showing its checklist/review screen. */
-async function handleMilestoneOpen(req: VercelRequest, res: VercelResponse) {
+async function handleMilestoneOpen(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -163,7 +162,7 @@ async function handleMilestoneOpen(req: VercelRequest, res: VercelResponse) {
 
 const PATCHABLE_MILESTONE_KEYS = new Set(["workClassification", "retentionPct", "checklistState"]);
 
-async function handleMilestoneUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleMilestoneUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:create");
   const doc = await loadMilestoneOrThrow(id);
@@ -202,7 +201,7 @@ async function handleMilestoneUpdate(req: VercelRequest, res: VercelResponse, id
 /** Explicit-only re-pull of `pct`/`label`/`paymentType`/`days` from the Scope of Work — mirrors
  * Delivery Order's own explicit-only "อัปเดตข้อมูลจาก Scope of Work" refresh. Only allowed while
  * `not_billed` (once billed, the milestone is a frozen snapshot of what was actually invoiced). */
-async function handleMilestoneRefresh(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleMilestoneRefresh(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:create");
   const doc = await loadMilestoneOrThrow(id);
@@ -234,7 +233,7 @@ const MAX_AR_ATTACHMENTS_PER_MILESTONE = 5;
 const MAX_AR_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 const VALID_CHECKLIST_KEYS: ReadonlySet<ArChecklistKey> = new Set(["poCopy", "deliveryNote", "report", "stampDuty", "bankGuarantee", "whtEnvelope"]);
 
-async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, milestoneId: string) {
+async function handleAttachmentUpload(req: ApiRequest, res: ApiResponse, milestoneId: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:create");
   const milestone = await loadMilestoneOrThrow(milestoneId);
@@ -278,7 +277,7 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, m
   res.status(200).json({ milestone: withStringId(updated), attachmentId });
 }
 
-async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, milestoneId: string, attachmentId: string) {
+async function handleAttachmentDelete(req: ApiRequest, res: ApiResponse, milestoneId: string, attachmentId: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:create");
   const milestone = await loadMilestoneOrThrow(milestoneId);
@@ -295,7 +294,7 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, m
   res.status(200).json({ milestone: withStringId(updated) });
 }
 
-async function handleAttachmentDownload(req: VercelRequest, res: VercelResponse, milestoneId: string, attachmentId: string) {
+async function handleAttachmentDownload(req: ApiRequest, res: ApiResponse, milestoneId: string, attachmentId: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   // Session + permission gated (not an unguessable capability URL) — unlike Scope of Work's
   // attachments, these are never emailed to an external recipient, so there's no mail-client-with-
@@ -390,7 +389,7 @@ async function buildDocumentLines(
   return { docType: "IV", lines: [...itemLines, ...deductionLines] };
 }
 
-async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
+async function handleIssueDocuments(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:issue");
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -513,7 +512,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
  * milestone/checklist semantics that don't apply here, and branching it would risk the already-
  * live-tested milestone flow. Still issues a companion BI in the same action, matching the
  * "AR/IV + BI together" convention every tax invoice follows regardless of how it was created. */
-async function handleManualIssue(req: VercelRequest, res: VercelResponse) {
+async function handleManualIssue(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:create");
   if (!roleHasPermission(ctx.role, "ar:issue")) throw new HttpError(403, "Forbidden");
@@ -622,7 +621,7 @@ async function handleManualIssue(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ documents: [withStringId(principal), withStringId(bi)] });
 }
 
-async function handleDocumentsList(req: VercelRequest, res: VercelResponse) {
+async function handleDocumentsList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "ar:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
@@ -655,7 +654,7 @@ async function loadDocumentOrThrow(id: string): Promise<WithId<ArDocumentFields>
   return doc;
 }
 
-async function handleDocumentOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDocumentOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "ar:view");
   const doc = await loadDocumentOrThrow(id);
@@ -669,7 +668,7 @@ async function handleDocumentOne(req: VercelRequest, res: VercelResponse, id: st
  * (the VAT liability lives on the tax invoice, not the receipt). Issuing the receipt for a
  * non-deposit milestone closes it (billingStatus "work_open" → "closed" = "จบ" in the Flow's
  * lifecycle); a deposit milestone stays "billed". */
-async function handleIssueReceipt(req: VercelRequest, res: VercelResponse, principalId: string) {
+async function handleIssueReceipt(req: ApiRequest, res: ApiResponse, principalId: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:issue");
   const principal = await loadDocumentOrThrow(principalId);
@@ -745,7 +744,7 @@ async function handleIssueReceipt(req: VercelRequest, res: VercelResponse, princ
  * collections.ts) and flips `stockDeducted` true so the print stamp reflects it — never flipped
  * back false by a later call, since a document that's had ANY stock cut against it should read as
  * "ตัดสต๊อกแล้ว" from that point on. */
-async function handleStockDeduction(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleStockDeduction(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadDocumentOrThrow(id);
@@ -802,7 +801,7 @@ async function handleStockDeduction(req: VercelRequest, res: VercelResponse, id:
 /** Phase 1: basic cancel — a status transition only (never a delete, see collections.ts's
  * ArDocumentFields doc comment), no red ยกเลิก watermark / supervisor-override checklist bypass yet
  * (Phase 2 polish, see docs/MODULES/Accounting.md). */
-async function handleDocumentCancel(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDocumentCancel(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "ar:cancel");
   const doc = await loadDocumentOrThrow(id);
@@ -893,7 +892,7 @@ const DOC_TYPE_ORDER: ArDocumentType[] = ["AR", "IV", "BI", "RE"];
  * name from the source Quote — `ScopeOfWork` has no salesperson field of its own; AR documents don't
  * carry one directly either, so this join is the only path to the same person concept the main
  * Dashboard filters `Quote.salesperson` by directly). */
-async function handleDashboard(req: VercelRequest, res: VercelResponse) {
+async function handleDashboard(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "ar:view");
 
@@ -1052,7 +1051,7 @@ async function handleDashboard(req: VercelRequest, res: VercelResponse) {
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────
 
-export async function handleAr(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleAr(req: ApiRequest, res: ApiResponse): Promise<void> {
   const pathname = (req.url ?? "").split("?")[0];
 
   if (pathname === "/api/ar-dashboard") return handleDashboard(req, res);

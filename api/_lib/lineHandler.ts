@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { createHmac, randomInt } from "node:crypto";
 import { HttpError } from "./http.js";
 import { customersCollection, auditLogCollection } from "./collections.js";
@@ -20,11 +20,9 @@ import { nowIso } from "../../src/lib/products.js";
  *    chat; the webhook matches the code and stores that chat's `userId` as
  *    `customers.lineUserId` permanently.
  *
- * **Express-runtime only.** Signature verification needs the RAW request body (HMAC-SHA256,
+ * **Needs the raw body.** Signature verification needs the RAW request body (HMAC-SHA256,
  * base64, `x-line-signature` header) — `server/app.ts` captures it as `req.rawBody` via
- * express.json's `verify` hook. The Vercel demo has no `/api/line` rewrite (vercel.json is
- * deliberately untouched; its runtime also pre-parses bodies, losing the raw bytes), so the
- * OA's Webhook URL must point at the real server.
+ * express.json's `verify` hook. The OA's Webhook URL points at `${APP_URL}/api/line/webhook`.
  */
 
 const LINE_API_BASE = "https://api.line.me/v2/bot";
@@ -144,7 +142,7 @@ type LineEvent = {
   message?: { type?: string; text?: string };
 };
 
-export async function handleLineWebhook(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleLineWebhook(req: ApiRequest, res: ApiResponse): Promise<void> {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const secret = (process.env.LINE_CHANNEL_SECRET ?? "").trim();
   // Unconfigured → ack quietly so a stray/verify request never 500s in logs.

@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments, isAutoSaveRequest } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
 import { buildOwnershipClause } from "../_lib/visibility.js";
@@ -298,7 +298,7 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   return update;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "GET") {
     const ctx = await requirePermission(req, "quotations:view");
     const quotes = await quotesCollection();
@@ -408,7 +408,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
 
   const autoSave = isAutoSaveRequest(req);
@@ -533,7 +533,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   res.status(200).json({ quote: withStringId(updated) });
 }
 
-async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDuplicate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "quotations:create");
 
@@ -577,7 +577,7 @@ const MAX_REWRITE_ATTEMPTS = 3;
  * always derived from the *quote actually being rewritten* (`id`), not from any prior revision's
  * root passed by the client, so rewriting an `-R1` correctly advances to `-R2`, never `-R1-R1`.
  */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "quotations:create");
 
@@ -640,7 +640,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
  * permission that already gates the print button's visibility) rather than `:edit`, since printing
  * doesn't modify the document.
  */
-async function handlePrintQuote(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePrintQuote(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "quotations:export");
   const quotes = await quotesCollection();
@@ -676,7 +676,7 @@ async function handlePrintQuote(req: VercelRequest, res: VercelResponse, id: str
   res.status(200).json({ ok: true });
 }
 
-async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleWorkflow(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
 
@@ -936,10 +936,10 @@ async function createWorkflowNotifications(
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
-    // Scope of Work (added 2026-07-15) shares this function file rather than getting its own —
-    // Vercel Hobby's 12-function cap is still fully used (see docs/ARCHITECTURE.md). Checked first,
+    // Scope of Work (added 2026-07-15) shares this handler file (routed here by server/app.ts
+    // `API_ROUTES`). Checked first,
     // on the raw pathname, before falling through to the quotes logic below — same established
     // sharing pattern as api/handlers/customers.ts (/api/search) and api/handlers/jobtypes.ts
     // (/api/quotation-templates). Mounted here specifically (not jobtypes.ts) since a Scope of Work
@@ -950,7 +950,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     // Delivery Order (added 2026-07-23) — same sharing pattern as Scope of Work above, created
     // from and always belonging to exactly one Scope of Work, so mounted here rather than getting
-    // its own function file (Vercel Hobby's 12-function cap is still fully used).
+    // its own handler file.
     if (pathname === "/api/delivery-orders" || pathname.startsWith("/api/delivery-orders/")) {
       return handleDeliveryOrder(req, res);
     }

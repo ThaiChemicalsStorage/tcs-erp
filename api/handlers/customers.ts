@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling } from "../_lib/http.js";
 import { handleCustomers } from "../_lib/customersHandler.js";
 import { handleSearch } from "../_lib/searchHandler.js";
@@ -12,22 +12,20 @@ import { handlePendingApprovals } from "../_lib/pendingApprovals.js";
 /**
  * Customer master data — see `api/_lib/customersHandler.ts` for the actual list/create/get/patch/
  * archive logic. This file used to be `api/handlers/company-profiles.ts`, dispatching both
- * `/api/company-profiles` (the now-removed multi-issuer-company admin module) and `/api/customers`
- * (this one) from the same Vercel function to stay under the Hobby plan's 12-function cap. The
- * Company Profiles module was removed 2026-07-14 (this ERP has exactly one issuer company — see
+ * `/api/company-profiles` (the now-removed multi-issuer-company admin module) and `/api/customers`.
+ * The Company Profiles module was removed 2026-07-14 (this ERP has exactly one issuer company — see
  * docs/MODULES/CompanyProfiles.md "Removed (2026-07-14)"), so this file was simplified down to
  * customers-only rather than kept as a two-resource dispatcher for a resource that no longer
  * exists.
  *
- * **Global Search (added 2026-07-14) now shares this same function file** rather than getting its
- * own — Vercel Hobby's 12-function cap is still fully used (see docs/ARCHITECTURE.md). Checked
- * first, on the raw pathname, before falling through to the customers-only logic below — the same
- * established pattern this file itself used to share with `company-profiles.ts`. The actual
+ * **Several resources share this handler file** (`server/app.ts` `API_ROUTES` sends each of them
+ * here) — an inherited layout, not a constraint. Global Search (added 2026-07-14) is checked first,
+ * on the raw pathname, before falling through to the customers-only logic below. The actual
  * search logic lives in `api/_lib/searchHandler.ts`, unrelated to and independent from
- * `customersHandler.ts` below; they just happen to share one Vercel function slot.
+ * `customersHandler.ts` below; they just happen to share one handler file.
  *
- * **Service Reports + Service Templates (added 2026-08-06)** also share this function file, same
- * cap-driven reasoning — mounted here rather than on `api/handlers/quotes.ts` (already the
+ * **Service Reports + Service Templates (added 2026-08-06)** also share this file — mounted here
+ * rather than on `api/handlers/quotes.ts` (already the
  * heaviest bundle) because a Service Report's one real relational anchor is `customerId`/
  * `customerSnapshot`, the same entity this file already owns; a Service Report is created
  * directly against a Customer, not derived from a quotation. Logic lives in
@@ -40,7 +38,7 @@ import { handlePendingApprovals } from "../_lib/pendingApprovals.js";
  * **กล่อง "เอกสารรออนุมัติ" (2026-08-31)** ก็อยู่ที่นี่ — มันอ่านข้ามเกือบทุก collection ในระบบ
  * จึงไม่มีไฟล์ handler ไหนที่ "เป็นเจ้าของ" มันจริง ๆ และสล็อตนี้เบากว่า `quotes.ts` ที่หนักที่สุดอยู่แล้ว
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     const pathname = (req.url ?? "").split("?")[0];
     if (pathname === "/api/search") return handleSearch(req, res);
@@ -49,9 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (pathname === "/api/vendors" || pathname.startsWith("/api/vendors/")) return handleVendors(req, res);
     if (pathname === "/api/code-entries" || pathname.startsWith("/api/code-entries/")) return handleCodeEntries(req, res);
     if (pathname === "/api/pending-approvals") return handlePendingApprovals(req, res);
-    // LINE OA webhook (2026-08-10) — Express runtime only: server/app.ts routes /api/line/* here
-    // and captures the raw body its signature check needs; vercel.json deliberately has no
-    // /api/line rewrite (the demo can't verify signatures — see api/_lib/lineHandler.ts).
+    // LINE OA webhook (2026-08-10) — server/app.ts routes /api/line/* here and captures the raw
+    // body its signature check needs (see api/_lib/lineHandler.ts).
     if (pathname === "/api/line/webhook") return handleLineWebhook(req, res);
     return handleCustomers(req, res);
   });

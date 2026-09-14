@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError } from "./http.js";
 import { requireUser, type AuthContext } from "./auth.js";
 import {
@@ -286,7 +286,7 @@ export async function collectPendingApprovals(ctx: AuthContext): Promise<Pending
   return groups.flat().sort((a, b) => a.waitingSince.localeCompare(b.waitingSince));
 }
 
-export async function handlePendingApprovals(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handlePendingApprovals(req: ApiRequest, res: ApiResponse): Promise<void> {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   // ไม่มีสิทธิ์เฉพาะของหน้านี้ — ใครมีสิทธิ์อนุมัติอะไรก็เห็นอันนั้น ไม่มีเลยก็ได้รายการว่าง
   const ctx = await requireUser(req);

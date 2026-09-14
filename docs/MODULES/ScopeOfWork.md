@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04, **document-recipient delivery changed to in-app-notification-only 2026-08-07 (email sending removed entirely — see "Document Recipients")**, image attachments compressed to WebP client-side before upload 2026-08-14
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (MongoDB file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04, **document-recipient delivery changed to in-app-notification-only 2026-08-07 (email sending removed entirely — see "Document Recipients")**, image attachments compressed to WebP client-side before upload 2026-08-14
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -454,8 +454,8 @@ drawings, etc.) can be attached in the "ผู้รับเอกสาร" ca
 - **The "กลัว db เต็ม" concern is answered with hard limits instead of external storage**:
   ≤ 2 MB per file, ≤ 5 files per record (`MAX_ATTACHMENT_BYTES`/`MAX_ATTACHMENTS_PER_SCOPE`,
   enforced server-side, mirrored in the UI) — free Atlas (512 MB) fits ~50 fully-loaded records,
-  plenty for a trial; raise the caps later if the future host has room. The 2 MB cap also keeps
-  the JSON-base64 upload body under Vercel's ~4.5 MB serverless request limit.
+  plenty for a trial; raise the caps later if the future host has room. The 2 MB cap was also
+  sized to keep the JSON-base64 upload body under the old serverless host's ~4.5 MB request limit.
 - **Image attachments are compressed to WebP client-side before upload (added 2026-08-14)** —
   `handleUploadAttachment()` (`ScopeOfWorkDocument.tsx`) runs the file through the shared
   `compressImageFile()` (`src/lib/imageCompression.ts`, see [ARCHITECTURE.md](../ARCHITECTURE.md)
@@ -791,8 +791,8 @@ Built from the 2026-07-24 proposal on the owner's direct go-ahead. A customer PO
   PO number exists or when no account resolves.
 - **Dashboard**: the Scope of Work summary card gained a "ยังไม่มีเลข PO" tile (same own-records
   scoping as its other tiles).
-- **Deferred**: time-based auto-chasing ("remind after 3 days") needs cron — post-migration per
-  the no-Vercel-locked-services rule ([SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md)).
+- **Deferred**: time-based auto-chasing ("remind after 3 days") needs a scheduler — possible on
+  the Express server, not built yet; keep it portable ([SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md)).
 
 ### Follow-up fields exempt from the approval lock (same pass)
 
@@ -912,8 +912,7 @@ Indicator & Draft Recovery", and [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25.
 
 - `src/lib/scopeOfWork.ts` — types + `apiFetch` wrapper functions.
 - `api/_lib/scopeOfWorkHandler.ts` — all API logic (create/get/list/update/finalize/duplicate/
-  refresh/print/delete), mounted from `api/handlers/quotes.ts` (shares its function file — Vercel
-  Hobby's 12-function cap is still fully used).
+  refresh/print/delete), mounted from `api/handlers/quotes.ts` (shares that handler file).
 - `api/_lib/collections.ts` — `scopeOfWorksCollection()` + indexes.
 - `api/_lib/searchHandler.ts` / `src/lib/search.ts` / `src/components/GlobalSearch.tsx` — the
   `scopeOfWorks` Global Search result group (2026-07-15 fix pass).

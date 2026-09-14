@@ -413,8 +413,7 @@ link with a 7-day expiry** (the owner's recorded preference against always-live 
 - **Pairing (once per customer)** — `POST /api/customers/:id/line-pairing` (`customers:edit` OR
   `service:edit`) issues a 24-hour `TCS-XXXXX` code (unambiguous alphabet); the customer adds the
   company OA and types it in chat; the signed webhook (`POST /api/line/webhook`,
-  HMAC-SHA256 over the RAW body — Express-only, `server/app.ts` captures `req.rawBody`; the
-  Vercel demo has no `/api/line` route) matches it and stores `customers.lineUserId` permanently
+  HMAC-SHA256 over the RAW body — `server/app.ts` captures `req.rawBody`) matches it and stores `customers.lineUserId` permanently
   (`linePairing` is server-only, stripped by `toPublicCustomer()`).
 - **The public page** — `/approve` renders `src/pages/approval/CustomerApprovalPage.tsx` with NO
   app shell or session (`src/main.tsx` branches before the auth gate). Thai-only, mobile-first:
@@ -485,8 +484,7 @@ server rejects `?autoSave=1` past Draft (409) and writes no audit-log entry for 
 
 See [API.md](../API.md) "Service Templates + Service Reports" for the full method/auth/route table
 (list/get/create/update/status-change/delete for both resources, plus the photo and print routes
-above). Mounted on `api/handlers/customers.ts` (not `quotes.ts`) — Vercel Hobby's 12-function cap is
-fully used, and a Service Report's one real relational anchor is `customerId`/`customerSnapshot`,
+above). Mounted on `api/handlers/customers.ts` (not `quotes.ts`) — a Service Report's one real relational anchor is `customerId`/`customerSnapshot`,
 the same entity `customers.ts` already owns.
 
 ## Permissions

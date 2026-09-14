@@ -249,8 +249,8 @@ concern than the browse-everything list).
 ## API
 
 Mounted from `api/handlers/quotes.ts` (checked on the raw pathname before the Scope of Work check,
-which is itself checked before the plain quotes logic) — no new Vercel function file, same
-12-function-slot-sharing convention Scope of Work and Quotation Templates already use. New
+which is itself checked before the plain quotes logic) — same
+handler-sharing convention Scope of Work and Quotation Templates already use. New
 `api/_lib/deliveryOrderHandler.ts`. See [API.md](../API.md) for the full route table.
 
 ## ไฟล์แนบ (added 2026-09-03)

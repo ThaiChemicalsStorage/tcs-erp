@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { WithId } from "mongodb";
 import { ObjectId, MongoServerError } from "mongodb";
 import { createHash, randomUUID } from "node:crypto";
@@ -19,9 +19,8 @@ import type {
 /**
  * Quotation Templates API (added 2026-07-14, extended 2026-07-15 with the Template Management
  * module — create/edit/duplicate + granular RBAC + audit logging) — `api/handlers/jobtypes.ts`
- * dispatches `/api/quotation-templates` here on the raw pathname, sharing that function file rather
- * than getting its own (Vercel Hobby's 12-function cap is still fully used — see
- * docs/ARCHITECTURE.md). See docs/MODULES/QuotationTemplates.md for the full feature writeup.
+ * dispatches `/api/quotation-templates` here on the raw pathname, sharing that handler file rather
+ * than getting its own (see docs/ARCHITECTURE.md). See docs/MODULES/QuotationTemplates.md for the full feature writeup.
  */
 
 function requireAnyPermission(ctx: AuthContext, permissions: Permission[]): void {
@@ -215,7 +214,7 @@ function toSummary(doc: WithId<QuotationTemplateFields>): QuotationTemplateSumma
   };
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method === "POST") return handleCreate(req, res);
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   // Same "manage vs. pick-for-a-quotation" carve-out already established for Customers
@@ -358,7 +357,7 @@ async function sanitizeContent(body: Record<string, unknown>): Promise<Sanitized
   };
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   const ctx = await requireUser(req);
   requireAnyPermission(ctx, ["quotationTemplates:create"]);
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -391,7 +390,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ template: withStringId(created) satisfies QuotationTemplate });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") {
     const ctx = await requireUser(req);
     const canViewAdmin = hasAnyPermission(ctx, ["quotationTemplates:view"]);
@@ -493,7 +492,7 @@ async function generateCopyCode(base: string): Promise<string> {
   return candidate;
 }
 
-async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDuplicate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   requireAnyPermission(ctx, ["quotationTemplates:duplicate"]);
@@ -549,7 +548,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   res.status(201).json({ template: withStringId(created) satisfies QuotationTemplate });
 }
 
-async function handleImport(req: VercelRequest, res: VercelResponse) {
+async function handleImport(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   requireAnyPermission(ctx, ["quotationTemplates:import"]);
@@ -567,7 +566,7 @@ async function handleImport(req: VercelRequest, res: VercelResponse) {
   res.status(200).json(report);
 }
 
-export async function handleQuotationTemplates(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleQuotationTemplates(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/quotation-templates");
 
   if (parts.length === 0) return handleList(req, res);

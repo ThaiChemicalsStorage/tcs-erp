@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection, WithId } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import {
@@ -26,10 +26,10 @@ import type {
 
 /**
  * Delivery Order API (added 2026-07-23) — `api/handlers/quotes.ts` dispatches
- * `/api/delivery-orders` here on the raw pathname, sharing that function file rather than getting
- * its own (Vercel Hobby's 12-function cap is still fully used — see docs/ARCHITECTURE.md). Mounted
+ * `/api/delivery-orders` here on the raw pathname, sharing that handler file rather than getting
+ * its own (see docs/ARCHITECTURE.md). Mounted
  * from the quotes handler (not scopeOfWorkHandler.ts's own file, even though a Delivery Order is
- * created from a Scope of Work) purely because that's where the shared function slot already lives;
+ * created from a Scope of Work) purely because that's where the shared dispatch already lives;
  * there's no other reason it couldn't have been mounted from scopeOfWorkHandler.ts instead. See
  * docs/MODULES/DeliveryOrder.md for the full feature writeup and PDF-to-field mapping.
  */
@@ -221,7 +221,7 @@ async function loadScopeOrThrow(scopeOfWorkId: string): Promise<WithId<ScopeOfWo
   return doc;
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
@@ -253,7 +253,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ deliveryOrders: docs.map(toSummary) });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:create");
   // Reading the source Scope of Work's full content requires `:view` too — same defense-in-depth
@@ -295,7 +295,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ deliveryOrder: toClient(created) });
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "deliveryOrder:view");
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -340,7 +340,7 @@ function sanitizeInstallmentsUpdate(raw: unknown, current: DeliveryOrderInstallm
  *
  * เขียน audit ทุกครั้ง และไม่ต่อกับการบันทึกอัตโนมัติ — การแก้เอกสารที่อนุมัติแล้วควรมีร่องรอยเสมอ (ดู TODO.md)
  */
-async function handleInstallmentNumbers(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleInstallmentNumbers(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -378,7 +378,7 @@ async function handleInstallmentNumbers(req: VercelRequest, res: VercelResponse,
   res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -421,7 +421,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
  * *หลัง* เอกสารอนุมัติแล้ว และการส่งต่อไม่ได้แก้เนื้อหาเอกสารเลย — แนวเดียวกับ PO chasing ของ
  * Scope of Work ที่ยกเว้นล็อก Final ด้วยเหตุผลเดียวกัน (ดู MODULES/ScopeOfWork.md "PO Chasing")
  */
-async function handleSendToDepartments(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleSendToDepartments(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:edit");
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -480,7 +480,7 @@ async function handleSendToDepartments(req: VercelRequest, res: VercelResponse, 
   res.status(200).json({ deliveryOrder: toClient(updated), recipientCount });
 }
 
-async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRefresh(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -535,7 +535,7 @@ async function notifyDeliveryOrderApprovalEvent(
   })));
 }
 
-async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleSubmitApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -559,7 +559,7 @@ async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id:
 }
 
 /** `/finalize` now means "อนุมัติ" — same route-name-preserving convention as Scope of Work's. */
-async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleFinalize(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:finalize");
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -582,7 +582,7 @@ async function handleFinalize(req: VercelRequest, res: VercelResponse, id: strin
   res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
-async function handleRejectApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRejectApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:finalize");
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -606,7 +606,7 @@ async function handleRejectApproval(req: VercelRequest, res: VercelResponse, id:
   res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
-async function handleWithdrawApproval(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleWithdrawApproval(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -630,7 +630,7 @@ async function handleWithdrawApproval(req: VercelRequest, res: VercelResponse, i
  * editable directly and a copy would just be a confusing duplicate. The list/existence lookups
  * sort by `updatedAt` desc, so the rewrite becomes the record the Scope of Work's
  * "เปิดใบส่งมอบสินค้า" button opens. */
-async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:create");
   if (!roleHasPermission(ctx.role, "deliveryOrder:view")) throw new HttpError(403, "Forbidden");
@@ -659,7 +659,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ deliveryOrder: toClient(created) });
 }
 
-async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:delete");
   const doc = await loadDeliveryOrderOrThrow(id);
@@ -673,7 +673,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ ok: true });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   if (req.method === "DELETE") return handleDelete(req, res, id);
@@ -704,7 +704,7 @@ const attachmentConfig: AttachmentConfig<WithId<DeliveryOrderFields>> = {
   respond: async (res, id) => { res.status(200).json({ deliveryOrder: toClient(await loadDeliveryOrderOrThrow(id)) }); },
 };
 
-export async function handleDeliveryOrder(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleDeliveryOrder(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/delivery-orders");
 
   if (parts.length === 0) {

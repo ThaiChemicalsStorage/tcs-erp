@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { WithId } from "mongodb";
 import { MongoServerError } from "mongodb";
 import { createHash, randomBytes } from "node:crypto";
@@ -15,8 +15,8 @@ import type {
 
 /**
  * Service Checklist Template API (added 2026-08-06, Phase 1) — mounted from
- * `api/handlers/customers.ts` on the raw pathname (Vercel Hobby's 12-function cap is fully used —
- * see docs/ARCHITECTURE.md), the same sharing pattern that file already uses for `/api/search`.
+ * `api/handlers/customers.ts` on the raw pathname (see docs/ARCHITECTURE.md), the same sharing
+ * pattern that file already uses for `/api/search`.
  * See docs/MODULES/Service.md for the full feature writeup.
  */
 
@@ -154,7 +154,7 @@ function toSummary(doc: WithId<ServiceTemplateFields>): ServiceTemplateSummary {
   };
 }
 
-async function handleList(req: VercelRequest, res: VercelResponse) {
+async function handleList(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "serviceTemplates:view");
   await ensureServiceTemplateIndexes();
@@ -171,13 +171,13 @@ async function loadTemplateOrThrow(id: string): Promise<WithId<ServiceTemplateFi
   return doc;
 }
 
-async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   await requirePermission(req, "serviceTemplates:view");
   const doc = await loadTemplateOrThrow(id);
   res.status(200).json({ serviceTemplate: withStringId(doc) satisfies ServiceTemplate });
 }
 
-async function handleCreate(req: VercelRequest, res: VercelResponse) {
+async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "serviceTemplates:create");
   await ensureServiceTemplateIndexes();
@@ -212,7 +212,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   res.status(201).json({ serviceTemplate: withStringId({ ...doc, _id: insertedId }) satisfies ServiceTemplate });
 }
 
-async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "serviceTemplates:edit");
   const doc = await loadTemplateOrThrow(id);
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -240,7 +240,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ serviceTemplate: withStringId(updated) satisfies ServiceTemplate });
 }
 
-async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDuplicate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "serviceTemplates:create");
   const source = await loadTemplateOrThrow(id);
@@ -259,7 +259,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   res.status(201).json({ serviceTemplate: withStringId({ ...doc, _id: result.insertedId }) satisfies ServiceTemplate });
 }
 
-async function handleArchive(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "serviceTemplates:archive");
   const doc = await loadTemplateOrThrow(id);
@@ -271,13 +271,13 @@ async function handleArchive(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ serviceTemplate: withStringId(updated) satisfies ServiceTemplate });
 }
 
-async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method === "GET") return handleGetOne(req, res, id);
   if (req.method === "PATCH") return handleUpdate(req, res, id);
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleServiceTemplate(req: VercelRequest, res: VercelResponse): Promise<void> {
+export async function handleServiceTemplate(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/service-templates");
   if (parts.length === 0) {
     if (req.method === "POST") return handleCreate(req, res);

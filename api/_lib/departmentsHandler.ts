@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { ObjectId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission } from "./auth.js";
@@ -9,8 +9,7 @@ import { nowIso } from "../../src/lib/products.js";
 /**
  * Departments (manageable) + Sales Teams (2026-08-14, direct business request — Sales has 2 teams,
  * each with its own team lead who should only see their own team's records, not the other team's).
- * Mounted inside `api/handlers/roles.ts` via pathname dispatch — Vercel Hobby's 12-function cap is
- * still fully used (see docs/ARCHITECTURE.md), same sharing pattern Scope of Work/Delivery Order
+ * Mounted inside `api/handlers/roles.ts` via pathname dispatch (see docs/ARCHITECTURE.md), same sharing pattern Scope of Work/Delivery Order
  * use inside `api/handlers/quotes.ts`. List routes are open to any authenticated user (needed for
  * the User Management create/edit dropdowns); mutations require `departments:manage`/
  * `teams:manage` (Super-Admin-only permissions, like `roles:manage`/`company:manage`).
@@ -20,7 +19,7 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function handleDepartmentList(req: VercelRequest, res: VercelResponse) {
+async function handleDepartmentList(req: ApiRequest, res: ApiResponse) {
   const departments = await departmentsCollection();
 
   if (req.method === "GET") {
@@ -61,7 +60,7 @@ async function handleDepartmentList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleDepartmentOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleDepartmentOne(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "departments:manage");
   const departments = await departmentsCollection();
   const objectId = toObjectId(id);
@@ -94,7 +93,7 @@ async function handleDepartmentOne(req: VercelRequest, res: VercelResponse, id: 
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleTeamList(req: VercelRequest, res: VercelResponse) {
+async function handleTeamList(req: ApiRequest, res: ApiResponse) {
   const teams = await teamsCollection();
 
   if (req.method === "GET") {
@@ -137,7 +136,7 @@ async function handleTeamList(req: VercelRequest, res: VercelResponse) {
   throw new HttpError(405, "Method not allowed");
 }
 
-async function handleTeamOne(req: VercelRequest, res: VercelResponse, id: string) {
+async function handleTeamOne(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "teams:manage");
   const teams = await teamsCollection();
   const objectId = toObjectId(id);
@@ -170,14 +169,14 @@ async function handleTeamOne(req: VercelRequest, res: VercelResponse, id: string
   throw new HttpError(405, "Method not allowed");
 }
 
-export async function handleDepartments(req: VercelRequest, res: VercelResponse) {
+export async function handleDepartments(req: ApiRequest, res: ApiResponse) {
   const parts = getPathSegments(req, "/api/departments");
   if (parts.length === 0) return handleDepartmentList(req, res);
   if (parts.length === 1) return handleDepartmentOne(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }
 
-export async function handleTeams(req: VercelRequest, res: VercelResponse) {
+export async function handleTeams(req: ApiRequest, res: ApiResponse) {
   const parts = getPathSegments(req, "/api/teams");
   if (parts.length === 0) return handleTeamList(req, res);
   if (parts.length === 1) return handleTeamOne(req, res, parts[0]);
