@@ -770,25 +770,6 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   },
 ];
 
-/**
- * หน้าตาช่องติ๊กในหน้า "บทบาทและสิทธิ์" ของสิทธิ์ที่ชื่อเต็มยาวเกินจะวางเป็นตารางให้อ่านง่าย (2026-09-14)
- *
- * `labelKey` = ป้ายสั้นบนช่องติ๊ก · `hintKey` = บรรทัดรองสีจาง · `sectionKey` = หัวข้อย่อยในกล่องกลุ่มเดียวกัน
- * (ช่องที่อยู่หัวข้อย่อยเดียวกันวางเป็นตาราง 3 คอลัมน์) · `PERMISSION_LABEL_KEY` ยังเป็นชื่อเต็มที่ใช้ในข้อความ
- * อื่น เช่น "ต้องมีสิทธิ์ …" จึงไม่เปลี่ยน
- */
-export const PERMISSION_CHECKBOX_UI: Partial<Record<Permission, { labelKey: TranslationKey; hintKey?: TranslationKey; sectionKey?: TranslationKey }>> = {
-  "dashboard:tabOverview": { labelKey: "permission.checkbox.dashboardTabOverview", hintKey: "permission.checkbox.dashboardTabOverviewHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabSales": { labelKey: "permission.checkbox.dashboardTabSales", hintKey: "permission.checkbox.dashboardTabSalesHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabService": { labelKey: "permission.checkbox.dashboardTabService", hintKey: "permission.checkbox.dashboardTabServiceHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabPurchasing": { labelKey: "permission.checkbox.dashboardTabPurchasing", hintKey: "permission.checkbox.dashboardTabPurchasingHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabInventory": { labelKey: "permission.checkbox.dashboardTabInventory", hintKey: "permission.checkbox.dashboardTabInventoryHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabProduction": { labelKey: "permission.checkbox.dashboardTabProduction", hintKey: "permission.checkbox.dashboardTabProductionHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabProject": { labelKey: "permission.checkbox.dashboardTabProject", hintKey: "permission.checkbox.dashboardTabProjectHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabBd": { labelKey: "permission.checkbox.dashboardTabBd", hintKey: "permission.checkbox.dashboardTabBdHint", sectionKey: "roles.section.dashboardTabs" },
-  "dashboard:tabAccounting": { labelKey: "permission.checkbox.dashboardTabAccounting", hintKey: "permission.checkbox.dashboardTabAccountingHint", sectionKey: "roles.section.dashboardTabs" },
-};
-
 export const SUPER_ADMIN_ONLY_PERMISSIONS: Permission[] = ["roles:manage", "company:manage", "departments:manage", "teams:manage"];
 
 /**
