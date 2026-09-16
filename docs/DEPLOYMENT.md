@@ -386,6 +386,40 @@ docker run -d --name watchtower --restart unless-stopped --log-driver none -e TZ
 `TZ=Asia/Bangkok` that is 03:00 local, not UTC. Stop it with `docker rm -f watchtower`; the app
 keeps running, it just stops updating itself.
 
+**Checking that it still works.** Its own logging is off, so `docker logs watchtower` is empty by
+design — absence of logs is not a symptom. Three read-only checks, in order of what they prove:
+
+```bash
+# 1. the container is up and not restart-looping
+docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} up-since={{.State.StartedAt}}' watchtower
+
+# 2. WHICH containers it watches + the schedule (baked in at install time, never re-read)
+docker inspect -f 'args: {{.Args}}' watchtower
+docker ps --format '{{.Names}}'      # every app/web name above must appear here
+
+# 3. did the last 03:00 run actually restart anything? compare container age with image age
+docker ps --format '{{.Names}}\t{{.RunningFor}}\t{{.Image}}'
+docker images --format '{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}'
+```
+
+Check 2 is the one that catches the real failure mode: the watched names are fixed when the
+container is installed, so a container renamed (or added) since 2026-09-11 is silently not watched
+— re-run the install command above to pick the current names up.
+
+For a live end-to-end proof (Docker socket reachable, Docker Hub reachable, digests compared), run
+a throwaway Watchtower with logging on and `--monitor-only`, which reports without touching
+anything:
+
+```bash
+docker run --rm -e TZ=Asia/Bangkok -e WATCHTOWER_LOG_LEVEL=info \
+  -v /var/run/docker.sock:/var/run/docker.sock nickfedor/watchtower \
+  --run-once --monitor-only $(docker ps --format '{{.Names}}' | grep -vE 'mongo|watchtower' | tr '\n' ' ')
+```
+
+It prints how many containers it scanned and whether any is stale, then exits. `--monitor-only`
+makes it safe to run at any time — drop that flag only when you actually want to deploy now.
+`docker exec watchtower ...` does not work (the image has no shell); use `docker inspect`.
+
 Backups under Docker (authenticated):
 `docker compose exec mongodb sh -c 'mongodump -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive' > backup-$(date +%F).archive`
 (everything incl. attachments is in MongoDB), and copy the file off-machine. This is exactly what
