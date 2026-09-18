@@ -33,27 +33,10 @@ Known, deliberate scope limitations (not bugs, see [RBAC.md](./RBAC.md) Known Ga
 ERP/
 ├── docs/                          # you are here
 │   ├── CLAUDE.md                  # this file
-│   ├── PROJECT_STATUS.md
-│   ├── CHANGELOG.md
-│   ├── TODO.md
-│   ├── ARCHITECTURE.md
-│   ├── DATABASE.md
-│   ├── API.md
-│   ├── UI_GUIDELINES.md
-│   ├── RBAC.md
 │   └── MODULES/
-│       ├── Dashboard.md
-│       ├── Quotation.md
-│       ├── Product.md
 │       ├── Store.md               # added 2026-09-03 — แผนกสโตร์: ใบรับสินค้า (RR) + ตั้งหนี้/ภาษีซื้อ, ใบเบิกตัดตอนจ่ายจริง, เครื่องมือประจำทีม, การ์ดสต๊อก, เลขเอกสาร {PREFIX}-{YYYYMM}-{NNNN}
 │       ├── Lead.md                # not yet implemented
 │       ├── Customer.md            # not yet implemented
-│       ├── Auth.md
-│       ├── Settings.md
-│       ├── UserManagement.md
-│       ├── RoleManagement.md
-│       ├── Notifications.md
-│       ├── AuditLog.md
 │       ├── CompanyProfiles.md     # module removed 2026-07-14 — this file documents the removal, not a live module
 │       ├── QuotationTemplates.md  # added 2026-07-14 — Create Quotation wizard's Job Type/Template data
 │       ├── ScopeOfWork.md         # added 2026-07-15 — Scope of Work document generated from a quotation
@@ -75,11 +58,8 @@ ERP/
 ├── tsconfig.api.json              # Node-target tsconfig covering api/ (separate from root tsconfig.json which covers src/)
 ├── src/
 │   ├── App.tsx                    # root shell: sidebar, topbar, bootstrap/auth gate, page router (string switch, no react-router)
-│   ├── main.tsx                   # entry point
 │   ├── components/                # generic, reusable, cross-module UI
-│   │   ├── ConfirmDialog.tsx
 │   │   ├── PromptDialog.tsx       # styled single-value text prompt (reject reasons, document numbers) — added 2026-07-29, replaces every window.prompt()
-│   │   ├── Toast.tsx
 │   │   ├── NotificationBell.tsx   # header bell + dropdown panel
 │   │   ├── WhatsNewPanel.tsx      # header "มีอะไรใหม่" (What's New) sparkle icon + dropdown panel — added 2026-07-23, in-app update log, see this file's "Current Modules" table row "What's New (topbar)"
 │   │   ├── GlobalSearch.tsx       # topbar search — added 2026-07-14 (replaced a never-functional dead input); **rebuilt 2026-08-28 as a centred command panel** covering all 17 categories incl. every business document, with a document-number fast path, type-filter chips, and recently-opened documents. See UI_GUIDELINES.md "Global Search".
@@ -92,20 +72,14 @@ ERP/
 │   │   ├── ServiceChecklistItemControl.tsx # shared Normal/Abnormal 3-way toggle + measurement input for the Service checklist — added 2026-08-06, Phase 1; the reusable primitive Phase 2's mobile touch-card pass builds on top of, not replaces
 │   │   ├── GuidedTour.tsx         # driver.js tours: useGuidedTour() (first-sign-in walkthrough, 2026-07-10) + useModuleTour() (per-page/per-document tours w/ per-user seen-tracking — every list/admin page, Dashboard, the QuoteDocument/ScopeOfWorkDocument/DeliveryOrderDocument editors (2026-07-29), and the Service module (2026-08-07)). `hasPageTourCompleted()` gates ONLY the auto-fire — never the replay button's visibility. **A page tour is marked seen when its automatic play renders (2026-08-07), not when it's dismissed** — so ignoring it still counts; the manual replay writes nothing. `useGuidedTour` (the main tour) still marks on dismissal via `useDriverTour`'s untouched `onFinish`.
 │   │   ├── TourReplayButton.tsx   # the shared always-visible HelpCircle replay button (extracted 2026-07-29 — it lives HERE, not inside GuidedTour.tsx; a stale note claiming otherwise is why the Service module shipped with no tour at all, fixed 2026-08-07). **Every new tour call site must use it**, not hand-rolled HelpCircle markup, and must render it unconditionally — never behind a permission/status/tour-state gate.
-│   ├── hooks/useToast.ts
 │   ├── hooks/useAutoSave.ts       # useAutoSave() + useDraftBackup() — the shared auto-save for EVERY document editor, added 2026-08-25. Two layers: a localStorage snapshot (the only thing that can protect a document with no server record yet, e.g. a brand-new quotation) and a silent Draft-only server PATCH via `?autoSave=1`. Rendered through components/AutoSaveIndicator.tsx + components/DraftRecoveryBanner.tsx. See UI_GUIDELINES.md "Auto-Save Indicator & Draft Recovery" and API.md "Auto-save writes".
 │   ├── lib/                       # types + pure helpers + REST API calls (apiFetch), per domain
 │   │   ├── apiClient.ts           # apiFetch<T>() — the one place every domain lib talks to the backend; also writeQuery()/WriteOptions, the single spelling of the `?autoSave=1` write flag (added 2026-08-25)
 │   │   ├── quoteMath.ts           # the ONE implementation of quotation money math (line/document discounts in % or ฿, VAT, totals) — added 2026-08-25, deliberately React/JSX-free so `api/_lib/quoteAmounts.ts` can re-export it instead of keeping a second copy of the formula. Same frontend↔API sharing pattern as `src/lib/validation/*`.
-│   │   ├── storage.ts             # Company (incl. bank/VAT/T&C fields, updatedAt/updatedBy)
 │   │   ├── users.ts               # User (employee + account record), password hashing, uniqueness checks
 │   │   ├── roles.ts               # Role, default role set, hasPermission()/userIsSuperAdmin()/roleNameFor()
-│   │   ├── departments.ts         # Department type + fetch/create/update — added 2026-08-14
-│   │   ├── teams.ts               # Team type + fetch/create/update — added 2026-08-14
 │   │   ├── permissions.ts         # Permission union, labels, grouping, Super-Admin-only permissions
-│   │   ├── session.ts             # real session (httpOnly JWT cookie) fetch/login/logout
 │   │   ├── notifications.ts       # Notification type + per-event builders (submitted/approved/rejected/high-value/...)
-│   │   ├── auditLog.ts            # append-only AuditLogEntry log + logAudit()
 │   │   ├── products.ts            # Product (gained stockQty 2026-08-18, see stock.ts below), ProductCategory (now incl. createdBy/updatedBy)
 │   │   ├── quotes.ts              # Quote (+ approval workflow: statuses, ApprovalHistoryEntry, computeQuotePermissions; +jobTypeCode/jobTypeName/isPotentialOpportunity/followUpDate, added 2026-07-10). **Plain `.ts` since 2026-08-25** — `statusIcon` moved to `src/pages/quotation/statusIcons.tsx` and `bahtText` to `src/lib/bahtText.ts` so the server never has to transpile JSX at boot (the 2026-08-21 outage shape). `tests/serverImportGraph.test.ts` fails the build if a `.tsx` re-enters the server's runtime import graph.
 │   │   ├── bahtText.ts            # THB → Thai words (`bahtText()`), split out of quotes on 2026-08-25 — imports nothing, so `api/_lib/arHandler.ts` can stamp `amountTextTh` without pulling the whole quotation module in
@@ -127,7 +101,6 @@ ERP/
 │   │   └── i18n.tsx               # Thai/English translation context — added 2026-07-09, extended same day and again 2026-07-10 to cover the Executive Dashboard/Job Type pass, see TODO.md
 │   ├── pages/
 │   │   ├── SetupWizardPage.tsx / SignInPage.tsx / AuthLayout.tsx   # no public sign-up — see MODULES/Auth.md
-│   │   ├── SettingsPage.tsx       # incl. language toggle (profile tab)
 │   │   ├── dashboard/              # DashboardPage + ~17 subcomponents (ExecutiveSummaryCards, PipelineSteps, QuotationStatusSummary, SalesActivityAnalytics, SalesPerformancePanel, ActivityFollowUpSummary, JobTypeAnalytics, CustomerAnalytics, ActivityTimeline, FollowUpReminders, ApprovalDashboard, NotificationSummary, DashboardFilterBar, DashboardCharts, ChartCard, format/dateRanges helpers) — real MongoDB-backed Executive Dashboard, rebuilt 2026-07-10, completed against the full business spec, fixed against Codex review, then visually redesigned, then reorganized 2026-07-13 against the P'Keng/P'Kee requirement, see MODULES/Dashboard.md
 │   │   ├── products/              # ProductsPage, ProductList, ProductForm, CategoriesManager, ProductPickerModal
 │   │   ├── quotation/             # QuotationPage, QuoteList, QuoteDocument, LineItemsEditor, InterestButtons, CustomerSelector (added 2026-07-14, replaces the incorrect 2026-07-13 IssuerCompanySelector), PrintDocument, QuotationTemplateWizard + applyTemplate.ts (Create Quotation wizard, added 2026-07-14), ScopeOfWorkDocument + ScopeOfWorkItemsEditor + ScopeOfWorkPrintDocument (Scope of Work, added 2026-07-15 — reached via a "scopeOfWork" view state in QuotationPage when opened from a quotation; **2026-07-22: also reused directly by the new standalone scopeOfWork/ page below**, via an optional `backLabel` prop), ChecklistGroupCard (renamed 2026-07-16 from ScopeOfWorkChecklistGroup.tsx when Quotation briefly reused it for its own checklistGroups; that Quotation-side usage was removed again the same day, so this component is Scope-of-Work-only in practice today, just kept under its more generic name), DocumentRecipientsPicker (added 2026-07-23, real-people email routing for the `documentsToSend` checklist — see MODULES/ScopeOfWork.md "Document Recipients"), DeliveryOrderDocument + DeliveryOrderPrintDocument (Delivery Order, added 2026-07-23, generated from a Scope of Work via a "สร้าง/เปิดใบส่งมอบสินค้า" button on ScopeOfWorkDocument's toolbar — see MODULES/DeliveryOrder.md)
@@ -188,7 +161,6 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 ## Coding Standards
 
 - TypeScript `strict: true`, plus `noUnusedLocals`/`noUnusedParameters: true` — dead code is a build error, not a lint suggestion.
-- ESLint flat config (`eslint.config.js`): `@eslint/js` + `typescript-eslint` recommended + `react-hooks` + `react-refresh`. Run via `npm run lint`.
 - No comments unless they explain a non-obvious *why* (a workaround, a hidden constraint). Never comments that restate what the code does.
 - One `lib/<domain>.ts` per data domain: types + sample/seed data + pure helper functions + (if applicable) `localStorage` load/save. Pages import from there, never redefine types locally.
 - One `pages/<module>/` folder per module once it grows past a single file; a top-level `<Module>Page.tsx` manages view-switching state and composes smaller view components from the same folder.
