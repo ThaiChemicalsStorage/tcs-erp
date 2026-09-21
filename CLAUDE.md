@@ -1,6 +1,6 @@
 # TCS ERP
 
-Full project documentation lives in [`docs/`](./docs/CLAUDE.md) — **read `docs/CLAUDE.md` first**, it's the entry point and links to everything else (status, changelog, architecture, database, API, UI guidelines, RBAC, and per-module docs).
+Full project documentation lives in [`docs/`](./docs/CLAUDE.md) — **read `docs/CLAUDE.md` first**, it's the entry point and links to everything else (status, changelog, architecture, database, API, UI guidelines, RBAC, and per-module docs). Two things used to live inside it and now sit beside it, so the entry point stays small: [`docs/MODULE_STATUS.md`](./docs/MODULE_STATUS.md) (what each module is and what was deliberately removed — **check it before assuming a feature exists**) and [`docs/FOLDER_MAP.md`](./docs/FOLDER_MAP.md) (annotated tree of `api/`, `server/`, `src/`).
 
 ⚠️ **Before building anything in Accounting, Purchasing/Inventory, or a new document-generation module**: read the active coordination note at the top of `docs/CLAUDE.md` and `docs/TODO.md` High Priority — two parallel workstreams (Accounting module vs. Material Requisition/PR/Production Order/Job Delivery Note) are starting at the same time and will need to connect to each other; scope/ownership boundaries aren't agreed yet.
 
