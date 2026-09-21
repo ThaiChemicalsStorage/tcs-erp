@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_MARK, printAmount, printDate, printDateOrBlank, printNumber, printText } from "../src/lib/printFormat";
+import { EMPTY_MARK, printAmount, printDate, printDateOrBlank, printNumber, printText, printTextOrBlank } from "../src/lib/printFormat";
 import { templateLinesToRequisitionLines } from "../src/lib/materialRequisitionTemplate";
 import type { MaterialRequisitionTemplateLine } from "../src/lib/materialRequisitionTemplate";
 
@@ -42,6 +42,19 @@ describe("printText / printNumber / printAmount", () => {
     expect(printText("   ")).toBe(EMPTY_MARK);
     expect(printText(null)).toBe(EMPTY_MARK);
     expect(printText(" ตัวอย่าง ")).toBe("ตัวอย่าง");
+  });
+
+  /**
+   * เจ้าของสั่ง 2026-09-21 (*"เว้นว่างแทนขีดด้วย"*) — ช่องลงนามที่ยังไม่มีใครเซ็นคือช่องที่ตั้งใจ
+   * เว้นไว้ให้เขียนด้วยปากกา `-` ที่พิมพ์ทับตรงนั้นทำให้คนเซ็นต้องขีดฆ่ามันก่อน
+   */
+  it("printTextOrBlank คืนค่าว่างแทนขีด — ใช้กับชื่อในช่องลายเซ็น", () => {
+    expect(printTextOrBlank("")).toBe("");
+    expect(printTextOrBlank("   ")).toBe("");
+    expect(printTextOrBlank(null)).toBe("");
+    expect(printTextOrBlank(undefined)).toBe("");
+    expect(printTextOrBlank(" ตัวอย่าง "), "มีชื่อแล้วต้องพิมพ์ชื่อตามปกติ").toBe("ตัวอย่าง");
+    expect(printTextOrBlank(""), "ต้องไม่ใช่ขีดกลาง").not.toBe(EMPTY_MARK);
   });
 
   it("ศูนย์ไม่ใช่ค่าว่าง — 'เบิก 0' ต้องพิมพ์เลข 0 ไม่ใช่ขีด", () => {

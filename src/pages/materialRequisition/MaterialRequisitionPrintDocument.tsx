@@ -2,7 +2,7 @@ import type { MaterialRequisition } from "../../lib/materialRequisition";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { PrintSignatureLine } from "../../components/PrintSignature";
-import { printDate, printDateOrBlank, printText, printNumber } from "../../lib/printFormat";
+import { printDate, printDateOrBlank, printText, printTextOrBlank, printNumber } from "../../lib/printFormat";
 import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
@@ -149,7 +149,9 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
                   {/* เส้นลงนามสั้นกว่าช่อง มีช่องว่างคั่นชัดเจน — เดิมเต็มช่องและช่องไม่มี padding
                       แนวนอนเลย สองช่องจึงต่อกันเป็นเส้นเดียวลากยาวทั้งหน้า (เจ้าของแจ้ง 2026-09-21) */}
                   <div className="border-b border-black mb-1 w-3/4 mx-auto" />
-                  <p>{label}: {printText(name)}</p>
+                  {/* ชื่อที่ยังไม่มีคนเซ็นเว้นว่าง ไม่ใช่ `-` (เจ้าของสั่ง 2026-09-21) — ช่องนี้ตั้งใจ
+                      เว้นไว้ให้เขียนด้วยปากกา เหตุผลเดียวกับ printDateOrBlank() บรรทัดถัดไป */}
+                  <p>{label}: {printTextOrBlank(name)}</p>
                   <p>วันที่: {printDateOrBlank(date) || "....... / ....... / ......."}</p>
                 </td>
               ))}

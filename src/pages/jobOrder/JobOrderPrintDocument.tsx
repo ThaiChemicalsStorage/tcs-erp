@@ -75,11 +75,16 @@ function HeaderField({ thai, english, value }: { thai: string; english: string; 
  * `userId` (ถ้ามี) คือเจ้าของช่องเซ็นในระบบ — คนสร้างเอกสารสำหรับ "ผู้ร้องขอ" และคนที่กดอนุมัติ
  * สำหรับ "ผู้อนุมัติ" ลายเซ็นที่เขาอัปโหลดไว้ในโปรไฟล์จะถูกวางเหนือบรรทัดให้ (เจ้าของสั่ง 2026-09-02)
  * ช่องที่ไม่มีเจ้าของในระบบ เช่น "ผู้รับเอกสาร" ยังเป็นจุดไข่ปลาให้เซ็นมือเหมือนเดิม
+ *
+ * **`signSlot` ต้องเป็น true ทุกช่องที่คนต้องเซ็น ไม่ใช่เฉพาะช่องที่ระบบรู้ว่าใครเซ็น**
+ * (แก้ 2026-09-21 พร้อมกับใบสั่งผลิตซึ่งพังแบบเดียวกัน) — เดิมเว้นที่ 26px ให้เฉพาะช่องที่มี `userId`
+ * "ผู้อนุมัติ" กับ "ผู้รับเอกสาร" ที่อยู่แถวเดียวกันจึงเหลื่อมกัน 26px พอดี (วัดจากใบที่เรนเดอร์จริง)
+ * ส่วนช่อง "วันที่" ไม่ใช่ช่องเซ็น จึงไม่ต้องเว้น — ถ้าเว้นด้วยบล็อกลายเซ็นจะสูงขึ้นอีกร้อยกว่า px ฟรี ๆ
  */
-function SignatureField({ thai, english, value, userId }: { thai: string; english: string; value: string; userId?: string }) {
+function SignatureField({ thai, english, value, userId, signSlot = false }: { thai: string; english: string; value: string; userId?: string; signSlot?: boolean }) {
   return (
     <div style={{ margin: "0 0 6px" }}>
-      {userId ? <PrintSignatureLine userId={userId} height={26} /> : null}
+      {signSlot ? <PrintSignatureLine userId={userId} height={26} /> : null}
       <p style={{ margin: 0 }}>
         <span style={{ fontWeight: 700 }}>{thai}</span> ({english}) :{" "}
         <span>{value || "..................................."}</span>
@@ -270,16 +275,16 @@ export function JobOrderPrintDocument({
         {/* 7. ช่องลงนาม — ผู้ร้องขออยู่แถวบนเดี่ยว ๆ ตามกระดาษ ไม่ใช่สามช่องเรียงกัน */}
         <div style={{ marginTop: "16px", breakInside: "avoid" }}>
           <div style={{ width: "50%" }}>
-            <SignatureField thai="ผู้ร้องขอ" english="Requested By" value={j.requestedBy} userId={j.createdBy} />
+            <SignatureField thai="ผู้ร้องขอ" english="Requested By" value={j.requestedBy} userId={j.createdBy} signSlot />
             <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.requestedAt)} />
           </div>
           <div style={{ display: "flex", gap: "18px", marginTop: "14px" }}>
             <div style={{ width: "50%" }}>
-              <SignatureField thai="ผู้อนุมัติ" english="Approved By" value={j.approvedBy} userId={j.approvedByUserId} />
+              <SignatureField thai="ผู้อนุมัติ" english="Approved By" value={j.approvedBy} userId={j.approvedByUserId} signSlot />
               <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.approvedAt)} />
             </div>
             <div style={{ flex: 1 }}>
-              <SignatureField thai="ผู้รับเอกสาร" english="document recipient By" value={j.documentRecipientBy} />
+              <SignatureField thai="ผู้รับเอกสาร" english="document recipient By" value={j.documentRecipientBy} signSlot />
               <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.documentRecipientAt)} />
             </div>
           </div>

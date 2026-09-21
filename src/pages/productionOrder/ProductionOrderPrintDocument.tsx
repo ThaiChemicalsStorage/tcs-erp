@@ -2,7 +2,7 @@ import type { ProductionOrder } from "../../lib/productionOrder";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { PrintSignatureLine } from "../../components/PrintSignature";
-import { printText, printNumber } from "../../lib/printFormat";
+import { printText, printTextOrBlank, printNumber } from "../../lib/printFormat";
 import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
@@ -70,7 +70,7 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
     <tr>
       <td style={{ ...cell, width: "62%", verticalAlign: "bottom" }}>
         <PrintSignatureLine userId={userId} height={SIGN_SPACE} />
-        {label} : <span style={{ fontWeight: 400 }}>{printText(s.name)}</span>
+        {label} : <span style={{ fontWeight: 400 }}>{printTextOrBlank(s.name)}</span>
       </td>
       <td style={{ ...cell, width: "38%", verticalAlign: "bottom" }}>
         วันที่ : <span style={{ fontWeight: 400 }}>{s.date ? formatQuoteDateThai(s.date) : ""}</span>
