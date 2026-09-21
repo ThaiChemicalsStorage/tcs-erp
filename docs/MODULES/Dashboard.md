@@ -929,3 +929,9 @@ pass — see [RBAC.md](../RBAC.md).
   (both configs)/`npm run lint`/`npm run build` only — the arithmetic change itself was not
   re-exercised against a live quote's data in this pass; that spot-check remains an open item for
   whoever next has live-database access.
+
+## ภาพในคู่มือ (2026-09-21)
+
+ภาพบทที่ 4 ของ `public/manual.html` ถ่ายใหม่แล้วหลังการแยกแท็บเมื่อ 2026-09-14 —
+`02-dashboard.jpg` เป็น **แท็บขาย** (ตรงกับหัวข้อ `<h3>แท็บขาย</h3>` ที่ภาพอยู่ใต้) และเพิ่มภาพใหม่
+`52-dashboard-overview.jpg` ของ **แท็บภาพรวม** ซึ่งไม่เคยมีภาพมาก่อนทั้งที่บทอธิบายแท็บทั้ง 8 ไว้แล้ว
