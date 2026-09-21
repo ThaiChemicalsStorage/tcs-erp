@@ -170,8 +170,10 @@ The owner's instruction was *"ใบ PO ไม่ต้องมีลายเ�
 so `PrintSignatureLine` was dropped from this file and the typed `orderedBy` / `approvedBy` print above
 the rule instead, with a bare `ผู้สั่งซื้อ` / `ผู้อนุมัติ` label below it and no parentheses. The 28px box
 above the rule is kept so the row does not collapse on a draft printed out to be signed by hand.
-**`CostControlPrintDocument.tsx:177,:181` still uses the parenthesised form** — the owner named only the
-PO, so it was left alone pending an answer (tracked in [TODO.md](../TODO.md)).
+**Cost Control was brought in line the same day.** The 2026-09-18 instruction named only the PO, so
+`CostControlPrintDocument.tsx` was left alone and the question asked; the owner confirmed on
+2026-09-21 that it should match, so its *Submitted by* / *Approved by* cells now use the identical
+shape — typed name above the rule, bare label below, no scanned signature and no parentheses.
 
 ### Page edges (2026-09-21)
 

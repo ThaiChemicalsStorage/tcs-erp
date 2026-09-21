@@ -1,7 +1,6 @@
 import { type CostControl, lineTotalCost } from "../../lib/costControl";
 import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
-import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printText } from "../../lib/printFormat";
 import { PrintPageFrame } from "../../components/PrintPageFrame";
 
@@ -61,6 +60,8 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
   // ฿ กับตัวเลขอยู่ในช่องเดียวกัน ดันคนละฝั่ง — เคยแยกเป็นสองช่องแล้วมีเส้นคั่นกลางซึ่งฟอร์มจริงไม่มี
   const bahtRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: "6px" };
   // สไตล์ของบล็อกสรุป (sumLabel/sumBaht/sumValue) ถูกลบไปพร้อมบล็อกเมื่อ 2026-08-31
+  /** พื้นที่เหนือเส้นลงนาม — สูงคงที่ 26px เท่าของเดิม ให้ชื่อนั่งชิดเส้นเหมือนคนเซ็นชื่อบนเส้น */
+  const signatureArea: React.CSSProperties = { height: 26, display: "flex", alignItems: "flex-end", justifyContent: "center", overflow: "hidden" };
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px", paddingRight: EDGE_GUARD }}>
@@ -172,19 +173,26 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px", breakInside: "avoid" }}>
         <tbody>
           <tr>
-            {/* ลายเซ็นจริงของคนสร้างใบและคนที่กดอนุมัติ (เจ้าของสั่ง 2026-09-02) */}
-            <td style={{ border: "none", padding: "2px 6px", width: "50%" }}>
-              <PrintSignatureLine userId={c.createdBy} height={26} />
-              Submitted by&nbsp; ...............................{c.submittedBy ? ` (${c.submittedBy})` : ""}
+            {/* เจ้าของสั่ง 2026-09-21 ให้ทำแบบเดียวกับใบสั่งซื้อ: **ไม่มีลายเซ็นสแกน ขึ้นชื่อที่กรอกไว้
+                ตรง ๆ และเอาวงเล็บออก** — คำสั่งเดิม (2026-09-18) ระบุเฉพาะใบ PO ใบนี้จึงถูกเว้นไว้ก่อน
+                แล้วมาตามเก็บทีหลังเมื่อยืนยันแล้วว่าให้ทำเหมือนกัน
+
+                ชื่ออยู่เหนือเส้น ป้ายอยู่ใต้เส้น เหมือนใบ PO เป๊ะ · กล่องสูง 26px เท่าของเดิม
+                แถวจึงไม่ยุบเมื่อยังไม่ได้กรอกชื่อ (ใบร่างที่พิมพ์ไปเซ็นมือ) */}
+            <td style={{ border: "none", padding: "2px 6px", width: "50%", textAlign: "center" }}>
+              <div style={signatureArea}>{(c.submittedBy ?? "").trim()}</div>
+              <div style={{ borderBottom: LINE, width: "76%", margin: "0 auto" }} />
+              <div style={{ marginTop: "2px" }}>Submitted by</div>
             </td>
-            <td style={{ border: "none", padding: "2px 6px", width: "50%" }}>
-              <PrintSignatureLine userId={c.approvedByUserId} height={26} />
-              Approved by&nbsp; ...............................{c.approvedBy ? ` (${c.approvedBy})` : ""}
+            <td style={{ border: "none", padding: "2px 6px", width: "50%", textAlign: "center" }}>
+              <div style={signatureArea}>{(c.approvedBy ?? "").trim()}</div>
+              <div style={{ borderBottom: LINE, width: "76%", margin: "0 auto" }} />
+              <div style={{ marginTop: "2px" }}>Approved by</div>
             </td>
           </tr>
           <tr>
-            <td style={{ border: "none", padding: "2px 6px" }}>Date (ว/ด/ป)&nbsp; ...................................</td>
-            <td style={{ border: "none", padding: "2px 6px" }}>Date (ว/ด/ป)&nbsp; ...................................</td>
+            <td style={{ border: "none", padding: "2px 6px", textAlign: "center" }}>Date (ว/ด/ป)&nbsp; ...................................</td>
+            <td style={{ border: "none", padding: "2px 6px", textAlign: "center" }}>Date (ว/ด/ป)&nbsp; ...................................</td>
           </tr>
         </tbody>
       </table>

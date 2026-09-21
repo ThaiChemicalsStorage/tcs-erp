@@ -11,7 +11,7 @@ import {
   withStringId, type JobOrderFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
-import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
+import { loadPendingProjectItemsOrThrow, loadProjectOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
@@ -156,9 +156,19 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       ? (body.itemIds as unknown[]).filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean)
       : typeof body.itemId === "string" && body.itemId.trim() ? [body.itemId.trim()] : [],
   )];
-  if (!projectId || itemIds.length === 0) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
+  if (!projectId) throw new HttpError(400, "กรุณาระบุโครงการ");
 
-  const { project, items } = await loadPendingProjectItemsOrThrow(projectId, itemIds);
+  /**
+   * **เปิดใบโดยไม่ผูกรายการได้ (2026-09-21)** — เหตุผลเดียวกับใบขอซื้อและใบเบิกทุกประการ
+   * (ดู `handleCreate()` ใน purchaseRequestHandler.ts): โครงการที่ออกเอกสารครบทุกรายการแล้วจะไม่มี
+   * รายการ `pending` เหลือ แล้วเดิมนั่นแปลว่าเปิดใบใหม่ไม่ได้เลย · เจ้าของสั่งให้แก้ให้เหมือนกันทั้งสามใบ
+   *
+   * ใบยังอ้างโครงการครบ ต่างกันแค่**ตารางรายการดำเนินงานเริ่มว่าง** ให้พิมพ์เอง แทนที่จะถูกเติมจาก
+   * รายการที่ติ๊ก — ซึ่งเป็นพฤติกรรมของใบสั่งงานก่อน 2026-08-27 อยู่แล้ว
+   */
+  const { project, items } = itemIds.length > 0
+    ? await loadPendingProjectItemsOrThrow(projectId, itemIds)
+    : { project: await loadProjectOrThrow(projectId), items: [] as Awaited<ReturnType<typeof loadPendingProjectItemsOrThrow>>["items"] };
 
   const counters = await countersCollection();
   const id = await nextJobOrderId(counters);
@@ -198,7 +208,10 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   await jobOrders.insertOne({ ...doc, _id: id });
 
   // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
-  await linkProjectItemsToSubDocument(projectId, itemIds, "jobOrder", "jobOrderId", id);
+  // ใบที่ไม่ได้เลือกรายการไม่มี ProjectItem ให้ผูก (2026-09-21)
+  if (itemIds.length > 0) {
+    await linkProjectItemsToSubDocument(projectId, itemIds, "jobOrder", "jobOrderId", id);
+  }
 
   await writeAuditEntry(ctx, "Job Order Created", `สร้างใบสั่งงาน ${id} สำหรับ ${items.length} รายการ: ${items.map((it) => `"${it.name}"`).join(", ")}`, { scopeOfWorkId: project.scopeOfWorkId });
   res.status(201).json({ jobOrder: toClient({ ...doc, _id: id }) });

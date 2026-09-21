@@ -713,6 +713,51 @@ describe("ทะเบียนผู้ขาย", () => {
  *   3. สโตร์จ่ายของจริง → สต๊อกลดจริง ใบปิดเป็น `"closed"` และออกใบสั่งซื้อไม่ได้อีก
  *   4. บรรทัดที่สโตร์จ่ายจากสต๊อก**ไม่ถูกลอกไปใบสั่งซื้อ** (ไม่งั้นซื้อของที่มีอยู่แล้วซ้ำ)
  */
+
+describe("เอกสารของฝ่ายโครงการ — เปิดใบโดยไม่ผูกรายการ (2026-09-21)", () => {
+  /**
+   * เจ้าของสั่ง 2026-09-21 ให้แก้ทั้งสามใบให้เหมือนกัน — โครงการที่ออกเอกสารครบทุกรายการแล้ว
+   * เคยเปิดใบใหม่ไม่ได้เลย ขณะที่ฝ่ายผลิตออกกี่ใบก็ได้จากใบสั่งผลิตใบเดิม
+   */
+  async function projectWithNoPendingItems(scopeNumber: string): Promise<string> {
+    const { getDb } = await import("../../api/_lib/mongodb.js");
+    const now = new Date().toISOString();
+    const inserted = await (await getDb()).collection("projects").insertOne({
+      scopeOfWorkId: "SOW-TEST", scopeNumber, customerCompanyName: "ลูกค้าทดสอบ",
+      items: [{ id: "i1", name: "ของที่ออกเอกสารไปแล้ว", quantity: 1, unit: "ชิ้น", specifications: [], itemStatus: "documentCreated", sourcingMethod: "jobOrder" }],
+      isDeleted: false, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system",
+    });
+    return inserted.insertedId.toString();
+  }
+
+  it("ใบเบิกวัสดุ: เปิดได้โดยไม่ผูกรายการ และยังปฏิเสธรายการที่ออกเอกสารไปแล้ว", async () => {
+    const projectId = await projectWithNoPendingItems("PQ-TEST-MR");
+    expect((await api("/api/material-requisitions", {
+      method: "POST", body: JSON.stringify({ projectId, itemIds: ["i1"] }),
+    })).status).toBe(400);
+
+    const res = await api("/api/material-requisitions", { method: "POST", body: JSON.stringify({ projectId, itemIds: [] }) });
+    expect(res.status).toBe(201);
+    const mr = (await json<{ materialRequisition: { projectId: string; jobCode: string; ownerDepartment?: string } }>(res)).materialRequisition;
+    expect(mr.projectId).toBe(projectId);
+    expect(mr.jobCode).toBe("PQ-TEST-MR");
+    expect(mr.ownerDepartment, "ยังเป็นใบของฝ่ายโครงการ").toBe("project");
+  });
+
+  it("ใบสั่งงาน: เปิดได้โดยไม่ผูกรายการ ตารางรายการเริ่มว่าง", async () => {
+    const projectId = await projectWithNoPendingItems("PQ-TEST-JO");
+    expect((await api("/api/job-orders", {
+      method: "POST", body: JSON.stringify({ projectId, itemIds: ["i1"] }),
+    })).status).toBe(400);
+
+    const res = await api("/api/job-orders", { method: "POST", body: JSON.stringify({ projectId, itemIds: [] }) });
+    expect(res.status).toBe(201);
+    const jo = (await json<{ jobOrder: { projectId: string; jobCode: string; lines: unknown[] } }>(res)).jobOrder;
+    expect(jo.projectId).toBe(projectId);
+    expect(jo.jobCode).toBe("PQ-TEST-JO");
+    expect(jo.lines, "ไม่มีรายการให้คัดลอก ตารางจึงเริ่มว่างให้พิมพ์เอง").toHaveLength(0);
+  });
+});
 describe("ใบขอซื้อ — เปิดใบของฝ่ายโครงการโดยไม่ผูกรายการ (2026-09-21)", () => {
   /**
    * เจ้าของแจ้ง 2026-09-21: *"ทำไมใบขอซื้อของโครงการสร้างไม่ได้เหมือนของแผนกผลิต"* — โครงการที่ออก

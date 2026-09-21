@@ -10,7 +10,7 @@ import {
   toObjectId, withStringId, type MaterialRequisitionFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
-import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
+import { loadPendingProjectItemsOrThrow, loadProjectOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
@@ -444,7 +444,7 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
    * ที่เพิ่งเปิดอยู่ในรายการที่คนกดมองเห็นอยู่ ไม่ใช่หายไปอยู่เมนูที่สาม
    */
   const standalone = !fromProduction && !projectId && itemIds.length === 0;
-  if (!fromProduction && !standalone && (!projectId || itemIds.length === 0)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  if (!fromProduction && !standalone && !projectId) throw new HttpError(400, "กรุณาระบุโครงการ หรือใบสั่งผลิต");
   // สิทธิ์ project:view จำเป็นเฉพาะทางที่อ่านโครงการจริง ๆ — ถ้าบังคับกับใบเปล่าด้วย ฝ่ายที่ไม่มีสิทธิ์
   // ดูโครงการจะเปิดใบเปล่าของตัวเองไม่ได้เลย ซึ่งคือสิ่งที่รอบนี้ตั้งใจแก้ (ด่านของทางอื่นไม่เปลี่ยน)
   if (!standalone && !roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
@@ -475,6 +475,24 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   } else if (standalone) {
     // ไม่มีอะไรให้สืบทอด — ทุกช่องบนหัวใบพิมพ์เองในเอกสาร เหลือแค่ชื่อคนสร้างที่เติมให้ไว้ก่อน
     source = { projectId: "", scopeOfWorkId: "", jobCode: "", customerName: "", productName: "", responsibleEmployee: ctx.user.fullName };
+  } else if (itemIds.length === 0) {
+    /**
+     * **เปิดใบของโครงการโดยไม่ผูกรายการ (2026-09-21)** — เหตุผลเดียวกับใบขอซื้อทุกประการ
+     * (ดู `handleCreate()` ใน purchaseRequestHandler.ts): โครงการที่ออกเอกสารครบทุกรายการแล้วจะไม่มี
+     * รายการ `pending` เหลือ แล้วเดิมนั่นแปลว่าเปิดใบใหม่ไม่ได้เลย ขณะที่ฝ่ายผลิตออกกี่ใบก็ได้จาก
+     * ใบสั่งผลิตใบเดิม · เจ้าของสั่งให้แก้ให้เหมือนกันทั้งสามใบ 2026-09-21
+     *
+     * ใบยังเป็นของฝ่ายโครงการและอ้าง `projectId`/`scopeOfWorkId`/`jobCode` ครบ ต่างกันแค่ไม่มี
+     * ProjectItem ให้ขยับสถานะ · ช่อง "ชื่อสินค้า" เว้นว่างให้กรอกเอง เพราะไม่มีรายการให้ต่อชื่อ
+     */
+    const project = await loadProjectOrThrow(projectId);
+    jobOrderLink = await resolveJobOrderLink(projectId, body.jobOrderId);
+    source = {
+      projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber,
+      customerName: project.customerCompanyName,
+      productName: "",
+      responsibleEmployee: ctx.user.fullName,
+    };
   } else {
     // Validates the item exists and is still "pending" BEFORE anything is inserted — see
     // loadPendingProjectItemOrThrow()'s own doc comment for why this ordering is what makes the
@@ -528,7 +546,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   // linkProjectItemToSubDocument()'s doc comment) immediately after the insert succeeds — never
   // trusting any client-sent sourcingMethod/itemStatus/materialRequisitionId value.
   // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้ไป
-  if (!fromProduction && !standalone) {
+  // ใบของโครงการที่ไม่ได้เลือกรายการก็เช่นกัน (2026-09-21)
+  if (!fromProduction && !standalone && itemIds.length > 0) {
     await linkProjectItemsToSubDocument(projectId, itemIds, "requisition", "materialRequisitionId", id);
   }
 

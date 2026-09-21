@@ -162,6 +162,9 @@ export function JobOrderPage({
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
           multiSelect
+          // โครงการที่ออกเอกสารครบทุกรายการแล้วต้องยังเปิดใบใหม่ได้ (2026-09-21) — เหตุผลเต็ม
+          // อยู่ใน handleCreate() ของ purchaseRequestHandler.ts
+          allowNoItems
           onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds)}
         />
       )}
