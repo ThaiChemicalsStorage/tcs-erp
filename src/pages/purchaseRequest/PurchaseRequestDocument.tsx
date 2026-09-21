@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, ShoppingCart } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, ShoppingCart, PackageMinus } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -11,7 +11,7 @@ import {
   rewritePurchaseRequest,
   uploadPurchaseRequestAttachment, deletePurchaseRequestAttachment,
   reviewPurchaseRequestStock, postPurchaseRequestIssue, cancelPurchaseRequestIssue,
-  purchasingApprovePurchaseRequest, purchasingReopenPurchaseRequest,
+  purchasingApprovePurchaseRequest, purchasingReopenPurchaseRequest, pullPurchaseRequestToPurchasing,
   storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
 } from "../../lib/purchaseRequest";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
@@ -128,6 +128,7 @@ export function PurchaseRequestDocument({
   /** ขั้นของฝ่ายจัดซื้อ (2026-09-21) — อนุมัติ / ถอนการอนุมัติ */
   const [confirmPurchasingApprove, setConfirmPurchasingApprove] = useState(false);
   const [confirmPurchasingReopen, setConfirmPurchasingReopen] = useState(false);
+  const [confirmPurchasingPull, setConfirmPurchasingPull] = useState(false);
   const [purchasingBusy, setPurchasingBusy] = useState(false);
   /** หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว — ส่งไปกับการกดบันทึก ไม่ใช่ฟิลด์ที่เก็บบนใบ */
   const [purchasingEditNote, setPurchasingEditNote] = useState("");
@@ -453,24 +454,25 @@ export function PurchaseRequestDocument({
    * บันทึกที่ค้างอยู่ต้องถูกกดบันทึกเองก่อน — ปุ่มนี้ไม่บันทึกร่างให้ เพราะการอนุมัติกับการบันทึก
    * เป็นคนละเจตนา และใบจะถูกล็อกทันทีหลังอนุมัติ การเซฟให้เงียบ ๆ จะกลายเป็นการยัดค่าที่ยังไม่ตั้งใจ
    */
-  const runPurchasingStage = async (action: "approve" | "reopen") => {
+  const runPurchasingStage = async (action: "approve" | "reopen" | "pull") => {
     setPurchasingBusy(true);
     try {
-      const updated = action === "approve"
-        ? await purchasingApprovePurchaseRequest(doc.id)
-        : await purchasingReopenPurchaseRequest(doc.id);
+      const updated = action === "approve" ? await purchasingApprovePurchaseRequest(doc.id)
+        : action === "reopen" ? await purchasingReopenPurchaseRequest(doc.id)
+        : (await pullPurchaseRequestToPurchasing(doc.id)).purchaseRequest;
       setDoc(updated);
       setDraft(updated);
       dirty.markSaved(toUpdateFields(updated));
-      showToast(t(action === "approve"
-        ? "purchaseRequestDoc.purchasing.approvedToast"
-        : "purchaseRequestDoc.purchasing.reopenedToast"));
+      showToast(t(action === "approve" ? "purchaseRequestDoc.purchasing.approvedToast"
+        : action === "reopen" ? "purchaseRequestDoc.purchasing.reopenedToast"
+        : "purchaseRequestDoc.purchasing.pulledToast"));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.errorSave"));
     } finally {
       setPurchasingBusy(false);
       setConfirmPurchasingApprove(false);
       setConfirmPurchasingReopen(false);
+      setConfirmPurchasingPull(false);
     }
   };
 
@@ -605,6 +607,19 @@ export function PurchaseRequestDocument({
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border text-muted-foreground rounded-lg font-medium hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
                 >
                   <Undo2 size={13} /> {t("purchaseRequestDoc.purchasing.reopen")}
+                </button>
+              </div>
+            ) : doc.storeStage === "pending" ? (
+              /* ยังรอสโตร์ — เซิร์ฟเวอร์ปฏิเสธการอนุมัติในขั้นนี้ ปุ่มที่ถูกต้องคือ "ดึงมาที่จัดซื้อ" */
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <p className="text-xs text-muted-foreground flex-1 min-w-[16rem]">{t("purchaseRequestDoc.purchasing.pullHelp")}</p>
+                <button
+                  onClick={() => setConfirmPurchasingPull(true)}
+                  disabled={purchasingBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c9a84c]/50 text-[#a7841a] rounded-lg font-medium hover:bg-[#c9a84c]/10 transition-colors disabled:opacity-50"
+                >
+                  {purchasingBusy ? <Loader2 size={13} className="animate-spin" /> : <PackageMinus size={13} />}
+                  {t("purchaseRequestDoc.purchasing.pull")}
                 </button>
               </div>
             ) : (
@@ -1102,6 +1117,15 @@ export function PurchaseRequestDocument({
         busy={purchasingBusy}
         onConfirm={() => void runPurchasingStage("approve")}
         onCancel={() => setConfirmPurchasingApprove(false)}
+      />
+      <ConfirmDialog
+        open={confirmPurchasingPull}
+        title={t("purchaseRequestDoc.purchasing.pullConfirmTitle")}
+        message={t("purchaseRequestDoc.purchasing.pullConfirmBody")}
+        confirmLabel={t("purchaseRequestDoc.purchasing.pull")}
+        busy={purchasingBusy}
+        onConfirm={() => void runPurchasingStage("pull")}
+        onCancel={() => setConfirmPurchasingPull(false)}
       />
       <ConfirmDialog
         open={confirmPurchasingReopen}

@@ -674,6 +674,29 @@ describe("ใบขอซื้อ — ขั้นของฝ่ายจั�
     expect(again.purchasingStage, "nextStoreStage() ต้องไม่แตะฟิลด์ของจัดซื้อ").toBe("approved");
   });
 
+  it("จัดซื้อดึงใบที่ยังรอสโตร์มาทำเองได้ — ใบถูกส่งต่อทันทีและลอกบรรทัดครบทุกบรรทัด", async () => {
+    const waiting = await approvedAwaitingStore();
+    expect(waiting.storeStage).toBe("pending");
+
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(waiting.id)}/pull-to-purchasing`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const pulled = (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest;
+    expect(pulled.storeStage).toBe("forwarded");
+    expect(pulled.purchasingStage).toBe("review");
+    expect(pulled.storeRemark ?? "").toContain("ดึงใบมาดำเนินการเอง");
+    // ไม่แตะบรรทัดเลย — storeDecision ยังว่าง ซึ่งตัวกรองตอนสร้าง PO นับว่า "ต้องซื้อ"
+    expect(pulled.lines.every((l) => !l.storeDecision)).toBe(true);
+
+    const po = await createPurchaseOrder({ purchaseRequestId: pulled.id });
+    expect(po.lines).toHaveLength(pulled.lines.length);
+  });
+
+  it("ดึงซ้ำไม่ได้ และใบที่สโตร์ปิดไปแล้วดึงไม่ได้", async () => {
+    const waiting = await approvedAwaitingStore();
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(waiting.id)}/pull-to-purchasing`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(waiting.id)}/pull-to-purchasing`, { method: "POST" })).status).toBe(400);
+  });
+
   /**
    * บั๊กที่มีโอกาสเกิดสูงสุดของงานชุดนี้ — `handleRewrite` ใช้ `...rest` ถ้าไม่ล้างฟิลด์นี้
    * ฉบับแก้ไขจะเกิดมาพร้อม "approved" แล้วถูกล็อกทันทีที่หัวหน้าอนุมัติ ทั้งที่จัดซื้อยังไม่เคยเห็น

@@ -153,7 +153,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "storeRequestInbox" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -264,7 +264,18 @@ const navItems: NavItem[] = [
   // ไม่สร้างสิทธิ์ใหม่ แต่ต้องมีทั้งคู่ (2026-09-10): `stock:adjust` คือสิทธิ์ที่ทำให้ *ทำงานในกล่องนี้ได้จริง*
   // ส่วน `purchaseRequest:view` คือด่านของรายการที่หน้านี้อ่าน — เดิมมีแค่ตัวหลัง ผู้ขอซื้อธรรมดาจึงเห็น
   // กล่องงานของสโตร์ไปด้วย · สโตร์มี `stock:adjust` อยู่แล้วเพราะเป็นสิทธิ์ที่ใช้จ่ายของ ไม่ต้องติ๊กเพิ่ม
+  //
+  // **2026-09-21**: ฝ่ายจัดซื้อเห็นกล่องนี้ด้วย ตามคำสั่งเจ้าของข้อ 3 — และเมนูเดียวกันไปโผล่ทั้งกลุ่ม
+  // จัดซื้อและกลุ่มคลังสินค้า (รูปแบบเดียวกับ `materialRequisitionTemplates` ที่อยู่สองกลุ่ม) แทนที่จะ
+  // ย้ายออกจากสโตร์ เพราะสโตร์ยังต้องมีคิวของตัวเอง · จัดซื้อ**เห็นและดึงใบได้ แต่บันทึกผลเช็คของไม่ได้**
+  // เพราะ `handleStoreReview` ฝั่งเซิร์ฟเวอร์ยังกันด้วย `stock:adjust` — ความไม่สมมาตรนี้ตั้งใจ
   { key: "storeRequestInbox", icon: ShoppingCart, labelKey: "nav.storeRequestInbox", permission: "purchaseRequest:view",
+    anyPermission: ["stock:adjust", "purchaseOrder:create", "purchaseRequest:editApproved"] },
+  // สโตร์เปิดใบขอซื้อเองได้ (2026-09-21, คำสั่งเจ้าของข้อ 10 "เผื่อแบบซื้อของเข้าสโตร์ไรงี้")
+  // ฝั่งเซิร์ฟเวอร์รองรับอยู่แล้ว (ใบไม่ผูกเอกสารต้นทาง = `ownerDepartment: "general"`) ขาดแค่ทางเข้า
+  // **ต้องเป็นเมนูแยกจาก `storeRequestInbox`** เพราะกล่องนั้นกรอง `Final` + `storeStage: "pending"`
+  // ใบที่สโตร์เพิ่งสร้างยังเป็นร่าง จะไม่โผล่ในนั้นเลย
+  { key: "storePurchaseRequest", icon: ShoppingCart, labelKey: "nav.storePurchaseRequest", permission: "purchaseRequest:view",
     anyPermission: ["stock:adjust"] },
   // หน้าตัดของของสโตร์ (2026-09-10) — ใบเบิกที่อนุมัติแล้วและยังจ่ายไม่ครบ ของทั้งฝ่ายโครงการและฝ่ายผลิต
   // ต้องมีทั้งสองสิทธิ์: `stock:adjust` คือสิทธิ์ที่ทำให้กดจ่ายได้จริง (และเป็นด่านของ API ตัวเดียวกัน)
@@ -300,10 +311,10 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
   { labelKey: "nav.group.project", keys: ["materialRequisition", "materialRequisitionTemplates", "jobOrder", "purchaseRequest", "deliveryOrder"] },
   { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "materialRequisitionTemplates", "productionPurchase", "deliveryOrder"] },
-  { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
+  { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "storeRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "toolControl", "receivingReport", "storeRequestInbox", "storeIssueInbox", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "toolControl", "receivingReport", "storeRequestInbox", "storePurchaseRequest", "storeIssueInbox", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -324,6 +335,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   arMonthly: "nav.arMonthly",
   purchaseTaxRegister: "nav.purchaseTaxRegister",
   storeRequestInbox: "nav.storeRequestInbox",
+  storePurchaseRequest: "nav.storePurchaseRequest",
   storeIssueInbox: "nav.storeIssueInbox",
   productCategories: "nav.productCategories",
   apRegister: "nav.apRegister",
@@ -1276,6 +1288,8 @@ export default function App() {
               ? <CategoriesManager categories={categories} products={products} onChange={updateCategories} canManage={hasPermission(currentUser, roles, "products:create") || hasPermission(currentUser, roles, "products:edit")} />
               : effectiveNav === "storeRequestInbox"
               ? <PurchaseRequestPage key="pr-store" ownerDepartment="all" storeStage="pending" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              : effectiveNav === "storePurchaseRequest"
+              ? <PurchaseRequestPage key="pr-store-own" ownerDepartment="general" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "storeIssueInbox"
               ? <StoreIssueInboxPage currentUserName={currentUser.fullName} onOpenDocument={navigateToMaterialRequisition} />
               : effectiveNav === "receivingReport"

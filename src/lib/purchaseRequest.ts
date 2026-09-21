@@ -178,6 +178,13 @@ export interface PurchaseRequest {
   /** ขั้นของฝ่ายจัดซื้อ — ดู `PurchaseRequestPurchasingStage` · ไม่มีค่า = ใบก่อน 2026-09-21 */
   purchasingStage?: PurchaseRequestPurchasingStage;
   /**
+   * ร่องรอยว่าฝ่ายจัดซื้อดึงใบมาทำเองโดยข้ามขั้นสโตร์ (2026-09-21) — ไม่ใช่ข้อมูลที่ใครกรอก
+   * เซิร์ฟเวอร์เขียนตอนกดปุ่ม "ดึงมาที่จัดซื้อ" เท่านั้น มีไว้ให้ตอบได้ว่าทำไมใบนี้ไม่มีผลเช็คของสโตร์
+   */
+  pulledToPurchasingBy?: string;
+  pulledToPurchasingByName?: string;
+  pulledToPurchasingAt?: string;
+  /**
    * ผู้กดอนุมัติของฝ่ายจัดซื้อจริงในระบบ — เซิร์ฟเวอร์เขียนเท่านั้น แยกจาก `purchasingDeptBy` ซึ่งเป็น
    * ช่องข้อความบนฟอร์มที่เจ้าหน้าที่พิมพ์เองได้ (กติกาเดียวกับ `approvedByUserId`)
    *
@@ -424,6 +431,15 @@ export async function purchasingApprovePurchaseRequest(id: string): Promise<Purc
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(
     `/purchase-requests/${encodeURIComponent(id)}/purchasing-approve`, { method: "POST" });
   return purchaseRequest;
+}
+/**
+ * ฝ่ายจัดซื้อดึงใบมาทำเองโดยไม่รอสโตร์ — ข้ามขั้นเช็คของไปเลย
+ *
+ * เจ้าของ: *"ส่วนใหญ่ในใบขอซื้อมันจะไม่มีของใน stock อยู่แล้ว"* · ขั้นสโตร์ยังอยู่ ไม่ใช่ทางผ่านบังคับ
+ */
+export async function pullPurchaseRequestToPurchasing(id: string): Promise<PurchaseRequestWithStock> {
+  return unwrapWithStock(await apiFetch<PurchaseRequestStockResponse>(
+    `/purchase-requests/${encodeURIComponent(id)}/pull-to-purchasing`, { method: "POST" }));
 }
 /** ถอนการอนุมัติของจัดซื้อ — ปุ่มแก้พลาดมือลั่น ไม่ต้อง Rewrite ทั้งใบ · ทำไม่ได้ถ้าเปิดใบสั่งซื้อไปแล้ว */
 export async function purchasingReopenPurchaseRequest(id: string): Promise<PurchaseRequest> {

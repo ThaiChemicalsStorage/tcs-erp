@@ -875,6 +875,7 @@ body รับ `newCategoryName` เพิ่มอีกหนึ่งช่�
 | Route | Permission | Notes |
 |---|---|---|
 | `POST /api/purchase-requests/:id/purchasing-approve` | `purchaseRequest:editApproved` | `Final` เท่านั้น · `storeStage: "pending"` → 400 (ให้กด "ดึงมาที่จัดซื้อ" ก่อน) · อนุมัติซ้ำ → 400 · เขียน `purchasingStage: "approved"` + `purchasingApprovedByUserId` และเติม `purchasingDeptBy`/`At` **เฉพาะเมื่อยังว่าง** (ไม่ทับชื่อที่เจ้าหน้าที่พิมพ์เอง — กติกาเดียวกับ `handleApprove()`) · แจ้งผู้สร้างใบ |
+| `POST /api/purchase-requests/:id/pull-to-purchasing` | `purchaseRequest:editApproved` | `Final` เท่านั้น · `storeStage` ต้องยังเป็น `"pending"` (`"forwarded"`/`"closed"` → 400) · ตั้ง `storeStage: "forwarded"` **ด้วย** ไม่ใช่แค่ `purchasingStage` เพราะด่านเปิดใบสั่งซื้อและชิปในหน้ารายการอ่านจากค่านั้น · **ไม่แตะบรรทัดเลย** — ทุกบรรทัดยังเป็น `storeDecision: ""` ซึ่งตัวกรอง `l.storeDecision !== "stock"` นับว่าต้องซื้อ บรรทัดจึงถูกลอกไปครบ · ต่อท้าย `storeRemark` และเก็บ `pulledToPurchasingBy/ByName/At` |
 | `POST /api/purchase-requests/:id/purchasing-reopen` | `purchaseRequest:editApproved` | ต้องเป็น `"approved"` อยู่ก่อน · **มีใบสั่งซื้อที่ยังไม่ถูกลบอ้างใบนี้อยู่ → 400** พร้อมจำนวนใบ · กลับเป็น `"review"` และล้าง `purchasingApprovedByUserId` · **ไม่ล้าง** `purchasingDeptBy`/`At` เพราะเป็นข้อความบนฟอร์มที่กรอกเอง |
 
 **ไม่มีสิทธิ์ใหม่และไม่มี migration** — `purchaseRequest:editApproved` (มีมาตั้งแต่ 2026-09-09)

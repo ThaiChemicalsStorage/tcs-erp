@@ -182,6 +182,35 @@ left/right edges and as an empty 12mm row inside `<thead>`/`<tfoot>` of a wrappe
 browsers repeat those two on every page, which a single box's `padding` does not. `PurchaseRequestPrintDocument`
 keeps its own `paddingRight: EDGE_GUARD` on the outer div; it stacks on top of the frame's 12mm.
 
+## Where a PR lives in the sidebar (2026-09-21)
+
+Owner's item 3: *"ใบขอซื้อที่เอาไว้ให้สโตร์เช็คของมันไปโผล่ที่แผนกจัดซื้อมันไม่ได้ไปที่แผนกสโตร์ แต่คือ
+ส่วนใหญ่ในใบขอซื้อมันจะไม่มีของใน stock อยู่แล้ว"*.
+
+`storeRequestInbox` is now listed in **both** the Purchasing and the Inventory groups — one nav key in
+two groups, the same shape `materialRequisitionTemplates` already uses. Stores keeps its own queue;
+Purchasing simply also sees it. Its `anyPermission` widened to
+`["stock:adjust", "purchaseOrder:create", "purchaseRequest:editApproved"]`, because a Purchasing role
+generally has no `stock:adjust`.
+
+**Purchasing can see and pull, but cannot record a stock check** — `handleStoreReview` still requires
+`stock:adjust` server-side. The asymmetry is deliberate: looking at the queue is not the same authority
+as saying what is on the shelf.
+
+`POST /:id/pull-to-purchasing` is the escape hatch for the second half of the quote. It sets
+`storeStage: "forwarded"` **and** `purchasingStage: "review"`, appends who pulled it to `storeRemark`,
+and records `pulledToPurchasingBy/ByName/At`. It touches **no lines**: they stay `storeDecision: ""`,
+which the PO copy filter (`!== "stock"`) already counts as "to buy", so every line carries over.
+
+Item 10 (*"สโตรก็สามารถเปิดใบขอซื้อได้เผื่อแบบซื้อของเข้าสโตร์ไรงี้"*) needed no server work at all —
+a PR with no source document has been `ownerDepartment: "general"` since 2026-08-28. What was missing
+was a way in, so there is a new `storePurchaseRequest` nav key in the Inventory group. **It has to be
+separate from `storeRequestInbox`**, which filters `Final` + `storeStage: "pending"` — a request Stores
+has just created is a Draft and would never appear there.
+
+⚠️ `purchaseRequest:create` still has to be ticked onto the customer's Stores role by hand; see
+[RBAC.md](../RBAC.md) for why `RBAC_MIGRATIONS` cannot reach roles with no fixed `roleKey`.
+
 ## The Purchasing stage on a PR (2026-09-21)
 
 The owner reported that an approved PR was a dead end: *"ใบ PR ตอนนี้แผนกจัดซื้อไม่สามารถอนุมัติได้

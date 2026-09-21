@@ -511,6 +511,50 @@ async function openPurchaseOrderCountOf(id: string): Promise<number> {
 }
 
 /**
+ * ฝ่ายจัดซื้อดึงใบมาทำเองโดยไม่รอสโตร์ (2026-09-21)
+ *
+ * เจ้าของอธิบายว่า *"ส่วนใหญ่ในใบขอซื้อมันจะไม่มีของใน stock อยู่แล้ว"* — การบังคับให้รอสโตร์ติ๊ก
+ * ทุกบรรทัดก่อนจึงเป็นคอขวดที่ไม่ได้ให้ข้อมูลอะไรเพิ่ม · ขั้นสโตร์ยังอยู่ครบสำหรับใบที่ต้องใช้จริง
+ * แค่ไม่ใช่ทางผ่านที่บังคับอีกต่อไป
+ *
+ * ตั้ง `storeStage: "forwarded"` ด้วย ไม่ใช่แค่ `purchasingStage` — เพราะด่านเปิดใบสั่งซื้อและชิป
+ * ในหน้ารายการอ่านจาก `storeStage` และเพราะสถานะที่ถูกต้องของใบนี้**คือ**ส่งต่อจัดซื้อแล้วจริง ๆ
+ *
+ * **ไม่แตะบรรทัดเลย** — ทุกบรรทัดยังเป็น `storeDecision: ""` ซึ่งตัวกรองตอนสร้างใบสั่งซื้อ
+ * (`l.storeDecision !== "stock"`) นับว่า "ต้องซื้อ" อยู่แล้ว บรรทัดจึงถูกลอกไปครบทุกบรรทัดเอง
+ */
+async function handlePullToPurchasing(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:editApproved");
+  const doc = await loadOrThrow(id);
+  if (doc.status !== "Final") throw new HttpError(400, "ดึงมาที่จัดซื้อได้เฉพาะใบขอซื้อที่อนุมัติแล้วเท่านั้น");
+  if (doc.storeStage === "closed") throw new HttpError(400, "ใบนี้สโตร์จ่ายของจากสต๊อกครบแล้ว ไม่ต้องสั่งซื้อ");
+  if (doc.storeStage === "forwarded") throw new HttpError(400, "ใบนี้อยู่ที่ฝ่ายจัดซื้อแล้ว");
+
+  const now = nowIso();
+  const note = `ฝ่ายจัดซื้อดึงใบมาดำเนินการเองโดยไม่รอสโตร์ (${ctx.user.fullName})`;
+  const previousRemark = (doc.storeRemark ?? "").trim();
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, {
+    $set: {
+      storeStage: "forwarded" as PurchaseRequestStoreStage,
+      purchasingStage: "review" as PurchaseRequestPurchasingStage,
+      // ต่อท้าย ไม่เขียนทับ — สโตร์อาจเขียนหมายเหตุไว้ก่อนแล้วแม้จะยังติ๊กไม่ครบ
+      storeRemark: previousRemark ? `${previousRemark}
+${note}` : note,
+      pulledToPurchasingBy: ctx.user.id,
+      pulledToPurchasingByName: ctx.user.fullName,
+      pulledToPurchasingAt: now.slice(0, 10),
+      updatedAt: now, updatedBy: ctx.user.id,
+    },
+  });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Purchase Request Pulled To Purchasing",
+    `ฝ่ายจัดซื้อดึงใบขอซื้อ ${id} มาดำเนินการเองโดยข้ามขั้นสโตร์`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ purchaseRequest: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
+}
+
+/**
  * ฝ่ายจัดซื้ออนุมัติใบขอซื้อ (2026-09-21) — ขั้นสุดท้ายของใบก่อนเปิดใบสั่งซื้อ
  *
  * เจ้าของสั่ง: *"ให้จัดซื้อแก้ไขและอนุมัติ มันมีช่องเซ็นของจัดซื้อ"* — การกดปุ่มนี้จึงทำสองอย่างพร้อมกัน
@@ -944,6 +988,7 @@ export async function handlePurchaseRequest(req: ApiRequest, res: ApiResponse): 
   // ขั้นของจัดซื้อ (2026-09-21) — อนุมัติ / ถอนการอนุมัติ
   if (parts.length === 2 && parts[1] === "purchasing-approve") return handlePurchasingApprove(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "purchasing-reopen") return handlePurchasingReopen(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "pull-to-purchasing") return handlePullToPurchasing(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "store-issues") return handleStoreIssue(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "store-issues") return handleCancelStoreIssue(req, res, parts[0], parts[2]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
