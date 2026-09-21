@@ -1010,6 +1010,43 @@ The nav group hides itself when a role holds none of the view permissions in it
 (`items.length === 0` returns `null` in `App.tsx`), so a role without these never sees a จัดซื้อ
 heading with nothing under it.
 
+## `vendor:approve` and the two boxes that must be ticked by hand (2026-09-21)
+
+The 2026-09-18 purchasing batch added **one** permission: **`vendor:approve`** — *อนุมัติผู้ขายใน
+ทะเบียน (บัญชี)*. It belongs to **Accounting**, not Purchasing: the owner's instruction was that
+Purchasing fills the vendor in and *"นำส่งข้อมูลไปที่บัญชีให้บัญชีอนุมัติก่อนเปิด PO สั่งซื้อ"*.
+
+⚠️ **`ap:manage` is not a substitute.** It means "record a payment", which is a different authority
+that happens to live in the same department.
+
+This one **did** get an `RBAC_MIGRATIONS` entry (`vendor-approval-2026-09-21`), because without it
+nobody on an existing database could approve a vendor and therefore no purchase order could ever be
+approved again:
+
+```
+administrator:   ["vendor:approve"]
+accounting_user: ["vendor:view", "vendor:approve"]
+```
+
+**Accounting needs `vendor:view` as well, not just `vendor:approve`.** `GET /api/vendors` passes
+through exactly three doors (`vendor:view` / `purchaseOrder:view` / `purchaseRequest:view`) and
+`accounting_user` held none of them — it would have got a 403 on the page it was just given a button on.
+
+### The two boxes `RBAC_MIGRATIONS` cannot reach
+
+`syncDefaultRoles()` never touches a role document that already exists, and the customer's real
+**Purchasing** and **Stores** roles were created by hand in Role Management — they have no fixed
+`roleKey`, so no migration can name them. These must be ticked by a Super Admin on the live system:
+
+| Permission | Role | Why |
+|---|---|---|
+| `purchaseRequest:editApproved` | Purchasing | The whole ขั้นของฝ่ายจัดซื้อ flow (edit an approved PR, approve it, withdraw that approval, pull it over from Stores) runs on this one permission. Without it Purchasing still cannot touch an approved PR — the exact complaint that started this batch. |
+| `purchaseRequest:create` | Stores | The new *เปิดใบขอซื้อ (สโตร์)* menu is visible without it but every create fails. |
+
+Per the owner's 2026-09-14 instruction these are **not** tracked as TODO items — they are told to
+the owner directly. They are recorded here because this is the document that explains why code
+cannot do it.
+
 ## Cost Control permissions (added 2026-08-28)
 
 **7 permissions** — `costControl:` `view` / `viewAll` / `create` / `edit` / `finalize` / `print` /

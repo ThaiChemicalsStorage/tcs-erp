@@ -182,6 +182,63 @@ left/right edges and as an empty 12mm row inside `<thead>`/`<tfoot>` of a wrappe
 browsers repeat those two on every page, which a single box's `padding` does not. `PurchaseRequestPrintDocument`
 keeps its own `paddingRight: EDGE_GUARD` on the outer div; it stacks on top of the frame's 12mm.
 
+## The flow as it stands after 2026-09-21
+
+```
+แผนกต้นทาง เปิดใบขอซื้อ  →  หัวหน้าอนุมัติ (status: Final)
+      │
+      ├─ storeStage: "pending"   สโตร์เช็คของ ──┬─ มีของ  → จ่ายจากสต๊อก → "closed" (จบ)
+      │        │                                └─ ไม่มี  → "forwarded"
+      │        └─ จัดซื้อกด "ดึงมาที่จัดซื้อ" ──────→ "forwarded" (ข้ามการเช็ค)
+      │
+      └─ purchasingStage: "review"   จัดซื้อแก้ใบได้ทุกช่อง
+               │
+               └─ "approved"  ลงชื่อช่องฝ่ายจัดซื้อ + ล็อกทั้งใบ
+                        │
+                        └─ ติ๊กรายการ → ออกใบสั่งซื้อ (แตกได้หลายใบตามผู้ขาย)
+                                 │
+                                 └─ PO: ผู้ขายต้องผ่านบัญชี → อนุมัติ → รับสินค้า
+```
+
+**สองขั้นนี้แยกกันเด็ดขาด.** `storeStage` is recomputed from every line's tick each time Stores
+saves a check (`nextStoreStage()`); `purchasingStage` is written only by Purchasing's own routes.
+Folding them together would reset Purchasing's stage on a repeat stock check — there is a test for it.
+
+**Neither is a document status.** `ApprovableStatus` is shared by six document types; both new stages
+are fields on the purchase request, exactly like `storeStage` before them.
+
+### What "already ordered" means, and what Rewrite does to it
+
+A PO line carries `sourcePrLineId`. "Has this PR line been ordered?" is **computed from live purchase
+orders every time** (`purchasedPrLineIds()`), never stored as a flag on the PR. Delete a PO and its
+lines become orderable again on their own; a stored flag would strand them as permanently unbuyable
+with no screen able to clear it.
+
+Two consequences worth knowing before touching this:
+
+- **A PO revision (`-R1`) counts as a second order against the same PR line.** The original is still
+  `Final` and not deleted, so both numbers show. That is correct for blocking — the line really was
+  ordered — and the screen lists both. **Do not try to collapse the revision chain**; that would hide
+  an order that is still open.
+- **A PR revision starts its "ordered" count from zero.** The new document gets a new `_id` while the
+  POs still point at the old one, and line ids are inherited. Accepted deliberately — Rewrite means
+  "start again" everywhere else in this system — but the card shows a warning banner on a revision
+  whose original still has live purchase orders, so nobody orders twice without seeing it.
+
+### Reverting an approved PO does not free the PR lines
+
+`revert-approval` puts the PO back to Draft; the PO still exists, so its lines still count as ordered.
+Only deleting the PO releases them. This is the right split: a withdrawn approval is still an order
+on the vendor's desk.
+
+### Known limitation: two people, one purchase request
+
+Two buyers pressing *ออกใบสั่งซื้อ* on the same PR at the same moment both pass the duplicate check.
+There is **no multi-document transaction anywhere in this project** (single-node Mongo, no replica
+set), so this is stated plainly rather than papered over with a lock that would be the only one of its
+kind in the codebase. Reloading the PR shows both orders. Same class of trade-off as the `1 PO = 1 RR`
+note in [Store.md](./Store.md).
+
 ## Where a PR lives in the sidebar (2026-09-21)
 
 Owner's item 3: *"ใบขอซื้อที่เอาไว้ให้สโตร์เช็คของมันไปโผล่ที่แผนกจัดซื้อมันไม่ได้ไปที่แผนกสโตร์ แต่คือ

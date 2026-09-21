@@ -301,6 +301,38 @@ Auto-save covers only `documentNumber` and `remarks`. Everything else is the res
 `PurchaseOrderDocument` gained a **รับสินค้า** button on approved orders: it looks for an existing RR
 first and opens it, and only creates one when there is none.
 
+## 7a. What the 2026-09-21 purchasing batch changed for Stores
+
+Three of the owner's twelve items land on this module:
+
+- **The *ใบขอซื้อ (รอสโตร์เช็คของ)* queue now also appears under the จัดซื้อ nav group** — one nav
+  key listed in two groups, the shape `materialRequisitionTemplates` already used. Stores keeps its
+  own queue exactly as it was; Purchasing simply also sees it. Its `anyPermission` widened to
+  `["stock:adjust", "purchaseOrder:create", "purchaseRequest:editApproved"]`, because a Purchasing
+  role generally holds no `stock:adjust`.
+
+- **Purchasing can pull a request out of the queue without waiting** (`POST /:id/pull-to-purchasing`).
+  The owner's reason: *"ส่วนใหญ่ในใบขอซื้อมันจะไม่มีของใน stock อยู่แล้ว"* — the stock check is still
+  there for the requests that need it, it is simply no longer a compulsory gate. Who pulled it is
+  appended to `storeRemark` and recorded in `pulledToPurchasingBy/ByName/At`.
+
+  **Purchasing still cannot record a stock check** — `handleStoreReview` requires `stock:adjust`.
+  Looking at the queue is not the same authority as saying what is on the shelf. That asymmetry is
+  deliberate; do not "fix" it by widening the route.
+
+- **Stores can raise its own purchase request** — new *เปิดใบขอซื้อ (สโตร์)* menu (item 10:
+  *"เผื่อแบบซื้อของเข้าสโตร์ไรงี้"*). The server has supported this since 2026-08-28 (a request with
+  no source document is `ownerDepartment: "general"`); only the way in was missing. **It has to be a
+  separate menu** from the review queue, which filters `Final` + `storeStage: "pending"` — a request
+  Stores has just created is a Draft and would never show up there.
+
+  ⚠️ `purchaseRequest:create` must be ticked onto the Stores role by hand; see [RBAC.md](../RBAC.md).
+
+**Receiving skips cancelled purchase-order lines** (2026-09-21). A PO line can now be cancelled with
+a reason instead of deleted; `POST /api/receiving-reports` filters those out, so Stores is never asked
+to receive something Purchasing has withdrawn, and no payable or stock movement is raised for goods
+that will never arrive. A PO whose lines are *all* cancelled returns 400.
+
 ## 8. RBAC
 
 Nine new permissions, split on purpose — Store receives and posts the payable, Accounting chases the
