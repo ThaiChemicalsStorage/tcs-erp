@@ -309,6 +309,7 @@ async function handleVendorApprovalStage(
 
   res.status(200).json({ vendor: publicVendor });
 }
+
 /** เก็บถาวร/กู้คืน — soft-delete เสมอ ไม่เคยลบแถวจริง เพราะใบสั่งซื้อเก่าอ้างชื่อผู้ขายไว้ */
 async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");

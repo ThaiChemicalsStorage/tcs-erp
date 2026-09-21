@@ -72,11 +72,6 @@ function canEdit(ctx: AuthContext, doc: { createdBy: string }): boolean {
 }
 
 /**
- * `productId` เป็น optional เหมือนใบขอซื้อ — จัดซื้อสั่งของที่ยังไม่มีรหัสในคลังเป็นเรื่องปกติ
- * (โมดูล "คำขอเพิ่มสินค้า" มีอยู่ก็เพราะรหัสถูกตั้งทีหลัง) ถ้าผูกกับสินค้าจริง รหัส/ชื่อ/หน่วย
- * ถูก **ดึงจากฐานข้อมูลฝั่งเซิร์ฟเวอร์** ไม่เชื่อค่าที่ client ส่งมา
- */
-/**
  * ช่องยกเลิกของหนึ่งบรรทัด — **ติ๊กยกเลิกแล้วต้องมีเหตุผลเสมอ**
  *
  * `lenient` = คำขอนี้เป็นการ**บันทึกอัตโนมัติ** (2026-09-21, เจ้าของเลือกทางนี้): ติ๊กปุ่มยกเลิกแล้ว
@@ -101,6 +96,11 @@ function cancellationOf(
   return { cancelled, cancelRemark: cancelled ? cancelRemark : "" };
 }
 
+/**
+ * `productId` เป็น optional เหมือนใบขอซื้อ — จัดซื้อสั่งของที่ยังไม่มีรหัสในคลังเป็นเรื่องปกติ
+ * (โมดูล "คำขอเพิ่มสินค้า" มีอยู่ก็เพราะรหัสถูกตั้งทีหลัง) ถ้าผูกกับสินค้าจริง รหัส/ชื่อ/หน่วย
+ * ถูก **ดึงจากฐานข้อมูลฝั่งเซิร์ฟเวอร์** ไม่เชื่อค่าที่ client ส่งมา
+ */
 async function sanitizeLines(
   raw: unknown, existing: PurchaseOrderLine[] = [], lenientCancel = false,
 ): Promise<PurchaseOrderLine[]> {
@@ -456,6 +456,8 @@ async function resolveVendorLink(
   body: Record<string, unknown>,
   doc: PurchaseOrderFields & { _id: string },
 ): Promise<Partial<PurchaseOrderFields>> {
+  // ไม่ได้ส่งช่องผู้ขายมาสักช่อง = ไม่มีอะไรให้ทำ ออกก่อนแตะทะเบียน (บันทึกอัตโนมัติยิงถี่มาก)
+  if (!("vendorId" in body) && !("vendorName" in body)) return {};
   const vendors = await vendorsCollection();
 
   // เลือกจากทะเบียนบนหน้าจอ — ตรวจว่ามีจริง แล้วเชื่อค่านั้น

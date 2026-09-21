@@ -162,8 +162,14 @@ async function notifyApprovers<TDoc extends ApprovableFields>(
   try {
     const context = n.context?.(doc)?.trim() ?? "";
     // ผู้รับเฉพาะเจาะจงมาก่อน ถ้าไม่มี (หรือคนที่เลือกไว้ใช้ไม่ได้แล้ว) ค่อยกระจายตามสิทธิ์ตามเดิม
-    const targeted = (await n.recipients?.(doc)) ?? null;
-    const sent = await notifyUsers(targeted ?? await activeUserIdsWithPermission(cfg.approvePermission), ctx.user.id, {
+    //
+    // ⚠️ คนที่ถูกเลือกไว้ต้อง**อยู่ในกลุ่มที่มีสิทธิ์อนุมัติจริง**ด้วย — หน้าจอให้เลือกจากผู้ใช้ทุกคน
+    // เลือกคนที่อนุมัติไม่ได้ปุ๊บ แจ้งเตือนจะวิ่งไปหาเขาคนเดียวแล้ว**ไม่มีผู้อนุมัติตัวจริงคนไหนรู้เรื่อง**
+    // ใบจะค้างที่ "รออนุมัติ" เงียบ ๆ · เข้าเกณฑ์เดียวกับ "คนที่เลือกไว้ใช้ไม่ได้แล้ว" จึงถอยไปกระจายตามสิทธิ์
+    const approvers = await activeUserIdsWithPermission(cfg.approvePermission);
+    const picked = (await n.recipients?.(doc))?.filter((uid) => approvers.includes(uid)) ?? [];
+    const targeted = picked.length > 0 ? picked : null;
+    const sent = await notifyUsers(targeted ?? approvers, ctx.user.id, {
       type: n.type,
       title: `${cfg.label}รออนุมัติ`,
       description: `${ctx.user.fullName} ส่ง${cfg.label} ${id}${context ? ` (${context})` : ""} เพื่อขออนุมัติ`,
@@ -171,9 +177,9 @@ async function notifyApprovers<TDoc extends ApprovableFields>(
       related: { [n.relatedField]: id },
     });
     if (sent === 0) {
-      // แยกสองสาเหตุออกจากกัน — "คนที่เลือกไว้ลาออก/ถูกปิดบัญชี" แก้คนละทางกับ "ไม่มีใครมีสิทธิ์เลย"
+      // แยกสองสาเหตุออกจากกัน — "คนที่เลือกไว้เป็นคนกดส่งเอง" แก้คนละทางกับ "ไม่มีใครมีสิทธิ์เลย"
       console.warn(`[document-approval] ${id} submitted but nobody was notified —`,
-        targeted ? "the chosen approver is no longer an active user" : `no active user holds ${cfg.approvePermission}`);
+        targeted ? "the chosen approver is the submitter" : `no active user holds ${cfg.approvePermission}`);
     }
   } catch (err) {
     console.error(`[document-approval] failed to notify approvers of ${id}`, err);

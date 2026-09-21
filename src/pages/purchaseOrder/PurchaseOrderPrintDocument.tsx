@@ -90,8 +90,14 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
                 {l.subDetails.map((sd, j) => (
                   <div key={j} style={{ paddingLeft: 12, fontSize: "10px" }}>{sd}</div>
                 ))}
+                {/* ⚠️ `textDecoration: "none"` ตรงนี้**ไม่ได้ผล** — ขีดฆ่าของ `<tr>` ถูกวาดทับลูกหลาน
+                    ทุกตัวและลบจากข้างในไม่ได้ (CSS Text Decoration §Painting) · ใช้ `inline-block`
+                    แทน เพราะสเปกบอกว่าเส้นขีดฆ่าไม่ลากผ่าน atomic inline · ถ้าไม่ทำ เหตุผลการยกเลิก
+                    ซึ่งเป็นข้อความที่ผู้ขายต้องอ่านจะถูกขีดฆ่าไปด้วย */}
                 {l.cancelled && (
-                  <div style={{ paddingLeft: 12, fontSize: "10px", textDecoration: "none" }}>ยกเลิก: {printText(l.cancelRemark)}</div>
+                  <div style={{ paddingLeft: 12, fontSize: "10px", display: "inline-block", textDecoration: "none" }}>
+                    ยกเลิก: {printText(l.cancelRemark)}
+                  </div>
                 )}
               </td>
               <td style={{ ...cell, textAlign: "center" }}>{printText(l.unit)}</td>

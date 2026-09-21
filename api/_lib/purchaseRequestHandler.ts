@@ -746,7 +746,7 @@ async function handleStoreReview(req: ApiRequest, res: ApiResponse, id: string) 
       storeStage: stage,
       // ส่งต่อจัดซื้อ = ใบเข้าขั้น "review" ของจัดซื้อ (2026-09-21) · เขียนเฉพาะตอนเปลี่ยนเป็น forwarded
       // ไม่งั้นการกดเช็คของซ้ำหลังจัดซื้ออนุมัติไปแล้วจะรีเซ็ตขั้นของจัดซื้อกลับเป็น review
-      ...(stage === "forwarded" && doc.purchasingStage === undefined ? { purchasingStage: "review" as const } : {}),
+      ...(stage === "forwarded" && !doc.purchasingStage ? { purchasingStage: "review" as const } : {}),
       storeReviewedBy: ctx.user.id,
       storeReviewedByName: ctx.user.fullName,
       storeReviewedAt: now.slice(0, 10),
@@ -955,7 +955,10 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   let lastErr: unknown;
   for (let attempt = 0; attempt < 5 && !created; attempt++) {
     const seq = await nextPurchaseRequestRevision(counters, root);
-    const { _id: _drop, ...rest } = source;
+    // `purchasingStage` ถูก**ดึงออกจาก `...rest` ตรงนี้** ไม่ใช่เขียนทับเป็น `undefined` ข้างล่าง —
+    // ไดรเวอร์ของ MongoDB ไม่ได้ตั้ง `ignoreUndefined` ค่า `undefined` จึงถูกบันทึกลงไปเป็น `null` จริง ๆ
+    // ซึ่ง **ไม่เท่ากับ "ไม่มีฟิลด์"** แล้วด่าน `doc.purchasingStage === undefined` ที่อื่นจะอ่านผิดหมด
+    const { _id: _drop, purchasingStage: _dropStage, ...rest } = source;
     const doc: PurchaseRequestFields & { _id: string } = {
       ...rest,
       _id: `${root}-R${seq}`,
@@ -967,8 +970,9 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
        * ⚠️ **ต้องล้างขั้นของจัดซื้อทุกครั้ง** — `...rest` ข้างบนพาทุกฟิลด์ของฉบับเดิมมาด้วย ถ้าไม่ล้าง
        * ฉบับแก้ไขจะเกิดมาพร้อม `purchasingStage: "approved"` แล้วถูกล็อกทันทีที่หัวหน้าอนุมัติ
        * ทั้งที่จัดซื้อยังไม่เคยเห็นฉบับนี้เลย (มีเทสต์ดักไว้ใน tests/api/purchasing.test.ts)
+       * · ตัวฟิลด์ถูกดึงออกจาก `...rest` ไปแล้วข้างบน เอกสารใหม่จึง**ไม่มีคีย์นี้อยู่เลย**
        */
-      purchasingStage: undefined, purchasingApprovedByUserId: "",
+      purchasingApprovedByUserId: "",
       approvedByUserId: "",
       rejectionComment: "",
       revisionNote: "",

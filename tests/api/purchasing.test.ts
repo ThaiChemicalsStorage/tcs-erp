@@ -1273,6 +1273,33 @@ describe("ใบขอซื้อ — ขั้นของฝ่ายจั�
     expect(rewritten.purchasingApprovedByUserId ?? "").toBe("");
     expect(rewritten.purchasingDeptBy ?? "").toBe("");
   });
+
+  /**
+   * ต่อจากเทสต์ข้างบน — เทสต์นั้นอ่านจาก **response ของการ Rewrite** ซึ่งเป็นอ็อบเจกต์ในหน่วยความจำ
+   * `JSON.stringify` ตัดคีย์ที่เป็น `undefined` ทิ้ง มันจึงผ่านแม้ตอนที่ในฐานข้อมูลเป็น `null`
+   * (ไดรเวอร์ Mongo ไม่ได้ตั้ง `ignoreUndefined` — `$set`/`insertOne` เขียน `undefined` ลงไปเป็น `null`)
+   *
+   * `null` ไม่เท่ากับ "ไม่มีฟิลด์" ด่าน `handleStoreReview` จึงไม่ตั้ง `"review"` ให้ และฉบับแก้ไข
+   * **ออกใบสั่งซื้อได้โดยข้ามการอนุมัติของจัดซื้อไปทั้งขั้น** · เทสต์นี้จึงเดินไหลงานจริงทั้งเส้น
+   */
+  it("ฉบับแก้ไขต้องเข้าขั้นของจัดซื้อจริงเมื่อสโตร์ส่งต่อ และออกใบสั่งซื้อไม่ได้ก่อนจัดซื้ออนุมัติ", async () => {
+    const pr = await approvedPurchaseRequest();
+    await purchasingApproved(pr.id);
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/rewrite`, { method: "POST" });
+    expect(res.status).toBe(201);
+    const revisionId = (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest.id;
+
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(revisionId)}/submit-approval`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(revisionId)}/approve`, { method: "POST" })).status).toBe(200);
+    const forwarded = await storeForwardsToPurchasing(revisionId);
+    expect(forwarded.purchasingStage, "สโตร์ส่งต่อฉบับแก้ไขแล้ว ใบต้องเข้ามือจัดซื้อเหมือนใบแรก").toBe("review");
+
+    const blocked = await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: revisionId }) });
+    expect(blocked.status, "จัดซื้อยังไม่อนุมัติ ออกใบสั่งซื้อไม่ได้").toBe(400);
+
+    await purchasingApproved(revisionId);
+    expect((await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: revisionId }) })).status).toBe(201);
+  });
 });
 
 describe("ใบขอซื้อ — จัดซื้อแก้ใบที่อนุมัติแล้ว", () => {
