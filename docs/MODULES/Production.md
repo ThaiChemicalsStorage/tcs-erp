@@ -24,6 +24,18 @@ image** (one embedded bitmap, no text layer) and is gitignored, so the field map
 `src/lib/productionOrder.ts`'s doc comment is the durable record of the form's structure — treat it
 as the source of truth rather than expecting to re-read the PDF.
 
+> **2026-09-21 — the signature block's rows are now all the same height.** The owner sent a screenshot
+> asking *"ทำไมกล่องมันเป็นแบบนั้น"*; rendering it and measuring showed the first row at 46px against
+> 26px for the other four. The 22px signature-image slot was only being reserved on rows whose signer
+> the system knows (`ผู้สั่งผลิต` has `createdBy`), so that one row grew while its top-aligned `วันที่`
+> cell floated above the label beside it. Every row now reserves the same signing space and both cells
+> are bottom-aligned, so label and date always share a baseline — and the four hand-signed boxes get
+> as much room to sign as the first one, which is what a signature form should do anyway.
+>
+> Still open, deliberately: an unfilled name prints `-` (`printText()`), even though these boxes are
+> meant to be signed by hand and `printDateOrBlank()` already exists for exactly that reason on the
+> date side. Not changed because the owner asked about the box only.
+
 **Two deliberate differences** from the Project-family documents, both confirmed with the owner
 before building:
 

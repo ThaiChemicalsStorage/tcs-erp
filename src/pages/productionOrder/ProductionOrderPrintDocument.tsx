@@ -53,15 +53,26 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
   const headCell: React.CSSProperties = { ...cell, textAlign: "center", fontWeight: 700 };
   const shellCell: React.CSSProperties = { padding: 0, border: "none" };
 
-  /** @param userId เจ้าของช่องเซ็นในระบบ (คนสร้างใบ / คนที่กดอนุมัติ) — วางรูปลายเซ็นจากโปรไฟล์ให้
-   *  ช่องที่ไม่มีเจ้าของ (ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน) เว้นไว้ให้เซ็นมือเหมือนเดิม */
+  /**
+   * @param userId เจ้าของช่องเซ็นในระบบ (คนสร้างใบ / คนที่กดอนุมัติ) — วางรูปลายเซ็นจากโปรไฟล์ให้
+   *
+   * **ทุกแถวสูงเท่ากันเสมอ (แก้ 2026-09-21 ตามที่เจ้าของทัก "ทำไมกล่องมันเป็นแบบนั้น")** — เดิม
+   * ช่องวางรูปลายเซ็นสูง 22px ถูกใส่ให้เฉพาะแถวที่ระบบรู้ว่าใครเซ็น แถว "ผู้สั่งผลิต" จึงสูง 46px
+   * อยู่แถวเดียวในขณะที่อีกสี่แถวสูง 26px แล้วช่อง "วันที่" ที่ชิดบนก็ลอยขึ้นไปอยู่เหนือคำว่า
+   * "ผู้สั่งผลิต" ที่ถูกดันลงล่าง กล่องเลยดูเบี้ยวทั้งบล็อก
+   *
+   * ตอนนี้เว้นที่เซ็นความสูงเท่ากันทุกแถวไม่ว่าจะมีรูปหรือไม่ และจัดทั้งสองช่องชิดล่าง ป้ายกับวันที่
+   * จึงอยู่ระดับเดียวกันเสมอ · ผลพลอยได้ที่ตั้งใจ: อีกสี่ช่องได้ที่เซ็นด้วยปากกาเท่ากับช่องแรก
+   * ซึ่งเป็นสิ่งที่ฟอร์มลงนามควรเป็นอยู่แล้ว
+   */
+  const SIGN_SPACE = 22;
   const signRow = (label: string, s: { name: string; date: string }, userId?: string) => (
     <tr>
-      <td style={{ ...cell, width: "62%", height: "26px" }}>
-        {userId ? <PrintSignatureLine userId={userId} height={22} /> : null}
+      <td style={{ ...cell, width: "62%", verticalAlign: "bottom" }}>
+        <PrintSignatureLine userId={userId} height={SIGN_SPACE} />
         {label} : <span style={{ fontWeight: 400 }}>{printText(s.name)}</span>
       </td>
-      <td style={{ ...cell, width: "38%" }}>
+      <td style={{ ...cell, width: "38%", verticalAlign: "bottom" }}>
         วันที่ : <span style={{ fontWeight: 400 }}>{s.date ? formatQuoteDateThai(s.date) : ""}</span>
       </td>
     </tr>

@@ -132,6 +132,11 @@ run-once mechanism if that decision is ever reversed.
 
 ## Print documents
 
+> **2026-09-21 — the "พิมพ์โดย … วันที่ … บันทึกโดย …" footer line was removed** on the owner's
+> instruction (*"ทำไมในใบขอซื้อมีแบบนี้ขึ้นมา เอาออกไปด้วย"*). It printed the requester's name twice more
+> directly under a signature box that already carries the same name, and the real FM-PU-05 has no such
+> line. The document now ends with the three signature boxes and the right-aligned form code.
+
 `PurchaseRequestPrintDocument.tsx` was matched against the **real filled FM-PU-05 Rev.02 : 03/11/68**
 on 2026-08-31 (`reference/company/ED6908038.pdf`, gitignored — its layout is transcribed in that
 file's doc comment, which is the durable record). It had described itself as a "first-pass … not yet
