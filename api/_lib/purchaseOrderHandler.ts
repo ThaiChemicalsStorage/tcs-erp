@@ -7,7 +7,7 @@ import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   purchaseOrdersCollection, purchaseRequestsCollection, productsCollection, countersCollection,
   auditLogCollection, toObjectId, withStringId, type PurchaseOrderFields, type CounterFields,
-  vendorsCollection,
+  vendorsCollection, usersCollection,
 } from "./collections.js";
 import { vendorApprovalStatusOf } from "../../src/lib/vendors.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -126,6 +126,8 @@ function toClient(doc: PurchaseOrderFields & { _id: string }) {
     documentNumber: doc.documentNumber || doc._id,
     // ใบก่อน 2026-09-21 ไม่มี `vendorId` — เติมเป็น "" ตอนอ่าน ไม่ทำ migration
     vendorId: doc.vendorId ?? "",
+    intendedApproverUserId: doc.intendedApproverUserId ?? "",
+    intendedApproverName: doc.intendedApproverName ?? "",
     lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
     revisionNote: doc.revisionNote ?? "",
   }));
@@ -335,6 +337,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     // ผู้ขายเริ่มว่างเสมอตั้งแต่ 2026-08-31 — ฝ่ายจัดซื้อเลือกเองจากทะเบียนผู้ขายบนหน้าใบสั่งซื้อ
     vendorId: "",
     vendorName: "",
+    intendedApproverUserId: "",
+    intendedApproverName: "",
     vendorContact: "",
     vendorPhone: "",
     vendorTaxId: "",
@@ -441,6 +445,23 @@ async function resolveVendorLink(
   return { vendorId: matches.length === 1 ? matches[0]._id.toString() : "" };
 }
 
+/**
+ * ผู้อนุมัติที่ตั้งใจไว้ (2026-09-21) — ตรวจกับตารางผู้ใช้จริงเสมอ
+ *
+ * **ห้ามปล่อยผ่าน `SHORT_TEXT_FIELDS`** ไม่งั้นกลายเป็นช่อง id อิสระที่ใครพิมพ์อะไรลงไปก็ได้ แล้ว
+ * การแจ้งเตือนจะยิงไปหา id ที่ไม่มีอยู่จริงอย่างเงียบ ๆ · เก็บชื่อเป็น snapshot ไว้แสดงผลด้วย
+ * เผื่อผู้ใช้คนนั้นถูกปิดบัญชีภายหลัง
+ */
+async function resolveIntendedApprover(body: Record<string, unknown>): Promise<Partial<PurchaseOrderFields>> {
+  if (!("intendedApproverUserId" in body)) return {};
+  const raw = typeof body.intendedApproverUserId === "string" ? body.intendedApproverUserId.trim() : "";
+  if (!raw) return { intendedApproverUserId: "", intendedApproverName: "" };
+  const users = await usersCollection();
+  const user = await users.findOne({ _id: toObjectId(raw) });
+  if (!user) throw new HttpError(400, "ไม่พบผู้ใช้ที่เลือกเป็นผู้อนุมัติ");
+  if (user.status !== "active") throw new HttpError(400, `${user.fullName} ถูกปิดบัญชีแล้ว เลือกเป็นผู้อนุมัติไม่ได้`);
+  return { intendedApproverUserId: raw, intendedApproverName: user.fullName };
+}
 async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
@@ -460,6 +481,7 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if ("lines" in body) update.lines = await sanitizeLines(body.lines, doc.lines ?? []);
   // ผู้ขายในทะเบียน — จัดการแยกจาก SHORT_TEXT_FIELDS เสมอ ไม่งั้นกลายเป็นช่อง id อิสระที่ใครพิมพ์อะไรก็ได้
   Object.assign(update, await resolveVendorLink(body, doc));
+  Object.assign(update, await resolveIntendedApprover(body));
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   if ("vatRate" in body) update.vatRate = sanitizeNullableNumber(body.vatRate, "อัตราภาษี (%)");
   if ("discount" in body) update.discount = sanitizeNullableNumber(body.discount, "ส่วนลดท้ายใบ");
@@ -527,6 +549,8 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
     documentNumber: newDocId,
     status: "Draft",
     // ล้างลายเซ็น/ผลอนุมัติทั้งหมด และ **หมายเหตุการแก้ไขเริ่มว่างเสมอ** ไม่สืบทอดของฉบับก่อน
+    // `intendedApproverUserId`/`Name` **ไม่อยู่ในรายการนี้โดยตั้งใจ** — มันคือความตั้งใจว่าใครควรเป็น
+    // คนอนุมัติ ซึ่งยังเป็นคนเดิมในฉบับแก้ไข ต่างจาก `approvedBy` ที่เป็นลายเซ็นของการอนุมัติครั้งก่อน
     approvedBy: "",
     approvedByUserId: "",
     approvedAt: "",
@@ -551,6 +575,17 @@ const approvalConfig: ApprovalConfig<PurchaseOrderFields & { _id: string }> = {
   submitNotification: {
     type: "purchase_order_submitted", module: "ใบสั่งซื้อ",
     relatedField: "relatedPurchaseOrderId", context: (doc) => doc.vendorName || doc.jobCode || "",
+    /**
+     * เลือกคนอนุมัติไว้ = แจ้งเฉพาะคนนั้น (2026-09-21) · **ไม่ล็อกสิทธิ์** คนอื่นยังกดอนุมัติได้
+     *
+     * คนที่เลือกไว้ถูกปิดบัญชีไปแล้ว → คืน `null` เพื่อถอยไปกระจายตามสิทธิ์ตามเดิม ดีกว่าส่งไม่ถึงใครเลย
+     */
+    recipients: async (doc) => {
+      if (!doc.intendedApproverUserId) return null;
+      const users = await usersCollection();
+      const user = await users.findOne({ _id: toObjectId(doc.intendedApproverUserId) });
+      return user && user.status === "active" ? [doc.intendedApproverUserId] : null;
+    },
   },
   collection: async () => (await purchaseOrdersCollection()) as unknown as Collection<PurchaseOrderFields & { _id: string }>,
   /**

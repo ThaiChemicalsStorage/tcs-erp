@@ -57,6 +57,7 @@ type PurchaseRequestDoc = {
 };
 type PurchaseOrderDoc = {
   id: string; documentNumber: string; status: string; vendorName: string; vendorId?: string; purchaseRequestId: string;
+  intendedApproverUserId?: string; intendedApproverName?: string; approvedBy?: string;
   lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null; sourcePrLineId?: string }[];
 };
 /** ใบขอซื้อเปล่าของฝ่ายที่ไม่มีเอกสารต้นทาง — ทางสร้างที่เพิ่มมาพร้อมโมดูลจัดซื้อ */
@@ -413,6 +414,48 @@ describe("ใบสั่งซื้อ — รายละเอียดต�
   });
 });
 
+describe("ใบสั่งซื้อ — เลือกคนอนุมัติ (2026-09-21)", () => {
+  it("เลือกผู้อนุมัติได้ และแจ้งเตือนวิ่งไปหาคนนั้นคนเดียว", async () => {
+    const me = await json<{ user: { id: string; fullName: string } }>(await api("/api/auth/session"));
+    const po = await createPurchaseOrder();
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ intendedApproverUserId: me.user.id }),
+    });
+    expect(patched.status).toBe(200);
+    const withApprover = (await json<{ purchaseOrder: PurchaseOrderDoc }>(patched)).purchaseOrder;
+    expect(withApprover.intendedApproverUserId).toBe(me.user.id);
+    expect(withApprover.intendedApproverName, "เก็บชื่อเป็น snapshot ไว้แสดงผล").toBe(me.user.fullName);
+
+    // **ไม่ล็อกสิทธิ์** — คนอื่นที่มีสิทธิ์ยังอนุมัติได้ (เจ้าของเลือกไว้ตรง ๆ)
+    await api(`/api/purchase-orders/${encodeURIComponent(withApprover.id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorId: await approvedVendorId() }),
+    });
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/submit-approval`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/approve`, { method: "POST" })).status).toBe(200);
+  });
+
+  it("id ที่ไม่มีอยู่จริงถูกปฏิเสธ — ไม่ใช่ช่องข้อความอิสระ", async () => {
+    const po = await createPurchaseOrder();
+    const res = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ intendedApproverUserId: "0123456789abcdef01234567" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("Rewrite พาผู้อนุมัติที่ตั้งใจไว้ไปด้วย แต่ล้างลายเซ็นการอนุมัติ", async () => {
+    const me = await json<{ user: { id: string } }>(await api("/api/auth/session"));
+    const po = await createPurchaseOrder();
+    await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ intendedApproverUserId: me.user.id }),
+    });
+    await approvePurchaseOrder(po.id);
+    const res = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/rewrite`, { method: "POST" });
+    expect(res.status).toBe(201);
+    const next = (await json<{ purchaseOrder: PurchaseOrderDoc }>(res)).purchaseOrder;
+    expect(next.intendedApproverUserId, "ความตั้งใจว่าใครควรอนุมัติยังเป็นคนเดิม").toBe(me.user.id);
+    expect(next.approvedBy ?? "", "แต่ลายเซ็นของการอนุมัติครั้งก่อนต้องถูกล้าง").toBe("");
+  });
+});
 describe("ทะเบียนผู้ขาย — บัญชีต้องอนุมัติก่อนจึงจะอนุมัติใบสั่งซื้อได้ (2026-09-21)", () => {
   it("ผู้ขายใหม่เริ่มที่ร่าง เดินครบสามขั้นแล้วจึงอนุมัติได้ และกดข้ามขั้นไม่ได้", async () => {
     const res = await createVendor({ name: "ผู้ขายรออนุมัติ" });

@@ -60,7 +60,7 @@
 - [x] **เฟส 6 — ทะเบียนผู้ขายให้บัญชีอนุมัติ (ข้อ 5).** ✅ **เสร็จ 2026-09-21** — `Vendor.approvalStatus` + 3 route + สิทธิ์ใหม่
   `vendor:approve` + migration · ด่านจริงอยู่ที่ `beforeApprove` ของ PO · **ต้องทำ auto-resolve/backfill
   `vendorId` ให้ใบร่างเก่าในรอบ deploy เดียวกัน** ไม่งั้นใบร่างทุกใบใน production อนุมัติไม่ได้ทันที
-- [ ] **เฟส 7 — เลือกผู้อนุมัติ PO (ข้อ 2).** `intendedApproverUserId` + hook `recipients` แบบบวกเพิ่ม
+- [x] **เฟส 7 — เลือกผู้อนุมัติ PO (ข้อ 2).** ✅ **เสร็จ 2026-09-21** — `intendedApproverUserId` + hook `recipients` แบบบวกเพิ่ม
   ใน `documentApproval.ts` (อีก 5 โมดูลไม่เซ็ต = ทำงานเหมือนเดิม) · ลอก `SignatoryEditor`
   (`ScopeOfWorkDocument.tsx:89-133`) มาเป็นตัวเลือกคน
 - [ ] **เฟส 8 — ย้อน PO ที่อนุมัติแล้ว (ข้อ 9).** route ใหม่ `revert-approval` เฉพาะ PO

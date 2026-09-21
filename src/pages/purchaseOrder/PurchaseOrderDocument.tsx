@@ -14,6 +14,7 @@ import { newId } from "../../lib/products";
 import { fmt } from "../../lib/quotes";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
+import { useUserDirectory } from "../../lib/userDirectory";
 import { Combobox } from "../../components/Combobox";
 import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
@@ -35,6 +36,7 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
     jobCode: d.jobCode,
     // ผูกกับทะเบียนผู้ขาย (2026-09-21) — เซิร์ฟเวอร์ตรวจว่ามีจริง และใช้เป็นด่านตอนอนุมัติ
     vendorId: d.vendorId,
+    intendedApproverUserId: d.intendedApproverUserId,
     vendorName: d.vendorName,
     vendorContact: d.vendorContact,
     vendorPhone: d.vendorPhone,
@@ -75,6 +77,13 @@ export function PurchaseOrderDocument({
   showToast: (message: string) => void;
 }) {
   const { t } = useI18n();
+  /**
+   * รายชื่อผู้อนุมัติที่เลือกได้ (2026-09-21) — เอาผู้ใช้ที่ยัง active ทั้งหมด **ไม่กรองด้วยสิทธิ์**
+   * ฝั่งหน้าจอ เพราะหน้านี้ไม่มีตารางบทบาทอยู่ในมือ และเจ้าของเลือกไว้แล้วว่าการเลือกคนไม่ใช่การ
+   * ล็อกสิทธิ์ — เซิร์ฟเวอร์ตรวจอีกชั้นว่าเป็นผู้ใช้จริงและยังไม่ถูกปิดบัญชี
+   */
+  const { users: directoryUsers } = useUserDirectory();
+  const approverOptions = directoryUsers.filter((u) => u.status === "active");
   const [doc, setDoc] = useState<PurchaseOrder | null>(null);
   const [draft, setDraft] = useState<PurchaseOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -520,6 +529,35 @@ export function PurchaseOrderDocument({
                 {/* ระบบเติมชื่อให้ตอนกดอนุมัติถ้ายังว่าง แต่ไม่ทับค่าที่พิมพ์เอง */}
                 <input className={inputCls} disabled={!editable} value={draft.approvedBy ?? ""} onChange={(e) => set("approvedBy", e.target.value)} />
               </Field>
+              {/* ผู้อนุมัติที่ตั้งใจไว้ (2026-09-21) — เจ้าของข้อ 2 "ใบ PO สามารถเลือกคนอนุมัติได้"
+
+                  รายชื่อมาจาก `useUserDirectory()` ซึ่ง App.tsx โหลดไว้ให้อยู่แล้ว ไม่ต้องส่ง prop
+                  ลงมาอีกสี่ชั้น (เหตุผลเดียวกับที่ช่องลายเซ็นบนใบพิมพ์ใช้ context ตัวนี้) */}
+              <div className="sm:col-span-2">
+                <Field label={t("purchaseOrderDoc.intendedApprover")}>
+                  <select
+                    className={inputCls}
+                    disabled={!editable}
+                    value={draft.intendedApproverUserId ?? ""}
+                    onChange={(e) => {
+                      const picked = approverOptions.find((u) => u.id === e.target.value);
+                      setDraft((d) => d && {
+                        ...d,
+                        intendedApproverUserId: e.target.value,
+                        intendedApproverName: picked?.fullName ?? "",
+                      });
+                    }}
+                  >
+                    <option value="">{t("purchaseOrderDoc.intendedApproverAny")}</option>
+                    {approverOptions.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+                    {/* คนที่เคยถูกเลือกไว้แล้วถูกปิดบัญชี — ยังต้องเห็นชื่อ ไม่ใช่ช่องว่างที่อธิบายไม่ได้ */}
+                    {draft.intendedApproverUserId && !approverOptions.some((u) => u.id === draft.intendedApproverUserId) && (
+                      <option value={draft.intendedApproverUserId}>{draft.intendedApproverName || draft.intendedApproverUserId}</option>
+                    )}
+                  </select>
+                </Field>
+                <p className="text-xs text-muted-foreground mt-1">{t("purchaseOrderDoc.intendedApproverHint")}</p>
+              </div>
               <div className="sm:col-span-2">
                 <Field label={t("purchaseOrderDoc.remarks")}>
                   <textarea rows={2} className={inputCls} disabled={!editable} value={draft.remarks} onChange={(e) => set("remarks", e.target.value)} />

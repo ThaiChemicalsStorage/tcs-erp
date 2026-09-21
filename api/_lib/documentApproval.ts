@@ -102,6 +102,17 @@ export interface ApprovalConfig<TDoc extends ApprovableFields> {
     relatedField: string;
     /** ข้อความสั้น ๆ บอกว่าเป็นใบของงานไหน เช่นรหัสงานหรือชื่อลูกค้า — วงเล็บต่อท้ายให้เอง */
     context?: (doc: TDoc) => string;
+    /**
+     * ผู้รับเฉพาะเจาะจง (2026-09-21) — คืน `null` = กระจายตามสิทธิ์ตามเดิม
+     *
+     * เพิ่มมาเพื่อใบสั่งซื้อที่ "เลือกคนอนุมัติได้" (คำสั่งเจ้าของข้อ 2) · เป็นการ**เพิ่มล้วน ๆ**
+     * อีก 5 โมดูลไม่ได้เซ็ตฟิลด์นี้จึงทำงานเหมือนเดิมทุกประการ — เล็กกว่าการแยก route ส่งขออนุมัติ
+     * เฉพาะใบสั่งซื้อออกมาต่างหาก
+     *
+     * ⚠️ **นี่คือการเลือกผู้รับแจ้งเตือน ไม่ใช่การล็อกสิทธิ์** — เจ้าของเลือกไว้ตรง ๆ ว่าคนอื่นที่มี
+     * สิทธิ์อนุมัติยังกดอนุมัติได้เหมือนเดิม ด่านของ `handleApprove()` จึงไม่ถูกแตะ
+     */
+    recipients?: (doc: TDoc) => Promise<string[] | null>;
   };
   respond: (res: ApiResponse, doc: TDoc) => void;
 }
@@ -150,7 +161,9 @@ async function notifyApprovers<TDoc extends ApprovableFields>(
   if (!n) return;
   try {
     const context = n.context?.(doc)?.trim() ?? "";
-    const sent = await notifyUsers(await activeUserIdsWithPermission(cfg.approvePermission), ctx.user.id, {
+    // ผู้รับเฉพาะเจาะจงมาก่อน ถ้าไม่มี (หรือคนที่เลือกไว้ใช้ไม่ได้แล้ว) ค่อยกระจายตามสิทธิ์ตามเดิม
+    const targeted = (await n.recipients?.(doc)) ?? null;
+    const sent = await notifyUsers(targeted ?? await activeUserIdsWithPermission(cfg.approvePermission), ctx.user.id, {
       type: n.type,
       title: `${cfg.label}รออนุมัติ`,
       description: `${ctx.user.fullName} ส่ง${cfg.label} ${id}${context ? ` (${context})` : ""} เพื่อขออนุมัติ`,
@@ -158,8 +171,9 @@ async function notifyApprovers<TDoc extends ApprovableFields>(
       related: { [n.relatedField]: id },
     });
     if (sent === 0) {
+      // แยกสองสาเหตุออกจากกัน — "คนที่เลือกไว้ลาออก/ถูกปิดบัญชี" แก้คนละทางกับ "ไม่มีใครมีสิทธิ์เลย"
       console.warn(`[document-approval] ${id} submitted but nobody was notified —`,
-        `no active user holds ${cfg.approvePermission}`);
+        targeted ? "the chosen approver is no longer an active user" : `no active user holds ${cfg.approvePermission}`);
     }
   } catch (err) {
     console.error(`[document-approval] failed to notify approvers of ${id}`, err);
