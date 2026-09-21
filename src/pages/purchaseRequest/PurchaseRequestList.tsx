@@ -7,6 +7,8 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import type { PurchaseRequestSummary, PurchaseRequestStatus } from "../../lib/purchaseRequest";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { DateRangeFilter } from "../../components/DateRangeFilter";
+import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 
 const FILTER_ALL = "all";
 
@@ -58,6 +60,8 @@ export function PurchaseRequestList({
     general: t("purchaseRequest.dept.general"),
   };
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
+  const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   /**
    * ตั้งต้นที่ "ถึงคิวจัดซื้อ" ไม่ใช่ "ทั้งหมด" — เปิดหน้ามาแล้วต้องเห็นงานที่ทำได้จริงก่อน
    * ใบที่ยังรอสโตร์อยู่ดูได้จากชิปข้าง ๆ ไม่ได้ถูกซ่อนหายไป
@@ -74,7 +78,9 @@ export function PurchaseRequestList({
   const atPurchasing = (p: PurchaseRequestSummary) => p.status === "Final" && (p.storeStage === "forwarded" || !p.storeStage);
 
   const items = purchaseRequests.map((p) => ({ ...p, jobCode: p.jobCode ?? "", status: p.status ?? "Draft" }));
+  const dateRangeResolved = resolveRange(dateRange);
   const filtered = items
+    .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
     .filter((p) => (stageFilter
       ? filterStage === "all" || (filterStage === "forwarded" ? atPurchasing(p) : p.status === "Final" && p.storeStage === "pending")
       : filterStatus === FILTER_ALL || p.status === filterStatus))
@@ -94,6 +100,7 @@ export function PurchaseRequestList({
       </div>
 
       <div data-tour="pr-filters" className="flex items-center gap-3 flex-wrap">
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
         <div className="relative h-9 w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input

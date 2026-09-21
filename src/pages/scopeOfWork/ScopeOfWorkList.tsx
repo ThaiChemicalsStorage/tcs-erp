@@ -6,6 +6,8 @@ import { useModuleTour } from "../../components/GuidedTour";
 import { scopePoNumbers, scopeQuotationNumbers, type ScopeOfWorkListItem, type ScopeOfWorkStatus } from "../../lib/scopeOfWork";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { DateRangeFilter } from "../../components/DateRangeFilter";
+import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 
 const FILTER_ALL = "all";
 
@@ -37,6 +39,8 @@ export function ScopeOfWorkList({
   const tour = useModuleTour("scopeOfWork", currentUserId, tourSteps);
 
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
+  const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
   const [filterNoPo, setFilterNoPo] = useState(false);
@@ -62,7 +66,9 @@ export function ScopeOfWorkList({
 
   const noPoCount = items.filter((s) => !s.customerPoNumber.trim()).length;
 
+  const dateRangeResolved = resolveRange(dateRange);
   const filtered = items
+    .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
     .filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus)
     .filter((s) => filterJobType === FILTER_ALL || s.jobTypeCode === filterJobType)
     .filter((s) => filterSalesperson === FILTER_ALL || s.quotationSalesperson === filterSalesperson)
@@ -106,6 +112,7 @@ export function ScopeOfWorkList({
 
       <div data-tour="sow-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
           <div className="relative h-9 w-72">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input

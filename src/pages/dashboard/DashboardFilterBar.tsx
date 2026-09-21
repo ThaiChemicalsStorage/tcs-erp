@@ -2,7 +2,7 @@ import { useId } from "react";
 import { CalendarRange } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { Toggle } from "../../components/Toggle";
-import { type DateRangePreset, rangeForPreset } from "./dateRanges";
+import { type DateRangePreset, rangeForPreset } from "../../lib/dateRanges";
 import type { DashboardVatMode } from "../../lib/dashboard";
 
 export interface DashboardFilterState {

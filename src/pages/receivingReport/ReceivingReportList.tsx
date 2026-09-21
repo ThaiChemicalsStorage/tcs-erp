@@ -4,6 +4,8 @@ import { EmptyState } from "../../components/EmptyState";
 import type { ReceivingReportSummary, ReceivingReportStatus } from "../../lib/receivingReport";
 import { formatQuoteDateThai, fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { DateRangeFilter } from "../../components/DateRangeFilter";
+import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 
 const FILTER_ALL = "all";
 
@@ -26,10 +28,14 @@ export function ReceivingReportList({
     Closed: t("receivingReport.status.closed"),
   };
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
+  const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
   const q = searchQuery.trim().toLowerCase();
 
+  const dateRangeResolved = resolveRange(dateRange);
   const filtered = receivingReports
+    .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
     .filter((r) => filterStatus === FILTER_ALL || r.status === filterStatus)
     .filter((r) => !q || [r.id, r.documentNumber, r.purchaseOrderNumber, r.vendorName, r.jobCode].some((v) => (v ?? "").toLowerCase().includes(q)));
 
@@ -44,6 +50,7 @@ export function ReceivingReportList({
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
         <div className="relative h-9 w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input

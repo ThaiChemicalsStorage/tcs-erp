@@ -18,7 +18,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { Tabs } from "../../components/Tabs";
 import { tabPanelProps } from "../../components/tabPanelProps";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
-import { todayIsoBangkok } from "./dateRanges";
+import { todayIsoBangkok } from "../../lib/dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
 import { exportDashboardXlsx } from "./xlsxExport";
 import { DashboardContentSkeleton, ErrorState } from "./DashboardStates";

@@ -6,7 +6,7 @@ import { AGING_BUCKET_COLORS, AGING_BUCKET_LABEL_KEY, type ArDashboardStats } fr
 import type { AttentionItem, DepartmentDashboardResponse } from "../../../lib/departmentDashboard";
 import { useI18n } from "../../../lib/i18n";
 import { fmtShort, fmtDateShort } from "../format";
-import { todayIsoBangkok } from "../dateRanges";
+import { todayIsoBangkok } from "../../../lib/dateRanges";
 import { ActivityTimeline } from "../ActivityTimeline";
 import { SkeletonBar } from "../DashboardStates";
 import type { DashboardData } from "../useDashboardData";

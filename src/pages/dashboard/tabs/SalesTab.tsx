@@ -2,7 +2,7 @@ import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, UserRound, FileText, 
 import { type QuotationListFilter, type QuoteStatus, interestLabelKey, statusLabelKey } from "../../../lib/quotes";
 import type { DashboardStats, FollowUpSummary } from "../../../lib/dashboard";
 import { useI18n } from "../../../lib/i18n";
-import { todayIsoBangkok } from "../dateRanges";
+import { todayIsoBangkok } from "../../../lib/dateRanges";
 import { fmtShort, fmtPercent } from "../format";
 import { SalesPerformancePanel } from "../SalesPerformancePanel";
 import { ActivityFollowUpSummary } from "../ActivityFollowUpSummary";

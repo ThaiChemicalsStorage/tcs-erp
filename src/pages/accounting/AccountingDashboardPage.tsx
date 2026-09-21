@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CalendarRange, Users, Wallet, Receipt, AlertTriangle, Banknote } from "lucide-react";
 import { fetchArDashboardStats, type ArDashboardStats } from "../../lib/accountingDashboard";
-import { rangeForPreset, type DateRangePreset } from "../dashboard/dateRanges";
+import { rangeForPreset, type DateRangePreset } from "../../lib/dateRanges";
 import { fmtShort, fmtDateShort } from "../dashboard/format";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
