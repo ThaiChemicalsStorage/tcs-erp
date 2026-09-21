@@ -826,6 +826,17 @@ describe("ทะเบียนผู้ขาย", () => {
  *   4. บรรทัดที่สโตร์จ่ายจากสต๊อก**ไม่ถูกลอกไปใบสั่งซื้อ** (ไม่งั้นซื้อของที่มีอยู่แล้วซ้ำ)
  */
 
+/**
+ * รายละเอียดล่าสุดใน audit log ของเอกสารใบนั้น — ประโยคที่คนอ่านจริงในหน้าประวัติการใช้งาน
+ * ก่อน 2026-09-21 ใบที่เปิดโดยไม่ผูกรายการเขียนว่า `สำหรับ 0 รายการ:` / `สำหรับรายการ ""` ซึ่งอ่านไม่รู้เรื่อง
+ */
+async function latestAuditDetails(documentId: string): Promise<string> {
+  const { getDb } = await import("../../api/_lib/mongodb.js");
+  const rows = await (await getDb()).collection("audit_log")
+    .find({ details: { $regex: documentId } }).sort({ createdAt: -1 }).limit(1).toArray();
+  return (rows[0]?.details as string) ?? "";
+}
+
 describe("เอกสารของฝ่ายโครงการ — เปิดใบโดยไม่ผูกรายการ (2026-09-21)", () => {
   /**
    * เจ้าของสั่ง 2026-09-21 ให้แก้ทั้งสามใบให้เหมือนกัน — โครงการที่ออกเอกสารครบทุกรายการแล้ว
@@ -850,10 +861,12 @@ describe("เอกสารของฝ่ายโครงการ — เ�
 
     const res = await api("/api/material-requisitions", { method: "POST", body: JSON.stringify({ projectId, itemIds: [] }) });
     expect(res.status).toBe(201);
-    const mr = (await json<{ materialRequisition: { projectId: string; jobCode: string; ownerDepartment?: string } }>(res)).materialRequisition;
+    const mr = (await json<{ materialRequisition: { id: string; projectId: string; jobCode: string; ownerDepartment?: string } }>(res)).materialRequisition;
     expect(mr.projectId).toBe(projectId);
     expect(mr.jobCode).toBe("PQ-TEST-MR");
     expect(mr.ownerDepartment, "ยังเป็นใบของฝ่ายโครงการ").toBe("project");
+    expect(await latestAuditDetails(mr.id),
+      "ประวัติต้องไม่เขียนว่า สำหรับรายการ \"\" ซึ่งอ่านไม่รู้เรื่อง").toContain("โดยไม่ผูกรายการ");
   });
 
   it("ใบสั่งงาน: เปิดได้โดยไม่ผูกรายการ ตารางรายการเริ่มว่าง", async () => {
@@ -864,10 +877,12 @@ describe("เอกสารของฝ่ายโครงการ — เ�
 
     const res = await api("/api/job-orders", { method: "POST", body: JSON.stringify({ projectId, itemIds: [] }) });
     expect(res.status).toBe(201);
-    const jo = (await json<{ jobOrder: { projectId: string; jobCode: string; lines: unknown[] } }>(res)).jobOrder;
+    const jo = (await json<{ jobOrder: { id: string; projectId: string; jobCode: string; lines: unknown[] } }>(res)).jobOrder;
     expect(jo.projectId).toBe(projectId);
     expect(jo.jobCode).toBe("PQ-TEST-JO");
     expect(jo.lines, "ไม่มีรายการให้คัดลอก ตารางจึงเริ่มว่างให้พิมพ์เอง").toHaveLength(0);
+    expect(await latestAuditDetails(jo.id),
+      "ประวัติต้องไม่เขียนว่า สำหรับ 0 รายการ:").toContain("โดยไม่ผูกรายการ");
   });
 });
 describe("ใบขอซื้อ — เปิดใบของฝ่ายโครงการโดยไม่ผูกรายการ (2026-09-21)", () => {
@@ -903,6 +918,8 @@ describe("ใบขอซื้อ — เปิดใบของฝ่าย�
     expect(pr.ownerDepartment, "ยังเป็นใบของฝ่ายโครงการ ไม่ใช่ใบลอย").toBe("project");
     expect(pr.projectId).toBe(projectId);
     expect(pr.jobCode, "รหัสงานยังมาจากโครงการเหมือนเดิม").toBe("PQ-TEST-NOITEM");
+
+    expect(await latestAuditDetails(pr.id), "ประวัติต้องไม่เขียนว่า สำหรับรายการ \"\"").toContain("โดยไม่ผูกรายการ");
   });
 });
 

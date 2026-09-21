@@ -340,6 +340,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       ? `สร้างใบขอซื้อ ${id} (ไม่มีเอกสารต้นทาง)`
       : fromProduction
       ? `สร้างใบขอซื้อ ${id} จากใบสั่งผลิต ${productionOrderId}`
+      : pickedItems.length === 0
+      ? `สร้างใบขอซื้อ ${id} ในโครงการ ${source.jobCode} โดยไม่ผูกรายการ`
       : `สร้างใบขอซื้อ ${id} สำหรับรายการ "${pickedItems.map((it) => it.name).join('", "')}"`,
     { scopeOfWorkId: source.scopeOfWorkId },
   );

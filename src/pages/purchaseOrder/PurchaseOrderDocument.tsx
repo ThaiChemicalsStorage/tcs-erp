@@ -153,7 +153,24 @@ export function PurchaseOrderDocument({
     onSave: async (fields) => {
       if (!draft) return;
       // อัปเดตแค่ `doc` ไม่แตะ `draft` เพราะผู้ใช้อาจกำลังพิมพ์อยู่
-      setDoc(await updatePurchaseOrder(draft.id, fields, { autoSave: true }));
+      const updated = await updatePurchaseOrder(draft.id, fields, { autoSave: true });
+      setDoc(updated);
+      /**
+       * ข้อยกเว้นเดียวของกฎ "ไม่แตะ draft": `vendorId` เป็นค่าที่**เซิร์ฟเวอร์จับคู่ให้เอง**จากชื่อที่พิมพ์
+       * (ดู `resolveVendorLink()`) ไม่ใช่ช่องที่ผู้ใช้พิมพ์อยู่ จึงไม่มีอะไรให้ทับ · ถ้าไม่ซิงก์กลับ
+       * คำเตือน "ชื่อนี้ยังไม่ตรงกับผู้ขายในทะเบียน" จะค้างอยู่บนจอทั้งที่ผูกให้เรียบร้อยแล้ว
+       * และผู้ใช้จะไปเลือกซ้ำโดยไม่จำเป็น
+       */
+      if (updated.vendorId !== draft.vendorId) {
+        const synced = { ...draft, vendorId: updated.vendorId };
+        setDraft(synced);
+        // ตั้ง baseline ของตัวติดตาม "ยังไม่ได้บันทึก" ใหม่ ไม่งั้นการซิงก์ครั้งนี้จะถูกนับเป็น
+        // "ผู้ใช้แก้เอง" แล้วกล่องเตือนจะเด้งตอนออกจากหน้าทั้งที่ไม่มีอะไรค้างจริง
+        //
+        // ตัว auto-save เองจะยิงอีกหนึ่งรอบ (payload เปลี่ยน) แล้วจบ เพราะรอบนั้นเซิร์ฟเวอร์คืนค่าเดิม
+        // ปล่อยให้เป็นแบบนั้นดีกว่าอ้างถึง `autoSave` ในคอนฟิกของตัวมันเอง ซึ่งเป็นความฉลาดที่พังทีหลังง่าย
+        dirty.markSaved(toUpdateFields(synced));
+      }
     },
   });
 

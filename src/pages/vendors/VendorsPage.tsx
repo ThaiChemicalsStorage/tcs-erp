@@ -95,7 +95,7 @@ export function VendorsPage({
       const next = stage === "submit" ? await submitVendorApproval(v.id)
         : stage === "approve" ? await approveVendor(v.id)
         : await rejectVendor(v.id, rejectComment.trim());
-      onVendorsChange(vendors.map((x) => (x.id === next.id ? next : x)));
+      replaceVendor(next);
       setRejectTarget(null);
       setRejectComment("");
       toast.show(t(stage === "submit" ? "vendors.approval.submittedToast"

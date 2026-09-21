@@ -213,7 +213,10 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     await linkProjectItemsToSubDocument(projectId, itemIds, "jobOrder", "jobOrderId", id);
   }
 
-  await writeAuditEntry(ctx, "Job Order Created", `สร้างใบสั่งงาน ${id} สำหรับ ${items.length} รายการ: ${items.map((it) => `"${it.name}"`).join(", ")}`, { scopeOfWorkId: project.scopeOfWorkId });
+  await writeAuditEntry(ctx, "Job Order Created", items.length === 0
+    ? `สร้างใบสั่งงาน ${id} ในโครงการ ${project.scopeNumber} โดยไม่ผูกรายการ`
+    : `สร้างใบสั่งงาน ${id} สำหรับ ${items.length} รายการ: ${items.map((it) => `"${it.name}"`).join(", ")}`,
+    { scopeOfWorkId: project.scopeOfWorkId });
   res.status(201).json({ jobOrder: toClient({ ...doc, _id: id }) });
 }
 

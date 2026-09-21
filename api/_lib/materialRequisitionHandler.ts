@@ -557,6 +557,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       ? `สร้างใบเบิกและใบคืนวัสดุ ${id} (${documentNumber}) จากใบสั่งผลิต ${productionOrderId}`
       : standalone
       ? `สร้างใบเบิกและใบคืนวัสดุ ${id} เป็นใบเปล่า ไม่มีเอกสารต้นทาง`
+      : pickedItems.length === 0
+      ? `สร้างใบเบิกและใบคืนวัสดุ ${id} ในโครงการ ${source.jobCode} โดยไม่ผูกรายการ`
       : `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${pickedItems.map((it) => it.name).join('", "')}"`,
     { scopeOfWorkId: source.scopeOfWorkId },
   );
