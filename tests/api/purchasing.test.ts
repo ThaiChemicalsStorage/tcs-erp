@@ -458,6 +458,44 @@ describe("ใบสั่งซื้อ — ยกเลิกรายกา�
     expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(uncancelled)).purchaseOrder.lines[1].cancelRemark).toBe("");
   });
 
+  /**
+   * เจ้าของเลือกทางนี้ 2026-09-21 — ติ๊กปุ่มยกเลิกแล้วใบ dirty ทันที auto-save จึงยิงออกไปพร้อม
+   * เหตุผลว่างและเด้ง 400 ใส่คนที่กำลังจะพิมพ์เหตุผลอยู่แท้ ๆ · แต่ต้องไม่ยอมให้มีบรรทัดที่ยกเลิก
+   * โดยไม่มีเหตุผลค้างอยู่ในฐานข้อมูล auto-save จึงบันทึกบรรทัดนั้นเป็น "ยังไม่ยกเลิก" แทน
+   */
+  it("บันทึกอัตโนมัติไม่เด้ง 400 เรื่องเหตุผลการยกเลิก และไม่บันทึกการยกเลิกที่ไม่มีเหตุผล", async () => {
+    const po = await createPurchaseOrder();
+    const withLine = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: [{ productCode: "A", description: "ของที่สั่ง", unit: "ชิ้น", qty: 1, unitPrice: 100 }] }),
+    });
+    const lines = (await json<{ purchaseOrder: PurchaseOrderDoc }>(withLine)).purchaseOrder.lines;
+
+    // ติ๊กยกเลิกแต่ยังพิมพ์เหตุผลไม่เสร็จ แล้ว auto-save ยิงออกไป
+    const auto = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}?autoSave=1`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: lines.map((l) => ({ ...l, cancelled: true, cancelRemark: "" })) }),
+    });
+    expect(auto.status, "ต้องไม่เด้ง 400 ใส่คนที่กำลังพิมพ์อยู่").toBe(200);
+    const afterAuto = (await json<{ purchaseOrder: PurchaseOrderDoc }>(auto)).purchaseOrder;
+    expect(afterAuto.lines[0].cancelled, "แต่ต้องไม่บันทึกการยกเลิกที่ไม่มีเหตุผลลงฐานข้อมูล").toBe(false);
+
+    // กดบันทึกเองยังบังคับเหมือนเดิม — คนที่ตั้งใจข้ามต้องถูกบอก ไม่ใช่ถูกปล่อยผ่านเงียบ ๆ
+    const manual = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: lines.map((l) => ({ ...l, cancelled: true, cancelRemark: "" })) }),
+    });
+    expect(manual.status).toBe(400);
+
+    // พิมพ์เหตุผลเสร็จแล้ว auto-save รอบถัดไปบันทึกครบทั้งคู่
+    const done = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}?autoSave=1`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: lines.map((l) => ({ ...l, cancelled: true, cancelRemark: "ผู้ขายของหมด" })) }),
+    });
+    const finalLines = (await json<{ purchaseOrder: PurchaseOrderDoc }>(done)).purchaseOrder.lines;
+    expect(finalLines[0].cancelled).toBe(true);
+    expect(finalLines[0].cancelRemark).toBe("ผู้ขายของหมด");
+  });
   it("บรรทัดที่ยกเลิกไม่ถูกลอกไปใบรับสินค้า — สโตร์ไม่ถูกสั่งให้รับของที่ถอนไปแล้ว", async () => {
     const po = await createPurchaseOrder();
     const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {

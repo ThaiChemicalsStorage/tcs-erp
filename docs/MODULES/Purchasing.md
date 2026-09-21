@@ -235,6 +235,20 @@ receiving report, and must be orderable again — from another vendor if need be
 whole purchase order. Un-tick the cancellation and the block comes back, because the answer is always
 recomputed from live purchase orders.
 
+### Auto-save and the mandatory cancellation reason
+
+Ticking *ยกเลิกรายการ* makes the draft dirty immediately, so the debounced auto-save fires with an
+empty `cancelRemark` before anyone has finished typing one. An auto-save therefore **stores the line
+as not cancelled** instead of returning 400 (owner's call, 2026-09-21, picking this over relaxing the
+rule or leaving the error).
+
+The rule the owner asked for still holds at every instant — a `cancelled` line in the database always
+carries a reason. The lazier fix (persist `cancelled: true` with an empty reason) would have let the
+totals and the receiving report skip a line with nobody able to say why, which is exactly what the
+rule exists to prevent. A manual Save still returns 400, so deliberately skipping the reason is
+refused rather than silently accepted, and the tick stays on screen throughout because auto-save
+writes back only `doc`, never `draft`.
+
 ### Reverting an approved PO does not free the PR lines
 
 `revert-approval` puts the PO back to Draft; the PO still exists, so its lines still count as ordered.

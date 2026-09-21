@@ -76,18 +76,34 @@ function canEdit(ctx: AuthContext, doc: { createdBy: string }): boolean {
  * (โมดูล "คำขอเพิ่มสินค้า" มีอยู่ก็เพราะรหัสถูกตั้งทีหลัง) ถ้าผูกกับสินค้าจริง รหัส/ชื่อ/หน่วย
  * ถูก **ดึงจากฐานข้อมูลฝั่งเซิร์ฟเวอร์** ไม่เชื่อค่าที่ client ส่งมา
  */
-/** ช่องยกเลิกของหนึ่งบรรทัด — ติ๊กยกเลิกแล้วต้องมีเหตุผลเสมอ */
-function cancellationOf(r: Record<string, unknown>, idx: number): { cancelled: boolean; cancelRemark: string } {
+/**
+ * ช่องยกเลิกของหนึ่งบรรทัด — **ติ๊กยกเลิกแล้วต้องมีเหตุผลเสมอ**
+ *
+ * `lenient` = คำขอนี้เป็นการ**บันทึกอัตโนมัติ** (2026-09-21, เจ้าของเลือกทางนี้): ติ๊กปุ่มยกเลิกแล้ว
+ * ใบกลายเป็น dirty ทันที auto-save จึงยิงออกไปพร้อมเหตุผลว่าง แล้วเด้ง 400 ใส่ผู้ใช้ตั้งแต่ยังพิมพ์
+ * เหตุผลไม่เสร็จ ซึ่งเป็นการลงโทษคนที่กำลังทำตามขั้นตอนอยู่แท้ ๆ
+ *
+ * **แต่ไม่ได้แปลว่ายอมให้มีบรรทัดที่ยกเลิกโดยไม่มีเหตุผลอยู่ในฐานข้อมูล** — โหมดนี้จะบันทึกบรรทัดนั้น
+ * เป็น "ยังไม่ยกเลิก" แทน กฎของเจ้าของจึงยังจริงเสมอทุกวินาที: *บรรทัดที่ยกเลิกมีเหตุผลกำกับเสมอ* ·
+ * การติ๊กยังอยู่บนหน้าจอ (auto-save เขียนกลับแค่ `doc` ไม่แตะ `draft`) พอพิมพ์เหตุผลเสร็จรอบถัดไป
+ * ก็บันทึกครบทั้งคู่ · กดบันทึกเองยังบังคับเหมือนเดิม คนที่ตั้งใจข้ามจึงถูกบอก ไม่ใช่ถูกปล่อยผ่านเงียบ ๆ
+ */
+function cancellationOf(
+  r: Record<string, unknown>, idx: number, lenient: boolean,
+): { cancelled: boolean; cancelRemark: string } {
   const cancelled = r.cancelled === true;
   const cancelRemark = sanitizeShortText(r.cancelRemark, `หมายเหตุการยกเลิกลำดับที่ ${idx + 1}`);
   if (cancelled && !cancelRemark) {
+    if (lenient) return { cancelled: false, cancelRemark: "" };
     throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: กรุณาระบุหมายเหตุการยกเลิก`);
   }
   // ไม่ได้ยกเลิกก็ไม่เก็บหมายเหตุค้างไว้ ไม่งั้นติ๊กออกแล้วเหตุผลเก่าจะโผล่กลับมาตอนติ๊กใหม่
   return { cancelled, cancelRemark: cancelled ? cancelRemark : "" };
 }
 
-async function sanitizeLines(raw: unknown, existing: PurchaseOrderLine[] = []): Promise<PurchaseOrderLine[]> {
+async function sanitizeLines(
+  raw: unknown, existing: PurchaseOrderLine[] = [], lenientCancel = false,
+): Promise<PurchaseOrderLine[]> {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายการไม่ถูกต้อง");
   if (raw.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
@@ -127,7 +143,7 @@ async function sanitizeLines(raw: unknown, existing: PurchaseOrderLine[] = []): 
       sourcePrLineId: existingById.get(typeof r.id === "string" ? r.id : "")?.sourcePrLineId ?? "",
       // ยกเลิกรายการ (2026-09-21) — **เหตุผลบังคับ** เจ้าของขอสองอย่างนี้มาคู่กัน
       // การยกเลิกที่ไม่มีเหตุผลอธิบายไม่ได้ตอนผู้ขายโทรมาถามว่าทำไมของหาย
-      ...cancellationOf(r, idx),
+      ...cancellationOf(r, idx, lenientCancel),
       remark: sanitizeShortText(r.remark, `หมายเหตุลำดับที่ ${idx + 1}`),
     };
   });
@@ -505,7 +521,8 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<PurchaseOrderFields> = {};
-  if ("lines" in body) update.lines = await sanitizeLines(body.lines, doc.lines ?? []);
+  // บันทึกอัตโนมัติไม่ตกเรื่องเหตุผลการยกเลิก — ดู cancellationOf() สำหรับเหตุผลเต็ม
+  if ("lines" in body) update.lines = await sanitizeLines(body.lines, doc.lines ?? [], autoSave);
   // ผู้ขายในทะเบียน — จัดการแยกจาก SHORT_TEXT_FIELDS เสมอ ไม่งั้นกลายเป็นช่อง id อิสระที่ใครพิมพ์อะไรก็ได้
   Object.assign(update, await resolveVendorLink(body, doc));
   Object.assign(update, await resolveIntendedApprover(body));
