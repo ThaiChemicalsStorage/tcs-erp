@@ -204,7 +204,7 @@ export async function fetchArDocuments(filter?: { scopeOfWorkId?: string; status
 /** Issues an RE (ใบเสร็จรับเงิน) against an already-issued AR/IV tax invoice — records the payment
  * actually received; refused server-side if that invoice already has an active receipt. */
 export async function issueArReceipt(taxInvoiceDocumentId: string): Promise<ArDocument> {
-  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${taxInvoiceDocumentId}/receipt`, { method: "POST" });
+  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${encodeURIComponent(taxInvoiceDocumentId)}/receipt`, { method: "POST" });
   return document;
 }
 

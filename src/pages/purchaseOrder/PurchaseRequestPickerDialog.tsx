@@ -14,6 +14,10 @@ import { formatQuoteDateThai } from "../../lib/quotes";
  * `storeStage` (2026-09-09): `"pending"` = ยังรอสโตร์เช็คของ · `"closed"` = สโตร์จ่ายจากสต๊อกครบแล้ว
  * ทั้งสองออกใบสั่งซื้อไม่ได้ · ใบเก่าที่ไม่มีฟิลด์นี้ถือว่าผ่าน (วิ่งตรงไปจัดซื้อตามกติกาเดิม)
  *
+ * `purchasingStage === "review"` (2026-09-21) ก็โดนเซิร์ฟเวอร์ปฏิเสธเหมือนกัน แต่**ไม่กรองทิ้ง** —
+ * ต่างจากสองกรณีข้างบนตรงที่คนเปิดกล่องนี้คือฝ่ายจัดซื้อเอง ซึ่งเป็นคนกดอนุมัติได้ด้วยตัวเอง ซ่อนไป
+ * เฉย ๆ จะกลายเป็น "ใบหายไปไหน" · ขึ้นป้าย + คำใบ้ว่าต้องไปกดอะไรก่อนแทน
+ *
  * ดึงด้วย `ownerDepartment=all` เพราะจัดซื้อต้องเห็นงานที่ต้องซื้อของ**ทุกฝ่าย** ไม่ใช่แค่ฝ่ายเดียว
  * (หน้ารายการใบขอซื้อเดิมแยกตามฝ่ายเพราะเป็นมุมมองของฝ่ายผู้ขอ ไม่ใช่ของผู้ซื้อ) · ตัว `all` เปิดเฉพาะ
  * กำแพงแผนก ไม่ได้เปิดกำแพงสิทธิ์ — เซิร์ฟเวอร์ยังกรองด้วยความเป็นเจ้าของใบเหมือนเดิม
@@ -102,7 +106,9 @@ export function PurchaseRequestPickerDialog({
                   <span className="flex items-center gap-2">
                     {/* ป้ายบอกว่าใบนี้ออกใบสั่งซื้อไปแค่ไหนแล้ว (2026-09-21) — ใบที่ครบแล้วยังกดได้
                         เพราะเซิร์ฟเวอร์เป็นคนตอบว่าไม่เหลืออะไรให้ซื้อ ไม่ใช่ซ่อนไปเฉย ๆ ให้งง */}
-                    {r.purchaseState === "full" ? (
+                    {r.purchasingStage === "review" ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#e08a3c]/15 text-[#a75d1a] whitespace-nowrap">{t("purchaseOrder.picker.needsPurchasingApproval")}</span>
+                    ) : r.purchaseState === "full" ? (
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#2aa36b]/15 text-[#1c7a4e] whitespace-nowrap">{t("purchaseOrder.picker.orderedFull")}</span>
                     ) : r.purchaseState === "partial" ? (
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#3c7de0]/15 text-[#1a4fa7] whitespace-nowrap">{t("purchaseOrder.picker.orderedPartial")}</span>
@@ -111,6 +117,9 @@ export function PurchaseRequestPickerDialog({
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{r.jobCode || "—"}</p>
+                {r.purchasingStage === "review" && (
+                  <p className="text-xs text-[#a75d1a] mt-1">{t("purchaseOrder.picker.needsPurchasingApprovalHint")}</p>
+                )}
               </button>
             ))
           )}

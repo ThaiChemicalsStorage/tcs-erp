@@ -1144,6 +1144,25 @@ describe("ใบขอซื้อ — ติ๊กรายการแล้�
     expect(second.lines[0].sourcePrLineId).toBe("l2");
   });
 
+  /**
+   * กล่อง "เลือกใบขอซื้อต้นทาง" ของใบสั่งซื้อขึ้นป้าย "จัดซื้อยังไม่อนุมัติ" จากฟิลด์นี้ในรายการย่อ
+   * (`PurchaseRequestPickerDialog.tsx`) — ถ้า projection ตกหล่นเมื่อไหร่ ป้ายจะหายไปเงียบ ๆ
+   * แล้วผู้ใช้จะกดแล้วโดน 400 โดยไม่มีอะไรบอกล่วงหน้า
+   */
+  it("รายการย่อส่งขั้นของจัดซื้อมาด้วย — กล่องเลือกต้นทางใช้ค่านี้ขึ้นป้ายเตือน", async () => {
+    const pr = await approvedPurchaseRequest();
+    const list = await json<{ purchaseRequests: { id: string; purchasingStage?: string }[] }>(
+      await api("/api/purchase-requests?ownerDepartment=all"),
+    );
+    expect(list.purchaseRequests.find((r) => r.id === pr.id)?.purchasingStage).toBe("review");
+
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    const after = await json<{ purchaseRequests: { id: string; purchasingStage?: string }[] }>(
+      await api("/api/purchase-requests?ownerDepartment=all"),
+    );
+    expect(after.purchaseRequests.find((r) => r.id === pr.id)?.purchasingStage).toBe("approved");
+  });
+
   it("จัดซื้อยังไม่กดอนุมัติ เปิดใบสั่งซื้อไม่ได้ — แต่ใบเก่าที่ไม่มีขั้นนี้เลยยังเปิดได้", async () => {
     const pr = await approvedPurchaseRequest();
     expect(pr.purchasingStage).toBe("review");
