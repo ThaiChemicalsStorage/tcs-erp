@@ -21,6 +21,8 @@ let mongod: MongoMemoryServer;
 let client: MongoClient;
 let authHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
 let quotesHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
+/** ไฟล์แนบตั้งแต่ 2026-09-21 เสิร์ฟจาก route กลาง `/api/files/:id` ไม่ใช่ route ของโมดูลอีกแล้ว */
+let filesHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
 let rolesHandler: (req: ApiRequest, res: ApiResponse) => Promise<void>;
 
 let salesCookie = "";
@@ -69,6 +71,7 @@ beforeAll(async () => {
   await client.connect();
   authHandler = (await import("../../api/handlers/auth.js")).default;
   quotesHandler = (await import("../../api/handlers/quotes.js")).default;
+  filesHandler = (await import("../../api/_lib/upload/filesHandler.js")).handleFiles;
   rolesHandler = (await import("../../api/handlers/roles.js")).default;
 
   const setup = makeReqRes("POST", "/api/auth/setup", {
@@ -238,21 +241,33 @@ describe("ไฟล์แนบใบส่งมอบสินค้า", () =
   it("เจ้าของแนบไฟล์ได้ และเอกสารตอบกลับพร้อม attachments", async () => {
     const up = await call(quotesHandler, "POST", `/api/delivery-orders/${deliveryOrderId}/attachments`, fileBody);
     expect(up.statusCode, JSON.stringify(up.body)).toBe(200);
-    const attachments = (up.body as { deliveryOrder: { attachments: { id: string; fileName: string; url: string }[] } }).deliveryOrder.attachments;
+    const attachments = (up.body as { deliveryOrder: { attachments: { id: string; fileName: string; url: string; fileId?: string }[] } }).deliveryOrder.attachments;
     expect(attachments).toHaveLength(1);
     expect(attachments[0].fileName).toBe("signed-do.pdf");
     attachmentId = attachments[0].id;
     downloadUrl = attachments[0].url;
-    expect(downloadUrl).toContain(`/attachments/${attachmentId}/download?key=`);
+    // ตั้งแต่ 2026-09-21 ไฟล์ไปอยู่ในตารางกลาง `files` และเปิดผ่าน route ที่ตรวจสิทธิ์
+    expect(attachments[0].fileId, "ต้องผ่านระบบอัปโหลดกลาง").toBe(attachmentId);
+    expect(downloadUrl).toBe(`/api/files/${attachmentId}`);
   });
 
-  it("ดาวน์โหลดได้โดยไม่ต้องล็อกอิน (คุมด้วย key ใน URL) และคีย์ผิดได้ 404", async () => {
-    const ok = await call(quotesHandler, "GET", downloadUrl, undefined, "");
+  /**
+   * **เปลี่ยนสัญญาเมื่อ 2026-09-21** — เดิมไฟล์แนบเปิดได้ด้วย capability URL ที่มี `?key=` โดยไม่ต้อง
+   * ล็อกอิน · ข้อ 6 ของ `docs/UPLOAD_COMPRESSION_TASK.md` สั่งว่าไฟล์ของเอกสารภายในต้องดาวน์โหลด
+   * ผ่าน route ที่ตรวจสิทธิ์ผู้ใช้ ห้ามเป็นลิงก์สาธารณะที่ใครก็เข้าได้ · เหตุผลเดิม (ส่งลิงก์ให้คนนอก
+   * ทางอีเมล) หมดไปตั้งแต่ถอดระบบส่งอีเมลออกเมื่อ 2026-08-07
+   */
+  it("ดาวน์โหลดต้องมี session และสิทธิ์ — ไม่ใช่ลิงก์สาธารณะอีกต่อไป", async () => {
+    const ok = await call(filesHandler, "GET", downloadUrl);
     expect(ok.statusCode, JSON.stringify(ok.body)).toBe(200);
     expect(Buffer.isBuffer(ok.body)).toBe(true);
+    expect(ok.headers["x-content-type-options"], "ต้องกันเบราว์เซอร์เดาชนิดไฟล์").toBe("nosniff");
 
-    const bad = await call(quotesHandler, "GET", downloadUrl.replace(/key=.*$/, "key=wrong"), undefined, "");
-    expect(bad.statusCode).toBe(404);
+    const anonymous = await call(filesHandler, "GET", downloadUrl, undefined, "");
+    expect(anonymous.statusCode, "ไม่ล็อกอินต้องเปิดไม่ได้").toBe(401);
+
+    const missing = await call(filesHandler, "GET", "/api/files/does-not-exist");
+    expect(missing.statusCode).toBe(404);
   });
 
   it("ผู้รับที่เอกสารถูกส่งถึงแผนก แนบหรือลบไฟล์ไม่ได้", async () => {

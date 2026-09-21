@@ -1,7 +1,5 @@
 import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { Collection } from "mongodb";
-import { Binary } from "mongodb";
-import { randomUUID, randomBytes } from "node:crypto";
 import { HttpError } from "./http.js";
 import { requireUser, type AuthContext } from "./auth.js";
 import { documentAttachmentFilesCollection } from "./collections.js";
@@ -9,6 +7,7 @@ import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText } from "./quoteValidation.js";
 import type { DocumentAttachment } from "../../src/lib/documentAttachments.js";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_DOCUMENT } from "../../src/lib/documentAttachments.js";
+import { storeUpload, deleteUpload } from "./upload/uploadService.js";
 
 /**
  * ไฟล์แนบแบบใช้ร่วมกันได้ทุกเอกสาร — เพิ่ม 2026-08-27 ตอนที่ฝ่ายโครงการขอให้ใบสั่งงานแนบไฟล์ได้
@@ -87,28 +86,30 @@ export async function handleAttachmentUpload<TDoc>(
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
   const data = Buffer.from(dataBase64, "base64");
   if (data.length === 0) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
-  if (data.length > MAX_ATTACHMENT_BYTES) {
-    throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
-  }
 
-  const attachmentId = randomUUID();
-  const downloadKey = randomBytes(24).toString("base64url");
-  const files = await documentAttachmentFilesCollection();
-  await ensureIndexes(files);
-  await files.insertOne({
-    docType: cfg.docType, docId: id, attachmentId, downloadKey,
-    fileName, contentType, size: data.length, data: new Binary(data), createdAt: nowIso(),
-  });
+  /**
+   * **ตั้งแต่ 2026-09-21 ไบต์ไม่ได้ถูกเขียนที่นี่อีกแล้ว** — ส่งต่อให้ `storeUpload()` ซึ่งตรวจชนิดไฟล์
+   * จากเนื้อไฟล์จริง บีบอัด สร้างรูปย่อ แล้วเก็บลงตารางกลาง `files` (ดู `api/_lib/upload/`)
+   * ที่นี่เหลือหน้าที่เดียวคือผูกไฟล์เข้ากับเอกสารแบบ atomic ซึ่งเป็นตรรกะเฉพาะของไฟล์แนบ
+   *
+   * `contentType` ที่ client ส่งมา**ไม่ถูกใช้แล้ว** — ระบบกำหนดเองจากชนิดจริงที่ตรวจได้
+   * ตัวแปรยังรับไว้เพื่อไม่ให้ body เดิมของหน้าจอพัง แต่ค่าที่เก็บมาจาก `storeUpload()` เสมอ
+   */
+  const stored = await storeUpload(ctx, { data, fileName }, { module: cfg.docType, docId: id });
+  void contentType;
 
+  const attachmentId = stored.id;
   const attachment: DocumentAttachment = {
     id: attachmentId,
     fileName,
-    url: `/api/${cfg.docType}/${encodeURIComponent(id)}/attachments/${attachmentId}/download?key=${downloadKey}`,
-    size: data.length,
-    contentType,
+    url: stored.url,
+    size: stored.size,
+    contentType: stored.mime,
     uploadedBy: ctx.user.id,
     uploadedByName: ctx.user.fullName,
     uploadedAt: nowIso(),
+    fileId: stored.id,
+    thumbnailUrl: stored.thumbnailUrl,
   };
 
   // `$push` แบบ atomic ที่เช็คเพดานซ้ำในตัว filter เอง ("ช่องที่ N-1 ต้องยังไม่มี") — ถ้าอ่านมาทั้ง array
@@ -121,7 +122,7 @@ export async function handleAttachmentUpload<TDoc>(
   );
   if (pushResult.matchedCount === 0) {
     // แพ้การแย่งช่องสุดท้าย — ลบไฟล์ที่เพิ่งเก็บทิ้ง ไม่ให้ค้างแบบไม่มีใครอ้างถึง แล้วตอบข้อความเดียวกับ pre-check
-    await files.deleteOne({ attachmentId });
+    await deleteUpload(stored.id);
     throw new HttpError(400, `แนบไฟล์ได้สูงสุด ${MAX_ATTACHMENTS_PER_DOCUMENT} ไฟล์ต่อเอกสาร — ลบไฟล์เดิมออกก่อน`);
   }
 
@@ -140,7 +141,6 @@ export async function handleAttachmentDelete<TDoc>(
   const target = cfg.currentAttachments(doc).find((a) => a.id === attachmentId);
   if (!target) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
-  const files = await documentAttachmentFilesCollection();
   const collection = await cfg.collection();
   // `$pull` เฉพาะรายการนี้ (ไม่ใช่ `$set` ทับทั้ง array ที่อ่านมา) เพื่อไม่ให้ไฟล์ที่เพิ่งถูกแนบพร้อมกันหายไปด้วย
   //
@@ -150,7 +150,18 @@ export async function handleAttachmentDelete<TDoc>(
     { _id: cfg.idOf(doc) } as never,
     { $pull: { attachments: { id: attachmentId } }, $set: { updatedAt: nowIso(), updatedBy: ctx.user.id } } as never,
   );
-  await files.deleteOne({ attachmentId });
+
+  /**
+   * ไฟล์ใหม่ (ตั้งแต่ 2026-09-21) อยู่ในตารางกลาง ส่วนไฟล์เก่ายังอยู่ใน `document_attachment_files`
+   * ลบทั้งสองทางโดยดูจาก `fileId` — เรียกทั้งคู่ไปเลยก็ได้ แต่ทางที่ไม่ตรงจะเป็น no-op อยู่แล้ว
+   * เขียนแยกให้ชัดว่าไฟล์ไหนอยู่ระบบไหน เพราะสคริปต์ย้ายข้อมูลต้องอ่านตรรกะเดียวกันนี้
+   */
+  if (target.fileId) {
+    await deleteUpload(target.fileId);
+  } else {
+    const files = await documentAttachmentFilesCollection();
+    await files.deleteOne({ attachmentId });
+  }
 
   await cfg.writeAudit(ctx, `${cfg.label} Attachment Removed`, `ลบไฟล์แนบ "${target.fileName}" ออกจาก${cfg.label} ${id}`, doc);
   await cfg.respond(res, id);

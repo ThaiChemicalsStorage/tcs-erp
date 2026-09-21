@@ -15,6 +15,7 @@ import customersHandler from "../api/handlers/customers.js";
 import companyHandler from "../api/company/index.js";
 import auditLogHandler from "../api/audit-log/index.js";
 import dashboardHandler from "../api/dashboard/index.js";
+import { handleFiles as filesHandler } from "../api/_lib/upload/filesHandler.js";
 
 type ApiHandler = (req: ApiRequest, res: ApiResponse) => void | Promise<void>;
 
@@ -66,6 +67,8 @@ const API_ROUTES: Record<string, ApiHandler> = {
   company: companyHandler,
   "audit-log": auditLogHandler,
   dashboard: dashboardHandler,
+  // จุดเดียวที่ไฟล์ออกจากระบบ — ตรวจสิทธิ์ตามโมดูลเจ้าของไฟล์ ดู api/_lib/upload/filesHandler.ts
+  files: filesHandler,
 };
 
 // Sized for the largest JSON body the app legitimately sends: a Service photo is ≤4 MB raw

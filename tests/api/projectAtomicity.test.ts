@@ -28,7 +28,7 @@ interface CapturedResponse {
   headers: Record<string, string>;
 }
 
-function makeReqRes(method: string, url: string, body?: unknown): { req: ApiRequest; res: ApiResponse; captured: CapturedResponse } {
+function makeReqRes(method: string, url: string, body?: unknown, cookie?: string): { req: ApiRequest; res: ApiResponse; captured: CapturedResponse } {
   const captured: CapturedResponse = { statusCode: 0, body: undefined, headers: {} };
   // The Express server always populates `req.query`; handlers read it
   // directly, so the mock has to as well or a query-string route crashes here but works in prod.
@@ -38,7 +38,7 @@ function makeReqRes(method: string, url: string, body?: unknown): { req: ApiRequ
     url,
     body,
     query,
-    headers: { "x-forwarded-for": "10.0.0.1", cookie: sessionCookie },
+    headers: { "x-forwarded-for": "10.0.0.1", cookie: cookie ?? sessionCookie },
     socket: { remoteAddress: "10.0.0.1" },
   } as unknown as ApiRequest;
   const res = {
@@ -55,6 +55,14 @@ function makeReqRes(method: string, url: string, body?: unknown): { req: ApiRequ
 async function call(method: string, url: string, body?: unknown): Promise<CapturedResponse> {
   const { req, res, captured } = makeReqRes(method, url, body);
   await quotesHandler(req, res);
+  return captured;
+}
+
+/** ไฟล์แนบตั้งแต่ 2026-09-21 เสิร์ฟจาก route กลาง `/api/files/:id` ไม่ใช่ route ของโมดูล */
+async function callFiles(method: string, url: string, cookie?: string): Promise<CapturedResponse> {
+  const { req, res, captured } = makeReqRes(method, url, undefined, cookie);
+  const { handleFiles } = await import("../../api/_lib/upload/filesHandler.js");
+  await handleFiles(req, res);
   return captured;
 }
 
@@ -919,19 +927,25 @@ describe("Job Order attachments", () => {
     return (res.body as { jobOrder: { id: string } }).jobOrder.id;
   }
 
-  it("attaches a file, exposes it through a capability URL, and removes it again", async () => {
+  /**
+   * **เปลี่ยนสัญญาเมื่อ 2026-09-21** — ไฟล์แนบเข้าระบบอัปโหลดกลาง (`api/_lib/upload/`) แล้ว
+   * เปิดผ่าน `/api/files/:id` ที่ตรวจสิทธิ์ตามโมดูล แทน capability URL เดิมที่เปิดได้โดยไม่ต้อง
+   * ล็อกอิน (ข้อ 6 ของ `docs/UPLOAD_COMPRESSION_TASK.md`)
+   */
+  it("attaches a file, serves it from the central store, and removes it again", async () => {
     const id = await createJobOrder();
     const up = await call("POST", `/api/job-orders/${id}/attachments`, {
       fileName: "แบบงาน.pdf", contentType: "application/pdf", dataBase64: b64("hello-drawing"),
     });
     expect(up.statusCode, JSON.stringify(up.body)).toBe(200);
-    const attachments = (up.body as { jobOrder: { attachments: { id: string; fileName: string; size: number; url: string }[] } }).jobOrder.attachments;
+    const attachments = (up.body as { jobOrder: { attachments: { id: string; fileName: string; size: number; url: string; fileId?: string }[] } }).jobOrder.attachments;
     expect(attachments).toHaveLength(1);
-    expect(attachments[0].fileName).toBe("แบบงาน.pdf");
+    expect(attachments[0].fileName, "ชื่อไทยต้องไม่เพี้ยน").toBe("แบบงาน.pdf");
     expect(attachments[0].size).toBe("hello-drawing".length);
+    expect(attachments[0].fileId, "ต้องผ่านระบบอัปโหลดกลาง").toBeTruthy();
+    expect(attachments[0].url).toBe(`/api/files/${attachments[0].id}`);
 
-    // URL ต้องพาไปดาวน์โหลดได้จริง โดยไม่ต้องแก้อะไรเพิ่ม
-    const dl = await call("GET", attachments[0].url.replace("/api", "/api"));
+    const dl = await callFiles("GET", attachments[0].url);
     expect(dl.statusCode).toBe(200);
     expect(Buffer.isBuffer(dl.body) ? dl.body.toString("utf8") : String(dl.body)).toBe("hello-drawing");
     expect(dl.headers["x-content-type-options"]).toBe("nosniff");
@@ -939,18 +953,24 @@ describe("Job Order attachments", () => {
     const del = await call("DELETE", `/api/job-orders/${id}/attachments/${attachments[0].id}`);
     expect(del.statusCode, JSON.stringify(del.body)).toBe(200);
     expect((del.body as { jobOrder: { attachments: unknown[] } }).jobOrder.attachments).toHaveLength(0);
+
+    const gone = await callFiles("GET", attachments[0].url);
+    expect(gone.statusCode, "ลบแล้วไบต์ต้องหายจริง ไม่ใช่แค่ถอดออกจากเอกสาร").toBe(404);
   });
 
-  it("refuses a download without the right key", async () => {
+  it("refuses a download with no session — ไฟล์ภายในไม่ใช่ลิงก์สาธารณะ", async () => {
     const id = await createJobOrder();
     const up = await call("POST", `/api/job-orders/${id}/attachments`, {
       fileName: "a.txt", contentType: "text/plain", dataBase64: b64("secret"),
     });
     const a = (up.body as { jobOrder: { attachments: { id: string; url: string }[] } }).jobOrder.attachments[0];
-    const noKey = await call("GET", `/api/job-orders/${id}/attachments/${a.id}/download`);
-    expect(noKey.statusCode, "ไม่มี key ต้อง 404").toBe(404);
-    const wrongKey = await call("GET", `/api/job-orders/${id}/attachments/${a.id}/download?key=not-the-key`);
-    expect(wrongKey.statusCode, "key ผิดต้อง 404").toBe(404);
+
+    const anonymous = await callFiles("GET", a.url, "");
+    expect(anonymous.statusCode, "ไม่ล็อกอินต้องเปิดไม่ได้").toBe(401);
+
+    // route เดิมของโมดูลไม่เสิร์ฟไฟล์ใหม่อีกแล้ว — ไบต์ไม่ได้อยู่ในคอลเลกชันนั้น
+    const legacy = await call("GET", `/api/job-orders/${id}/attachments/${a.id}/download?key=not-the-key`);
+    expect(legacy.statusCode).toBe(404);
   });
 
   it("serves a script-capable type as a plain download, never inline", async () => {
@@ -958,8 +978,12 @@ describe("Job Order attachments", () => {
     const up = await call("POST", `/api/job-orders/${id}/attachments`, {
       fileName: "evil.html", contentType: "text/html", dataBase64: b64("<script>alert(1)</script>"),
     });
-    const a = (up.body as { jobOrder: { attachments: { url: string }[] } }).jobOrder.attachments[0];
-    const dl = await call("GET", a.url);
+    expect(up.statusCode, JSON.stringify(up.body)).toBe(200);
+    const a = (up.body as { jobOrder: { attachments: { url: string; contentType: string }[] } }).jobOrder.attachments[0];
+    // `contentType` ที่ client ส่งมาถูกทิ้ง — ระบบตั้งเองจากชนิดจริงที่ตรวจได้ (ไม่มี magic bytes = ข้อความ)
+    expect(a.contentType, "ต้องไม่เชื่อ text/html ที่ client อ้าง").toBe("text/plain");
+
+    const dl = await callFiles("GET", a.url);
     expect(dl.statusCode).toBe(200);
     expect(dl.headers["content-type"], "HTML ต้องไม่ถูกส่งกลับเป็น text/html").toBe("application/octet-stream");
     expect(dl.headers["content-disposition"]).toContain("attachment;");

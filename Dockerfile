@@ -15,6 +15,13 @@ RUN npm run build
 FROM node:22-alpine AS app
 WORKDIR /app
 ENV NODE_ENV=production
+# Ghostscript — ตัวบีบอัด PDF ของระบบอัปโหลด (api/_lib/upload/compressPdf.ts)
+# ไม่มีก็ไม่พัง: PDF จะถูกเก็บขนาดเดิมพร้อม log ตามข้อ 4.2.3 ของ docs/UPLOAD_COMPRESSION_TASK.md
+# แต่จะไม่ประหยัดพื้นที่เลย ซึ่งเป็นเหตุผลทั้งหมดของงานนี้
+#
+# sharp (ตัวบีบรูป) **ไม่ต้องติดตั้งอะไรเพิ่ม** — มี prebuilt สำหรับ musl (@img/sharp-linuxmusl-x64)
+# จึงอยู่บน alpine ได้ตามเดิม และ HEIC ถอดรหัสด้วย libheif-js ที่เป็น WebAssembly ล้วน
+RUN apk add --no-cache ghostscript
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 RUN npm prune --omit=dev

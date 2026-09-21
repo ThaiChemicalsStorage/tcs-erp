@@ -9,18 +9,34 @@ import { apiFetch } from "./apiClient.js";
 export interface DocumentAttachment {
   id: string;
   fileName: string;
-  /** capability URL — มี `?key=` ที่สุ่มมาอยู่ในตัว เปิดได้โดยไม่ต้องล็อกอิน */
+  /**
+   * ที่อยู่สำหรับเปิดไฟล์ · **ไฟล์ตั้งแต่ 2026-09-21 เป็น `/api/files/:id` ที่ตรวจสิทธิ์ตามโมดูล**
+   * ส่วนไฟล์เก่ากว่านั้นเป็น capability URL ที่มี `?key=` สุ่มอยู่ในตัว เปิดได้โดยไม่ต้องล็อกอิน
+   * — หน้าจอไม่ต้องรู้ความต่าง แค่เปิด `url` ที่ได้มา
+   */
   url: string;
   size: number;
   contentType: string;
   uploadedBy: string;
   uploadedByName: string;
   uploadedAt: string;
+  /**
+   * id ในตารางกลาง `files` — **มีเฉพาะไฟล์ที่อัปโหลดตั้งแต่ 2026-09-21** ที่ผ่านระบบบีบอัดกลาง
+   * ไม่มีค่า = ไฟล์เก่าที่ไบต์ยังอยู่ใน `document_attachment_files` ตามเดิม (ดู `uploadService.ts`)
+   */
+  fileId?: string;
+  /** URL รูปย่อ 400px สำหรับหน้ารายการ — ว่างเมื่อไม่ใช่รูป หรือเป็นไฟล์เก่า */
+  thumbnailUrl?: string;
 }
 
-/** เพดานเดียวกับที่ Scope of Work ใช้มาตั้งแต่ 2026-07-24 — ตอบข้อกังวล "กลัว db เต็ม" ด้วยลิมิตแข็ง
- * แทนการไปพึ่ง storage ภายนอก ไฟล์เก็บเป็น BSON Binary จึงเดินทางไปกับฐานข้อมูลทุกที่ */
-export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+/**
+ * เพดาน**ฝั่งหน้าจอ** สำหรับเตือนผู้ใช้ก่อนอัปโหลด — ตัวจริงที่บังคับคือ `uploadConfig()` ฝั่งเซิร์ฟเวอร์
+ * ซึ่งแยกเพดานรูป (20MB) กับเอกสาร (10MB) และปรับจาก env ได้
+ *
+ * ตั้งเป็นค่าที่ใหญ่ที่สุดที่เป็นไปได้ เพื่อไม่ให้หน้าจอปฏิเสธไฟล์ที่เซิร์ฟเวอร์รับได้จริง · ก่อน
+ * 2026-09-21 ค่านี้คือ 2MB และเป็นเพดานจริง เพราะยังไม่มีการบีบอัดฝั่งเซิร์ฟเวอร์
+ */
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_DOCUMENT = 5;
 
 export function formatFileSize(bytes: number): string {
