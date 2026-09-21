@@ -78,8 +78,11 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
           </tr>
         </thead>
         <tbody>
+          {/* บรรทัดที่ถูกยกเลิก (2026-09-21) — **ยังพิมพ์อยู่** แต่ขีดทับ เพราะผู้ขายถือใบเดิมและต้อง
+              เห็นว่าอะไรถูกถอน · ยอดของบรรทัดยังโชว์ให้เทียบได้ว่าที่หายไปคือเท่าไร แต่ไม่ถูกคิดใน
+              ยอดรวม (กรองอยู่ใน purchaseOrderSubtotal ที่เดียว) */}
           {doc.lines.map((l, i) => (
-            <tr key={l.id}>
+            <tr key={l.id} style={l.cancelled ? { color: "#666", textDecoration: "line-through" } : undefined}>
               <td style={{ ...cell, textAlign: "center" }}>{i + 1}</td>
               <td style={cell}>{printText(l.productCode)}</td>
               <td style={cell}>
@@ -87,6 +90,9 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
                 {l.subDetails.map((sd, j) => (
                   <div key={j} style={{ paddingLeft: 12, fontSize: "10px" }}>{sd}</div>
                 ))}
+                {l.cancelled && (
+                  <div style={{ paddingLeft: 12, fontSize: "10px", textDecoration: "none" }}>ยกเลิก: {printText(l.cancelRemark)}</div>
+                )}
               </td>
               <td style={{ ...cell, textAlign: "center" }}>{printText(l.unit)}</td>
               <td style={{ ...cell, textAlign: "right" }}>{printNumber(l.qty)}</td>
@@ -98,6 +104,11 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
               <td style={{ ...cell, textAlign: "right" }}>{fmt(purchaseOrderLineTotal(l))}</td>
             </tr>
           ))}
+          {doc.lines.some((l) => l.cancelled) && (
+            <tr>
+              <td style={{ ...cell, fontSize: "10px" }} colSpan={8}>รายการที่ขีดฆ่าถูกยกเลิก ไม่รวมในยอดสุทธิ</td>
+            </tr>
+          )}
           <tr>
             <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>รวมเป็นเงิน</td>
             <td style={{ ...cell, textAlign: "right" }}>{fmt(totals.subtotal)}</td>

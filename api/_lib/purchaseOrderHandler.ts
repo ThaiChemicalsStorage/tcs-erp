@@ -76,6 +76,17 @@ function canEdit(ctx: AuthContext, doc: { createdBy: string }): boolean {
  * (โมดูล "คำขอเพิ่มสินค้า" มีอยู่ก็เพราะรหัสถูกตั้งทีหลัง) ถ้าผูกกับสินค้าจริง รหัส/ชื่อ/หน่วย
  * ถูก **ดึงจากฐานข้อมูลฝั่งเซิร์ฟเวอร์** ไม่เชื่อค่าที่ client ส่งมา
  */
+/** ช่องยกเลิกของหนึ่งบรรทัด — ติ๊กยกเลิกแล้วต้องมีเหตุผลเสมอ */
+function cancellationOf(r: Record<string, unknown>, idx: number): { cancelled: boolean; cancelRemark: string } {
+  const cancelled = r.cancelled === true;
+  const cancelRemark = sanitizeShortText(r.cancelRemark, `หมายเหตุการยกเลิกลำดับที่ ${idx + 1}`);
+  if (cancelled && !cancelRemark) {
+    throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: กรุณาระบุหมายเหตุการยกเลิก`);
+  }
+  // ไม่ได้ยกเลิกก็ไม่เก็บหมายเหตุค้างไว้ ไม่งั้นติ๊กออกแล้วเหตุผลเก่าจะโผล่กลับมาตอนติ๊กใหม่
+  return { cancelled, cancelRemark: cancelled ? cancelRemark : "" };
+}
+
 async function sanitizeLines(raw: unknown, existing: PurchaseOrderLine[] = []): Promise<PurchaseOrderLine[]> {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายการไม่ถูกต้อง");
@@ -114,6 +125,9 @@ async function sanitizeLines(raw: unknown, existing: PurchaseOrderLine[] = []): 
       departmentCode: sanitizeShortText(r.departmentCode, `แผนกลำดับที่ ${idx + 1}`),
       costCode: sanitizeShortText(r.costCode, `รหัสบัญชีลำดับที่ ${idx + 1}`),
       sourcePrLineId: existingById.get(typeof r.id === "string" ? r.id : "")?.sourcePrLineId ?? "",
+      // ยกเลิกรายการ (2026-09-21) — **เหตุผลบังคับ** เจ้าของขอสองอย่างนี้มาคู่กัน
+      // การยกเลิกที่ไม่มีเหตุผลอธิบายไม่ได้ตอนผู้ขายโทรมาถามว่าทำไมของหาย
+      ...cancellationOf(r, idx),
       remark: sanitizeShortText(r.remark, `หมายเหตุลำดับที่ ${idx + 1}`),
     };
   });
@@ -321,6 +335,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       costCode: l.costCode ?? "",
       // ตัวชี้กลับไปบรรทัดต้นทาง — หัวใจของการกันซื้อซ้ำ ดู purchasedPrLineIds()
       sourcePrLineId: l.id,
+      cancelled: false,
+      cancelRemark: "",
       remark: "",
     }));
   }

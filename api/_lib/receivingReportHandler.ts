@@ -171,7 +171,18 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     });
   }
 
-  const lines: ReceivingReportLine[] = (po.lines ?? []).map((l) => ({
+  /**
+   * **ข้ามบรรทัดที่ถูกยกเลิก (2026-09-21)** — ถ้าไม่กรอง สโตร์จะถูกสั่งให้รับของที่จัดซื้อถอนไปแล้ว
+   * และหนี้กับสต๊อกจะถูกตั้งจากของที่ไม่มีวันมาถึง · บรรทัดที่ยกเลิกยังพิมพ์อยู่บนใบสั่งซื้อ (ขีดทับ)
+   * เพื่อให้ผู้ขายเทียบกับใบเดิมได้ แต่ไม่ใช่สิ่งที่ต้องรับเข้าคลัง
+   */
+  const linesToReceive = (po.lines ?? []).filter((l) => !l.cancelled);
+  // ใบที่ไม่มีบรรทัดเลยยังสร้างใบรับสินค้าได้เหมือนเดิม — พฤติกรรมเดิมที่ไม่ได้ตั้งใจเปลี่ยนรอบนี้
+  // ด่านนี้จับเฉพาะกรณี "มีรายการ แต่ถูกยกเลิกหมด" ซึ่งเป็นของใหม่ที่เพิ่งเป็นไปได้
+  if (linesToReceive.length === 0 && (po.lines ?? []).length > 0) {
+    throw new HttpError(400, "ทุกรายการในใบสั่งซื้อนี้ถูกยกเลิกแล้ว ไม่มีรายการที่ต้องรับของ");
+  }
+  const lines: ReceivingReportLine[] = linesToReceive.map((l) => ({
     id: newId("rrline"),
     poLineId: l.id,
     productId: l.productId || null,

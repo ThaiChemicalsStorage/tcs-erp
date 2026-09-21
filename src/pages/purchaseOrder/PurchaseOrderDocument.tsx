@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2, Undo2 } from "lucide-react";
+import { ArrowLeft, Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2, Undo2, Ban } from "lucide-react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
@@ -461,19 +461,33 @@ export function PurchaseOrderDocument({
                     {["#", t("purchaseOrderDoc.col.code"), t("purchaseOrderDoc.col.description"), t("purchaseOrderDoc.col.unit"),
                       t("purchaseOrderDoc.col.department"), t("purchaseOrderDoc.col.costCode"),
                       t("purchaseOrderDoc.col.qty"), t("purchaseOrderDoc.col.unitPrice"), t("purchaseOrderDoc.col.discount"),
-                      t("purchaseOrderDoc.col.amount"), ""].map((h, i) => (
+                      // สองคอลัมน์ท้ายไม่มีหัว: ปุ่มยกเลิกรายการ กับปุ่มลบรายการ (คนละเรื่องกัน)
+                      t("purchaseOrderDoc.col.amount"), "", ""].map((h, i) => (
                       <th key={i} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {draft.lines.length === 0 ? (
-                    <tr><td colSpan={11} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
+                    <tr><td colSpan={12} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
                   ) : draft.lines.map((l, i) => (
-                    <tr key={l.id} className="border-b border-border/50">
+                    <tr key={l.id} className={`border-b border-border/50 ${l.cancelled ? "opacity-60" : ""}`}>
                       <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{i + 1}</td>
                       <td className="px-1 py-1"><input className={cellCls} disabled={!editable} value={l.productCode} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
-                      <td className="px-1 py-1"><input className={cellCls} disabled={!editable} value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} /></td>
+                      <td className="px-1 py-1">
+                        <input className={`${cellCls} ${l.cancelled ? "line-through" : ""}`} disabled={!editable} value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} />
+                        {/* ช่องเหตุผลโผล่เฉพาะตอนติ๊กยกเลิก — เซิร์ฟเวอร์ตอบ 400 ถ้าเว้นว่าง */}
+                        {l.cancelled && (
+                          <input
+                            className={`${cellCls} mt-1 text-[#a75d1a]`}
+                            disabled={!editable}
+                            value={l.cancelRemark ?? ""}
+                            placeholder={t("purchaseOrderDoc.cancelRemarkPlaceholder")}
+                            aria-label={t("purchaseOrderDoc.cancelRemark")}
+                            onChange={(e) => setLine(l.id, { cancelRemark: e.target.value })}
+                          />
+                        )}
+                      </td>
                       <td className="px-1 py-1 w-24"><input className={cellCls} disabled={!editable} value={l.unit} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
                       {/* รหัสแผนก/บัญชีที่ดึงมาจากใบขอซื้อ — ก่อนหน้านี้คัดลอกมาแล้วแต่ไม่มีที่ให้เห็นหรือแก้
                           จัดซื้อมักต้องแก้รหัสบัญชีที่ผู้ขอกรอกมาผิดหมวด จึงต้องแก้ได้บนใบสั่งซื้อด้วย */}
@@ -505,6 +519,21 @@ export function PurchaseOrderDocument({
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-mono text-foreground whitespace-nowrap">{fmt(purchaseOrderLineTotal(l))}</td>
+                      {/* ยกเลิกรายการ (2026-09-21) — **คนละเรื่องกับปุ่มลบ** ลบ = บรรทัดที่ไม่เคยสั่ง
+                          (พิมพ์ผิด) · ยกเลิก = สั่งไปแล้วแต่ถอน ซึ่งยังต้องพิมพ์บนใบให้ผู้ขายเห็น
+                          จึงเก็บปุ่มลบไว้ด้วย ไม่ได้แทนที่กัน */}
+                      <td className="px-2 py-1 w-8">
+                        {editable && (
+                          <button
+                            onClick={() => setLine(l.id, { cancelled: !l.cancelled, ...(l.cancelled ? { cancelRemark: "" } : {}) })}
+                            aria-label={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
+                            title={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
+                            className={`opacity-50 hover:opacity-100 focus-visible:opacity-100 transition-opacity ${l.cancelled ? "text-[#c9a84c]" : "text-muted-foreground"}`}
+                          >
+                            <Ban size={13} />
+                          </button>
+                        )}
+                      </td>
                       <td className="px-2 py-1 w-8">
                         {editable && (
                           <button onClick={() => set("lines", draft.lines.filter((x) => x.id !== l.id))}

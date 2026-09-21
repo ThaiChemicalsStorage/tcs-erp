@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { purchaseOrderTotals } from "../../src/lib/purchaseOrder";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -58,7 +59,7 @@ type PurchaseRequestDoc = {
 type PurchaseOrderDoc = {
   id: string; documentNumber: string; status: string; vendorName: string; vendorId?: string; purchaseRequestId: string;
   intendedApproverUserId?: string; intendedApproverName?: string; approvedBy?: string;
-  lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null; sourcePrLineId?: string }[];
+  lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null; sourcePrLineId?: string; cancelled?: boolean; cancelRemark?: string }[];
 };
 /** ใบขอซื้อเปล่าของฝ่ายที่ไม่มีเอกสารต้นทาง — ทางสร้างที่เพิ่มมาพร้อมโมดูลจัดซื้อ */
 async function createStandalonePurchaseRequest(): Promise<PurchaseRequestDoc> {
@@ -414,6 +415,70 @@ describe("ใบสั่งซื้อ — รายละเอียดต�
   });
 });
 
+describe("ใบสั่งซื้อ — ยกเลิกรายการ (2026-09-21)", () => {
+  it("ยกเลิกบรรทัดต้องมีเหตุผล และยอดเงินไม่นับบรรทัดที่ยกเลิก", async () => {
+    const po = await createPurchaseOrder();
+    const withLines = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        vatRate: 0,
+        lines: [
+          { productCode: "A", description: "ของที่สั่ง", unit: "ชิ้น", qty: 2, unitPrice: 100 },
+          { productCode: "B", description: "ของที่จะยกเลิก", unit: "ชิ้น", qty: 3, unitPrice: 50 },
+        ],
+      }),
+    });
+    expect(withLines.status).toBe(200);
+    const lines = (await json<{ purchaseOrder: PurchaseOrderDoc }>(withLines)).purchaseOrder.lines;
+
+    // ติ๊กยกเลิกแต่ไม่ใส่เหตุผล = 400
+    const noReason = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: lines.map((l, i) => (i === 1 ? { ...l, cancelled: true } : l)) }),
+    });
+    expect(noReason.status).toBe(400);
+
+    const cancelled = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: lines.map((l, i) => (i === 1 ? { ...l, cancelled: true, cancelRemark: "ผู้ขายของหมด" } : l)) }),
+    });
+    expect(cancelled.status).toBe(200);
+    const after = (await json<{ purchaseOrder: PurchaseOrderDoc }>(cancelled)).purchaseOrder;
+    expect(after.lines[1].cancelled).toBe(true);
+    expect(after.lines[1].cancelRemark).toBe("ผู้ขายของหมด");
+    // บรรทัดที่ยกเลิกยังอยู่บนใบ (พิมพ์ขีดทับ) แต่ไม่ถูกคิดเงิน
+    expect(after.lines, "ไม่ได้ถูกลบทิ้ง").toHaveLength(2);
+    expect(purchaseOrderTotals(after as never).subtotal, "200 จากบรรทัดแรกเท่านั้น").toBe(200);
+
+    // ติ๊กออกแล้วเหตุผลเก่าต้องไม่ค้าง
+    const uncancelled = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: after.lines.map((l, i) => (i === 1 ? { ...l, cancelled: false } : l)) }),
+    });
+    expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(uncancelled)).purchaseOrder.lines[1].cancelRemark).toBe("");
+  });
+
+  it("บรรทัดที่ยกเลิกไม่ถูกลอกไปใบรับสินค้า — สโตร์ไม่ถูกสั่งให้รับของที่ถอนไปแล้ว", async () => {
+    const po = await createPurchaseOrder();
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        lines: [
+          { productCode: "A", description: "ของที่สั่ง", unit: "ชิ้น", qty: 2, unitPrice: 100 },
+          { productCode: "B", description: "ของที่ยกเลิก", unit: "ชิ้น", qty: 3, unitPrice: 50, cancelled: true, cancelRemark: "ของหมด" },
+        ],
+      }),
+    });
+    expect(patched.status).toBe(200);
+    await approvePurchaseOrder(po.id);
+
+    const rr = await api("/api/receiving-reports", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id }) });
+    expect(rr.status).toBe(201);
+    const lines = (await json<{ receivingReport: { lines: { description: string }[] } }>(rr)).receivingReport.lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0].description).toBe("ของที่สั่ง");
+  });
+});
 describe("ใบสั่งซื้อ — ย้อนการอนุมัติ (2026-09-21)", () => {
   it("ย้อนใบที่อนุมัติแล้วกลับเป็นร่าง เลขที่เดิม ลายเซ็นถูกล้าง และเหตุผลถูกจดไว้", async () => {
     const po = await createPurchaseOrder();

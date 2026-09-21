@@ -66,7 +66,7 @@
 - [x] **เฟส 8 — ย้อน PO ที่อนุมัติแล้ว (ข้อ 9).** ✅ **เสร็จ 2026-09-21** — route ใหม่ `revert-approval` เฉพาะ PO
   **ห้ามไปขยาย `handleWithdrawApproval`** (`documentApproval.ts:228` ใช้ร่วมกัน 6 โมดูล) ·
   บล็อกเมื่อมีใบรับสินค้าแล้ว ตอบ 400 พร้อม `receivingReportId` ให้หน้าจอลิงก์ไปได้
-- [ ] **เฟส 9 — ยกเลิกรายการใน PO (ข้อ 11).** `cancelled` + `cancelRemark` ต่อบรรทัด · ยอดเงินแก้ที่เดียว
+- [x] **เฟส 9 — ยกเลิกรายการใน PO (ข้อ 11).** ✅ **เสร็จ 2026-09-21** — `cancelled` + `cancelRemark` ต่อบรรทัด · ยอดเงินแก้ที่เดียว
   คือ `purchaseOrderSubtotal()` (`src/lib/purchaseOrder.ts:164-166`) แล้วกระจายเองทั้งระบบ ·
   **ต้องตามไปแก้ `receivingReportHandler.ts:174-186`** ไม่งั้นสโตร์ถูกสั่งให้รับของที่ยกเลิกไปแล้ว
 - [ ] **เฟส 10 — เอกสาร.** `MODULES/Purchasing.md` · `MODULES/Store.md` · `RBAC.md` · `DATABASE.md` ·

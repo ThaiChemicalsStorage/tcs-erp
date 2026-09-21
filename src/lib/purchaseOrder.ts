@@ -78,6 +78,19 @@ export interface PurchaseOrderLine {
    * ใน `sanitizeLines()` (กติกาเดียวกับ `storeDecision` ของใบขอซื้อ)
    */
   sourcePrLineId?: string;
+  /**
+   * ยกเลิกรายการนี้ (2026-09-21) — เจ้าของข้อ 11: *"ใบ PO มีช่องยกเลิก และหมายเหตุการยกเลิก
+   * รายการสินค้านั้นๆด้วย"*
+   *
+   * **ต่างจากการลบบรรทัด**: ลบ = บรรทัดที่ไม่เคยสั่ง (พิมพ์ผิด) · ยกเลิก = สั่งไปแล้วแต่ถอน
+   * บรรทัดที่ยกเลิก **ยังพิมพ์ออกมาบนใบ** (ขีดทับ) เพราะผู้ขายถือใบเดิมอยู่และต้องเห็นว่าอะไรถูกถอน
+   * แต่**ไม่ถูกคิดในยอดเงิน** และ**ไม่ถูกลอกไปใบรับสินค้า**
+   *
+   * `cancelRemark` เป็นฟิลด์บังคับเมื่อ `cancelled` เป็น true (เซิร์ฟเวอร์ตอบ 400 ถ้าไม่มี) —
+   * เจ้าของขอสองอย่างนี้มาคู่กัน การยกเลิกที่ไม่มีเหตุผลอธิบายไม่ได้ตอนผู้ขายโทรมาถาม
+   */
+  cancelled?: boolean;
+  cancelRemark?: string;
   remark: string;
 }
 
@@ -186,7 +199,7 @@ export interface PurchaseOrderSummary {
 }
 
 export function blankPurchaseOrderLine(id: string): PurchaseOrderLine {
-  return { id, productId: null, productCode: "", description: "", subDetails: [], unit: "", qty: null, unitPrice: null, discount: null, discountMode: "percent", neededByDate: "", departmentCode: "", costCode: "", remark: "" };
+  return { id, productId: null, productCode: "", description: "", subDetails: [], unit: "", qty: null, unitPrice: null, discount: null, discountMode: "percent", neededByDate: "", departmentCode: "", costCode: "", cancelled: false, cancelRemark: "", remark: "" };
 }
 
 /**
@@ -201,7 +214,15 @@ export function blankPurchaseOrderLine(id: string): PurchaseOrderLine {
  * `purchaseOrderTotals()` ของตัวเองด้านล่าง
  */
 export function purchaseOrderSubtotal(lines: PurchaseOrderLine[]): number {
-  return lines.reduce((sum, l) => sum + lineSubtotal(toAmountLine(l)), 0);
+  /**
+   * **บรรทัดที่ยกเลิกไม่ถูกคิดเงิน (2026-09-21)** — กรองที่นี่ที่เดียวแล้วมันกระจายไปทั้งระบบเอง
+   * เพราะทั้งหน้าแก้ไขและใบพิมพ์คิดยอดผ่าน `purchaseOrderTotals()` และส่วนลดท้ายใบกับ VAT
+   * ก็คิดจาก subtotal ตัวนี้
+   *
+   * ⚠️ **อย่าไปแตะ `purchaseOrderLineTotal()`** — ใบพิมพ์ยังต้องโชว์ยอดของบรรทัดที่ขีดทับ
+   * ให้ผู้ขายเทียบกับใบเดิมได้ ว่าที่หายไปคือยอดเท่าไร
+   */
+  return lines.filter((l) => !l.cancelled).reduce((sum, l) => sum + lineSubtotal(toAmountLine(l)), 0);
 }
 
 /** แปลงบรรทัดของใบสั่งซื้อให้เข้ารูปที่ quoteMath คิดได้ — ใบสั่งซื้อใช้ null ส่วนใบเสนอราคาใช้ 0 */
