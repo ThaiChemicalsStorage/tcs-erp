@@ -17,6 +17,7 @@ import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, notifyUser, PURCHASING_DEPARTMENT_NAMES, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf } from "./stockHandler.js";
 import { purchasedPrLineIds } from "./purchaseOrderHandler.js";
+import { orderedPrLineIdOf } from "../../src/lib/purchaseOrder.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
@@ -217,8 +218,8 @@ async function purchaseStateOf(
   const boughtByPr = new Map<string, Set<string>>();
   for (const po of pos) {
     const set = boughtByPr.get(po.purchaseRequestId) ?? new Set<string>();
-    // บรรทัดที่ยกเลิกไม่นับว่าซื้อแล้ว — กติกาเดียวกับ `purchasedPrLineIds()` ที่ด่านการสร้างใบใช้
-    for (const l of po.lines ?? []) if (l.sourcePrLineId && !l.cancelled) set.add(l.sourcePrLineId);
+    // นิยาม "ซื้อแล้ว" อยู่ที่ `orderedPrLineIdOf()` ที่เดียว — ด่านตอนสร้างใบสั่งซื้อใช้ตัวเดียวกัน
+    for (const l of po.lines ?? []) { const id = orderedPrLineIdOf(l); if (id) set.add(id); }
     boughtByPr.set(po.purchaseRequestId, set);
   }
   for (const doc of docs) {

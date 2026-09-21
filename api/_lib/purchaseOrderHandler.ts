@@ -17,6 +17,7 @@ import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./q
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import type { PurchaseOrderLine, PurchaseOrderSummary } from "../../src/lib/purchaseOrder.js";
+import { orderedPrLineIdOf } from "../../src/lib/purchaseOrder.js";
 
 /**
  * ใบสั่งซื้อ (Purchase Order) API — added 2026-08-28 with the Purchasing module. Mounted from
@@ -222,10 +223,7 @@ export async function purchasedPrLineIds(purchaseRequestId: string): Promise<Map
   for (const po of docs) {
     const label = po.documentNumber || po._id;
     for (const line of po.lines ?? []) {
-      // บรรทัดที่ถูกยกเลิกไม่นับว่าซื้อแล้ว (2026-09-21) — ของนั้นถูกถอนไปแล้ว ไม่ถูกคิดเงินและไม่ถูก
-      // ลอกไปใบรับสินค้า ถ้ายังนับอยู่ บรรทัดของใบขอซื้อจะค้างเป็น "ซื้อไม่ได้ตลอดกาล" ทั้งที่ยังไม่ได้ของ
-      if (line.cancelled) continue;
-      const source = line.sourcePrLineId ?? "";
+      const source = orderedPrLineIdOf(line);
       if (!source) continue;
       const list = result.get(source);
       if (list) { if (!list.includes(label)) list.push(label); } else { result.set(source, [label]); }

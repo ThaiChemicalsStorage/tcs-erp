@@ -229,6 +229,12 @@ Two consequences worth knowing before touching this:
 
 ### Cancelling a PO line frees the PR line again
 
+`orderedPrLineIdOf()` (`src/lib/purchaseOrder.ts`) is the **single definition** of "does this PO line
+count as having bought a PR line". Both readers use it — `purchasedPrLineIds()` (the gate when a PO is
+created) and `purchaseStateOf()` (the badge on the list page). They each held their own copy of the
+rule until 2026-09-21, and the copies really did drift: a review had to fix the same missing
+"skip cancelled lines" condition in both places at once.
+
 A line marked `cancelled` is excluded from `purchasedPrLineIds()` (and from the list's
 `purchaseState` badge). The goods were withdrawn: the line is not billed, is not copied to the
 receiving report, and must be orderable again — from another vendor if need be — without deleting the
