@@ -105,6 +105,23 @@ Then `certbot --nginx -d erp.example.co.th`. Either way, **`X-Forwarded-For` mus
 — `api/handlers/auth.ts`'s per-IP login rate limiting reads that header (Caddy sets it by
 default; nginx needs the line above).
 
+## ดูว่าไฟล์ที่ผู้ใช้อัปโหลดกินพื้นที่เท่าไหร่ (เพิ่ม 2026-09-21)
+
+ระบบเก็บเอกสาร 10 ปีและไฟล์ทุกไฟล์อยู่ใน MongoDB (ไม่มีไฟล์บนดิสก์เลย ดู `api/_lib/upload/storage.ts`)
+คำสั่งนี้ **อ่านอย่างเดียว** ปลอดภัยกับ production · รันที่โฟลเดอร์ที่มี `docker-compose.yml`:
+
+```bash
+docker compose exec -T mongodb sh -c 'mongosh --quiet \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+  --authenticationDatabase admin tcs_erp' < scripts/upload-usage.js
+```
+
+รหัสผ่านอ่านจาก environment ของคอนเทนเนอร์เอง จึงไม่ต้องพิมพ์หรือเปิดเผยใน shell history
+ถ้าโปรเจกต์ไม่ได้อยู่บนเซิร์ฟเวอร์ ให้วางเนื้อ `scripts/upload-usage.js` ต่อท้าย `<<'JS'` แทน `< scripts/...`
+
+อยากรู้ว่าบีบแล้วจะประหยัดจริงเท่าไหร่ ให้รัน `node scripts/compress-existing-uploads.mjs`
+ซึ่งเป็น **dry-run ไม่แก้อะไร** · โหมด `--apply` ต้องได้รับคำสั่งจากเจ้าของและสำรองฐานข้อมูลก่อน
+
 ## Backups
 
 - **Atlas**: automatic backups are a paid-tier feature; on M0 free tier, schedule your own
