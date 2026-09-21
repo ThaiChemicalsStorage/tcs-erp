@@ -146,7 +146,9 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
               {row.map(({ label, name, date, userId }) => (
                 <td key={label} className="w-1/2 py-2 text-center align-top">
                   <PrintSignatureLine userId={userId} height={32} />
-                  <div className="border-b border-black mb-1" />
+                  {/* เส้นลงนามสั้นกว่าช่อง มีช่องว่างคั่นชัดเจน — เดิมเต็มช่องและช่องไม่มี padding
+                      แนวนอนเลย สองช่องจึงต่อกันเป็นเส้นเดียวลากยาวทั้งหน้า (เจ้าของแจ้ง 2026-09-21) */}
+                  <div className="border-b border-black mb-1 w-3/4 mx-auto" />
                   <p>{label}: {printText(name)}</p>
                   <p>วันที่: {printDateOrBlank(date) || "....... / ....... / ......."}</p>
                 </td>

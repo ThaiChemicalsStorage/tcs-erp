@@ -89,7 +89,10 @@ export function PurchaseRequestPrintDocument({
     <td style={{ width: "33.33%", padding: "0 10px", verticalAlign: "bottom", textAlign: "center" }}>
       {userId ? <PrintSignatureLine userId={userId} height={26} /> : null}
       <p style={{ margin: 0, minHeight: "30px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>{name || " "}</p>
-      <div style={{ borderBottom: LINE }} />
+      {/* เส้นลงนามต้องสั้นกว่าช่องอย่างชัดเจน (เจ้าของแจ้ง 2026-09-21: "มันเป็นขีดเส้นยาวเลย มันต้อง
+          แยกกันสิ") — เดิมเส้นกว้างเต็มช่อง เหลือช่องว่างระหว่างช่องแค่ 20px (~3.5mm บนกระดาษ A4)
+          สามช่องจึงพิมพ์ออกมาดูเหมือนเส้นเดียวลากยาวตลอดหน้า */}
+      <div style={{ borderBottom: LINE, width: "76%", margin: "0 auto" }} />
       <p style={{ margin: "2px 0 0" }}>{label}</p>
       <p style={{ margin: "6px 0 0" }}>____/____/______</p>
     </td>
