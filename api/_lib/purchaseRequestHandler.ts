@@ -101,7 +101,6 @@ async function sanitizeLines(raw: unknown, existing: PurchaseRequestLine[] = [])
       neededByDate: validateIsoDateOrEmpty(r.neededByDate, `วันต้องการลำดับที่ ${idx + 1}`),
       departmentCode: sanitizeShortText(r.departmentCode, `แผนกลำดับที่ ${idx + 1}`),
       costCode: sanitizeShortText(r.costCode, `รหัสต้นทุนลำดับที่ ${idx + 1}`),
-      estimatedCost: sanitizeNullableNumber(r.estimatedCost, `ราคาประเมินลำดับที่ ${idx + 1}`),
       // ผลการเช็คของของสโตร์ไม่รับจาก PATCH (2026-09-09) — เป็นของ route /store-review เท่านั้น
       // ค่าเดิมของบรรทัดเดียวกัน (จับคู่ด้วย id) ถูกคงไว้ กฎเดียวกับยอดจ่าย/คืนของของใบเบิก
       storeDecision: existingById.get(typeof r.id === "string" ? r.id : "")?.storeDecision ?? "",

@@ -48,7 +48,7 @@ type PurchaseRequestDoc = {
   storeRemark?: string;
   storeIssues?: { id: string; seq: number; lines: { lineId: string; qty: number }[] }[];
   purchasingEdits?: { at: string; byName: string; note: string }[];
-  lines: { id: string; productId: string; productCode: string; description: string; unit: string; qtyRequested: number | null; estimatedCost: number | null; subDetails: string[]; storeDecision?: string }[];
+  lines: { id: string; productId: string; productCode: string; description: string; unit: string; qtyRequested: number | null; subDetails: string[]; storeDecision?: string }[];
 };
 type PurchaseOrderDoc = {
   id: string; documentNumber: string; status: string; vendorName: string; purchaseRequestId: string;
@@ -73,8 +73,8 @@ async function approvedPurchaseRequest(): Promise<PurchaseRequestDoc> {
     method: "PATCH",
     body: JSON.stringify({
       lines: [
-        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, estimatedCost: 15000, neededByDate: "2026-09-15", departmentCode: "G143", costCode: "5150-13", remark: "" },
-        { id: "l2", productId: null, productCode: "", description: "ท่อ PVC", subDetails: [], unit: "เส้น", qtyRequested: 10, estimatedCost: 250, remark: "" },
+        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, neededByDate: "2026-09-15", departmentCode: "G143", costCode: "5150-13", remark: "" },
+        { id: "l2", productId: null, productCode: "", description: "ท่อ PVC", subDetails: [], unit: "เส้น", qtyRequested: 10, remark: "" },
       ],
     }),
   });
@@ -103,8 +103,8 @@ async function approvedAwaitingStore(): Promise<PurchaseRequestDoc> {
     method: "PATCH",
     body: JSON.stringify({
       lines: [
-        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, estimatedCost: 15000, remark: "" },
-        { id: "l2", productId: null, productCode: "", description: "ท่อ PVC", subDetails: [], unit: "เส้น", qtyRequested: 10, estimatedCost: 250, remark: "" },
+        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, remark: "" },
+        { id: "l2", productId: null, productCode: "", description: "ท่อ PVC", subDetails: [], unit: "เส้น", qtyRequested: 10, remark: "" },
       ],
     }),
   });
@@ -202,7 +202,8 @@ describe("ใบสั่งซื้อ (PO)", () => {
     expect(po.lines).toHaveLength(2);
     expect(po.lines[0].description).toBe("ปั๊มเคมี");
     expect(po.lines[0].qty).toBe(2);
-    expect(po.lines[0].unitPrice).toBe(15000);
+    // ราคาเริ่มว่างเสมอตั้งแต่ 2026-09-21 — ใบขอซื้อไม่มีราคาประเมินให้ลอกมาแล้ว จัดซื้อกรอกเอง
+    expect(po.lines[0].unitPrice).toBeNull();
     // บรรทัดของ PO เป็นคนละ id กับของใบขอซื้อ — ไม่ใช่การอ้างอิงเดิม
     expect(po.lines.map((l) => l.id)).not.toContain("l1");
 

@@ -645,8 +645,7 @@ export function PurchaseRequestDocument({
                     {[
                       t("purchaseRequestDoc.col.productCode"), t("purchaseRequestDoc.col.description"), t("purchaseRequestDoc.col.unit"),
                       t("purchaseRequestDoc.col.warehouseRemaining"), t("purchaseRequestDoc.col.qtyRequested"), t("purchaseRequestDoc.col.neededByDate"),
-                      t("purchaseRequestDoc.col.department"), t("purchaseRequestDoc.col.costCode"),
-                      t("purchaseRequestDoc.col.estimatedCost"), "",
+                      t("purchaseRequestDoc.col.department"), t("purchaseRequestDoc.col.costCode"), "",
                     ].map((h) => (
                       <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -712,10 +711,6 @@ export function PurchaseRequestDocument({
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input type="number" disabled={!editable} value={line.estimatedCost ?? ""} onChange={(e) => updateLine(line.id, { estimatedCost: e.target.value === "" ? null : Number(e.target.value) })}
-                            className="w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                        </td>
-                        <td className="px-2 py-1.5">
                           {editable && (
                             <button onClick={() => removeLine(line.id)} title={t("purchaseRequestDoc.removeLine")} className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
                               <X size={13} />
@@ -728,7 +723,7 @@ export function PurchaseRequestDocument({
                       {((line.subDetails ?? []).length > 0 || editable) && (
                         <tr className="border-b border-border/50">
                           <td />
-                          <td colSpan={8} className="px-3 pb-2 space-y-1">
+                          <td colSpan={7} className="px-3 pb-2 space-y-1">
                             {(line.subDetails ?? []).map((sd, i) => (
                               <div key={i} className="flex items-center gap-2 pl-4">
                                 <CornerDownRight size={12} className="text-muted-foreground flex-shrink-0" />

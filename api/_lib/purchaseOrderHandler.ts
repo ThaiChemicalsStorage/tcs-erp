@@ -217,7 +217,9 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       subDetails: l.subDetails ?? [],
       unit: l.unit ?? "",
       qty: l.qtyRequested ?? null,
-      unitPrice: l.estimatedCost ?? null,
+      // **ราคาเริ่มว่างเสมอ (2026-09-21)** — เดิมลอก `estimatedCost` ของใบขอซื้อมาเป็นราคาต่อหน่วย
+      // เจ้าของสั่งให้ถอดราคาประเมินออกจากใบขอซื้อทั้งหมด ฝ่ายจัดซื้อจึงกรอกราคาจริงที่ได้จากผู้ขายเอง
+      unitPrice: null,
       discount: null,
       discountMode: "percent" as const,
       // เจ้าของขอไว้ 2026-08-28: "ใบสั่งซื้อให้มีรายละเอียดด้วยที่ดึงมาจากใบขอซื้อ" — เดิมสามช่องนี้

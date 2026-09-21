@@ -45,9 +45,18 @@ export interface PurchaseRequestLine {
    * บรรทัดว่างถูกตัดทิ้งฝั่งเซิร์ฟเวอร์ เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น [] เสมอ
    */
   subDetails: string[];
-  /** "tied to a job code" per the original request — cost lives per-line here, not on the header,
-   * since a PR is naturally a list of individually-priced items. */
-  estimatedCost: number | null;
+  /**
+   * ⚠️ **`estimatedCost` (ราคาประเมิน) ถูกถอดออกเมื่อ 2026-09-21** ตามคำสั่งเจ้าของ *"ราคาประเมิน
+   * ในใบ PR เอาออก"* — ราคาเป็นเรื่องของฝ่ายจัดซื้อ คนขอซื้อไม่ใช่คนตั้งราคา และใบจริง FM-PU-05
+   * ก็เว้นคอลัมน์นั้นไว้ให้จัดซื้อเขียนเอง (ดู `PurchaseRequestPrintDocument.tsx`)
+   *
+   * ใบสั่งซื้อเคยรับค่านี้ไปเป็น `unitPrice` ตอนสร้าง ตอนนี้เริ่มที่ราคาว่างเสมอ
+   * (`purchaseOrderHandler.ts` `handleCreate()`)
+   *
+   * **ค่าเก่าที่บันทึกไว้แล้วยังอยู่ในฐานข้อมูล ไม่ได้ลบ ไม่ได้ทำ migration** — แค่ไม่มีใครอ่านอีก
+   * ใบไหนถูกบันทึกทับหลังวันนั้น `sanitizeLines()` จะประกอบบรรทัดใหม่โดยไม่มีฟิลด์นี้ ค่าจึงหลุดไปเอง
+   * ทีละใบ ตั้งใจให้เป็นแบบนั้น ไม่ได้ไล่ลบย้อนหลัง (ดู docs/DATABASE.md)
+   */
   /**
    * ผลการเช็คของของสโตร์ต่อบรรทัด (2026-09-09) — `"stock"` = มีของในคลัง สโตร์จ่ายให้เลย
    * `"purchase"` = ไม่มี ส่งต่อฝ่ายจัดซื้อ · `""`/ไม่มีค่า = ยังไม่ได้เช็ค
@@ -379,9 +388,9 @@ export async function cancelPurchaseRequestIssue(id: string, batchId: string): P
 export function blankPurchaseRequestLine(product?: { id: string; code: string; name: string; unit: string }): PurchaseRequestLine {
   const newId = `prline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   if (product) {
-    return { id: newId, subDetails: [], productId: product.id, productCode: product.code, description: product.name, unit: product.unit, warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
+    return { id: newId, subDetails: [], productId: product.id, productCode: product.code, description: product.name, unit: product.unit, warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "" };
   }
-  return { id: newId, subDetails: [], productId: "", productCode: "", description: "", unit: "", warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
+  return { id: newId, subDetails: [], productId: "", productCode: "", description: "", unit: "", warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "" };
 }
 
 // ── ขั้นตอนอนุมัติ (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 ──────────────────────────────

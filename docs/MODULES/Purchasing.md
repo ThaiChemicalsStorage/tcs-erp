@@ -145,7 +145,8 @@ pixel-calibrated" reproduction. What changed:
   `headerRemark` (the หมายเหตุ box under the table, distinct from the `หมายเหตุ` header label, which
   the paper uses for the job code).
 - The 7th column is **`ให้ซื้อ`, left blank for Purchasing to write in** — it is not the requester's
-  estimate. `estimatedCost` is still captured and stored, it is simply no longer printed. **If
+  estimate. **As of 2026-09-21 there is no requester-side price at all**: `estimatedCost` was removed
+  from the model, the editor column, and the PR→PO copy (see "ราคาประเมิน removed" below). **If
   Purchasing turns out to rely on a printed price, add an 8th column; do not overwrite `ให้ซื้อ`.**
 - `จำนวนขอซื้อ` prints quantity and unit in one cell (`1.00 ครั้ง`), as the paper does.
 - Signature names print **above** the rule with the label below it, and dates as `____/____/______`.
@@ -180,6 +181,19 @@ only `margin: 0` removes the margin box. The frame restores the 12mm as `padding
 left/right edges and as an empty 12mm row inside `<thead>`/`<tfoot>` of a wrapper table for top/bottom —
 browsers repeat those two on every page, which a single box's `padding` does not. `PurchaseRequestPrintDocument`
 keeps its own `paddingRight: EDGE_GUARD` on the outer div; it stacks on top of the frame's 12mm.
+
+## ราคาประเมิน removed from the PR (2026-09-21)
+
+Owner's instruction, item 6 of the 2026-09-18 purchasing batch: *"ราคาประเมินในใบ PR เอาออก"*.
+`PurchaseRequestLine.estimatedCost` is gone from the type, from `sanitizeLines()` on the server, from
+the editor table (one column narrower — the sub-detail row's `colSpan` went 8 → 7 with it), and from
+both translation tables plus the tour copy. It was already absent from the printed form.
+
+The one consumer outside the module was `purchaseOrderHandler.handleCreate()`, which seeded each new
+PO line's `unitPrice` from it. **A PO now starts with an empty price** and Purchasing types the real
+quoted price in. `tests/api/purchasing.test.ts` asserts `unitPrice === null` on an inherited line.
+
+Old values stay on disk untouched — see [DATABASE.md](../DATABASE.md) for why there is no migration.
 
 ## ใบขอซื้อ: four fields removed, and what that broke (2026-08-31)
 

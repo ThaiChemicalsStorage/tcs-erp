@@ -1066,8 +1066,16 @@ the module isn't functional yet, per the standing "hold off until functional" in
   (`public/reference/-ED6908027.pdf`) confirmed this is requested BY the Project department (header
   explicitly labeled "(ฝ่ายโครงการ)") and carries the job code in its remark field — modeled here as
   a real `jobCode` field. Lines optionally reference a `Product` (`productId`, unlike Material
-  Requisition's line this is optional — a PR line can be a one-off item with no catalog entry) plus
-  an `estimatedCost`, since a PR is a list of individually-priced items tied to a job code.
+  Requisition's line this is optional — a PR line can be a one-off item with no catalog entry).
+
+  **`lines[].estimatedCost` (ราคาประเมิน) was dropped from the model on 2026-09-21** on the owner's
+  instruction (*"ราคาประเมินในใบ PR เอาออก"*) — the requester does not set prices, and the real
+  FM-PU-05 leaves that column blank for Purchasing to write in. The PO handler no longer copies it
+  into `unitPrice`; a new PO starts with an empty price. **The values already written to disk are
+  left exactly where they are — no migration, no backfill, nothing deleted retroactively.** They are
+  simply never read again. A PR that is PATCHed after that date loses its value on its own, because
+  `sanitizeLines()` rebuilds each line field by field and no longer emits one; a PR that is never
+  edited again keeps it forever. That drift is intended, not an oversight.
 
 **Numbering** (implemented Stage 3): `MR-{buddhistYear}-{seq}` / `JO-{buddhistYear}-{seq}` /
 `PR-{buddhistYear}-{seq}`, an atomic per-Buddhist-year counter (`nextMaterialRequisitionId()`/
