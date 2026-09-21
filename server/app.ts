@@ -71,11 +71,20 @@ const API_ROUTES: Record<string, ApiHandler> = {
   files: filesHandler,
 };
 
-// Sized for the largest JSON body the app legitimately sends: a Service photo is ≤4 MB raw
-// (MAX_PHOTO_BYTES in serviceReportHandler.ts), ~5.5 MB as a base64 data URL — 25 MB leaves
-// headroom for multi-photo saves without approaching MongoDB's 16 MB per-document ceiling
-// (per-field caps are enforced by the handlers themselves).
-const JSON_BODY_LIMIT = "25mb";
+/**
+ * รองรับ body ที่ใหญ่ที่สุดที่แอปส่งจริง คือ**ไฟล์แนบที่แปลงเป็น base64**
+ *
+ * ⚠️ **base64 พองขึ้น 4/3 เท่า** — เพดานตัวนี้ต้องมากกว่า `UPLOAD_MAX_IMAGE_MB` × 1.34 เสมอ
+ * ไม่งั้นไฟล์ขนาดที่ระบบบอกว่ารับได้ จะถูกปฏิเสธที่ชั้น Express **ก่อนถึงโค้ดที่มีข้อความภาษาไทย**
+ * ผู้ใช้จะเห็นแค่ 413 ดิบ ๆ ที่ไม่บอกอะไรเลย
+ *
+ * 2026-09-21: เพดานรูปถูกขยายเป็น 20 MB (จาก 2 MB) → base64 = 26.7 MB ซึ่ง**เกิน 25 MB เดิม**
+ * ไฟล์ 19–20 MB จึงอัปโหลดไม่ได้ทั้งที่หน้าจอบอกว่าได้ · ขยับเป็น 30 MB ให้ตรงกับ
+ * `client_max_body_size 30m` ของ nginx ซึ่งเป็นเพดานถัดไปที่อยู่หน้าสุด
+ *
+ * ถ้าจะขยับ `UPLOAD_MAX_IMAGE_MB` ขึ้นอีก ต้องขยับ**ทั้งสองที่**: ตัวนี้ และ nginx.conf
+ */
+const JSON_BODY_LIMIT = "30mb";
 
 export function createApp(): Express {
   const app = express();

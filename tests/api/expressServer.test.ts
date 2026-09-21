@@ -85,11 +85,21 @@ describe("standalone Express server", () => {
     expect(r.status).toBe(200);
   });
 
+  /**
+   * ขนาดที่ใช้ทดสอบ**อ่านจาก `JSON_BODY_LIMIT` จริง** ไม่ได้ hardcode — เดิมตรึงไว้ที่ 26MB
+   * พอเพดานขยับเป็น 30MB เมื่อ 2026-09-21 (รองรับไฟล์แนบ 20MB ซึ่งเป็น base64 แล้ว 26.7MB)
+   * body 26MB ก็ผ่านเข้าไปถึง handler แล้วได้ 401 แทน เทสต์จึงตกทั้งที่พฤติกรรมไม่ได้ผิด
+   */
   it("an oversized JSON body is rejected with a JSON 413, not an HTML error page", async () => {
+    const { readFileSync } = await import("node:fs");
+    const appSrc = readFileSync(new URL("../../server/app.ts", import.meta.url), "utf8");
+    const limitMb = Number(/const JSON_BODY_LIMIT = "(\d+)mb"/.exec(appSrc)?.[1]);
+    expect(limitMb, "อ่านค่า JSON_BODY_LIMIT จาก server/app.ts ไม่ได้").toBeGreaterThan(0);
+
     const r = await fetch(`${baseUrl}/api/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ identifier: "admin", password: "x".repeat(26 * 1024 * 1024) }),
+      body: JSON.stringify({ identifier: "admin", password: "x".repeat((limitMb + 1) * 1024 * 1024) }),
     });
     expect(r.status).toBe(413);
     expect(r.headers.get("content-type")).toContain("application/json");

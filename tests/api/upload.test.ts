@@ -230,3 +230,42 @@ describe("การเก็บและการลบ", () => {
     expect(row?.uploadedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });
+
+/**
+ * เพดาน body ของ Express ต้องรองรับไฟล์ขนาดที่ระบบบอกว่ารับได้ **หลังแปลงเป็น base64**
+ *
+ * บั๊คจริงที่เจอ 2026-09-21: ขยายเพดานรูปเป็น 20MB แต่ `JSON_BODY_LIMIT` ยังเป็น 25mb
+ * → base64 ของไฟล์ 20MB คือ 26.7MB ซึ่งถูก Express ปฏิเสธเป็น 413 ดิบ ๆ **ก่อนถึงโค้ด
+ * ที่มีข้อความภาษาไทย** ผู้ใช้จะเห็นแค่ error ที่ไม่บอกอะไร ทั้งที่หน้าจอบอกว่าไฟล์ 20MB อัปโหลดได้
+ *
+ * เทสต์นี้อ่านตัวเลขจากไฟล์จริงทั้งสองฝั่ง ไม่ได้ hardcode — ขยับค่าไหนแล้วไม่ขยับอีกค่า จะตกทันที
+ */
+describe("เพดานขนาด body ต้องสอดคล้องกับเพดานไฟล์", () => {
+  it("Express รับ base64 ของไฟล์ที่ใหญ่ที่สุดที่ whitelist อนุญาตได้", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { uploadConfig } = await import("../../api/_lib/upload/uploadConfig.js");
+
+    const appSrc = readFileSync(new URL("../../server/app.ts", import.meta.url), "utf8");
+    const limitMb = Number(/const JSON_BODY_LIMIT = "(\d+)mb"/.exec(appSrc)?.[1]);
+    expect(limitMb, "อ่านค่า JSON_BODY_LIMIT จาก server/app.ts ไม่ได้").toBeGreaterThan(0);
+
+    const rawCap = uploadConfig().maxImageBytes;
+    const asBase64 = Math.ceil(rawCap / 3) * 4;
+    expect(
+      limitMb * 1024 * 1024,
+      `ไฟล์ ${(rawCap / 1048576).toFixed(0)}MB กลายเป็น base64 ${(asBase64 / 1048576).toFixed(1)}MB ` +
+      `ซึ่งเกินเพดาน ${limitMb}MB ของ Express — ผู้ใช้จะโดน 413 ที่ไม่มีข้อความภาษาไทย`,
+    ).toBeGreaterThanOrEqual(asBase64);
+  });
+
+  it("nginx ต้องรับได้ไม่น้อยกว่า Express ไม่งั้นบล็อกก่อนถึงแอป", async () => {
+    const { readFileSync } = await import("node:fs");
+    const appSrc = readFileSync(new URL("../../server/app.ts", import.meta.url), "utf8");
+    const nginxSrc = readFileSync(new URL("../../nginx/nginx.conf", import.meta.url), "utf8");
+
+    const expressMb = Number(/const JSON_BODY_LIMIT = "(\d+)mb"/.exec(appSrc)?.[1]);
+    const nginxMb = Number(/client_max_body_size\s+(\d+)m/.exec(nginxSrc)?.[1]);
+    expect(nginxMb, "อ่าน client_max_body_size จาก nginx.conf ไม่ได้").toBeGreaterThan(0);
+    expect(nginxMb, "nginx อยู่หน้าสุด ถ้าต่ำกว่า Express มันจะตัดทิ้งก่อน").toBeGreaterThanOrEqual(expressMb);
+  });
+});
