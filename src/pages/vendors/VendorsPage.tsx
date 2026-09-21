@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from "react";
-import { Plus, Search, X, Store, Pencil, Archive, RotateCcw } from "lucide-react";
-import { type Vendor, type VendorDraft, emptyVendorDraft, createVendor, updateVendor, setVendorArchived } from "../../lib/vendors";
+import { Plus, Search, X, Store, Pencil, Archive, RotateCcw, Send, Check, Ban, Loader2 } from "lucide-react";
+import { type Vendor, type VendorDraft, emptyVendorDraft, createVendor, updateVendor, setVendorArchived, vendorApprovalStatusOf, submitVendorApproval, approveVendor, rejectVendor } from "../../lib/vendors";
 import { EmptyState } from "../../components/EmptyState";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -30,12 +30,15 @@ export function VendorsPage({
   canCreate,
   canEdit,
   canArchive,
+  canApprove,
 }: {
   vendors: Vendor[];
   onVendorsChange: (next: Vendor[]) => void;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
+  /** `vendor:approve` — สิทธิ์ของ**ฝ่ายบัญชี** (2026-09-21) แยกจาก `vendor:edit` ของจัดซื้อ */
+  canApprove: boolean;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -45,6 +48,10 @@ export function VendorsPage({
   const [formTarget, setFormTarget] = useState<Vendor | "new" | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Vendor | null>(null);
   const [archiving, setArchiving] = useState(false);
+  /** ขั้นอนุมัติของบัญชี (2026-09-21) — ปุ่มบนแถว + กล่องกรอกเหตุผลตอนไม่อนุมัติ */
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Vendor | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -76,6 +83,27 @@ export function VendorsPage({
     }
   };
 
+  /**
+   * เดินขั้นอนุมัติของบัญชี — ทั้งสามปุ่มคืนผู้ขายที่อัปเดตแล้วมาเหมือนกัน จึงเขียนกลับที่เดียว
+   *
+   * ปุ่ม "ส่งให้บัญชีอนุมัติ" เป็นของ**จัดซื้อ** (ใช้สิทธิ์ `vendor:edit` ที่มีอยู่แล้ว) ส่วน "อนุมัติ"
+   * กับ "ไม่อนุมัติ" เป็นของ**บัญชี** (`vendor:approve`) — สองกลุ่มนี้ไม่ใช่คนเดียวกันโดยตั้งใจ
+   */
+  const runApproval = async (v: Vendor, stage: "submit" | "approve" | "reject") => {
+    setApprovalBusyId(v.id);
+    try {
+      const next = stage === "submit" ? await submitVendorApproval(v.id)
+        : stage === "approve" ? await approveVendor(v.id)
+        : await rejectVendor(v.id, rejectComment.trim());
+      onVendorsChange(vendors.map((x) => (x.id === next.id ? next : x)));
+      setRejectTarget(null);
+      setRejectComment("");
+      toast.show(t(stage === "submit" ? "vendors.approval.submittedToast"
+        : stage === "approve" ? "vendors.approval.approvedToast" : "vendors.approval.rejectedToast"));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("common.errorGeneric"));
+    } finally { setApprovalBusyId(null); }
+  };
   const handleArchiveToggle = async () => {
     if (!archiveTarget) return;
     setArchiving(true);
@@ -165,6 +193,7 @@ export function VendorsPage({
                   <th className={th}>{t("vendors.col.phone")}</th>
                   <th className={th}>{t("vendors.col.taxId")}</th>
                   <th className={th}>{t("vendors.col.status")}</th>
+                  <th className={th}>{t("vendors.approval.col")}</th>
                   <th className={th} />
                 </tr>
               </thead>
@@ -181,6 +210,46 @@ export function VendorsPage({
                         status={v.isDeleted ? "archived" : v.isActive ? "active" : "inactive"}
                         label={t(v.isDeleted ? "vendors.status.archived" : v.isActive ? "vendors.status.active" : "vendors.status.inactive")}
                       />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {/* ขั้นอนุมัติของบัญชี (2026-09-21) — ป้าย + ปุ่มของขั้นถัดไปในช่องเดียว
+                          ผู้ขายที่ถูกเก็บถาวรไม่ต้องเดินขั้นนี้ ไม่มีใครเอาไปใช้บนใบสั่งซื้อได้อยู่แล้ว */}
+                      {v.isDeleted ? <span className="text-xs text-muted-foreground">—</span> : (() => {
+                        const stage = vendorApprovalStatusOf(v);
+                        const busy = approvalBusyId === v.id;
+                        return (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <StatusBadge
+                              status={stage === "approved" ? "active" : stage === "rejected" ? "archived" : "inactive"}
+                              label={t(stage === "approved" ? "vendors.approval.approved"
+                                : stage === "pendingApproval" ? "vendors.approval.pending"
+                                : stage === "rejected" ? "vendors.approval.rejected" : "vendors.approval.draft")}
+                            />
+                            {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+                            {!busy && canEdit && (stage === "draft" || stage === "rejected") && (
+                              <button
+                                onClick={() => void runApproval(v, "submit")}
+                                className="flex items-center gap-1 text-xs text-[#a7841a] hover:underline"
+                              >
+                                <Send size={11} /> {t("vendors.approval.submit")}
+                              </button>
+                            )}
+                            {!busy && canApprove && stage === "pendingApproval" && (
+                              <>
+                                <button onClick={() => void runApproval(v, "approve")} className="flex items-center gap-1 text-xs text-[#1c7a4e] hover:underline">
+                                  <Check size={11} /> {t("vendors.approval.approve")}
+                                </button>
+                                <button onClick={() => { setRejectTarget(v); setRejectComment(""); }} className="flex items-center gap-1 text-xs text-[#e05252] hover:underline">
+                                  <Ban size={11} /> {t("vendors.approval.reject")}
+                                </button>
+                              </>
+                            )}
+                            {stage === "rejected" && (v.rejectionComment ?? "").trim() && (
+                              <span className="text-xs text-[#e05252] w-full">{v.rejectionComment}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
@@ -227,6 +296,36 @@ export function VendorsPage({
         />
       )}
 
+      {/* กล่องเหตุผลตอนไม่อนุมัติ — เซิร์ฟเวอร์บังคับว่าต้องมีเหตุผลเสมอ ปุ่มจึงปิดไว้จนกว่าจะพิมพ์ */}
+      {rejectTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setRejectTarget(null)} />
+          <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-foreground">{t("vendors.approval.rejectTitle")}</h2>
+            <p className="text-xs text-muted-foreground">{rejectTarget.name}</p>
+            <textarea
+              autoFocus
+              value={rejectComment}
+              onChange={(e) => setRejectComment(e.target.value)}
+              placeholder={t("vendors.approval.rejectPlaceholder")}
+              rows={3}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setRejectTarget(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() => void runApproval(rejectTarget, "reject")}
+                disabled={!rejectComment.trim() || approvalBusyId === rejectTarget.id}
+                className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#e05252] text-white hover:bg-[#c94545] transition-colors disabled:opacity-50"
+              >
+                {t("vendors.approval.reject")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ConfirmDialog
         open={archiveTarget !== null}
         title={t(archiveTarget?.isDeleted ? "vendors.confirmRestore.title" : "vendors.confirmArchive.title")}

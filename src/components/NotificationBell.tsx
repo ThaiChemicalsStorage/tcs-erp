@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, BellRing, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon, Mail, Wrench, PackagePlus, Warehouse, ShoppingCart } from "lucide-react";
+import { Bell, BellRing, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon, Mail, Wrench, PackagePlus, Warehouse, ShoppingCart, Store } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
 import { useI18n, type TranslationKey } from "../lib/i18n";
 
@@ -36,6 +36,9 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   purchase_request_approved: <ShoppingCart size={14} />,
   purchase_request_edited: <ShoppingCart size={14} />,
   purchase_request_purchasing_approved: <ShoppingCart size={14} />,
+  vendor_submitted: <Store size={14} />,
+  vendor_approved: <Store size={14} />,
+  vendor_rejected: <Store size={14} />,
   product_request_submitted: <PackagePlus size={14} />,
   product_request_approved: <CheckCircle2 size={14} />,
   product_request_rejected: <XCircle size={14} />,

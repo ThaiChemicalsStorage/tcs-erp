@@ -274,7 +274,22 @@ describe("applyRbacMigrations (vendor register + the purchasing/cost-control bac
   it("gives Administrator every vendor permission a fresh install would have", async () => {
     await applyRbacMigrations();
     const granted = (await permissionsOf("administrator")).filter((p) => p.startsWith("vendor:")).sort();
-    expect(granted).toEqual(["vendor:archive", "vendor:create", "vendor:edit", "vendor:view"]);
+    // `vendor:approve` มาจากรายการ `vendor-approval-2026-09-21` คนละรายการกับชุดทะเบียนผู้ขายเดิม
+    expect(granted).toEqual(["vendor:approve", "vendor:archive", "vendor:create", "vendor:edit", "vendor:view"]);
+  });
+
+  /**
+   * บัญชีได้ `vendor:view` + `vendor:approve` (2026-09-21) — **ต้องได้ `vendor:view` ด้วย**
+   * ไม่งั้นยิง `GET /api/vendors` ได้ 403 เพราะด่านของ `handleList` ผ่านได้สามทางเท่านั้น
+   * และบัญชีไม่มีสักตัว · แจกให้บัญชีเท่านั้น บทบาทอื่นต้องไม่ได้ตามไปด้วย
+   */
+  it("gives Accounting the two vendor permissions it needs to approve, and nothing more", async () => {
+    await applyRbacMigrations();
+    expect((await permissionsOf("accounting_user")).filter((p) => p.startsWith("vendor:")).sort())
+      .toEqual(["vendor:approve", "vendor:view"]);
+    for (const key of ["sales_user", "viewer", "approver_1"]) {
+      expect((await permissionsOf(key)).filter((p) => p.startsWith("vendor:")), key).toEqual([]);
+    }
   });
 
   it("restores the purchaseOrder and costControl permissions that were missing on the real database", async () => {
@@ -295,9 +310,12 @@ describe("applyRbacMigrations (vendor register + the purchasing/cost-control bac
 
   it("does not widen any other role — only Administrator is granted", async () => {
     await applyRbacMigrations();
-    for (const key of ["sales_user", "viewer", "approver_1", "accounting_user"]) {
+    for (const key of ["sales_user", "viewer", "approver_1"]) {
       expect((await permissionsOf(key)).filter((p) => PURCHASING_PERMISSION.test(p)), key).toEqual([]);
     }
+    // บัญชีได้เฉพาะสองตัวของการอนุมัติผู้ขาย (รายการ vendor-approval-2026-09-21) ไม่ใช่ชุดทะเบียนทั้งชุด
+    expect((await permissionsOf("accounting_user")).filter((p) => PURCHASING_PERMISSION.test(p)).sort())
+      .toEqual(["vendor:approve", "vendor:view"]);
   });
 
   it("records the migration so a second run is a complete no-op", async () => {

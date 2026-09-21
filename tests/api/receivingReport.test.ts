@@ -67,12 +67,22 @@ beforeAll(async () => {
     archived: false, stockQty: 0, createdAt: "", updatedAt: "", createdBy: "", updatedBy: "",
   })).insertedId.toString();
 
+  /**
+   * ผู้ขายต้องอยู่ในทะเบียนและผ่านบัญชีแล้ว ใบสั่งซื้อจึงจะอนุมัติได้ (2026-09-21) — ด่านอยู่ที่
+   * `beforeApprove` ของใบสั่งซื้อ ดู api/_lib/purchaseOrderHandler.ts
+   */
+  const vendorRes = await api("POST", "/api/vendors", { name: "บริษัท เหล็กดี จำกัด", taxId: "0105500000001" });
+  expect(vendorRes.status, JSON.stringify(vendorRes.body)).toBe(201);
+  const vendorId = vendorRes.body.vendor.id;
+  expect((await api("POST", `/api/vendors/${vendorId}/submit-approval`)).status).toBe(200);
+  expect((await api("POST", `/api/vendors/${vendorId}/approve`)).status).toBe(200);
+
   // ใบสั่งซื้อ: 10 แผ่น ราคา 100 + 1 บรรทัดพิมพ์เอง (ไม่มีรหัสสินค้า) 5 หน่วย ราคา 20 · VAT 7%
   const created = await api("POST", "/api/purchase-orders", {});
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   purchaseOrderId = created.body.purchaseOrder.id;
   const patched = await api("PATCH", `/api/purchase-orders/${purchaseOrderId}`, {
-    vendorName: "บริษัท เหล็กดี จำกัด", vendorTaxId: "0105500000001", vatRate: 7,
+    vendorId, vendorName: "บริษัท เหล็กดี จำกัด", vendorTaxId: "0105500000001", vatRate: 7,
     lines: [
       { productId, qty: 10, unitPrice: 100 },
       { productCode: "MISC", description: "ค่าขนส่ง", unit: "เที่ยว", qty: 5, unitPrice: 20 },

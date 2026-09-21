@@ -7,7 +7,9 @@ import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   purchaseOrdersCollection, purchaseRequestsCollection, productsCollection, countersCollection,
   auditLogCollection, toObjectId, withStringId, type PurchaseOrderFields, type CounterFields,
+  vendorsCollection,
 } from "./collections.js";
+import { vendorApprovalStatusOf } from "../../src/lib/vendors.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
@@ -122,6 +124,8 @@ function toClient(doc: PurchaseOrderFields & { _id: string }) {
   return withStringId(withApprovalDefaults({
     ...doc,
     documentNumber: doc.documentNumber || doc._id,
+    // ใบก่อน 2026-09-21 ไม่มี `vendorId` — เติมเป็น "" ตอนอ่าน ไม่ทำ migration
+    vendorId: doc.vendorId ?? "",
     lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
     revisionNote: doc.revisionNote ?? "",
   }));
@@ -329,6 +333,7 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     purchaseRequestId,
     jobCode,
     // ผู้ขายเริ่มว่างเสมอตั้งแต่ 2026-08-31 — ฝ่ายจัดซื้อเลือกเองจากทะเบียนผู้ขายบนหน้าใบสั่งซื้อ
+    vendorId: "",
     vendorName: "",
     vendorContact: "",
     vendorPhone: "",
@@ -397,6 +402,45 @@ const DATE_FIELDS: { key: keyof PurchaseOrderFields; label: string }[] = [
   { key: "neededByDate", label: "วันที่ต้องการรับของ" },
 ];
 
+
+/**
+ * ผูกใบสั่งซื้อเข้ากับผู้ขายในทะเบียน (2026-09-21) — คืนค่าที่จะเขียนลง `$set`
+ *
+ * **การกู้ใบเก่าอัตโนมัติคือส่วนที่สำคัญที่สุดของเฟสนี้**: ใบร่างที่ค้างอยู่ใน production ทุกใบมีแต่
+ * `vendorName` เป็นข้อความ ไม่มี `vendorId` เลย (ฟิลด์นี้เพิ่งมีวันนี้) ถ้าไม่กู้ให้ ใบเหล่านั้นจะ
+ * อนุมัติไม่ได้ทันทีในวันที่ deploy เพราะด่าน `beforeApprove` บังคับว่าต้องมี `vendorId`
+ *
+ * กู้ให้เฉพาะเมื่อชื่อตรงกับผู้ขาย **รายเดียวเป๊ะ** (ไม่สนตัวพิมพ์) — เจอหลายรายการห้ามเดา เพราะการ
+ * เดาผิดแปลว่าใบสั่งซื้อไปผูกกับนิติบุคคลอื่น ซึ่งแย่กว่าการให้คนมาเลือกเอง
+ */
+async function resolveVendorLink(
+  body: Record<string, unknown>,
+  doc: PurchaseOrderFields & { _id: string },
+): Promise<Partial<PurchaseOrderFields>> {
+  const vendors = await vendorsCollection();
+
+  // เลือกจากทะเบียนบนหน้าจอ — ตรวจว่ามีจริง แล้วเชื่อค่านั้น
+  if ("vendorId" in body) {
+    const raw = typeof body.vendorId === "string" ? body.vendorId.trim() : "";
+    if (!raw) return { vendorId: "" };
+    const vendor = await vendors.findOne({ _id: toObjectId(raw) });
+    if (!vendor) throw new HttpError(400, "ไม่พบผู้ขายที่เลือกในทะเบียน");
+    return { vendorId: raw };
+  }
+
+  // พิมพ์ชื่อเอง (หรือใบเก่าที่ถูกบันทึกครั้งแรกหลัง deploy) — ลองจับคู่กับทะเบียนให้
+  if (!("vendorName" in body)) return {};
+  const nextName = typeof body.vendorName === "string" ? body.vendorName.trim() : "";
+  if (nextName === (doc.vendorName ?? "").trim() && doc.vendorId) return {};
+  if (!nextName) return { vendorId: "" };
+  // เทียบชื่อฝั่ง JS ไม่ใช่ regex ใน Mongo — ทะเบียนผู้ขายเป็นตารางเล็ก (handleList ก็อ่านทั้งตาราง
+  // อยู่แล้ว) และการหนีอักขระพิเศษในชื่อบริษัทเป็นจุดที่พลาดเงียบ ๆ ได้ง่ายโดยไม่มีอะไรมาดัก
+  const key = nextName.toLowerCase();
+  const matches = (await vendors.find({ isDeleted: false }).toArray())
+    .filter((v) => (v.name ?? "").trim().toLowerCase() === key);
+  return { vendorId: matches.length === 1 ? matches[0]._id.toString() : "" };
+}
+
 async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
   const autoSave = isAutoSaveRequest(req);
@@ -414,6 +458,8 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<PurchaseOrderFields> = {};
   if ("lines" in body) update.lines = await sanitizeLines(body.lines, doc.lines ?? []);
+  // ผู้ขายในทะเบียน — จัดการแยกจาก SHORT_TEXT_FIELDS เสมอ ไม่งั้นกลายเป็นช่อง id อิสระที่ใครพิมพ์อะไรก็ได้
+  Object.assign(update, await resolveVendorLink(body, doc));
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   if ("vatRate" in body) update.vatRate = sanitizeNullableNumber(body.vatRate, "อัตราภาษี (%)");
   if ("discount" in body) update.discount = sanitizeNullableNumber(body.discount, "ส่วนลดท้ายใบ");
@@ -507,6 +553,33 @@ const approvalConfig: ApprovalConfig<PurchaseOrderFields & { _id: string }> = {
     relatedField: "relatedPurchaseOrderId", context: (doc) => doc.vendorName || doc.jobCode || "",
   },
   collection: async () => (await purchaseOrdersCollection()) as unknown as Collection<PurchaseOrderFields & { _id: string }>,
+  /**
+   * **บัญชีต้องอนุมัติผู้ขายก่อนจึงจะอนุมัติใบสั่งซื้อได้ (2026-09-21)** — คำสั่งเจ้าของข้อ 5:
+   * *"ทะเบียนผู้ขาย จัดซื้อกรอกข้อมูลรายละเอียดครบแล้ว นำส่งข้อมูลไปที่บัญชีให้บัญชีอนุมัติก่อนเปิด PO"*
+   *
+   * อยู่ที่ `beforeApprove` ไม่ใช่ที่ PATCH โดยตั้งใจ — ร่างยังสร้างและแก้ได้เสมอแม้ผู้ขายยังไม่ผ่านบัญชี
+   * (เจ้าของเลือกไว้ตรง ๆ ว่า "สร้าง PO ร่างได้ แต่อนุมัติ PO ไม่ได้") · hook นี้โยน error **ก่อน**
+   * สถานะเปลี่ยน ใบจึงค้างที่ "รออนุมัติ" ไม่เสียหาย
+   *
+   * **ใบที่อนุมัติไปแล้วไม่ถูกแตะตลอดกาล** — hook ทำงานเฉพาะตอน `PendingApproval` → `Final` เท่านั้น
+   * จงใจไม่ทำ migration ย้อนหลัง (ดู docs/DATABASE.md)
+   */
+  beforeApprove: async (_ctx, doc) => {
+    if (!doc.vendorId) {
+      throw new HttpError(400, 'ใบสั่งซื้อนี้ยังไม่ได้เลือกผู้ขายจากทะเบียน — เลือกผู้ขายในช่อง "ผู้ขาย" ก่อนจึงจะอนุมัติได้');
+    }
+    const vendors = await vendorsCollection();
+    const vendor = await vendors.findOne({ _id: toObjectId(doc.vendorId) });
+    if (!vendor) throw new HttpError(400, "ไม่พบผู้ขายของใบนี้ในทะเบียนแล้ว");
+    if (vendor.isDeleted) throw new HttpError(400, "ผู้ขาย " + vendor.name + " ถูกเก็บถาวรแล้ว");
+    if (!vendor.isActive) throw new HttpError(400, "ผู้ขาย " + vendor.name + " ถูกปิดใช้งานแล้ว");
+    const status = vendorApprovalStatusOf(vendor);
+    if (status !== "approved") {
+      throw new HttpError(400, status === "pendingApproval"
+        ? "ผู้ขาย " + vendor.name + " ยังรอบัญชีอนุมัติ"
+        : "ผู้ขาย " + vendor.name + " ยังไม่ผ่านการอนุมัติของบัญชี — ส่งให้บัญชีอนุมัติในหน้าทะเบียนผู้ขายก่อน");
+    }
+  },
   load: loadOrThrow,
   canEdit,
   writeAudit: (ctx, action, detail) => writeAuditEntry(ctx, action, detail),

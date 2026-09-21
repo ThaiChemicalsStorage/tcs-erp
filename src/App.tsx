@@ -924,6 +924,8 @@ export default function App() {
   const canCreateVendors = hasPermission(currentUser, roles, "vendor:create");
   const canEditVendors = hasPermission(currentUser, roles, "vendor:edit");
   const canArchiveVendors = hasPermission(currentUser, roles, "vendor:archive");
+  /** สิทธิ์ของฝ่ายบัญชี (2026-09-21) — อนุมัติผู้ขายก่อนเปิดใบสั่งซื้อ */
+  const canApproveVendors = hasPermission(currentUser, roles, "vendor:approve");
   const canCreateCodes = hasPermission(currentUser, roles, "codeRegister:create");
   const canEditCodes = hasPermission(currentUser, roles, "codeRegister:edit");
   const canArchiveCodes = hasPermission(currentUser, roles, "codeRegister:archive");
@@ -1273,7 +1275,7 @@ export default function App() {
               : effectiveNav === "materialRequisitionTemplates"
               ? <MaterialRequisitionTemplatePage canEdit={canEditMaterialRequisition} />
               : effectiveNav === "vendors"
-              ? <VendorsPage vendors={vendors} onVendorsChange={setVendors} canCreate={canCreateVendors} canEdit={canEditVendors} canArchive={canArchiveVendors} />
+              ? <VendorsPage vendors={vendors} onVendorsChange={setVendors} canCreate={canCreateVendors} canEdit={canEditVendors} canArchive={canArchiveVendors} canApprove={canApproveVendors} />
               : effectiveNav === "customers"
               ? <CustomersPage customers={customers} onCustomersChange={setCustomers} currentUserId={currentUser.id} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "settings"

@@ -33,6 +33,8 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
   return {
     documentNumber: d.documentNumber,
     jobCode: d.jobCode,
+    // ผูกกับทะเบียนผู้ขาย (2026-09-21) — เซิร์ฟเวอร์ตรวจว่ามีจริง และใช้เป็นด่านตอนอนุมัติ
+    vendorId: d.vendorId,
     vendorName: d.vendorName,
     vendorContact: d.vendorContact,
     vendorPhone: d.vendorPhone,
@@ -350,7 +352,9 @@ export function PurchaseOrderDocument({
                   className={inputCls}
                   disabled={!editable}
                   value={draft.vendorName}
-                  onChange={(next) => set("vendorName", next)}
+                  // พิมพ์ชื่อเองได้อยู่ แต่ต้องล้างการผูกทิ้ง ไม่งั้นใบจะอ้างผู้ขายรายเดิมทั้งที่ชื่อเปลี่ยนไปแล้ว
+                  // (เซิร์ฟเวอร์พยายามจับคู่ชื่อให้อีกชั้นตอนบันทึก ถ้าตรงรายเดียวเป๊ะ)
+                  onChange={(next) => setDraft((d) => d && { ...d, vendorName: next, vendorId: "" })}
                   options={vendorComboboxOptions(vendors)}
                   ariaLabel={t("purchaseOrderDoc.vendorName")}
                   // เลือกจากทะเบียนแล้วเติมช่องที่เหลือให้ — นั่นคือเหตุผลที่มีทะเบียน
@@ -360,6 +364,7 @@ export function PurchaseOrderDocument({
                     if (!v) return;
                     setDraft((d) => d && {
                       ...d,
+                      vendorId: v.id,
                       vendorName: v.name,
                       vendorContact: v.contactName,
                       vendorPhone: v.phone,
@@ -368,6 +373,10 @@ export function PurchaseOrderDocument({
                     });
                   }}
                 />
+                {/* ใบจะอนุมัติไม่ได้ถ้าไม่ได้ผูกกับทะเบียน — บอกตั้งแต่ตอนกรอก ดีกว่าให้ไปเจอตอนกดอนุมัติ */}
+                {editable && !draft.vendorId && draft.vendorName.trim() !== "" && (
+                  <p className="text-xs text-[#a75d1a] mt-1">{t("purchaseOrderDoc.vendorNotLinked")}</p>
+                )}
               </Field>
               <Field label={t("purchaseOrderDoc.vendorContact")}>
                 <input className={inputCls} disabled={!editable} value={draft.vendorContact} onChange={(e) => set("vendorContact", e.target.value)} />

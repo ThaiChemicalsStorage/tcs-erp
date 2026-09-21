@@ -23,6 +23,7 @@ import type { PurchaseOrder } from "../../src/lib/purchaseOrder.js";
 import type { CostControl } from "../../src/lib/costControl.js";
 import type { ReceivingReport } from "../../src/lib/receivingReport.js";
 import type { ApEntry } from "../../src/lib/apEntries.js";
+import type { VendorApprovalStatus } from "../../src/lib/vendors.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
@@ -403,6 +404,15 @@ export interface VendorFields {
   address: string;
   note: string;
   isActive: boolean;
+  /** ขั้นอนุมัติของบัญชี (2026-09-21) — ไม่มีค่า = ผู้ขายก่อนวันนั้น อ่านเป็น "approved" เสมอ
+   *  ห้ามอ่านฟิลด์นี้ตรง ๆ ใช้ `vendorApprovalStatusOf()` จาก src/lib/vendors.ts */
+  approvalStatus?: VendorApprovalStatus;
+  submittedAt?: string;
+  submittedBy?: string;
+  approvedAt?: string;
+  approvedByUserId?: string;
+  approvedByName?: string;
+  rejectionComment?: string;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;

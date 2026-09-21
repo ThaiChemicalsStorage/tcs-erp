@@ -56,7 +56,7 @@ type PurchaseRequestDoc = {
   lines: { id: string; productId: string; productCode: string; description: string; unit: string; qtyRequested: number | null; subDetails: string[]; storeDecision?: string }[];
 };
 type PurchaseOrderDoc = {
-  id: string; documentNumber: string; status: string; vendorName: string; purchaseRequestId: string;
+  id: string; documentNumber: string; status: string; vendorName: string; vendorId?: string; purchaseRequestId: string;
   lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null; sourcePrLineId?: string }[];
 };
 /** ใบขอซื้อเปล่าของฝ่ายที่ไม่มีเอกสารต้นทาง — ทางสร้างที่เพิ่มมาพร้อมโมดูลจัดซื้อ */
@@ -133,7 +133,33 @@ async function createPurchaseOrder(body: Record<string, unknown> = {}): Promise<
 }
 
 /** ส่งขออนุมัติแล้วอนุมัติ — PO ใช้เครื่องอนุมัติกลางตัวเดียวกับใบขอซื้อ */
+/**
+ * ผู้ขายที่บัญชีอนุมัติแล้ว พร้อมผูกกับใบสั่งซื้อ (2026-09-21)
+ *
+ * ตั้งแต่วันนี้ใบสั่งซื้อจะอนุมัติไม่ได้ถ้ายังไม่ได้ผูกผู้ขายที่ผ่านบัญชี — ตัวช่วยนี้จึงเดินครบสามขั้น
+ * ให้ครั้งเดียว (สร้าง → ส่งให้บัญชี → บัญชีอนุมัติ) เทสต์ที่แค่อยากได้ใบ Final จะได้ไม่ต้องเขียนซ้ำ
+ */
+let approvedVendorSeq = 0;
+async function approvedVendorId(): Promise<string> {
+  const res = await api("/api/vendors", {
+    method: "POST", body: JSON.stringify({ name: `ผู้ขายที่อนุมัติแล้ว ${++approvedVendorSeq}` }),
+  });
+  expect(res.status).toBe(201);
+  const id = (await json<{ vendor: { id: string } }>(res)).vendor.id;
+  expect((await api(`/api/vendors/${encodeURIComponent(id)}/submit-approval`, { method: "POST" })).status).toBe(200);
+  expect((await api(`/api/vendors/${encodeURIComponent(id)}/approve`, { method: "POST" })).status).toBe(200);
+  return id;
+}
+
 async function approvePurchaseOrder(id: string): Promise<PurchaseOrderDoc> {
+  // ผูกผู้ขายที่ผ่านบัญชีให้ก่อน ไม่งั้นด่าน beforeApprove ปฏิเสธ (ดู purchaseOrderHandler.ts)
+  const current = await json<{ purchaseOrder: PurchaseOrderDoc }>(await api(`/api/purchase-orders/${encodeURIComponent(id)}`));
+  if (!current.purchaseOrder.vendorId) {
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorId: await approvedVendorId() }),
+    });
+    expect(patched.status).toBe(200);
+  }
   const submitted = await api(`/api/purchase-orders/${encodeURIComponent(id)}/submit-approval`, { method: "POST" });
   expect(submitted.status).toBe(200);
   const approved = await api(`/api/purchase-orders/${encodeURIComponent(id)}/approve`, { method: "POST" });
@@ -387,6 +413,81 @@ describe("ใบสั่งซื้อ — รายละเอียดต�
   });
 });
 
+describe("ทะเบียนผู้ขาย — บัญชีต้องอนุมัติก่อนจึงจะอนุมัติใบสั่งซื้อได้ (2026-09-21)", () => {
+  it("ผู้ขายใหม่เริ่มที่ร่าง เดินครบสามขั้นแล้วจึงอนุมัติได้ และกดข้ามขั้นไม่ได้", async () => {
+    const res = await createVendor({ name: "ผู้ขายรออนุมัติ" });
+    const id = (await json<{ vendor: { id: string; approvalStatus: string } }>(res)).vendor.id;
+    expect((await json<{ vendor: { approvalStatus: string } }>(await api(`/api/vendors/${id}`))).vendor.approvalStatus).toBe("draft");
+
+    // ยังไม่ส่ง = อนุมัติไม่ได้
+    expect((await api(`/api/vendors/${id}/approve`, { method: "POST" })).status).toBe(400);
+    expect((await api(`/api/vendors/${id}/submit-approval`, { method: "POST" })).status).toBe(200);
+    // ส่งซ้ำไม่ได้
+    expect((await api(`/api/vendors/${id}/submit-approval`, { method: "POST" })).status).toBe(400);
+    // ตีกลับต้องมีเหตุผลเสมอ
+    expect((await api(`/api/vendors/${id}/reject`, { method: "POST", body: JSON.stringify({}) })).status).toBe(400);
+    const rejected = await api(`/api/vendors/${id}/reject`, { method: "POST", body: JSON.stringify({ comment: "ข้อมูลภาษีไม่ครบ" }) });
+    expect(rejected.status).toBe(200);
+    expect((await json<{ vendor: { approvalStatus: string; rejectionComment: string } }>(rejected)).vendor.rejectionComment).toBe("ข้อมูลภาษีไม่ครบ");
+
+    // ตีกลับแล้วส่งใหม่ได้ แล้วอนุมัติผ่าน
+    expect((await api(`/api/vendors/${id}/submit-approval`, { method: "POST" })).status).toBe(200);
+    const approved = await api(`/api/vendors/${id}/approve`, { method: "POST" });
+    expect(approved.status).toBe(200);
+    const v = (await json<{ vendor: { approvalStatus: string; approvedByName: string; rejectionComment: string } }>(approved)).vendor;
+    expect(v.approvalStatus).toBe("approved");
+    expect(v.approvedByName).not.toBe("");
+    expect(v.rejectionComment, "อนุมัติแล้วเหตุผลที่เคยตีกลับต้องถูกล้าง").toBe("");
+  });
+
+  it("แก้ชื่อ/เลขผู้เสียภาษีของผู้ขายที่อนุมัติแล้ว ตกกลับเป็นร่าง แต่แก้เบอร์โทรไม่ตก", async () => {
+    const id = await approvedVendorId();
+    const phoneOnly = await api(`/api/vendors/${id}`, { method: "PATCH", body: JSON.stringify({ phone: "02-000-0000" }) });
+    expect((await json<{ vendor: { approvalStatus: string } }>(phoneOnly)).vendor.approvalStatus).toBe("approved");
+
+    const renamed = await api(`/api/vendors/${id}`, { method: "PATCH", body: JSON.stringify({ taxId: "0999999999999" }) });
+    expect((await json<{ vendor: { approvalStatus: string } }>(renamed)).vendor.approvalStatus,
+      "เลขผู้เสียภาษีเปลี่ยน = ข้อมูลที่บัญชีตรวจไปแล้วไม่ใช่ชุดเดิม").toBe("draft");
+  });
+
+  it("ใบสั่งซื้อที่ผู้ขายยังไม่ผ่านบัญชี สร้างร่างได้แต่อนุมัติไม่ได้", async () => {
+    const vendorRes = await createVendor({ name: "ผู้ขายยังไม่ผ่านบัญชี" });
+    const vendorId = (await json<{ vendor: { id: string } }>(vendorRes)).vendor.id;
+    const po = await createPurchaseOrder();
+    // ร่างผูกผู้ขายที่ยังไม่ผ่านบัญชีได้ตามที่เจ้าของเลือกไว้ ("สร้าง PO ร่างได้ แต่อนุมัติ PO ไม่ได้")
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorId }),
+    })).status).toBe(200);
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/submit-approval`, { method: "POST" })).status).toBe(200);
+    const blocked = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/approve`, { method: "POST" });
+    expect(blocked.status).toBe(400);
+    // ใบต้องค้างที่ "รออนุมัติ" ไม่เสียหาย — beforeApprove โยน error ก่อนสถานะเปลี่ยน
+    expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`))).purchaseOrder.status)
+      .toBe("PendingApproval");
+
+    expect((await api(`/api/vendors/${vendorId}/submit-approval`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/vendors/${vendorId}/approve`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/approve`, { method: "POST" })).status).toBe(200);
+  });
+
+  it("ใบที่ไม่ได้เลือกผู้ขายจากทะเบียนเลย อนุมัติไม่ได้ — แต่ชื่อที่ตรงรายเดียวถูกกู้ให้อัตโนมัติ", async () => {
+    const po = await createPurchaseOrder();
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorName: "ผู้ขายที่ไม่มีในทะเบียน" }),
+    })).status).toBe(200);
+    await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/submit-approval`, { method: "POST" });
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/approve`, { method: "POST" })).status).toBe(400);
+
+    // ใบเก่าที่พิมพ์ชื่อไว้ตรงกับผู้ขายในทะเบียนรายเดียว — บันทึกครั้งแรกหลัง deploy ต้องถูกผูกให้เอง
+    const vendorId = await approvedVendorId();
+    const vendorName = (await json<{ vendor: { name: string } }>(await api(`/api/vendors/${vendorId}`))).vendor.name;
+    await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/withdraw-approval`, { method: "POST" });
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorName }),
+    });
+    expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(patched)).purchaseOrder.vendorId).toBe(vendorId);
+  });
+});
 describe("ทะเบียนผู้ขาย", () => {
   it("สร้างผู้ขายพร้อมรหัส แล้วรหัสถูกเก็บเป็นตัวพิมพ์ใหญ่", async () => {
     const res = await createVendor({ name: "บริษัท เหล็กดี จำกัด", code: "v-001", contactName: "คุณเอ", phone: "02-111-2222" });

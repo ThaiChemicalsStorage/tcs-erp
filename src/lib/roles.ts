@@ -136,6 +136,7 @@ export const defaultRoles: Role[] = withDashboardTicks([
       "vendor:create",
       "vendor:edit",
       "vendor:archive",
+      "vendor:approve",
       // ทะเบียนรหัสแผนก/บัญชี (2026-08-31)
       "codeRegister:view",
       "codeRegister:create",
@@ -237,6 +238,10 @@ export const defaultRoles: Role[] = withDashboardTicks([
       "stock:view", "stock:adjust",
       // ทะเบียนเจ้าหนี้/ภาษีซื้อ (2026-09-03) — หนี้ตั้งจากใบรับสินค้าของสโตร์ บัญชีเป็นคนตามจ่าย
       "ap:view", "ap:manage",
+      // ทะเบียนผู้ขาย (2026-09-21) — บัญชีเป็นด่านอนุมัติก่อนเปิดใบสั่งซื้อ (คำสั่งเจ้าของข้อ 5)
+      // ต้องมี `vendor:view` ด้วย ไม่ใช่แค่ `vendor:approve` — ไม่งั้นยิง GET /api/vendors ได้ 403
+      // เพราะด่านของ handleList ผ่านได้สามทางเท่านั้น: vendor:view / purchaseOrder:view / purchaseRequest:view
+      "vendor:view", "vendor:approve",
     ],
     isSuperAdmin: false,
     isSystem: false,

@@ -7,6 +7,8 @@ import { vendorsCollection, auditLogCollection, toObjectId, withStringId, type V
 import { validateVendorDraft } from "./vendorValidation.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
+import { vendorApprovalStatusOf } from "../../src/lib/vendors.js";
+import { activeUserIdsWithPermission, notifyUsers } from "./departmentNotify.js";
 
 /**
  * ทะเบียนผู้ขาย (Vendor register) — เจ้าของขอไว้ 2026-08-28:
@@ -32,6 +34,15 @@ function toPublicVendor(doc: WithId<VendorFields>) {
     taxId: doc.taxId ?? "",
     address: doc.address ?? "",
     note: doc.note ?? "",
+    // ผู้ขายก่อน 2026-09-21 ไม่มีฟิลด์นี้ — ต้องอ่านเป็น "approved" ไม่งั้นวัน deploy จัดซื้อจะ
+    // อนุมัติใบสั่งซื้อไม่ได้เลยทั้งระบบ · helper ตัวเดียวกับที่ด่าน beforeApprove ของใบสั่งซื้อใช้
+    approvalStatus: vendorApprovalStatusOf(doc),
+    submittedAt: doc.submittedAt ?? "",
+    submittedBy: doc.submittedBy ?? "",
+    approvedAt: doc.approvedAt ?? "",
+    approvedByUserId: doc.approvedByUserId ?? "",
+    approvedByName: doc.approvedByName ?? "",
+    rejectionComment: doc.rejectionComment ?? "",
   };
 }
 
@@ -126,6 +137,9 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
       address: draft.address ?? "",
       note: draft.note ?? "",
       isActive: draft.isActive ?? true,
+      // ผู้ขายใหม่เริ่มที่ "ร่าง" ชัดเจน (2026-09-21) — ต่างจากผู้ขายเก่าที่ไม่มีฟิลด์นี้เลยและถูก
+      // อ่านเป็น "approved" · ตั้งค่าตรงนี้เสมอ ไม่ปล่อยให้ undefined ไปชนกฎของใบเก่า
+      approvalStatus: "draft",
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
@@ -164,9 +178,23 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
 
     const update = validateVendorDraft(req.body, true);
     if (update.code !== undefined) await assertCodeAvailable(vendors, update.code, id);
+    /**
+     * แก้ข้อมูลที่ระบุตัวผู้ขาย = ต้องให้บัญชีอนุมัติใหม่ (2026-09-21)
+     *
+     * ผู้ขายที่บัญชีอนุมัติแล้วแต่เลขผู้เสียภาษีหรือชื่อถูกเปลี่ยนเงียบ ๆ แย่กว่าความยุ่งยากที่ต้องกดส่ง
+     * อนุมัติใหม่ — การอนุมัติหมายถึง "ตรวจข้อมูลชุดนี้แล้ว" ไม่ใช่ "ไว้ใจผู้ขายรายนี้ตลอดไป"
+     * ช่องอื่น (ผู้ติดต่อ/โทร/หมายเหตุ/เปิด-ปิดใช้งาน) แก้ได้โดยไม่ตกสถานะ
+     */
+    const IDENTITY_FIELDS = ["name", "code", "taxId", "address"] as const;
+    const identityChanged = IDENTITY_FIELDS.some(
+      (f) => update[f] !== undefined && update[f] !== (target[f] ?? ""),
+    );
+    const resetApproval = identityChanged && vendorApprovalStatusOf(target) !== "draft"
+      ? { approvalStatus: "draft" as const, submittedAt: "", submittedBy: "", approvedAt: "", approvedByUserId: "", approvedByName: "", rejectionComment: "" }
+      : {};
     if (Object.keys(update).length > 0) {
       await vendors
-        .updateOne({ _id: objectId }, { $set: { ...update, updatedAt: nowIso(), updatedBy: ctx.user.id } })
+        .updateOne({ _id: objectId }, { $set: { ...update, ...resetApproval, updatedAt: nowIso(), updatedBy: ctx.user.id } })
         .catch(rethrowDuplicate);
     }
     const updated = await vendors.findOne({ _id: objectId });
@@ -182,6 +210,93 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
+/**
+ * ขั้นอนุมัติของทะเบียนผู้ขาย (2026-09-21) — เจ้าของสั่งว่าจัดซื้อกรอกข้อมูลแล้ว *"นำส่งข้อมูลไปที่บัญชี
+ * ให้บัญชีอนุมัติก่อนเปิด PO สั่งซื้อ"*
+ *
+ * **เขียน route เอง ไม่ใช้ `documentApproval.ts`** — helper ตัวนั้นตรึง `_id` เป็น string แต่ทะเบียน
+ * ผู้ขายใช้ `ObjectId` (`toObjectId()`) ทั้งไฟล์ ใช้ร่วมกันไม่ได้จริง ๆ ไม่ใช่แค่ไม่สะดวก
+ */
+async function handleVendorApprovalStage(
+  req: ApiRequest, res: ApiResponse, id: string, stage: "submit" | "approve" | "reject",
+) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const objectId = toObjectId(id);
+  const vendors = await vendorsCollection();
+  const target = await vendors.findOne({ _id: objectId });
+  if (!target) throw new HttpError(404, "ไม่พบข้อมูลผู้ขาย");
+  const current = vendorApprovalStatusOf(target);
+
+  const now = nowIso();
+  let ctx: AuthContext;
+  let update: Partial<VendorFields>;
+  let action: string;
+
+  if (stage === "submit") {
+    // จัดซื้อเป็นคนส่ง จึงใช้สิทธิ์ที่จัดซื้อมีอยู่แล้ว ไม่สร้างสิทธิ์ใหม่ให้ต้องไปติ๊กมืออีกตัว
+    ctx = await requireUser(req);
+    if (!roleHasPermission(ctx.role, "vendor:create") && !roleHasPermission(ctx.role, "vendor:edit")) {
+      throw new HttpError(403, "Forbidden");
+    }
+    if (current !== "draft" && current !== "rejected") {
+      throw new HttpError(400, current === "pendingApproval" ? "ผู้ขายรายนี้ส่งให้บัญชีอนุมัติไปแล้ว" : "ผู้ขายรายนี้บัญชีอนุมัติแล้ว");
+    }
+    update = { approvalStatus: "pendingApproval", submittedAt: now, submittedBy: ctx.user.id, rejectionComment: "" };
+    action = "Vendor Submitted For Approval";
+  } else {
+    ctx = await requirePermission(req, "vendor:approve");
+    if (current !== "pendingApproval") throw new HttpError(400, "ผู้ขายรายนี้ไม่ได้อยู่ระหว่างรออนุมัติ");
+    if (stage === "approve") {
+      update = {
+        approvalStatus: "approved", approvedAt: now,
+        approvedByUserId: ctx.user.id, approvedByName: ctx.user.fullName, rejectionComment: "",
+      };
+      action = "Vendor Approved";
+    } else {
+      // บังคับใส่เหตุผลเหมือนการตีกลับเอกสารทุกใบในระบบ — ข้อความเดียวกับ documentApproval.ts
+      const comment = typeof req.body?.comment === "string" ? req.body.comment.trim() : "";
+      if (!comment) throw new HttpError(400, "กรุณาระบุเหตุผลที่ไม่อนุมัติ");
+      update = { approvalStatus: "rejected", rejectionComment: comment, approvedAt: "", approvedByUserId: "", approvedByName: "" };
+      action = "Vendor Rejected";
+    }
+  }
+
+  await vendors.updateOne({ _id: objectId }, { $set: { ...update, updatedAt: now, updatedBy: ctx.user.id } });
+  const updated = await vendors.findOne({ _id: objectId });
+  if (!updated) throw new HttpError(404, "ไม่พบข้อมูลผู้ขาย");
+  const publicVendor = toPublicVendor(updated);
+  await writeVendorAuditEntry(ctx, action, `${action === "Vendor Approved" ? "บัญชีอนุมัติผู้ขาย" : action === "Vendor Rejected" ? "บัญชีไม่อนุมัติผู้ขาย" : "ส่งผู้ขายให้บัญชีอนุมัติ"}: ${publicVendor.name}`);
+
+  // แจ้งเตือนแบบ best-effort เหมือนทุกที่ในระบบ — ส่งไม่ถึงต้องไม่ทำให้การบันทึกล้ม
+  try {
+    if (stage === "submit") {
+      const sent = await notifyUsers(await activeUserIdsWithPermission("vendor:approve"), ctx.user.id, {
+        type: "vendor_submitted",
+        title: "ผู้ขายรออนุมัติ",
+        description: `${ctx.user.fullName} ส่งผู้ขาย ${publicVendor.name} ให้บัญชีอนุมัติ`,
+        module: "ทะเบียนผู้ขาย",
+        related: {},
+      });
+      if (sent === 0) {
+        console.warn("[vendors] submitted but nobody was notified — no active user holds vendor:approve");
+      }
+    } else if (target.submittedBy) {
+      await notifyUsers([target.submittedBy], ctx.user.id, {
+        type: stage === "approve" ? "vendor_approved" : "vendor_rejected",
+        title: stage === "approve" ? "บัญชีอนุมัติผู้ขายแล้ว" : "บัญชีไม่อนุมัติผู้ขาย",
+        description: stage === "approve"
+          ? `${ctx.user.fullName} อนุมัติผู้ขาย ${publicVendor.name} — เปิดใบสั่งซื้อกับรายนี้ได้แล้ว`
+          : `${ctx.user.fullName} ไม่อนุมัติผู้ขาย ${publicVendor.name}: ${update.rejectionComment}`,
+        module: "ทะเบียนผู้ขาย",
+        related: {},
+      });
+    }
+  } catch (err) {
+    console.error("[vendors] approval-stage notification failed", err);
+  }
+
+  res.status(200).json({ vendor: publicVendor });
+}
 /** เก็บถาวร/กู้คืน — soft-delete เสมอ ไม่เคยลบแถวจริง เพราะใบสั่งซื้อเก่าอ้างชื่อผู้ขายไว้ */
 async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
@@ -211,5 +326,9 @@ export async function handleVendors(req: ApiRequest, res: ApiResponse): Promise<
   if (parts.length === 0) return handleList(req, res);
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "archive") return handleArchive(req, res, parts[0]);
+  // ขั้นอนุมัติของบัญชี (2026-09-21)
+  if (parts.length === 2 && parts[1] === "submit-approval") return handleVendorApprovalStage(req, res, parts[0], "submit");
+  if (parts.length === 2 && parts[1] === "approve") return handleVendorApprovalStage(req, res, parts[0], "approve");
+  if (parts.length === 2 && parts[1] === "reject") return handleVendorApprovalStage(req, res, parts[0], "reject");
   throw new HttpError(404, "Not found");
 }
