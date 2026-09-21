@@ -956,10 +956,31 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   let lastErr: unknown;
   for (let attempt = 0; attempt < 5 && !created; attempt++) {
     const seq = await nextPurchaseRequestRevision(counters, root);
-    // `purchasingStage` ถูก**ดึงออกจาก `...rest` ตรงนี้** ไม่ใช่เขียนทับเป็น `undefined` ข้างล่าง —
-    // ไดรเวอร์ของ MongoDB ไม่ได้ตั้ง `ignoreUndefined` ค่า `undefined` จึงถูกบันทึกลงไปเป็น `null` จริง ๆ
-    // ซึ่ง **ไม่เท่ากับ "ไม่มีฟิลด์"** แล้วด่าน `doc.purchasingStage === undefined` ที่อื่นจะอ่านผิดหมด
-    const { _id: _drop, purchasingStage: _dropStage, ...rest } = source;
+    /**
+     * ฟิลด์ที่ **ต้องไม่ติดไปกับฉบับแก้ไข** ถูกดึงออกจาก `...rest` ตรงนี้ ไม่ใช่เขียนทับเป็น
+     * `undefined` ข้างล่าง — ไดรเวอร์ของ MongoDB ไม่ได้ตั้ง `ignoreUndefined` ค่า `undefined`
+     * จึงถูกบันทึกลงไปเป็น `null` จริง ๆ ซึ่ง **ไม่เท่ากับ "ไม่มีฟิลด์"** แล้วด่านที่อ่านค่านั้นจะเพี้ยนหมด
+     *
+     * **ทั้งบล็อกของสโตร์ต้องหายไปด้วย (2026-09-21)** — พบจากข้อมูลจริงว่าฉบับแก้ไขเกิดมาพร้อม
+     * `storeStage: "forwarded"` + ชื่อคนเช็คของ + บรรทัดที่ติ๊กไว้แล้ว ทั้งที่สโตร์ไม่เคยเห็นฉบับนี้
+     * ผลคือพออนุมัติปุ๊บใบ **ข้ามขั้นเช็คของไปทั้งขั้น** และบรรทัดที่ติดธง `"stock"` มาจากฉบับเก่าจะ
+     * **ถูกตัดออกจากใบสั่งซื้อเงียบ ๆ** (ตัวกรองตอนลอกบรรทัดทิ้งบรรทัดนั้น) คนซื้อจึงไม่เห็นของที่ต้องซื้อ
+     *
+     * `storeIssues` อันตรายที่สุดในกลุ่ม: ถ้าติดไป ระบบจะเชื่อว่าจ่ายของออกไปแล้วตามใบที่ไม่เคยมีอยู่
+     * และ `assertStoreIssuesStillCovered()` จะห้ามลดจำนวนบรรทัดบนใบที่ยังไม่เคยจ่ายอะไรเลย
+     *
+     * ฟิลด์พวกนี้ถูกเพิ่มเข้ามาหลัง `handleRewrite` ถูกเขียน (2026-09-09 และ 2026-09-21) แล้วไม่มีใคร
+     * กลับมาดูตรงนี้ — เป็นกับดักเดิมซ้ำรอยที่สาม **ฟิลด์ใหม่ทุกตัวของใบขอซื้อต้องตัดสินใจที่นี่เสมอ**
+     */
+    const {
+      _id: _drop, purchasingStage: _dropStage,
+      storeStage: _dropStoreStage,
+      storeReviewedBy: _dropStoreBy, storeReviewedByName: _dropStoreName,
+      storeReviewedAt: _dropStoreAt, storeRemark: _dropStoreRemark,
+      pulledToPurchasingBy: _dropPulledBy, pulledToPurchasingByName: _dropPulledName,
+      pulledToPurchasingAt: _dropPulledAt,
+      ...rest
+    } = source;
     const doc: PurchaseRequestFields & { _id: string } = {
       ...rest,
       _id: `${root}-R${seq}`,
@@ -977,6 +998,11 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
       approvedByUserId: "",
       rejectionComment: "",
       revisionNote: "",
+      // รอบการจ่ายของและประวัติการแก้ของจัดซื้อเป็นของฉบับเดิมล้วน ๆ — ฉบับใหม่เริ่มที่ศูนย์
+      storeIssues: [],
+      purchasingEdits: [],
+      // ผลการเช็คของรายบรรทัดก็เป็นของฉบับเดิม — สโตร์ต้องเช็คฉบับใหม่เอง
+      lines: (rest.lines ?? []).map((l) => ({ ...l, storeDecision: "" as const, storeAvailableQty: null })),
       // ไฟล์แนบไม่สืบทอด — สำเนาจะชี้ไฟล์ก้อนเดียวกันแล้วลบทีเดียวพังทั้งสองฉบับ (เหมือนใบสั่งงาน)
       attachments: [],
       createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,

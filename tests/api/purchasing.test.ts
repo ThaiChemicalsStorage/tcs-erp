@@ -1275,6 +1275,39 @@ describe("ใบขอซื้อ — ขั้นของฝ่ายจั�
   });
 
   /**
+   * พบจากการส่องข้อมูลจริง 2026-09-21 — `PR-202609-0003-R1` เป็นฉบับร่างที่เกิดมาพร้อม
+   * `storeStage: "forwarded"`, ชื่อคนเช็คของ และบรรทัดที่ติ๊ก `stock`/`purchase` ไว้แล้ว
+   * ทั้งที่สโตร์ไม่เคยเห็นฉบับนั้นเลย
+   *
+   * ผลจริงสองชั้น: (1) พออนุมัติ ใบ**ข้ามขั้นเช็คของไปทั้งขั้น** (2) บรรทัดที่ติดธง `"stock"` มาจาก
+   * ฉบับเก่าจะ**ถูกตัดออกจากใบสั่งซื้อเงียบ ๆ** คนซื้อไม่เห็นของที่ต้องซื้อ · `storeIssues` ที่ติดไป
+   * ยังทำให้ระบบเชื่อว่าจ่ายของออกไปแล้วตามใบที่ไม่เคยมีอยู่
+   */
+  it("ฉบับแก้ไขต้องไม่สืบทอดผลการเช็คของสโตร์ — ต้องเริ่มที่รอสโตร์ใหม่ทั้งใบ", async () => {
+    const pr = await approvedPurchaseRequest(); // ใบนี้ผ่าน storeForwardsToPurchasing มาแล้ว
+    expect(pr.storeStage).toBe("forwarded");
+    expect(pr.lines.every((l) => l.storeDecision === "purchase"), "ตั้งต้น: ทุกบรรทัดถูกติ๊กแล้ว").toBe(true);
+
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/rewrite`, { method: "POST" });
+    expect(res.status).toBe(201);
+    const rev = (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest;
+
+    expect(rev.storeStage, "ฉบับใหม่ยังไม่เคยผ่านสโตร์").toBeUndefined();
+    expect(rev.lines.every((l) => !l.storeDecision), "ผลติ๊กรายบรรทัดต้องถูกล้าง").toBe(true);
+
+    // อนุมัติแล้วต้องไปรอสโตร์จริง ๆ ไม่ใช่วิ่งตรงไปจัดซื้อ
+    await api(`/api/purchase-requests/${encodeURIComponent(rev.id)}/submit-approval`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(rev.id)}/approve`, { method: "POST" });
+    const approved = await json<{ purchaseRequest: PurchaseRequestDoc }>(
+      await api(`/api/purchase-requests/${encodeURIComponent(rev.id)}`));
+    expect(approved.purchaseRequest.storeStage, "อนุมัติแล้วต้องรอสโตร์เช็คของ").toBe("pending");
+
+    // และเปิดใบสั่งซื้อยังไม่ได้ เพราะยังไม่ผ่านสโตร์
+    expect((await api("/api/purchase-orders", {
+      method: "POST", body: JSON.stringify({ purchaseRequestId: rev.id }),
+    })).status).toBe(400);
+  });
+  /**
    * ต่อจากเทสต์ข้างบน — เทสต์นั้นอ่านจาก **response ของการ Rewrite** ซึ่งเป็นอ็อบเจกต์ในหน่วยความจำ
    * `JSON.stringify` ตัดคีย์ที่เป็น `undefined` ทิ้ง มันจึงผ่านแม้ตอนที่ในฐานข้อมูลเป็น `null`
    * (ไดรเวอร์ Mongo ไม่ได้ตั้ง `ignoreUndefined` — `$set`/`insertOne` เขียน `undefined` ลงไปเป็น `null`)
