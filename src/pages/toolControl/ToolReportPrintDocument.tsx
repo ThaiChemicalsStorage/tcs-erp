@@ -2,6 +2,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { ToolHoldingRow, ToolReportRow } from "../../lib/toolHoldings";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { printDate, printText } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * รายงานเครื่องมือประจำทีม — พิมพ์ได้สองแบบตามแท็บที่เปิดอยู่บนจอ:
@@ -27,7 +28,7 @@ export function ToolReportPrintDocument({ mode, holdings, rows, companyHeader, p
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", fontSize: "11px", color: "#000" }}>
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
+      <PrintPageFrame>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -143,6 +144,7 @@ export function ToolReportPrintDocument({ mode, holdings, rows, companyHeader, p
           </tr>
         </tfoot>
       </table>
+      </PrintPageFrame>
     </div>
   );
 }

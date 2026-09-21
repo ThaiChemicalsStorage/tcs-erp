@@ -1,8 +1,8 @@
 import type { PurchaseOrder } from "../../lib/purchaseOrder";
 import { fmt } from "../../lib/quotes";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
-import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printText, printNumber } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ⚠️ **ใบพิมพ์ชั่วคราว — รอฟอร์มจริง**
@@ -24,10 +24,12 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
 
   const cell: React.CSSProperties = { border: "1px solid #000", padding: "4px 6px", verticalAlign: "top" };
   const head: React.CSSProperties = { ...cell, fontWeight: 700, textAlign: "center", background: "#eee" };
+  /** พื้นที่เหนือเส้นลงนาม — สูงคงที่ 28px เท่าของเดิม ให้ชื่อนั่งชิดเส้นเหมือนคนเซ็นชื่อบนเส้น */
+  const signatureArea: React.CSSProperties = { height: 28, display: "flex", alignItems: "flex-end", justifyContent: "center", overflow: "hidden" };
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif", fontSize: "11px", color: "#000" }}>
-      <style>{`@media print { @page { size: A4 portrait; margin: 12mm; } }`}</style>
+      <PrintPageFrame>
 
       <div style={{ textAlign: "center", marginBottom: 12 }}>
         <div style={{ fontSize: "16px", fontWeight: 700 }}>ใบสั่งซื้อ</div>
@@ -126,20 +128,24 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 28, breakInside: "avoid" }}>
         <tbody>
           <tr>
-            {/* ลายเซ็นจริงของคนสร้างใบและคนที่กดอนุมัติ วางเหนือเส้นให้ (เจ้าของสั่ง 2026-09-02) */}
+            {/* เจ้าของสั่ง 2026-09-18: ใบสั่งซื้อ "ไม่ต้องมีลายเซ็นให้ขึ้นชื่อที่กรอกในช่องไปเลยแล้วชื่อวงเล็บ
+                ก็เอาออกไปเลย" — จึงถอด <PrintSignatureLine> (รูปลายเซ็นจากโปรไฟล์) ออกทั้งสองช่อง แล้ววาง
+                ชื่อที่พิมพ์ไว้ในเอกสารไว้เหนือเส้นแทน ส่วนป้ายใต้เส้นเหลือแต่คำว่าผู้สั่งซื้อ/ผู้อนุมัติ
+                กล่องสูง 28px คงไว้เท่าของเดิมเพื่อไม่ให้แถวยุบเมื่อยังไม่ได้กรอกชื่อ (ใบร่างที่พิมพ์ไปเซ็นมือ) */}
             <td style={{ width: "50%", textAlign: "center", paddingTop: 20 }}>
-              <PrintSignatureLine userId={doc.createdBy} height={28} />
+              <div style={signatureArea}>{(doc.orderedBy ?? "").trim()}</div>
               <div>....................................................</div>
-              <div>ผู้สั่งซื้อ {doc.orderedBy ? `(${doc.orderedBy})` : ""}</div>
+              <div>ผู้สั่งซื้อ</div>
             </td>
             <td style={{ width: "50%", textAlign: "center", paddingTop: 20 }}>
-              <PrintSignatureLine userId={doc.approvedByUserId} height={28} />
+              <div style={signatureArea}>{(doc.approvedBy ?? "").trim()}</div>
               <div>....................................................</div>
-              <div>ผู้อนุมัติ {doc.approvedBy ? `(${doc.approvedBy})` : ""}</div>
+              <div>ผู้อนุมัติ</div>
             </td>
           </tr>
         </tbody>
       </table>
+      </PrintPageFrame>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Product, ProductCategory } from "../../lib/products";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { printDate, printText } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ใบนับสต๊อกสินค้า — เจ้าของสั่ง 2026-09-02:
@@ -33,7 +34,7 @@ export function StockCountSheetPrintDocument({ products, categories, companyHead
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", fontSize: "11px", color: "#000" }}>
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
+      <PrintPageFrame>
 
       {/* หัวจดหมายกับหัวเรื่องอยู่ใน thead/tfoot ของตารางนอกสุด เพื่อให้พิมพ์ซ้ำทุกหน้า —
           ใบนับของจริงมักยาวหลายแผ่น แผ่นที่หลุดออกจากแฟ้มต้องบอกได้ว่าเป็นของบริษัทไหน วันไหน */}
@@ -125,6 +126,7 @@ export function StockCountSheetPrintDocument({ products, categories, companyHead
           </tr>
         </tfoot>
       </table>
+      </PrintPageFrame>
     </div>
   );
 }

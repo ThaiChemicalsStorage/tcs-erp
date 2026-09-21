@@ -5,6 +5,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printText, printNumber } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ฟอร์มพิมพ์ใบสั่งงาน — คัดตามฟอร์มจริง FM-PJ-01 Rev.01 : 10/10/65
@@ -146,7 +147,8 @@ export function JobOrderPrintDocument({
     >
       {/* พื้นสีของแถบหัวเรื่อง/หัวตารางจะหายไปตอนพิมพ์ ถ้าไม่บอกเบราว์เซอร์ว่าต้องพิมพ์พื้นหลังด้วย
           (ค่าเริ่มต้นของ Chrome คือไม่พิมพ์ จนกว่าผู้ใช้จะไปติ๊ก "Background graphics" เอง) */}
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm } .jo-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact } }"}</style>
+      <style>{".jo-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact }"}</style>
+      <PrintPageFrame>
 
       <div className="jo-print">
         {/* 1. หัวจดหมาย — โลโก้ + ชื่อบริษัทไทย ไม่มีที่อยู่ ตรงตามกระดาษ */}
@@ -286,6 +288,7 @@ export function JobOrderPrintDocument({
         {/* 8. รหัสฟอร์ม */}
         <p style={{ textAlign: "right", margin: "12px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>
       </div>
+      </PrintPageFrame>
     </div>
   );
 }

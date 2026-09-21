@@ -3,6 +3,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printText, printNumber } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ฟอร์มพิมพ์ใบสั่งผลิต — คัดตามฟอร์มจริง FM-PD-02 Rev.00 : 01/11/64
@@ -68,7 +69,7 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", fontSize: "11px", color: "#000", background: "#fff", paddingRight: EDGE_GUARD }}>
-      <style>{`@media print { @page { size: A4 portrait; margin: 12mm; } }`}</style>
+      <PrintPageFrame>
 
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <tbody>
@@ -175,6 +176,7 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
           </tr>
         </tfoot>
       </table>
+      </PrintPageFrame>
     </div>
   );
 }

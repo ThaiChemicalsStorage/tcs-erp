@@ -3,6 +3,7 @@ import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printText } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ใบพิมพ์ Cost Control — **FM-SL-06 Rev.02 : 11/09/67**
@@ -63,7 +64,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px", paddingRight: EDGE_GUARD }}>
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
+      <PrintPageFrame>
 
       {/* หัวจดหมาย — โลโก้ซ้าย ข้อความขวา ตามฟอร์มจริง */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
@@ -189,6 +190,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
       </table>
 
       <div style={{ textAlign: "right", marginTop: "10px" }}>{FORM_CODE}</div>
+      </PrintPageFrame>
     </div>
   );
 }

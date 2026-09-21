@@ -162,6 +162,25 @@ design system, so it is a plain bordered table that holds the right fields rathe
 FM-PU-xx layout. It hardcodes Thai and never calls `useI18n`, like every other print document.
 `PrintLetterhead` is deliberately not used until a real form shows a company letterhead.
 
+### Signature block (2026-09-21)
+
+The PO's two signature cells no longer place the signer's scanned signature from their profile.
+The owner's instruction was *"ใบ PO ไม่ต้องมีลายเซ็นให้ขึ้นชื่อที่กรอกในช่องไปเลยแล้วชื่อวงเล็บก็เอาออกไปเลย"* —
+so `PrintSignatureLine` was dropped from this file and the typed `orderedBy` / `approvedBy` print above
+the rule instead, with a bare `ผู้สั่งซื้อ` / `ผู้อนุมัติ` label below it and no parentheses. The 28px box
+above the rule is kept so the row does not collapse on a draft printed out to be signed by hand.
+**`CostControlPrintDocument.tsx:177,:181` still uses the parenthesised form** — the owner named only the
+PO, so it was left alone pending an answer (tracked in [TODO.md](../TODO.md)).
+
+### Page edges (2026-09-21)
+
+Both purchasing print documents now go through `src/components/PrintPageFrame.tsx` instead of setting
+`@page { margin: 12mm }` themselves. That margin is what the browser drew the page URL and date into;
+only `margin: 0` removes the margin box. The frame restores the 12mm as `padding` on a `<div>` for the
+left/right edges and as an empty 12mm row inside `<thead>`/`<tfoot>` of a wrapper table for top/bottom —
+browsers repeat those two on every page, which a single box's `padding` does not. `PurchaseRequestPrintDocument`
+keeps its own `paddingRight: EDGE_GUARD` on the outer div; it stacks on top of the frame's 12mm.
+
 ## ใบขอซื้อ: four fields removed, and what that broke (2026-08-31)
 
 The owner's instruction from 2026-08-28 was blunt: *"ใบขอซื้อไม่ต้องมีผู้จำหน่าย เครดิต ขนส่งโดย"*.

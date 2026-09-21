@@ -4,6 +4,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { printDate, printText } from "../../lib/printFormat";
 import { STOCK_MOVEMENT_KIND_LABELS } from "../../lib/stock";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * การ์ดสต๊อก (Stock Card) ของสินค้าหนึ่งตัว — เจ้าของสั่ง 2026-09-03 ให้มี *"การ์ด stock"* คู่กับ
@@ -33,7 +34,7 @@ export function StockCardPrintDocument({ product, movements, companyHeader, prin
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", fontSize: "11px", color: "#000" }}>
-      <style>{"@media print { @page { size: A4 landscape; margin: 12mm; } }"}</style>
+      <PrintPageFrame size="A4 landscape">
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -126,6 +127,7 @@ export function StockCardPrintDocument({ product, movements, companyHeader, prin
           </tr>
         </tfoot>
       </table>
+      </PrintPageFrame>
     </div>
   );
 }

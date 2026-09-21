@@ -3,6 +3,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatArDocDate } from "../../lib/accounting";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printText } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ฟอร์มพิมพ์ใบขอซื้อ — คัดตามฟอร์มจริง FM-PU-05 Rev.02 : 03/11/68
@@ -99,7 +100,7 @@ export function PurchaseRequestPrintDocument({
       className="hidden print:block"
       style={{ fontFamily: DOC_FONT, fontSize: "11px", color: "#000", background: "#fff", paddingRight: EDGE_GUARD }}
     >
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm } }"}</style>
+      <PrintPageFrame>
 
       {/* หัวจดหมายไทย ซ้าย + หัวเรื่องขวา */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", marginBottom: "10px" }}>
@@ -210,6 +211,7 @@ export function PurchaseRequestPrintDocument({
         <span style={{ marginLeft: "24px" }}>บันทึกโดย {p.requestedBy || "-"}</span>
       </p>
       <p style={{ textAlign: "right", margin: "2px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>
+      </PrintPageFrame>
     </div>
   );
 }

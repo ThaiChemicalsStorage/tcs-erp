@@ -5,6 +5,7 @@ import { fmt } from "../../lib/quotes";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printText } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * ⚠️ **ใบพิมพ์ชั่วคราว — รอฟอร์มจริง** เหมือนใบสั่งซื้อ เจ้าของยังไม่ได้ส่งฟอร์มกระดาษของแผนกสโตร์มา
@@ -24,7 +25,7 @@ export function ReceivingReportPrintDocument({ doc, companyHeader }: { doc: Rece
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif", fontSize: "11px", color: "#000" }}>
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
+      <PrintPageFrame>
 
       <PrintLetterhead
         companyHeader={companyHeader}
@@ -151,6 +152,7 @@ export function ReceivingReportPrintDocument({ doc, companyHeader }: { doc: Rece
           </tr>
         </tbody>
       </table>
+      </PrintPageFrame>
     </div>
   );
 }

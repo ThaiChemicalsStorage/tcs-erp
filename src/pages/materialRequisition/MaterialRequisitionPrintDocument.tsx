@@ -3,6 +3,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printDateOrBlank, printText, printNumber } from "../../lib/printFormat";
+import { PrintPageFrame } from "../../components/PrintPageFrame";
 
 /**
  * Print layout for FM-ST-04 Rev.02 — the form's own column layout
@@ -52,7 +53,7 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif" }}>
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
+      <PrintPageFrame>
       <table className="w-full" style={{ borderCollapse: "collapse" }}>
         <tbody>
           <tr>
@@ -166,6 +167,7 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
         </tfoot>
       </table>
 
+      </PrintPageFrame>
     </div>
   );
 }
