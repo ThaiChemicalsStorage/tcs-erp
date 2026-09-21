@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import type { WithId, ObjectId } from "mongodb";
 import { MongoServerError } from "mongodb";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
@@ -10,7 +10,7 @@ import {
   notificationsCollection, scopeAttachmentFilesCollection, costControlsCollection, toObjectId, withStringId,
   type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
-import { Binary } from "mongodb";
+import { storeUpload, deleteUpload } from "./upload/uploadService.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { activeUserIdsWithPermission } from "./departmentNotify.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -1123,34 +1123,31 @@ async function handleAttachmentUpload(req: ApiRequest, res: ApiResponse, id: str
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
   const data = Buffer.from(dataBase64, "base64");
   if (data.length === 0) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
-  if (data.length > MAX_ATTACHMENT_BYTES) {
-    throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
-  }
 
-  const attachmentId = randomUUID();
-  const downloadKey = randomBytes(24).toString("base64url");
-  const files = await scopeAttachmentFilesCollection();
-  await ensureAttachmentIndexes(files);
-  await files.insertOne({
-    scopeOfWorkId: id,
-    attachmentId,
-    downloadKey,
-    fileName,
-    contentType,
-    size: data.length,
-    data: new Binary(data),
-    createdAt: nowIso(),
-  });
+  /**
+   * **ตั้งแต่ 2026-09-21 ไบต์ไปอยู่ในระบบอัปโหลดกลาง** (`api/_lib/upload/`) ซึ่งบีบอัดให้ในตัว
+   *
+   * ⚠️ **เปลี่ยนวิธีเปิดไฟล์**: เดิมเป็น capability URL ที่มี `?key=` เปิดได้โดยไม่ต้องล็อกอิน
+   * เหตุผลเดิมคือจะส่งลิงก์ให้ผู้รับเอกสารทางอีเมล ซึ่ง**ถอดออกไปแล้วตั้งแต่ 2026-08-07**
+   * ผู้รับเอกสารทุกวันนี้เป็นผู้ใช้ในระบบที่ต้องมี `scopeOfWork:view` อยู่แล้วจึงจะเห็นเอกสาร
+   * ไฟล์ใหม่จึงเปิดผ่าน `/api/files/:id` ที่ตรวจสิทธิ์ ตามข้อ 6 ของเอกสารงาน
+   * ไฟล์เก่ายังเปิดด้วยลิงก์เดิมได้ตามปกติ — route เดิมไม่ถูกแตะ
+   */
+  const stored = await storeUpload(ctx, { data, fileName }, { module: "scope-of-works", docId: id });
+  void contentType;
 
+  const attachmentId = stored.id;
   const attachment: ScopeOfWorkAttachment = {
     id: attachmentId,
     fileName,
-    url: `/api/scope-of-works/${id}/attachments/${attachmentId}/download?key=${downloadKey}`,
-    size: data.length,
-    contentType,
+    url: stored.url,
+    size: stored.size,
+    contentType: stored.mime,
     uploadedBy: ctx.user.id,
     uploadedByName: ctx.user.fullName,
     uploadedAt: nowIso(),
+    fileId: stored.id,
+    thumbnailUrl: stored.thumbnailUrl,
   };
   const scopeOfWorks = await scopeOfWorksCollection();
   // Atomic `$push` with the per-record cap re-checked inside the filter itself ("slot N-1 must not
@@ -1168,7 +1165,7 @@ async function handleAttachmentUpload(req: ApiRequest, res: ApiResponse, id: str
   if (pushResult.matchedCount === 0) {
     // Lost a concurrent race to the last free slot — remove the just-stored bytes so they can't
     // linger unreferenced, then surface the same "full" error the pre-check gives.
-    await files.deleteOne({ attachmentId });
+    await deleteUpload(stored.id);
     throw new HttpError(400, `แนบไฟล์ได้สูงสุด ${MAX_ATTACHMENTS_PER_SCOPE} ไฟล์ต่อเอกสาร — ลบไฟล์เดิมออกก่อน`);
   }
   const updated = await scopeOfWorks.findOne({ _id: doc._id });
@@ -1190,8 +1187,13 @@ async function handleAttachmentDelete(req: ApiRequest, res: ApiResponse, id: str
   const target = attachments.find((a) => a.id === attachmentId);
   if (!target) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
-  const files = await scopeAttachmentFilesCollection();
-  await files.deleteOne({ attachmentId });
+  // ไฟล์ใหม่อยู่ในตารางกลาง ไฟล์เก่าอยู่ที่เดิม — ลบทั้งสองทาง ทางที่ไม่ตรงเป็น no-op
+  if (target.fileId) {
+    await deleteUpload(target.fileId);
+  } else {
+    const files = await scopeAttachmentFilesCollection();
+    await files.deleteOne({ attachmentId });
+  }
   const scopeOfWorks = await scopeOfWorksCollection();
   // `$pull` of just this entry (not a `$set` of a pre-read filtered array) so a concurrent upload's
   // freshly-pushed sibling entry can't be clobbered by a stale snapshot.

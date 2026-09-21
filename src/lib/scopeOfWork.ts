@@ -227,6 +227,10 @@ export interface ScopeOfWorkAttachment {
   uploadedBy: string;
   uploadedByName: string;
   uploadedAt: string;
+  /** id ในตารางกลาง `files` — มีเฉพาะไฟล์ที่อัปโหลดตั้งแต่ 2026-09-21 ดู `documentAttachments.ts` */
+  fileId?: string;
+  /** URL รูปย่อ 400px — ว่างเมื่อไม่ใช่รูป หรือเป็นไฟล์เก่า */
+  thumbnailUrl?: string;
 }
 
 export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;

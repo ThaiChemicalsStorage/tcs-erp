@@ -731,7 +731,14 @@ export interface ArAttachmentFileFields {
   fileName: string;
   contentType: string;
   size: number;
-  data: import("mongodb").Binary;
+  /**
+   * ไบต์ของไฟล์ — **มีเฉพาะไฟล์ที่อัปโหลดก่อน 2026-09-21** ตั้งแต่นั้นไบต์ย้ายไปอยู่ในระบบอัปโหลด
+   * กลาง (ดู `api/_lib/upload/`) แถวนี้เหลือไว้เก็บ `checklistKey` ซึ่งเป็นข้อมูลเฉพาะของบัญชี
+   * ที่ตารางกลางไม่มีที่ให้เก็บ
+   */
+  data?: import("mongodb").Binary;
+  /** id ในตารางกลาง `files` — ไม่มีค่า = ไฟล์เก่าที่ไบต์ยังอยู่ในช่อง `data` ข้างบน */
+  fileId?: string;
   createdAt: string;
   createdBy: string;
 }

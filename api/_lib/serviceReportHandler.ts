@@ -1,7 +1,6 @@
 ﻿import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
-import { Binary } from "mongodb";
-import { randomUUID, randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
@@ -24,6 +23,7 @@ import type {
 } from "../../src/lib/serviceReports.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { companyCollection } from "./collections.js";
+import { storeUpload, deleteUpload } from "./upload/uploadService.js";
 import { isLinePushConfigured, pushLineMessage, buildApprovalFlexMessage } from "./lineHandler.js";
 
 /**
@@ -490,6 +490,9 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
     const survivingIds = collectPhotoIds(update.checklist);
     const orphanedIds = [...collectPhotoIds(doc.checklist)].filter((pid) => !survivingIds.has(pid));
     if (orphanedIds.length > 0) {
+      // รูปตั้งแต่ 2026-09-21 อยู่ในตารางกลาง ส่วนรูปเก่ายังอยู่ที่เดิม — ลบทั้งสองทาง
+      // ทางที่ไม่ตรงจะเป็น no-op เอง จึงเรียกทั้งคู่ได้โดยไม่ต้องแยกว่ารูปไหนอยู่ระบบไหน
+      for (const pid of orphanedIds) await deleteUpload(pid);
       const files = await serviceChecklistPhotoFilesCollection();
       await files.deleteMany({ serviceReportId: id, photoId: { $in: orphanedIds } });
     }
@@ -667,8 +670,6 @@ async function handlePhotoUpload(req: ApiRequest, res: ApiResponse, id: string) 
 
   const fileName = sanitizeShortText(body.fileName, "ชื่อไฟล์");
   if (!fileName.trim()) throw new HttpError(400, "กรุณาระบุชื่อไฟล์");
-  const contentType = typeof body.contentType === "string" && body.contentType.trim() ? body.contentType.trim().slice(0, 120) : "application/octet-stream";
-  if (!contentType.startsWith("image/")) throw new HttpError(400, "รองรับเฉพาะไฟล์รูปภาพเท่านั้น");
   const dataBase64 = typeof body.dataBase64 === "string" ? body.dataBase64 : "";
   if (!dataBase64) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
   if (dataBase64.length > Math.ceil((MAX_PHOTO_BYTES * 4) / 3) + 8) {
@@ -677,20 +678,25 @@ async function handlePhotoUpload(req: ApiRequest, res: ApiResponse, id: string) 
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
   const data = Buffer.from(dataBase64, "base64");
   if (data.length === 0) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
-  if (data.length > MAX_PHOTO_BYTES) throw new HttpError(400, `รูปภาพต้องมีขนาดไม่เกิน ${Math.floor(MAX_PHOTO_BYTES / 1024 / 1024)} MB`);
 
-  await ensurePhotoIndexes();
-  const photoId = randomUUID();
-  const downloadKey = randomBytes(24).toString("base64url");
-  const files = await serviceChecklistPhotoFilesCollection();
-  await files.insertOne({
-    serviceReportId: id, photoId, downloadKey, fileName, contentType, size: data.length,
-    data: new Binary(data), createdAt: nowIso(),
+  /**
+   * **ตั้งแต่ 2026-09-21 ส่งต่อให้ระบบอัปโหลดกลาง** (`api/_lib/upload/`) — บีบอัด หมุนตาม EXIF
+   * ลบ metadata และสร้างรูปย่อให้ในตัว · เดิมรูปหน้างานจากมือถือถูกเก็บดิบ ๆ ตามที่ browser ส่งมา
+   *
+   * `allowedKinds` แคบกว่าค่ากลางโดยตั้งใจ — รายการเช็คลิสต์รับ**รูปเท่านั้น** ด่านเดิม
+   * (`contentType.startsWith("image/")`) เชื่อค่าที่ client ส่งมา ตอนนี้ตัดสินจากเนื้อไฟล์จริง
+   */
+  const stored = await storeUpload(ctx, { data, fileName }, {
+    module: "service-reports", docId: id,
+    allowedKinds: ["jpg", "png", "webp", "gif", "heic"],
   });
 
+  const photoId = stored.id;
   const photo: ServiceChecklistItemPhoto = {
-    id: photoId, fileName, size: data.length, uploadedAt: nowIso(),
-    url: `/api/service-reports/${id}/photos/${photoId}/download?key=${downloadKey}`,
+    id: photoId, fileName, size: stored.size, uploadedAt: nowIso(),
+    url: stored.url,
+    fileId: stored.id,
+    thumbnailUrl: stored.thumbnailUrl,
   };
   const nextChecklist = doc.checklist.map((s) => (s.key !== sectionKey ? s : {
     ...s,
@@ -729,6 +735,8 @@ async function handlePhotoDelete(req: ApiRequest, res: ApiResponse, id: string, 
   }));
   if (!found) throw new HttpError(404, "ไม่พบรูปภาพ");
 
+  // รูปใหม่อยู่ในตารางกลาง รูปเก่าอยู่ที่เดิม — ลบทั้งสองทาง ทางที่ไม่ตรงเป็น no-op
+  await deleteUpload(photoId);
   const files = await serviceChecklistPhotoFilesCollection();
   await files.deleteOne({ serviceReportId: id, photoId });
   const serviceReports = await serviceReportsCollection();
@@ -752,6 +760,9 @@ async function handlePhotoDownload(req: ApiRequest, res: ApiResponse, id: string
   const key = typeof req.query.key === "string" ? req.query.key : "";
   if (!key) throw new HttpError(404, "ไม่พบรูปภาพ");
 
+  // route นี้เสิร์ฟเฉพาะ**รูปเก่า**ที่ยังไม่ได้ย้ายเข้าตารางกลาง (รูปใหม่ไปที่ /api/files/:id)
+  // ยังต้องมี index เพราะแต่ละแถวแบกรูปได้ถึง 4MB การสแกนทั้งคอลเลกชันจึงแพงมาก
+  await ensurePhotoIndexes();
   const files = await serviceChecklistPhotoFilesCollection();
   const file = await files.findOne({ serviceReportId: id, photoId });
   if (!file || file.downloadKey !== key) throw new HttpError(404, "ไม่พบรูปภาพ");

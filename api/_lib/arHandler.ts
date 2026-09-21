@@ -1,16 +1,18 @@
 import type { ApiRequest, ApiResponse } from "./httpTypes.js";
-import { type WithId, Binary } from "mongodb";
-import { randomUUID } from "node:crypto";
+import { type WithId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import {
   arMilestonesCollection, arAttachmentFilesCollection, arDocumentsCollection,
+  type ArAttachmentFileFields,
   scopeOfWorksCollection, quotesCollection, auditLogCollection, withStringId, toObjectId,
   type ArMilestoneFields, type ArDocumentFields, type ArDocumentLine, type ArChecklistKey,
   type ArWorkClassification, type ArDocumentType, type ArBillingStatus, type ArDocumentCustomerSnapshot,
   type ScopeOfWorkFields, type QuoteFields, countersCollection, type StockMovementFields,
 } from "./collections.js";
+import { storeUpload, deleteUpload, filesCollection } from "./upload/uploadService.js";
+import { storage } from "./upload/storage.js";
 import { computeQuoteAmountBeforeVat, lineSubtotal } from "./quoteAmounts.js";
 import { nextArDocNumber } from "./documentNumbering.js";
 import {
@@ -256,15 +258,21 @@ async function handleAttachmentUpload(req: ApiRequest, res: ApiResponse, milesto
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
   const data = Buffer.from(dataBase64, "base64");
-  if (data.length === 0 || data.length > MAX_AR_ATTACHMENT_BYTES) {
-    throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_AR_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
-  }
+  if (data.length === 0) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
 
-  const attachmentId = randomUUID();
+  /**
+   * **ตั้งแต่ 2026-09-21 ไบต์ไปอยู่ในระบบอัปโหลดกลาง** (`api/_lib/upload/`) ซึ่งบีบอัดให้ในตัว
+   * แถวใน `ar_attachment_files` ยังเขียนอยู่ เพราะ `checklistKey` (เอกสารนี้เป็นสำเนา PO หรือ
+   * ใบส่งของ) เป็นข้อมูลเฉพาะของบัญชีที่ตารางกลางไม่มีที่ให้เก็บ — แต่ไม่มีไบต์ในแถวอีกแล้ว
+   */
+  const stored = await storeUpload(ctx, { data, fileName }, { module: "ar-milestones", docId: milestoneId });
+  void contentType;
+
+  const attachmentId = stored.id;
   const files = await arAttachmentFilesCollection();
   await files.insertOne({
     milestoneId, attachmentId, checklistKey: checklistKey as ArChecklistKey,
-    fileName, contentType, size: data.length, data: new Binary(data),
+    fileName, contentType: stored.mime, size: stored.size, fileId: stored.id,
     createdAt: nowIso(), createdBy: ctx.user.id,
   });
 
@@ -284,6 +292,9 @@ async function handleAttachmentDelete(req: ApiRequest, res: ApiResponse, milesto
   if (!milestone.attachmentIds.includes(attachmentId)) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
   const files = await arAttachmentFilesCollection();
+  const row = await files.findOne({ attachmentId });
+  // ไฟล์ใหม่ไบต์อยู่ในตารางกลาง ไฟล์เก่าอยู่ในแถวนี้เอง — ลบให้ครบทั้งสองทาง
+  if (row?.fileId) await deleteUpload(row.fileId);
   await files.deleteOne({ attachmentId });
   const milestones = await arMilestonesCollection();
   await milestones.updateOne(
@@ -292,6 +303,22 @@ async function handleAttachmentDelete(req: ApiRequest, res: ApiResponse, milesto
   );
   const updated = await loadMilestoneOrThrow(milestoneId);
   res.status(200).json({ milestone: withStringId(updated) });
+}
+
+/**
+ * อ่านไบต์ของไฟล์แนบงวด ไม่ว่าจะเก็บอยู่ระบบไหน
+ *
+ * ไฟล์ตั้งแต่ 2026-09-21 ไบต์อยู่ในระบบอัปโหลดกลางและแถวนี้ถือแค่ `fileId`
+ * ส่วนไฟล์เก่ายังมีไบต์อยู่ในช่อง `data` ของแถวตัวเอง
+ */
+async function readAttachmentBytes(file: ArAttachmentFileFields): Promise<Buffer | null> {
+  if (file.fileId) {
+    const row = await (await filesCollection()).findOne({ _id: file.fileId });
+    if (!row) return null;
+    const blob = await storage().get(row.storageKey);
+    return blob?.data ?? null;
+  }
+  return file.data ? Buffer.from(file.data.buffer) : null;
 }
 
 async function handleAttachmentDownload(req: ApiRequest, res: ApiResponse, milestoneId: string, attachmentId: string) {
@@ -303,9 +330,19 @@ async function handleAttachmentDownload(req: ApiRequest, res: ApiResponse, miles
   const files = await arAttachmentFilesCollection();
   const file = await files.findOne({ milestoneId, attachmentId });
   if (!file) throw new HttpError(404, "ไม่พบไฟล์แนบ");
+  /**
+   * ไฟล์ใหม่ (ตั้งแต่ 2026-09-21) ไบต์อยู่ในระบบกลาง ส่วนไฟล์เก่ายังอยู่ในแถวนี้
+   * route เดิมยังเสิร์ฟทั้งสองแบบ หน้าจอบัญชีจึงไม่ต้องแก้อะไรเลย
+   */
+  const bytes = await readAttachmentBytes(file);
+  if (!bytes) throw new HttpError(404, "ไม่พบไฟล์แนบ");
+
   res.setHeader("Content-Type", file.contentType);
+  // กันเบราว์เซอร์เดาชนิดไฟล์เอง — `Content-Disposition: attachment` กันการเปิด inline อยู่แล้ว
+  // แต่ `nosniff` เป็นชั้นที่ข้อ 6 ของเอกสารงานขอไว้ตรง ๆ
+  res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(file.fileName)}"`);
-  res.status(200).send(file.data.buffer);
+  res.status(200).send(bytes);
 }
 
 // ─── Documents (issue AR/IV + companion BI) ──────────────────────────────────

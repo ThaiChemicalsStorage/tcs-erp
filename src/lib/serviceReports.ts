@@ -20,6 +20,10 @@ export interface ServiceChecklistItemPhoto {
   url: string;
   size: number;
   uploadedAt: string;
+  /** id ในตารางกลาง `files` — มีเฉพาะรูปที่อัปโหลดตั้งแต่ 2026-09-21 ดู `documentAttachments.ts` */
+  fileId?: string;
+  /** URL รูปย่อ 400px — ว่างเมื่อเป็นรูปเก่าที่ยังไม่ได้ย้ายเข้าระบบกลาง */
+  thumbnailUrl?: string;
 }
 
 export interface ServiceChecklistItemValue {
