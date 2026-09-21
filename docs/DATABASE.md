@@ -1153,6 +1153,8 @@ lack them:
 | `status` | all four | Gained `"PendingApproval"` between the existing `"Draft"` and `"Final"`. |
 | `approvedByUserId` | all four | The user who actually pressed Approve. Kept **separate** from the printed `approvedBy` name because that one is a free-text form field staff can edit. |
 | `rejectionComment` | all four | Why an approver sent it back. Cleared on resubmission. |
+| `purchasingStage` | `purchase_requests` | `"review"` \| `"approved"`, **เพิ่ม 2026-09-21**. ขั้นของฝ่ายจัดซื้อ แยกขาดจาก `storeStage`. **ไม่มีค่า = ใบก่อนวันนั้น** ด่านล็อกเช็ค `=== "approved"` ตรง ๆ ส่วนด่านเปิดใบสั่งซื้อเช็ค `!== "review"` เพื่อให้ใบเก่าผ่าน. ไม่มี migration. |
+| `purchasingApprovedByUserId` | `purchase_requests` | ผู้กดอนุมัติฝั่งจัดซื้อจริง เซิร์ฟเวอร์เขียนเท่านั้น แยกจากช่องข้อความ `purchasingDeptBy` ที่เจ้าหน้าที่พิมพ์เอง (กติกาเดียวกับ `approvedByUserId`). ทำให้ช่อง "ฝ่ายจัดซื้อ" บนใบพิมพ์มีลายเซ็นจริงได้เป็นครั้งแรก. |
 | `ownerDepartment` | `material_requisitions`, `purchase_requests` | `"project"` \| `"production"`. **Absent ⇒ treated as `"project"`**, which is what keeps pre-2026-08-20 records visible to the Project department. |
 | `productionOrderId` | `material_requisitions`, `purchase_requests` | Set only on Production-owned documents (which have `projectId: ""` instead). |
 

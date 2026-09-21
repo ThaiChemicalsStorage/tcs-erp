@@ -862,3 +862,32 @@ body รับ `newCategoryName` เพิ่มอีกหนึ่งช่�
 ไม่งั้น 400) · ชื่อที่ตรงกับหมวดที่มีอยู่แล้วแบบไม่สนตัวพิมพ์และตัดช่องว่างหัวท้าย จะ**ใช้หมวดเดิม
 ไม่สร้างซ้ำ** · การสร้างหมวดทางนี้ใช้สิทธิ์ `productRequest:review` ของ route นี้เอง ไม่ได้ผ่าน
 `POST /api/categories` ซึ่งยังต้องการ `products:create` เหมือนเดิม
+
+## ใบขอซื้อ — ขั้นของฝ่ายจัดซื้อ (2026-09-21, `api/_lib/purchaseRequestHandler.ts`)
+
+ต่อจากขั้นสโตร์: **สโตร์ส่งต่อ → จัดซื้อแก้ไขจนตรงกับของที่ซื้อได้จริง → จัดซื้ออนุมัติ (ลงชื่อในช่อง
+"ฝ่ายจัดซื้อ" + ล็อกทั้งใบ) → เปิดใบสั่งซื้อ**  เจ้าของแจ้งว่าใบที่อนุมัติแล้ว *"เป็น final แล้วทำอะไร
+ไม่ได้เลย"* — `purchasingStage` คือฟิลด์ที่แก้เรื่องนั้น
+
+เป็น**ฟิลด์ของเอกสาร ไม่ใช่สถานะที่ 4** ด้วยเหตุผลเดียวกับ `storeStage` ทุกประการ และ**แยกขาดจาก**
+`storeStage` เพราะ `nextStoreStage()` คำนวณค่าใหม่ทุกครั้งที่สโตร์กดเช็คของ
+
+| Route | Permission | Notes |
+|---|---|---|
+| `POST /api/purchase-requests/:id/purchasing-approve` | `purchaseRequest:editApproved` | `Final` เท่านั้น · `storeStage: "pending"` → 400 (ให้กด "ดึงมาที่จัดซื้อ" ก่อน) · อนุมัติซ้ำ → 400 · เขียน `purchasingStage: "approved"` + `purchasingApprovedByUserId` และเติม `purchasingDeptBy`/`At` **เฉพาะเมื่อยังว่าง** (ไม่ทับชื่อที่เจ้าหน้าที่พิมพ์เอง — กติกาเดียวกับ `handleApprove()`) · แจ้งผู้สร้างใบ |
+| `POST /api/purchase-requests/:id/purchasing-reopen` | `purchaseRequest:editApproved` | ต้องเป็น `"approved"` อยู่ก่อน · **มีใบสั่งซื้อที่ยังไม่ถูกลบอ้างใบนี้อยู่ → 400** พร้อมจำนวนใบ · กลับเป็น `"review"` และล้าง `purchasingApprovedByUserId` · **ไม่ล้าง** `purchasingDeptBy`/`At` เพราะเป็นข้อความบนฟอร์มที่กรอกเอง |
+
+**ไม่มีสิทธิ์ใหม่และไม่มี migration** — `purchaseRequest:editApproved` (มีมาตั้งแต่ 2026-09-09)
+แปลว่า "บทบาทฝ่ายจัดซื้อ" อยู่แล้ว
+
+**`PATCH /api/purchase-requests/:id` ถูกล็อกเมื่อ `purchasingStage === "approved"`** (400) — ด่านนี้
+เช็คค่าตรง ๆ **ห้ามเขียนเป็น "ไม่ใช่ review"** ไม่งั้นใบก่อน 2026-09-21 ทุกใบ (ซึ่งไม่มีฟิลด์นี้) จะถูก
+ล็อกทันทีในวันที่ deploy
+
+**`store-review` เขียน `purchasingStage: "review"` ให้เมื่อ `storeStage` กลายเป็น `"forwarded"`** และ
+**เฉพาะตอนที่ใบยังไม่มีค่านั้น** — ไม่งั้นการกดเช็คของซ้ำหลังจัดซื้ออนุมัติไปแล้วจะรีเซ็ตขั้นทิ้ง (มีเทสต์ดัก)
+
+**`handleRewrite` ล้าง `purchasingStage`/`purchasingApprovedByUserId` ทุกครั้ง** — มันใช้ `...rest`
+ถ้าไม่ล้าง ฉบับแก้ไขจะเกิดมาพร้อม `"approved"` แล้วถูกล็อกทันทีที่หัวหน้าอนุมัติ ทั้งที่จัดซื้อยังไม่เคยเห็น
+(มีเทสต์ดักไว้เช่นกัน)
+

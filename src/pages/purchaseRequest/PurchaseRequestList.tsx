@@ -188,6 +188,13 @@ export function PurchaseRequestList({
                           : t("purchaseRequest.stage.closed")}
                       </span>
                     )}
+                    {/* ขั้นของจัดซื้อ (2026-09-21) — ป้ายที่สามบอกว่าใบถูกล็อกแล้วพร้อมออกใบสั่งซื้อ
+                        ขึ้นเฉพาะตอน "approved" · "review" ไม่ขึ้นป้าย เพราะป้ายสโตร์ "รอจัดซื้อ" บอกอยู่แล้ว */}
+                    {p.status === "Final" && p.purchasingStage === "approved" && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#2aa36b]/15 text-[#1c7a4e]">
+                        {t("purchaseRequestDoc.purchasing.stageBadge")}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(p.updatedAt)}</td>

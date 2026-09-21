@@ -182,6 +182,39 @@ left/right edges and as an empty 12mm row inside `<thead>`/`<tfoot>` of a wrappe
 browsers repeat those two on every page, which a single box's `padding` does not. `PurchaseRequestPrintDocument`
 keeps its own `paddingRight: EDGE_GUARD` on the outer div; it stacks on top of the frame's 12mm.
 
+## The Purchasing stage on a PR (2026-09-21)
+
+The owner reported that an approved PR was a dead end: *"ใบ PR ตอนนี้แผนกจัดซื้อไม่สามารถอนุมัติได้
+มันเป็น final แล้วทำอะไรไม่ได้เลย"*. Two separate causes — the document was designed to be approved
+once, by the requesting department's head, with **no Purchasing stage of its own**; and the
+`purchaseRequest:editApproved` permission that already let Purchasing edit an approved PR (added
+2026-09-09) had never been ticked for any role but Administrator.
+
+`PurchaseRequestPurchasingStage` (`"review" | "approved"`) is the fix for the first cause. It is a
+**field on the document**, shaped exactly like `storeStage`, **not a fourth `ApprovableStatus`** —
+that union is shared by six document types. It must also stay **strictly separate** from `storeStage`,
+because `nextStoreStage()` recomputes that value from every line's tick each time Stores saves a
+stock check; folding the two together would reset Purchasing's stage on a repeat check.
+
+Flow: Stores forwards → the PR enters `"review"` → Purchasing edits it freely (the existing
+`editApproved` path) → **Approve (Purchasing)** writes `"approved"`, signs the form's ฝ่ายจัดซื้อ box,
+and locks the whole document → a PO can be raised. **Withdraw Purchasing approval** undoes a misclick
+without a Rewrite, and is refused once a PO references the PR.
+
+Three things that will bite whoever touches this next:
+
+1. **`handleRewrite` spreads `...rest`.** `purchasingStage` and `purchasingApprovedByUserId` are
+   cleared there explicitly. Without that, a revision is born already `"approved"` and locks itself
+   the moment the department head signs it, with Purchasing never having seen it. There is a test.
+2. **The lock checks `=== "approved"`, never `!== "review"`.** Pre-2026-09-21 documents have no
+   value at all; the negative form would lock every one of them on deploy day.
+3. **No new permission, no migration.** `purchaseRequest:editApproved` already means "Purchasing".
+   It still has to be ticked onto the customer's Purchasing role by hand — those roles have no fixed
+   `roleKey`, so `RBAC_MIGRATIONS` cannot reach them.
+
+`purchasingApprovedByUserId` is what finally lets the printed ฝ่ายจัดซื้อ column carry a real
+signature; before this the system never knew who approved on the Purchasing side.
+
 ## ราคาประเมิน removed from the PR (2026-09-21)
 
 Owner's instruction, item 6 of the 2026-09-18 purchasing batch: *"ราคาประเมินในใบ PR เอาออก"*.

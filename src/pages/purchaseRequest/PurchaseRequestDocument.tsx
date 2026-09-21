@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2 } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, ShoppingCart } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -11,6 +11,7 @@ import {
   rewritePurchaseRequest,
   uploadPurchaseRequestAttachment, deletePurchaseRequestAttachment,
   reviewPurchaseRequestStock, postPurchaseRequestIssue, cancelPurchaseRequestIssue,
+  purchasingApprovePurchaseRequest, purchasingReopenPurchaseRequest,
   storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
 } from "../../lib/purchaseRequest";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
@@ -124,6 +125,10 @@ export function PurchaseRequestDocument({
   const [savingIssue, setSavingIssue] = useState(false);
   const [cancelBatchTarget, setCancelBatchTarget] = useState<PurchaseRequestIssueBatch | null>(null);
   const [cancellingBatch, setCancellingBatch] = useState(false);
+  /** ขั้นของฝ่ายจัดซื้อ (2026-09-21) — อนุมัติ / ถอนการอนุมัติ */
+  const [confirmPurchasingApprove, setConfirmPurchasingApprove] = useState(false);
+  const [confirmPurchasingReopen, setConfirmPurchasingReopen] = useState(false);
+  const [purchasingBusy, setPurchasingBusy] = useState(false);
   /** หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว — ส่งไปกับการกดบันทึก ไม่ใช่ฟิลด์ที่เก็บบนใบ */
   const [purchasingEditNote, setPurchasingEditNote] = useState("");
 
@@ -295,7 +300,9 @@ export function PurchaseRequestDocument({
    * เพราะชื่อ/ยี่ห้อที่ซื้อได้จริงมักไม่ตรงกับที่ผู้ขอพิมพ์ไว้ · ทุกครั้งที่บันทึกจะถูกจดไว้ในประวัติ
    * `PendingApproval` ยังล็อกทุกคน — ห้ามแก้ใบที่ผู้อนุมัติกำลังอ่าน (กติกาเดิมของทั้งระบบ)
    */
-  const purchasingEditMode = canEditApproved && isFinal;
+  const purchasingEditMode = canEditApproved && isFinal && doc.purchasingStage !== "approved";
+  /** การ์ดของฝ่ายจัดซื้อ — เห็นตลอดหลังหัวหน้าอนุมัติ ไม่ว่าจะยังแก้ได้หรือถูกล็อกไปแล้ว */
+  const purchasingCardVisible = canEditApproved && isFinal;
   const editable = (canEdit && isDraftStatus) || purchasingEditMode;
   /** การ์ดของสโตร์ — ใบที่อนุมัติแล้วเท่านั้น และต้องมีสิทธิ์ขยับสต๊อก */
   const storeCardVisible = isFinal && canIssueStock;
@@ -440,6 +447,33 @@ export function PurchaseRequestDocument({
     } finally { setRewriting(false); setConfirmRewrite(false); }
   };
 
+  /**
+   * ฝ่ายจัดซื้ออนุมัติ / ถอนการอนุมัติ (2026-09-21)
+   *
+   * บันทึกที่ค้างอยู่ต้องถูกกดบันทึกเองก่อน — ปุ่มนี้ไม่บันทึกร่างให้ เพราะการอนุมัติกับการบันทึก
+   * เป็นคนละเจตนา และใบจะถูกล็อกทันทีหลังอนุมัติ การเซฟให้เงียบ ๆ จะกลายเป็นการยัดค่าที่ยังไม่ตั้งใจ
+   */
+  const runPurchasingStage = async (action: "approve" | "reopen") => {
+    setPurchasingBusy(true);
+    try {
+      const updated = action === "approve"
+        ? await purchasingApprovePurchaseRequest(doc.id)
+        : await purchasingReopenPurchaseRequest(doc.id);
+      setDoc(updated);
+      setDraft(updated);
+      dirty.markSaved(toUpdateFields(updated));
+      showToast(t(action === "approve"
+        ? "purchaseRequestDoc.purchasing.approvedToast"
+        : "purchaseRequestDoc.purchasing.reopenedToast"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.errorSave"));
+    } finally {
+      setPurchasingBusy(false);
+      setConfirmPurchasingApprove(false);
+      setConfirmPurchasingReopen(false);
+    }
+  };
+
   const handlePrint = async () => {
     setPrinting(true);
     try {
@@ -543,6 +577,51 @@ export function PurchaseRequestDocument({
             : undefined
           }
         />
+        {/* การ์ดของฝ่ายจัดซื้อ (2026-09-21) — ขั้นสุดท้ายของใบก่อนออกใบสั่งซื้อ
+            อยู่เหนือกล่องแก้ไขสีส้ม เพราะเป็นปุ่มที่จบงานของการแก้ ไม่ใช่ส่วนหนึ่งของการแก้ */}
+        {purchasingCardVisible && (
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <ShoppingCart size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.purchasing.title")}
+            </h2>
+            {doc.purchasingStage === "approved" ? (
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-2">
+                  <Lock size={15} className="text-[#3f8f5f] mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-[#3f8f5f]">{t("purchaseRequestDoc.purchasing.approvedBanner")}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t("purchaseRequestDoc.purchasing.approvedBy")
+                        .replace("{name}", doc.purchasingDeptBy || "")
+                        .replace("{date}", doc.purchasingDeptAt ? formatQuoteDateThai(doc.purchasingDeptAt) : "")}
+                    </p>
+                  </div>
+                </div>
+                {/* ปุ่มถอนโชว์เสมอ — เซิร์ฟเวอร์เป็นคนบอกว่าถอนไม่ได้เพราะออกใบสั่งซื้อไปแล้วกี่ใบ
+                    หน้านี้ไม่ได้โหลดรายการใบสั่งซื้อมา การเดาเองแล้วซ่อนปุ่มจะผิดได้ง่ายกว่า */}
+                <button
+                  onClick={() => setConfirmPurchasingReopen(true)}
+                  disabled={purchasingBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border text-muted-foreground rounded-lg font-medium hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
+                >
+                  <Undo2 size={13} /> {t("purchaseRequestDoc.purchasing.reopen")}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <p className="text-xs text-muted-foreground flex-1 min-w-[16rem]">{t("purchaseRequestDoc.purchasing.help")}</p>
+                <button
+                  onClick={() => setConfirmPurchasingApprove(true)}
+                  disabled={purchasingBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
+                >
+                  {purchasingBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                  {t("purchaseRequestDoc.purchasing.approve")}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {/* จัดซื้อกำลังแก้ใบที่หัวหน้าเซ็นไปแล้ว — ต้องเห็นชัดว่าไม่ใช่การแก้ใบร่างธรรมดา */}
         {purchasingEditMode && (
           <div className="bg-[#e08a3c]/8 border border-[#e08a3c]/30 rounded-xl p-4 space-y-2">
@@ -1014,6 +1093,24 @@ export function PurchaseRequestDocument({
         busy={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmPurchasingApprove}
+        title={t("purchaseRequestDoc.purchasing.approveConfirmTitle")}
+        message={t("purchaseRequestDoc.purchasing.approveConfirmBody")}
+        confirmLabel={t("purchaseRequestDoc.purchasing.approve")}
+        busy={purchasingBusy}
+        onConfirm={() => void runPurchasingStage("approve")}
+        onCancel={() => setConfirmPurchasingApprove(false)}
+      />
+      <ConfirmDialog
+        open={confirmPurchasingReopen}
+        title={t("purchaseRequestDoc.purchasing.reopenConfirmTitle")}
+        message={t("purchaseRequestDoc.purchasing.reopenConfirmBody")}
+        confirmLabel={t("purchaseRequestDoc.purchasing.reopen")}
+        busy={purchasingBusy}
+        onConfirm={() => void runPurchasingStage("reopen")}
+        onCancel={() => setConfirmPurchasingReopen(false)}
       />
       <ConfirmDialog
         open={confirmRewrite}

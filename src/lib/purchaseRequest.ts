@@ -109,6 +109,25 @@ export interface PurchaseRequestIssueBatch {
  */
 export type PurchaseRequestStoreStage = "pending" | "forwarded" | "closed";
 
+/**
+ * ขั้นของฝ่ายจัดซื้อบนใบขอซื้อ (2026-09-21) — เจ้าของแจ้งว่าใบที่อนุมัติแล้ว *"เป็น final แล้วทำอะไร
+ * ไม่ได้เลย"* และสั่งว่าเมื่อใบมาถึงจัดซื้อต้อง *"เป็น draft ที่สามารถแก้ข้อมูลได้แล้วให้จัดซื้อแก้ไข
+ * และอนุมัติ มันมีช่องเซ็นของจัดซื้อ"*
+ *
+ * - `"review"` = ใบมาถึงจัดซื้อแล้ว แก้ได้ทุกช่องเหมือนฉบับร่าง (ผ่านสิทธิ์ `purchaseRequest:editApproved`)
+ * - `"approved"` = จัดซื้ออนุมัติแล้ว ลงชื่อในช่อง "ฝ่ายจัดซื้อ" และ**ล็อกทั้งใบ** · เป็นด่านของการเปิดใบสั่งซื้อ
+ *
+ * **ไม่มีค่า = ใบก่อน 2026-09-21** ด่านล็อกจึงต้องเช็ค `=== "approved"` ตรง ๆ **ห้ามเช็คว่า "ไม่ใช่ review"**
+ * ไม่งั้นใบเก่าทุกใบจะถูกล็อกทันทีในวันที่ deploy · ด่านเปิดใบสั่งซื้อเขียนเป็น `!== "review"` ด้วยเหตุผล
+ * กลับกัน คือให้ใบเก่าที่ไม่มีค่าผ่านไปได้เหมือนเดิม
+ *
+ * **เป็นฟิลด์ของเอกสาร ไม่ใช่สถานะที่ 4** ด้วยเหตุผลเดียวกับ `PurchaseRequestStoreStage` ทุกประการ —
+ * `ApprovableStatus` ใน `api/_lib/documentApproval.ts` ใช้ร่วมกัน 6 เอกสาร · และต้อง**แยกขาดจาก**
+ * `storeStage` ด้วย เพราะ `nextStoreStage()` คำนวณค่าใหม่จากผลติ๊กทุกบรรทัดทุกครั้งที่สโตร์กดเช็คของ
+ * ถ้าเอามาปนกัน การเช็คของซ้ำจะรีเซ็ตขั้นของจัดซื้อทิ้ง
+ */
+export type PurchaseRequestPurchasingStage = "review" | "approved";
+
 export interface PurchaseRequest {
   /** Human-readable business id (e.g. "PR-2569-0001"), intended to be stored directly as _id once
    * the API layer mints it (Stage 3) — a clean new prefix, NOT the real example's legacy "ED" scheme
@@ -156,6 +175,16 @@ export interface PurchaseRequest {
   status: PurchaseRequestStatus;
   /** ขั้นของสโตร์หลังอนุมัติ — ดู `PurchaseRequestStoreStage` · ไม่มีค่า = ใบก่อน 2026-09-09 */
   storeStage?: PurchaseRequestStoreStage;
+  /** ขั้นของฝ่ายจัดซื้อ — ดู `PurchaseRequestPurchasingStage` · ไม่มีค่า = ใบก่อน 2026-09-21 */
+  purchasingStage?: PurchaseRequestPurchasingStage;
+  /**
+   * ผู้กดอนุมัติของฝ่ายจัดซื้อจริงในระบบ — เซิร์ฟเวอร์เขียนเท่านั้น แยกจาก `purchasingDeptBy` ซึ่งเป็น
+   * ช่องข้อความบนฟอร์มที่เจ้าหน้าที่พิมพ์เองได้ (กติกาเดียวกับ `approvedByUserId`)
+   *
+   * ทำให้ช่อง "ฝ่ายจัดซื้อ" บนใบพิมพ์มีลายเซ็นจริงได้เป็นครั้งแรก — ก่อนหน้านี้คอลัมน์นั้นส่ง `userId`
+   * ไม่ได้เพราะระบบไม่เคยรู้ว่าใครเป็นคนอนุมัติฝั่งจัดซื้อ
+   */
+  purchasingApprovedByUserId?: string;
   /** ผู้เช็คของของสโตร์ + วันที่ + หมายเหตุ (เช่น ของหมด สั่งเพิ่ม) */
   storeReviewedBy?: string;
   storeReviewedByName?: string;
@@ -248,6 +277,8 @@ export interface PurchaseRequestSummary {
   status: PurchaseRequestStatus;
   /** ขั้นของสโตร์ — ป้าย "รอสโตร์ / รอจัดซื้อ / จ่ายจากสต๊อก" ในหน้ารายการ (2026-09-09) */
   storeStage?: PurchaseRequestStoreStage;
+  /** ขั้นของจัดซื้อ — ป้าย "จัดซื้ออนุมัติแล้ว" ในหน้ารายการ (2026-09-21) */
+  purchasingStage?: PurchaseRequestPurchasingStage;
   updatedAt: string;
 }
 
@@ -381,6 +412,24 @@ export async function cancelPurchaseRequestIssue(id: string, batchId: string): P
     `/purchase-requests/${encodeURIComponent(id)}/store-issues/${encodeURIComponent(batchId)}`,
     { method: "DELETE" },
   ));
+}
+
+// ── ขั้นของฝ่ายจัดซื้อ (2026-09-21) ────────────────────────────────────────────────────────
+/**
+ * จัดซื้ออนุมัติใบขอซื้อ — ลงชื่อในช่อง "ฝ่ายจัดซื้อ" แล้วล็อกทั้งใบ · เป็นด่านของการเปิดใบสั่งซื้อ
+ *
+ * ใช้สิทธิ์เดิม `purchaseRequest:editApproved` ไม่มีสิทธิ์ใหม่ — สิทธิ์นั้นแปลว่า "บทบาทฝ่ายจัดซื้อ" อยู่แล้ว
+ */
+export async function purchasingApprovePurchaseRequest(id: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(
+    `/purchase-requests/${encodeURIComponent(id)}/purchasing-approve`, { method: "POST" });
+  return purchaseRequest;
+}
+/** ถอนการอนุมัติของจัดซื้อ — ปุ่มแก้พลาดมือลั่น ไม่ต้อง Rewrite ทั้งใบ · ทำไม่ได้ถ้าเปิดใบสั่งซื้อไปแล้ว */
+export async function purchasingReopenPurchaseRequest(id: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(
+    `/purchase-requests/${encodeURIComponent(id)}/purchasing-reopen`, { method: "POST" });
+  return purchaseRequest;
 }
 
 // สร้างรายการเปล่า อาจผูกกับสินค้าในแคตตาล็อกหรือพิมพ์เองอิสระก็ได้

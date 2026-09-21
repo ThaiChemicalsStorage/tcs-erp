@@ -48,6 +48,10 @@ type PurchaseRequestDoc = {
   storeRemark?: string;
   storeIssues?: { id: string; seq: number; lines: { lineId: string; qty: number }[] }[];
   purchasingEdits?: { at: string; byName: string; note: string }[];
+  purchasingStage?: "review" | "approved";
+  purchasingApprovedByUserId?: string;
+  purchasingDeptBy?: string;
+  purchasingDeptAt?: string;
   lines: { id: string; productId: string; productCode: string; description: string; unit: string; qtyRequested: number | null; subDetails: string[]; storeDecision?: string }[];
 };
 type PurchaseOrderDoc = {
@@ -607,6 +611,87 @@ describe("ใบขอซื้อ — ขั้นสโตร์เช็ค�
  * **ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้ว (2026-09-09)** — เจ้าของสั่ง: *"จัดซื้อสามารถแก้ไข PR ได้ เนื่องจาก
  * ชื่อหรือยี่ห้อตอนซื้ออาจจะไม่ตรงตามที่พิมพ์ไว้ในใบ"* และเลือกให้แก้ได้ทุกช่องเหมือนใบร่าง
  */
+describe("ใบขอซื้อ — ขั้นของฝ่ายจัดซื้อ (2026-09-21)", () => {
+  it("สโตร์ส่งต่อ = ใบเข้าขั้น review ของจัดซื้อ แล้วจัดซื้ออนุมัติจนล็อกใบได้", async () => {
+    const pr = await approvedPurchaseRequest();
+    expect(pr.purchasingStage, "สโตร์ส่งต่อแล้วใบต้องอยู่ในมือจัดซื้อ").toBe("review");
+
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const approved = (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest;
+    expect(approved.purchasingStage).toBe("approved");
+    expect(approved.status, "ยังเป็นเอกสาร Final เหมือนเดิม ไม่ใช่สถานะที่ 4").toBe("Final");
+    // ลงชื่อในช่อง "ฝ่ายจัดซื้อ" ให้อัตโนมัติเมื่อยังไม่มีใครพิมพ์ไว้
+    expect((approved.purchasingDeptBy ?? "").trim()).not.toBe("");
+    expect((approved.purchasingDeptAt ?? "").trim()).not.toBe("");
+    expect((approved.purchasingApprovedByUserId ?? "").trim()).not.toBe("");
+  });
+
+  it("อนุมัติแล้วแก้ใบไม่ได้ จนกว่าจะถอนการอนุมัติ", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+
+    const blocked = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ headerRemark: "แก้หลังล็อก" }),
+    });
+    expect(blocked.status).toBe(400);
+
+    const reopened = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-reopen`, { method: "POST" });
+    expect(reopened.status).toBe(200);
+    expect((await json<{ purchaseRequest: PurchaseRequestDoc }>(reopened)).purchaseRequest.purchasingStage).toBe("review");
+
+    const ok = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ headerRemark: "แก้ได้แล้ว" }),
+    });
+    expect(ok.status).toBe(200);
+  });
+
+  it("ออกใบสั่งซื้อไปแล้วถอนการอนุมัติไม่ได้", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    await createPurchaseOrder({ purchaseRequestId: pr.id });
+
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-reopen`, { method: "POST" });
+    expect(res.status).toBe(400);
+  });
+
+  it("อนุมัติซ้ำไม่ได้ และใบที่ยังรอสโตร์อนุมัติฝั่งจัดซื้อไม่ได้", async () => {
+    const waiting = await approvedAwaitingStore();
+    expect(waiting.purchasingStage, "ใบที่ยังรอสโตร์ยังไม่เข้ามือจัดซื้อ").toBeUndefined();
+    const tooEarly = await api(`/api/purchase-requests/${encodeURIComponent(waiting.id)}/purchasing-approve`, { method: "POST" });
+    expect(tooEarly.status).toBe(400);
+
+    const pr = await approvedPurchaseRequest();
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" })).status).toBe(400);
+  });
+
+  it("เช็คของซ้ำหลังจัดซื้ออนุมัติแล้ว ไม่รีเซ็ตขั้นของจัดซื้อทิ้ง", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    const again = await storeForwardsToPurchasing(pr.id);
+    expect(again.storeStage).toBe("forwarded");
+    expect(again.purchasingStage, "nextStoreStage() ต้องไม่แตะฟิลด์ของจัดซื้อ").toBe("approved");
+  });
+
+  /**
+   * บั๊กที่มีโอกาสเกิดสูงสุดของงานชุดนี้ — `handleRewrite` ใช้ `...rest` ถ้าไม่ล้างฟิลด์นี้
+   * ฉบับแก้ไขจะเกิดมาพร้อม "approved" แล้วถูกล็อกทันทีที่หัวหน้าอนุมัติ ทั้งที่จัดซื้อยังไม่เคยเห็น
+   */
+  it("Rewrite แล้วฉบับใหม่ต้องไม่ติดขั้นของจัดซื้อมาด้วย", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/rewrite`, { method: "POST" });
+    expect(res.status).toBe(201);
+    const rewritten = (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest;
+    expect(rewritten.status).toBe("Draft");
+    expect(rewritten.purchasingStage, "ฉบับแก้ไขต้องเริ่มที่ยังไม่ผ่านจัดซื้อ").toBeUndefined();
+    expect(rewritten.purchasingApprovedByUserId ?? "").toBe("");
+    expect(rewritten.purchasingDeptBy ?? "").toBe("");
+  });
+});
+
 describe("ใบขอซื้อ — จัดซื้อแก้ใบที่อนุมัติแล้ว", () => {
   it("แก้ชื่อ/ยี่ห้อบนใบ Final ได้ และถูกจดไว้ในประวัติ", async () => {
     const pr = await approvedPurchaseRequest();

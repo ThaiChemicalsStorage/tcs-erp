@@ -200,7 +200,9 @@ export function PurchaseRequestPrintDocument({
           <tr>
             {signCell("ผู้ขอซื้อ", p.requestedBy, p.createdBy)}
             {signCell("ผู้อนุมัติ", p.approvedBy, p.approvedByUserId)}
-            {signCell("ฝ่ายจัดซื้อ", p.purchasingDeptBy)}
+            {/* ลายเซ็นจริงของคนที่กดอนุมัติฝั่งจัดซื้อ (2026-09-21) — ก่อนหน้านี้คอลัมน์นี้ส่ง userId
+                ไม่ได้ เพราะระบบไม่เคยรู้ว่าใครอนุมัติฝั่งจัดซื้อ มีแต่ชื่อที่พิมพ์ลงช่องเอง */}
+            {signCell("ฝ่ายจัดซื้อ", p.purchasingDeptBy, p.purchasingApprovedByUserId)}
           </tr>
         </tbody>
       </table>

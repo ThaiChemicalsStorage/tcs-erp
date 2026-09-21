@@ -6,6 +6,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   purchaseRequestsCollection, productionOrdersCollection, productsCollection, countersCollection, auditLogCollection,
+  purchaseOrdersCollection,
   toObjectId, withStringId, type PurchaseRequestFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -21,6 +22,7 @@ import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import type {
   PurchaseRequestLine, PurchaseRequestSummary, PurchaseRequestIssueBatch, PurchaseRequestStoreStage,
+  PurchaseRequestPurchasingStage,
 } from "../../src/lib/purchaseRequest.js";
 import { storeIssueBatchesOf, storeIssuedQtyOf } from "../../src/lib/purchaseRequest.js";
 
@@ -135,7 +137,7 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
   const full = withStringId(doc);
-  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, storeStage: full.storeStage, updatedAt: full.updatedAt, ownerDepartment: full.ownerDepartment ?? "project" };
+  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, storeStage: full.storeStage, purchasingStage: full.purchasingStage, updatedAt: full.updatedAt, ownerDepartment: full.ownerDepartment ?? "project" };
 }
 
 async function loadOrThrow(id: string) {
@@ -360,6 +362,14 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   // การแก้ใบที่อนุมัติแล้วต้องเป็นการกดบันทึกของคนจริง ๆ ไม่ใช่การบันทึกอัตโนมัติระหว่างพิมพ์
   // (กฎมาตรฐานของระบบ: auto-save เขียนได้เฉพาะใบร่าง ดู hooks/useAutoSave.ts + api/_lib/http.ts)
   if (autoSave && purchasingEdit) throw new HttpError(409, "บันทึกอัตโนมัติไม่รองรับใบที่อนุมัติแล้ว");
+  /**
+   * จัดซื้ออนุมัติแล้ว = ล็อกทั้งใบ (2026-09-21) — เช็ค `=== "approved"` ตรง ๆ **ห้ามเขียนเป็น
+   * "ไม่ใช่ review"** ไม่งั้นใบก่อนวันนั้นทุกใบ (ซึ่ง `purchasingStage` เป็น undefined) จะถูกล็อกทันที
+   * ที่ deploy ทั้งที่จัดซื้อยังไม่เคยเห็น
+   */
+  if (purchasingEdit && doc.purchasingStage === "approved") {
+    throw new HttpError(400, "ฝ่ายจัดซื้ออนุมัติใบขอซื้อนี้แล้ว แก้ไขไม่ได้ — ถ้าต้องแก้ ให้ถอนการอนุมัติของจัดซื้อก่อน");
+  }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<PurchaseRequestFields> = {};
@@ -490,6 +500,102 @@ function assertStoreIssuesStillCovered(
 }
 
 /**
+ * จำนวนใบสั่งซื้อที่ยังไม่ถูกลบซึ่งอ้างใบขอซื้อใบนี้ (2026-09-21)
+ *
+ * ใช้เป็นด่านของการถอนการอนุมัติฝั่งจัดซื้อ — เปิดใบสั่งซื้อไปแล้วแปลว่าใบขอซื้อฉบับนี้ถูกใช้จริง
+ * การปลดล็อกให้แก้ต่อจะทำให้ใบสั่งซื้อที่ออกไปอ้างเนื้อหาที่ไม่มีอยู่แล้ว
+ */
+async function openPurchaseOrderCountOf(id: string): Promise<number> {
+  const purchaseOrders = await purchaseOrdersCollection();
+  return purchaseOrders.countDocuments({ purchaseRequestId: id, isDeleted: { $ne: true } });
+}
+
+/**
+ * ฝ่ายจัดซื้ออนุมัติใบขอซื้อ (2026-09-21) — ขั้นสุดท้ายของใบก่อนเปิดใบสั่งซื้อ
+ *
+ * เจ้าของสั่ง: *"ให้จัดซื้อแก้ไขและอนุมัติ มันมีช่องเซ็นของจัดซื้อ"* — การกดปุ่มนี้จึงทำสองอย่างพร้อมกัน
+ * คือลงชื่อในช่อง "ฝ่ายจัดซื้อ" บนตัวใบ และล็อกใบไม่ให้ใครแก้ต่อ
+ *
+ * **ใช้สิทธิ์เดิม `purchaseRequest:editApproved` ไม่มีสิทธิ์ใหม่และไม่ต้องทำ migration** — สิทธิ์นั้น
+ * แปลว่า "บทบาทฝ่ายจัดซื้อ" อยู่แล้วตั้งแต่ 2026-09-09 (ดู `canEditApproved()`)
+ *
+ * `purchasingDeptBy` ใช้ชื่อที่พิมพ์ไว้ในช่องเป็นหลัก ถ้าว่างค่อยเติมชื่อคนที่กด — กติกาเดียวกับ
+ * `handleApprove()` ใน documentApproval.ts ที่ไม่ทับชื่อที่เจ้าหน้าที่พิมพ์เอง
+ */
+async function handlePurchasingApprove(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:editApproved");
+  const doc = await loadOrThrow(id);
+  if (doc.status !== "Final") throw new HttpError(400, "อนุมัติได้เฉพาะใบขอซื้อที่หัวหน้าอนุมัติแล้วเท่านั้น");
+  // ใบที่ยังรอสโตร์เช็คของ จัดซื้อยังไม่ควรปิดจบ — ถ้าอยากทำก่อน ให้กด "ดึงมาที่จัดซื้อ" (เฟส 4) ก่อน
+  if (doc.storeStage === "pending") {
+    throw new HttpError(400, 'ใบนี้ยังรอสโตร์เช็คของอยู่ — กด "ดึงมาที่จัดซื้อ" ก่อน ถ้าต้องการทำเองเลย');
+  }
+  if (doc.purchasingStage === "approved") throw new HttpError(400, "ฝ่ายจัดซื้ออนุมัติใบนี้ไปแล้ว");
+
+  const now = nowIso();
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, {
+    $set: {
+      purchasingStage: "approved" as PurchaseRequestPurchasingStage,
+      purchasingDeptBy: (doc.purchasingDeptBy ?? "").trim() || ctx.user.fullName,
+      purchasingDeptAt: (doc.purchasingDeptAt ?? "").trim() || now.slice(0, 10),
+      purchasingApprovedByUserId: ctx.user.id,
+      updatedAt: now, updatedBy: ctx.user.id,
+    },
+  });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Purchase Request Purchasing Approved",
+    `ฝ่ายจัดซื้ออนุมัติใบขอซื้อ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  // แจ้งผู้สร้างใบว่าเรื่องเดินต่อแล้ว — best-effort เหมือนการแจ้งเตือนอื่นทั้งระบบ
+  try {
+    await notifyUser(doc.createdBy, ctx.user.id, {
+      type: "purchase_request_purchasing_approved",
+      title: "ฝ่ายจัดซื้ออนุมัติใบขอซื้อของคุณแล้ว",
+      description: `${ctx.user.fullName} อนุมัติใบขอซื้อ ${id} ฝั่งจัดซื้อ พร้อมออกใบสั่งซื้อ`,
+      module: "ใบขอซื้อ",
+      related: { relatedPurchaseRequestId: id },
+    });
+  } catch (err) {
+    console.error("[purchase-requests] failed to notify the author after a purchasing approval", err);
+  }
+  res.status(200).json({ purchaseRequest: toClient(updated) });
+}
+
+/**
+ * ถอนการอนุมัติของฝ่ายจัดซื้อ (2026-09-21) — ปุ่มแก้พลาดมือลั่น ไม่ต้อง Rewrite ทั้งใบ
+ *
+ * ปรัชญาเดียวกับการย้อนใบสั่งซื้อที่อนุมัติแล้ว (ข้อ 9 ของคำสั่งชุดเดียวกัน): การกดผิดหนึ่งครั้ง
+ * ไม่ควรบังคับให้ออกเลขที่เอกสารใหม่ · **ชื่อและวันที่ที่พิมพ์ไว้ในช่องไม่ถูกล้าง** เพราะเป็นข้อความ
+ * บนฟอร์มที่เจ้าหน้าที่กรอกเอง ไม่ใช่ผลของการกดปุ่ม — ล้างเฉพาะ `purchasingApprovedByUserId`
+ * ซึ่งเป็นของที่เซิร์ฟเวอร์เขียน (ลายเซ็นบนใบพิมพ์จึงหายไปพร้อมการถอน)
+ */
+async function handlePurchasingReopen(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:editApproved");
+  const doc = await loadOrThrow(id);
+  if (doc.purchasingStage !== "approved") throw new HttpError(400, "ใบนี้ยังไม่ได้ถูกอนุมัติโดยฝ่ายจัดซื้อ");
+  const openPos = await openPurchaseOrderCountOf(id);
+  if (openPos > 0) {
+    throw new HttpError(400, `ใบนี้ออกใบสั่งซื้อไปแล้ว ${openPos} ใบ ถอนการอนุมัติไม่ได้ — ต้องลบใบสั่งซื้อก่อน`);
+  }
+
+  const now = nowIso();
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, {
+    $set: {
+      purchasingStage: "review" as PurchaseRequestPurchasingStage,
+      purchasingApprovedByUserId: "",
+      updatedAt: now, updatedBy: ctx.user.id,
+    },
+  });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Purchase Request Purchasing Approval Withdrawn",
+    `ถอนการอนุมัติของฝ่ายจัดซื้อบนใบขอซื้อ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ purchaseRequest: toClient(updated) });
+}
+
+/**
  * สโตร์บันทึกผลการเช็คของ (2026-09-09) — บรรทัดไหนมีของ บรรทัดไหนต้องซื้อ
  *
  * สิทธิ์ `stock:adjust` ไม่ใช่ `purchaseRequest:edit` — คนเช็คของคือสโตร์ ไม่ใช่คนเขียนใบ (กติกาเดียวกับ
@@ -530,6 +636,9 @@ async function handleStoreReview(req: ApiRequest, res: ApiResponse, id: string) 
     $set: {
       lines,
       storeStage: stage,
+      // ส่งต่อจัดซื้อ = ใบเข้าขั้น "review" ของจัดซื้อ (2026-09-21) · เขียนเฉพาะตอนเปลี่ยนเป็น forwarded
+      // ไม่งั้นการกดเช็คของซ้ำหลังจัดซื้ออนุมัติไปแล้วจะรีเซ็ตขั้นของจัดซื้อกลับเป็น review
+      ...(stage === "forwarded" && doc.purchasingStage === undefined ? { purchasingStage: "review" as const } : {}),
       storeReviewedBy: ctx.user.id,
       storeReviewedByName: ctx.user.fullName,
       storeReviewedAt: now.slice(0, 10),
@@ -746,6 +855,12 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
       requestedBy: ctx.user.fullName, requestedAt: now.slice(0, 10),
       approvedBy: "", approvedAt: "",
       purchasingDeptBy: "", purchasingDeptAt: "",
+      /**
+       * ⚠️ **ต้องล้างขั้นของจัดซื้อทุกครั้ง** — `...rest` ข้างบนพาทุกฟิลด์ของฉบับเดิมมาด้วย ถ้าไม่ล้าง
+       * ฉบับแก้ไขจะเกิดมาพร้อม `purchasingStage: "approved"` แล้วถูกล็อกทันทีที่หัวหน้าอนุมัติ
+       * ทั้งที่จัดซื้อยังไม่เคยเห็นฉบับนี้เลย (มีเทสต์ดักไว้ใน tests/api/purchasing.test.ts)
+       */
+      purchasingStage: undefined, purchasingApprovedByUserId: "",
       approvedByUserId: "",
       rejectionComment: "",
       revisionNote: "",
@@ -826,6 +941,9 @@ export async function handlePurchaseRequest(req: ApiRequest, res: ApiResponse): 
     if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   // ขั้นสโตร์ (2026-09-09) — เช็คของ / จ่ายของ / ยกเลิกรอบล่าสุด
   if (parts.length === 2 && parts[1] === "store-review") return handleStoreReview(req, res, parts[0]);
+  // ขั้นของจัดซื้อ (2026-09-21) — อนุมัติ / ถอนการอนุมัติ
+  if (parts.length === 2 && parts[1] === "purchasing-approve") return handlePurchasingApprove(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "purchasing-reopen") return handlePurchasingReopen(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "store-issues") return handleStoreIssue(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "store-issues") return handleCancelStoreIssue(req, res, parts[0], parts[2]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);

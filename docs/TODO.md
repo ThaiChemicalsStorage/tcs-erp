@@ -47,7 +47,7 @@
 - [x] **เฟส 2 — ลบราคาประเมินออกจาก PR (ข้อ 6).** ✅ **เสร็จ 2026-09-21** — ฟิลด์จริงชื่อ `estimatedCost` ไม่ใช่ `estimatedPrice` ·
   ผู้ใช้นอกโมดูลรายเดียวคือ `api/_lib/purchaseOrderHandler.ts:220` ที่คัดลอกไปเป็น `unitPrice` ของ PO →
   เปลี่ยนเป็น `null` · **ไม่ได้ถูกพิมพ์อยู่แล้ว** (`PurchaseRequestPrintDocument.tsx:24,:29-31`)
-- [ ] **เฟส 3 — ขั้นของจัดซื้อบนใบ PR (ข้อ 1 + 4).** `PurchaseRequestPurchasingStage = "review" | "approved"`
+- [x] **เฟส 3 — ขั้นของจัดซื้อบนใบ PR (ข้อ 1 + 4).** ✅ **เสร็จ 2026-09-21** — `PurchaseRequestPurchasingStage = "review" | "approved"`
   ทรงเดียวกับ `storeStage` · 3 route ใหม่: `purchasing-approve` / `purchasing-reopen` / `pull-to-purchasing`
   ทั้งหมดใช้สิทธิ์เดิม `purchaseRequest:editApproved` **ไม่มีสิทธิ์ใหม่ ไม่ต้องทำ migration** ·
   ลงชื่อในช่อง `purchasingDeptBy`/`purchasingDeptAt` ที่มีอยู่แล้ว แล้วล็อกทั้งใบ
