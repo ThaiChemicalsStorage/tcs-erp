@@ -7,6 +7,7 @@ import {
 import {
   type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize,
 } from "../../lib/scopeOfWork";
+import { ACCEPT_ALL_UPLOADS } from "../../lib/uploadLimits";
 
 // เลือกพนักงานที่จะรับแจ้งเตือนเอกสารในระบบตามแผนกที่ติ๊กไว้ พร้อมจัดการไฟล์แนบและข้อความเพิ่มเติม
 // Picks which employees receive the in-app document notification per checked department, plus attachments and an extra message
@@ -197,6 +198,7 @@ export function DocumentRecipientsPicker({
           <input
             ref={fileInputRef}
             type="file"
+            accept={ACCEPT_ALL_UPLOADS}
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];

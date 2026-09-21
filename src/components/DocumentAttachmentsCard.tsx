@@ -2,10 +2,10 @@ import { useRef, useState } from "react";
 import { FileText, Loader2, Paperclip, Trash2 } from "lucide-react";
 import {
   type DocumentAttachment,
-  MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_DOCUMENT,
   formatFileSize,
 } from "../lib/documentAttachments";
+import { ACCEPT_ALL_UPLOADS, CLIENT_MAX_IMAGE_BYTES, SUPPORTED_TYPES_HINT, checkBeforeUpload } from "../lib/uploadLimits";
 import { useI18n } from "../lib/i18n";
 
 /**
@@ -39,8 +39,10 @@ export function DocumentAttachmentsCard({
     setError("");
     // เช็คขนาดฝั่งหน้าจอก่อน เพื่อบอกผู้ใช้ทันทีโดยไม่ต้องอัปโหลดไฟล์ใหญ่ขึ้นไปให้เซิร์ฟเวอร์ปฏิเสธ
     // (เซิร์ฟเวอร์ยังเช็คซ้ำอยู่ดี — อันนั้นคือด่านจริง อันนี้แค่ช่วยให้รู้เร็ว)
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      setError(t("attachments.tooLarge").replace("{mb}", String(Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024))));
+    // เพดานรูปกับเอกสารไม่เท่ากัน ข้อความจึงต้องบอกเพดานของไฟล์ที่เลือกจริง ๆ (ดู uploadLimits.ts)
+    const problem = checkBeforeUpload(file);
+    if (problem) {
+      setError(problem);
       return;
     }
     setBusy(true);
@@ -73,7 +75,8 @@ export function DocumentAttachmentsCard({
       <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
         <h2 className="text-sm font-semibold text-foreground">{t("attachments.title")}</h2>
         <span className="text-xs text-muted-foreground">
-          {attachments.length}/{MAX_ATTACHMENTS_PER_DOCUMENT} · {t("attachments.limit").replace("{mb}", String(Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)))}
+          {/* บอกเพดานของรูป ซึ่งเป็นค่าที่สูงกว่า — เอกสารต่ำกว่านี้ และข้อความตอนถูกปฏิเสธจะบอกเอง */}
+          {attachments.length}/{MAX_ATTACHMENTS_PER_DOCUMENT} · {t("attachments.limit").replace("{mb}", String(Math.floor(CLIENT_MAX_IMAGE_BYTES / 1024 / 1024)))}
         </span>
       </div>
 
@@ -82,6 +85,8 @@ export function DocumentAttachmentsCard({
           <input
             ref={inputRef}
             type="file"
+            // จำกัดชนิดไฟล์ตั้งแต่กล่องเลือกไฟล์ ให้ตรงกับ whitelist ของเซิร์ฟเวอร์ (ขั้นที่ 5)
+            accept={ACCEPT_ALL_UPLOADS}
             className="hidden"
             onChange={(e) => void pick(e.target.files?.[0])}
           />
@@ -92,8 +97,10 @@ export function DocumentAttachmentsCard({
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-2"
           >
             {busy ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
-            {full ? t("attachments.full") : t("attachments.attach")}
+            {busy ? t("attachments.uploading") : full ? t("attachments.full") : t("attachments.attach")}
           </button>
+          {/* บอกชนิดที่รองรับไว้ก่อน ผู้ใช้จะได้ไม่เลือกไฟล์ที่จะโดนปฏิเสธ */}
+          {!full && <p className="text-[10px] text-muted-foreground mb-2">{SUPPORTED_TYPES_HINT}</p>}
         </>
       )}
 

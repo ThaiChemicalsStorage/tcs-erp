@@ -15,6 +15,7 @@ import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
+import { ACCEPT_ALL_UPLOADS, checkBeforeUpload } from "../../lib/uploadLimits";
 
 // i18n key lookups for the two enums that have no shared _LABEL_KEY map in lib/accounting.ts yet
 // (see the task note that scoped src/lib/accounting.ts out of this pass) — built locally here.
@@ -284,6 +285,9 @@ function ScopeBillingDetail({
 
   const handleFileUpload = async (key: ArChecklistKey, file: File) => {
     if (!milestone) return;
+    // เตือนตั้งแต่ก่อนอ่านไฟล์ ไม่ต้องรอให้ไฟล์ใหญ่วิ่งขึ้นไปให้เซิร์ฟเวอร์ปฏิเสธ (ขั้นที่ 5)
+    const problem = checkBeforeUpload(file);
+    if (problem) { showToast(problem); return; }
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
@@ -424,7 +428,7 @@ function ScopeBillingDetail({
                               {canCreate && (
                                 <label className="flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer">
                                   <Upload size={12} />
-                                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileUpload(key, f); }} />
+                                  <input type="file" accept={ACCEPT_ALL_UPLOADS} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileUpload(key, f); }} />
                                 </label>
                               )}
                               {attached && <span className="text-xs text-muted-foreground">({milestone.attachmentIds.length} {t("accounting.jobBilling.filesUnit")})</span>}
