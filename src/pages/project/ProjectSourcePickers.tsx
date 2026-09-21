@@ -234,7 +234,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
  * An item pre-assigned to a *different* sourcing branch still shows (the server allows it — creating
  * overwrites `sourcingMethod`), but its current assignment is labelled so the choice is informed.
  */
-export function ProjectItemSourcePickerDialog({ title, description, onClose, onSelect, multiSelect = false }: {
+export function ProjectItemSourcePickerDialog({ title, description, onClose, onSelect, multiSelect = false, allowNoItems = false }: {
   title: string;
   description: string;
   onClose: () => void;
@@ -247,6 +247,12 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
    * ต่อหนึ่งใบสั่งผลิตมาตลอด) เหลือแต่ปุ่มรายแถวในหน้าโครงการที่ยังสร้างทีละรายการโดยธรรมชาติ
    */
   multiSelect?: boolean;
+  /**
+   * เปิดเอกสารโดย**ไม่ผูกรายการ**ได้ (2026-09-21) — เจ้าของแจ้งว่าใบขอซื้อของโครงการ "สร้างไม่ได้
+   * เหมือนของแผนกผลิต" · โครงการที่ออกเอกสารครบทุกรายการแล้วจะไม่มีรายการ `pending` เหลือเลย
+   * และเดิมนั่นแปลว่าเปิดใบใหม่ไม่ได้ ขณะที่ฝ่ายผลิตออกกี่ใบก็ได้จากใบสั่งผลิตใบเดิม
+   */
+  allowNoItems?: boolean;
 }) {
   const { t } = useI18n();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -314,7 +320,8 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
               {itemsError ? <p className="text-sm text-muted-foreground text-center py-6">{t("project.picker.loadError")}</p>
                 : items === null ? <SkeletonRows />
                 : pendingItems.length === 0 ? (
-                  <EmptyState icon={FileText} title={t("project.picker.item.emptyTitle")} description={t("project.picker.item.emptyDescription")} compact />
+                  <EmptyState icon={FileText} title={t("project.picker.item.emptyTitle")}
+                    description={allowNoItems ? t("project.picker.item.emptyButCanCreate") : t("project.picker.item.emptyDescription")} compact />
                 ) : (
                   <div className="space-y-1.5">
                     {pendingItems.map((item) => {
@@ -357,18 +364,30 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
                   </div>
                 )}
             </div>
-            {multiSelect && pendingItems.length > 0 && (
+            {(allowNoItems || (multiSelect && pendingItems.length > 0)) && (
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
-                <span className="text-xs text-muted-foreground">
-                  {t("project.picker.item.selectedCount").replace("{n}", String(checked.size))}
-                </span>
-                <button
+                {allowNoItems ? (
+                  /* ปุ่มนี้คือทางออกของโครงการที่ไม่มีรายการค้างเหลือแล้ว — ใบยังผูกกับโครงการและรหัสงาน
+                     ครบ แค่ไม่มี ProjectItem ให้ขยับสถานะ เหมือนใบของฝ่ายผลิตทุกประการ */
+                  <button
+                    onClick={() => { setBusy(true); onSelect(picked.id, []); }}
+                    disabled={busy}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-60"
+                  >
+                    {t("project.picker.item.createWithoutItems")}
+                  </button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {t("project.picker.item.selectedCount").replace("{n}", String(checked.size))}
+                  </span>
+                )}
+                {multiSelect && pendingItems.length > 0 && <button
                   onClick={() => { setBusy(true); onSelect(picked.id, [...checked]); }}
                   disabled={busy || checked.size === 0}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {busy && <Loader2 size={12} className="animate-spin" />} {t("project.picker.item.confirm")}
-                </button>
+                </button>}
               </div>
             )}
           </>

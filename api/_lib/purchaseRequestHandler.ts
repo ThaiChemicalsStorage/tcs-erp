@@ -12,7 +12,7 @@ import {
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { handleAttachmentUpload, handleAttachmentDelete, handleAttachmentDownload, type AttachmentConfig } from "./documentAttachments.js";
 import type { DocumentAttachment } from "../../src/lib/documentAttachments.js";
-import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
+import { loadPendingProjectItemsOrThrow, loadProjectOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, notifyUser, PURCHASING_DEPARTMENT_NAMES, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf } from "./stockHandler.js";
@@ -261,7 +261,7 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
    * linkProjectItemToSubDocument() — ผู้ใช้พิมพ์รายการเองทั้งใบ
    */
   const standalone = !fromProduction && !projectId && itemIds.length === 0;
-  if (!fromProduction && !standalone && (!projectId || itemIds.length === 0)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  if (!fromProduction && !standalone && !projectId) throw new HttpError(400, "กรุณาระบุโครงการ หรือใบสั่งผลิต");
   // สิทธิ์ project:view จำเป็นเฉพาะทางที่ต้องอ่านโครงการจริง ๆ — ถ้าบังคับทั้งก้อนเหมือนเดิม
   // ฝ่ายที่ไม่มีสิทธิ์ดูโครงการจะเปิดใบของตัวเองไม่ได้เลย ซึ่งเป็นสิ่งที่รอบนี้ตั้งใจแก้
   if (!fromProduction && !standalone && !roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
@@ -279,10 +279,26 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     // เดิมบังคับไว้ตั้งแต่ 2026-08-20 ด้วยเหตุผลว่าใบสั่งผลิตฉบับร่างไม่ควรสั่งเบิกของจริงได้
     if (!roleHasPermission(ctx.role, "productionOrder:view")) throw new HttpError(403, "Forbidden");
     source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode };
-  } else {
+  } else if (itemIds.length > 0) {
     const loaded = await loadPendingProjectItemsOrThrow(projectId, itemIds);
     pickedItems = loaded.items;
     source = { projectId, scopeOfWorkId: loaded.project.scopeOfWorkId, jobCode: loaded.project.scopeNumber };
+  } else {
+    /**
+     * **เปิดใบขอซื้อของโครงการโดยไม่ผูกรายการ (2026-09-21)** — เจ้าของแจ้งว่า *"ทำไมใบขอซื้อของ
+     * โครงการสร้างไม่ได้เหมือนของแผนกผลิต"*
+     *
+     * เดิมฝั่งโครงการ**บังคับ**ให้เลือกรายการที่ยังเป็น `pending` อย่างน้อยหนึ่งรายการ โครงการที่ออก
+     * เอกสารครบทุกรายการไปแล้วจึงเปิดใบขอซื้อใหม่ไม่ได้เลย (ในฐานข้อมูล dev มี 2 ใน 5 โครงการที่
+     * `pending` เหลือศูนย์) ขณะที่ฝ่ายผลิตออกกี่ใบก็ได้จากใบสั่งผลิตใบเดิม — ความไม่เท่ากันนี้ไม่มี
+     * เหตุผลทางธุรกิจรองรับ การซื้อของเพิ่มให้งานเดิมเป็นเรื่องปกติ
+     *
+     * ใบที่ไม่ผูกรายการยังเป็นของ**ฝ่ายโครงการ**และยังอ้าง `projectId`/`scopeOfWorkId`/`jobCode` ครบ
+     * ต่างกันแค่ไม่มี ProjectItem ให้ขยับสถานะ — ตรงกับที่ใบของฝ่ายผลิตทำอยู่แล้วทุกประการ
+     * การเลือกรายการยังทำได้เหมือนเดิมและยังผูก-ปลดตามปกติเมื่อเลือก
+     */
+    const project = await loadProjectOrThrow(projectId);
+    source = { projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber };
   }
 
   const counters = await countersCollection();
@@ -311,7 +327,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
 
   // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
   // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้
-  if (!fromProduction && !standalone) {
+  // ใบของฝ่ายผลิตไม่มีรายการในโครงการให้ผูก · ใบของโครงการที่ไม่ได้เลือกรายการก็เช่นกัน (2026-09-21)
+  if (!fromProduction && !standalone && itemIds.length > 0) {
     await linkProjectItemsToSubDocument(projectId, itemIds, "purchaseRequest", "purchaseRequestId", id);
   }
 

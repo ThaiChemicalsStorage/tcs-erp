@@ -52,6 +52,7 @@ type PurchaseRequestDoc = {
   purchasingApprovedByUserId?: string;
   purchasingDeptBy?: string;
   purchasingDeptAt?: string;
+  ownerDepartment?: string;
   lines: { id: string; productId: string; productCode: string; description: string; unit: string; qtyRequested: number | null; subDetails: string[]; storeDecision?: string }[];
 };
 type PurchaseOrderDoc = {
@@ -461,6 +462,42 @@ describe("ทะเบียนผู้ขาย", () => {
  *   3. สโตร์จ่ายของจริง → สต๊อกลดจริง ใบปิดเป็น `"closed"` และออกใบสั่งซื้อไม่ได้อีก
  *   4. บรรทัดที่สโตร์จ่ายจากสต๊อก**ไม่ถูกลอกไปใบสั่งซื้อ** (ไม่งั้นซื้อของที่มีอยู่แล้วซ้ำ)
  */
+describe("ใบขอซื้อ — เปิดใบของฝ่ายโครงการโดยไม่ผูกรายการ (2026-09-21)", () => {
+  /**
+   * เจ้าของแจ้ง 2026-09-21: *"ทำไมใบขอซื้อของโครงการสร้างไม่ได้เหมือนของแผนกผลิต"* — โครงการที่ออก
+   * เอกสารครบทุกรายการแล้วเคยเปิดใบขอซื้อใหม่ไม่ได้เลย ขณะที่ฝ่ายผลิตออกกี่ใบก็ได้จากใบสั่งผลิตใบเดิม
+   *
+   * สร้างโครงการผ่าน API จริงต้องมี Scope of Work ที่อนุมัติแล้วก่อน ซึ่งเป็นการเซ็ตอัปคนละโมดูล —
+   * เขียนแถวโครงการลงฐานข้อมูลตรง ๆ แทน แล้วทดสอบเฉพาะสัญญาของ `POST /api/purchase-requests`
+   * ที่เป็นสิ่งที่เปลี่ยนจริง
+   */
+  it("โครงการที่ไม่มีรายการค้างเหลือ ยังเปิดใบขอซื้อใหม่ได้ และใบยังผูกกับโครงการครบ", async () => {
+    const db = (await import("../../api/_lib/mongodb.js")).getDb;
+    const projects = (await db()).collection("projects");
+    const now = new Date().toISOString();
+    const inserted = await projects.insertOne({
+      scopeOfWorkId: "SOW-TEST", scopeNumber: "PQ-TEST-NOITEM", customerCompanyName: "ลูกค้าทดสอบ",
+      // ทุกรายการออกเอกสารไปแล้ว — ไม่มี pending เหลือเลย คือสภาพที่เคยทำให้เปิดใบใหม่ไม่ได้
+      items: [{ id: "i1", name: "ของที่ออกเอกสารไปแล้ว", quantity: 1, unit: "ชิ้น", itemStatus: "documentCreated", sourcingMethod: "purchaseRequest" }],
+      isDeleted: false, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system",
+    });
+    const projectId = inserted.insertedId.toString();
+
+    // เลือกรายการที่ออกเอกสารไปแล้ว = ยังถูกปฏิเสธเหมือนเดิม (ไม่ได้ปลดด่านนั้นทิ้ง)
+    const stillBlocked = await api("/api/purchase-requests", {
+      method: "POST", body: JSON.stringify({ projectId, itemIds: ["i1"] }),
+    });
+    expect(stillBlocked.status).toBe(400);
+
+    const res = await api("/api/purchase-requests", { method: "POST", body: JSON.stringify({ projectId, itemIds: [] }) });
+    expect(res.status).toBe(201);
+    const pr = (await json<{ purchaseRequest: PurchaseRequestDoc & { projectId: string; jobCode: string } }>(res)).purchaseRequest;
+    expect(pr.ownerDepartment, "ยังเป็นใบของฝ่ายโครงการ ไม่ใช่ใบลอย").toBe("project");
+    expect(pr.projectId).toBe(projectId);
+    expect(pr.jobCode, "รหัสงานยังมาจากโครงการเหมือนเดิม").toBe("PQ-TEST-NOITEM");
+  });
+});
+
 describe("ใบขอซื้อ — ขั้นสโตร์เช็คของ", () => {
   /** สินค้าจริงในคลังพร้อมยอดตั้งต้น — ต้องมีรหัสสินค้า ไม่งั้นสโตร์จ่ายของไม่ได้ */
   async function productWithStock(code: string, qty: number, unitCost?: number): Promise<string> {

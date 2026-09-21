@@ -229,6 +229,9 @@ export function PurchaseRequestPage({
           onClose={() => setPickerOpen(false)}
           onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds)}
           multiSelect
+          // โครงการที่ออกเอกสารครบทุกรายการแล้วต้องยังเปิดใบขอซื้อใหม่ได้ (2026-09-21) — ดูคอมเมนต์
+          // ใน handleCreate() ของ purchaseRequestHandler.ts สำหรับเหตุผลเต็ม
+          allowNoItems
         />
       ))}
       <Toast message={toast.message} />
