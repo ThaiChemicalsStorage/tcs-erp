@@ -217,7 +217,8 @@ async function purchaseStateOf(
   const boughtByPr = new Map<string, Set<string>>();
   for (const po of pos) {
     const set = boughtByPr.get(po.purchaseRequestId) ?? new Set<string>();
-    for (const l of po.lines ?? []) if (l.sourcePrLineId) set.add(l.sourcePrLineId);
+    // บรรทัดที่ยกเลิกไม่นับว่าซื้อแล้ว — กติกาเดียวกับ `purchasedPrLineIds()` ที่ด่านการสร้างใบใช้
+    for (const l of po.lines ?? []) if (l.sourcePrLineId && !l.cancelled) set.add(l.sourcePrLineId);
     boughtByPr.set(po.purchaseRequestId, set);
   }
   for (const doc of docs) {

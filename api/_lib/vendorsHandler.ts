@@ -222,29 +222,41 @@ async function handleVendorApprovalStage(
 ) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const objectId = toObjectId(id);
-  const vendors = await vendorsCollection();
-  const target = await vendors.findOne({ _id: objectId });
-  if (!target) throw new HttpError(404, "ไม่พบข้อมูลผู้ขาย");
-  const current = vendorApprovalStatusOf(target);
 
   const now = nowIso();
   let ctx: AuthContext;
   let update: Partial<VendorFields>;
   let action: string;
 
+  /**
+   * **ด่านสิทธิ์มาก่อนการอ่านฐานข้อมูลเสมอ** — เดิม `findOne()` ถูกเรียกก่อน คนที่ยังไม่ล็อกอินจึงยิง
+   * route นี้แล้วแยกได้ว่า id ไหนมีอยู่จริง (404 "ไม่พบข้อมูลผู้ขาย") กับ id ไหนไม่มี · ด่านของทั้งสอง
+   * ขั้นไม่ได้ขึ้นกับตัวเอกสารเลย จึงย้ายขึ้นมาก่อนได้ตรง ๆ
+   */
   if (stage === "submit") {
     // จัดซื้อเป็นคนส่ง จึงใช้สิทธิ์ที่จัดซื้อมีอยู่แล้ว ไม่สร้างสิทธิ์ใหม่ให้ต้องไปติ๊กมืออีกตัว
     ctx = await requireUser(req);
     if (!roleHasPermission(ctx.role, "vendor:create") && !roleHasPermission(ctx.role, "vendor:edit")) {
       throw new HttpError(403, "Forbidden");
     }
+  } else {
+    ctx = await requirePermission(req, "vendor:approve");
+  }
+
+  const vendors = await vendorsCollection();
+  const target = await vendors.findOne({ _id: objectId });
+  if (!target) throw new HttpError(404, "ไม่พบข้อมูลผู้ขาย");
+  // ผู้ขายที่ถูกเก็บถาวรไม่ต้องเดินขั้นนี้ — หน้าจอซ่อนปุ่มไว้อยู่แล้ว ด่านนี้กันคนที่ยิง API ตรง ๆ
+  if (target.isDeleted) throw new HttpError(400, "ผู้ขายรายนี้ถูกเก็บถาวรแล้ว");
+  const current = vendorApprovalStatusOf(target);
+
+  if (stage === "submit") {
     if (current !== "draft" && current !== "rejected") {
       throw new HttpError(400, current === "pendingApproval" ? "ผู้ขายรายนี้ส่งให้บัญชีอนุมัติไปแล้ว" : "ผู้ขายรายนี้บัญชีอนุมัติแล้ว");
     }
     update = { approvalStatus: "pendingApproval", submittedAt: now, submittedBy: ctx.user.id, rejectionComment: "" };
     action = "Vendor Submitted For Approval";
   } else {
-    ctx = await requirePermission(req, "vendor:approve");
     if (current !== "pendingApproval") throw new HttpError(400, "ผู้ขายรายนี้ไม่ได้อยู่ระหว่างรออนุมัติ");
     if (stage === "approve") {
       update = {

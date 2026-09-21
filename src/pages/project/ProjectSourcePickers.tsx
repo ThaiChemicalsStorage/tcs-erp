@@ -366,21 +366,26 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
             </div>
             {(allowNoItems || (multiSelect && pendingItems.length > 0)) && (
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
-                {allowNoItems ? (
-                  /* ปุ่มนี้คือทางออกของโครงการที่ไม่มีรายการค้างเหลือแล้ว — ใบยังผูกกับโครงการและรหัสงาน
-                     ครบ แค่ไม่มี ProjectItem ให้ขยับสถานะ เหมือนใบของฝ่ายผลิตทุกประการ */
-                  <button
-                    onClick={() => { setBusy(true); onSelect(picked.id, []); }}
-                    disabled={busy}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-60"
-                  >
-                    {t("project.picker.item.createWithoutItems")}
-                  </button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {t("project.picker.item.selectedCount").replace("{n}", String(checked.size))}
-                  </span>
-                )}
+                {/* ปุ่ม "เปิดใบโดยไม่ผูกรายการ" คือทางออกของโครงการที่ไม่มีรายการค้างเหลือแล้ว — ใบยังผูก
+                    กับโครงการและรหัสงานครบ แค่ไม่มี ProjectItem ให้ขยับสถานะ เหมือนใบของฝ่ายผลิตทุกประการ
+                    · ตัวนับ "เลือกแล้ว n รายการ" ต้องไม่หายไปเมื่อมีปุ่มนี้ ไม่งั้นคนติ๊กหลายรายการจะไม่เห็นว่า
+                    ติ๊กไปกี่อัน (เป็นข้อมูลเดียวที่บอกได้ เพราะรายการยาวเกินหน้าจอ) */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {allowNoItems && (
+                    <button
+                      onClick={() => { setBusy(true); onSelect(picked.id, []); }}
+                      disabled={busy}
+                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-60"
+                    >
+                      {t("project.picker.item.createWithoutItems")}
+                    </button>
+                  )}
+                  {multiSelect && pendingItems.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("project.picker.item.selectedCount").replace("{n}", String(checked.size))}
+                    </span>
+                  )}
+                </div>
                 {multiSelect && pendingItems.length > 0 && <button
                   onClick={() => { setBusy(true); onSelect(picked.id, [...checked]); }}
                   disabled={busy || checked.size === 0}

@@ -227,6 +227,14 @@ Two consequences worth knowing before touching this:
   "start again" everywhere else in this system — but the card shows a warning banner on a revision
   whose original still has live purchase orders, so nobody orders twice without seeing it.
 
+### Cancelling a PO line frees the PR line again
+
+A line marked `cancelled` is excluded from `purchasedPrLineIds()` (and from the list's
+`purchaseState` badge). The goods were withdrawn: the line is not billed, is not copied to the
+receiving report, and must be orderable again — from another vendor if need be — without deleting the
+whole purchase order. Un-tick the cancellation and the block comes back, because the answer is always
+recomputed from live purchase orders.
+
 ### Reverting an approved PO does not free the PR lines
 
 `revert-approval` puts the PO back to Draft; the PO still exists, so its lines still count as ordered.

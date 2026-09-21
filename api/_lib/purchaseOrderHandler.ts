@@ -206,6 +206,9 @@ export async function purchasedPrLineIds(purchaseRequestId: string): Promise<Map
   for (const po of docs) {
     const label = po.documentNumber || po._id;
     for (const line of po.lines ?? []) {
+      // บรรทัดที่ถูกยกเลิกไม่นับว่าซื้อแล้ว (2026-09-21) — ของนั้นถูกถอนไปแล้ว ไม่ถูกคิดเงินและไม่ถูก
+      // ลอกไปใบรับสินค้า ถ้ายังนับอยู่ บรรทัดของใบขอซื้อจะค้างเป็น "ซื้อไม่ได้ตลอดกาล" ทั้งที่ยังไม่ได้ของ
+      if (line.cancelled) continue;
       const source = line.sourcePrLineId ?? "";
       if (!source) continue;
       const list = result.get(source);
@@ -442,17 +445,25 @@ async function resolveVendorLink(
   // เลือกจากทะเบียนบนหน้าจอ — ตรวจว่ามีจริง แล้วเชื่อค่านั้น
   if ("vendorId" in body) {
     const raw = typeof body.vendorId === "string" ? body.vendorId.trim() : "";
-    if (!raw) return { vendorId: "" };
-    const vendor = await vendors.findOne({ _id: toObjectId(raw) });
-    if (!vendor) throw new HttpError(400, "ไม่พบผู้ขายที่เลือกในทะเบียน");
-    return { vendorId: raw };
+    if (raw) {
+      const vendor = await vendors.findOne({ _id: toObjectId(raw) });
+      if (!vendor) throw new HttpError(400, "ไม่พบผู้ขายที่เลือกในทะเบียน");
+      return { vendorId: raw };
+    }
+    // `vendorId: ""` **ไม่ใช่คำสั่งให้ตัดการผูก** — หน้าจอส่งทุกฟิลด์ไปกับทุกครั้งที่บันทึก ใบเก่าทุกใบ
+    // จึงส่งค่าว่างมาเสมอ · ถ้า return ตรงนี้ การกู้ใบเก่าด้วยการจับคู่ชื่อข้างล่างจะไม่เคยทำงานเลย
+    // (ซึ่งคือทั้งหมดของเหตุผลที่ฟังก์ชันนี้มีอยู่) จึงตกไปใช้การจับคู่ชื่อต่อ
   }
 
   // พิมพ์ชื่อเอง (หรือใบเก่าที่ถูกบันทึกครั้งแรกหลัง deploy) — ลองจับคู่กับทะเบียนให้
   if (!("vendorName" in body)) return {};
   const nextName = typeof body.vendorName === "string" ? body.vendorName.trim() : "";
-  if (nextName === (doc.vendorName ?? "").trim() && doc.vendorId) return {};
+  // **ชื่อว่างที่ส่งมาตรง ๆ = ตัดการผูกเสมอ** ต้องเช็คก่อนด่าน "ชื่อไม่เปลี่ยน" ข้างล่าง ไม่งั้นใบที่มี
+  // `vendorId` อยู่แต่ `vendorName` ว่าง (สร้างได้จากการยิง API ตรง ๆ) จะตัดการผูกไม่ได้เลย
   if (!nextName) return { vendorId: "" };
+  // ชื่อไม่เปลี่ยนและผูกไว้แล้ว = ไม่ต้องไปค้นทะเบียนซ้ำ · ใบเก่าที่ยังไม่ผูก (`vendorId` ว่าง) ต้องตก
+  // ลงไปจับคู่ชื่อข้างล่างเสมอ นั่นคือทางกู้ใบเก่าทั้งหมด
+  if (nextName === (doc.vendorName ?? "").trim() && doc.vendorId) return {};
   // เทียบชื่อฝั่ง JS ไม่ใช่ regex ใน Mongo — ทะเบียนผู้ขายเป็นตารางเล็ก (handleList ก็อ่านทั้งตาราง
   // อยู่แล้ว) และการหนีอักขระพิเศษในชื่อบริษัทเป็นจุดที่พลาดเงียบ ๆ ได้ง่ายโดยไม่มีอะไรมาดัก
   const key = nextName.toLowerCase();

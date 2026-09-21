@@ -564,6 +564,80 @@ describe("ใบสั่งซื้อ — เลือกคนอนุม�
   });
 });
 describe("ทะเบียนผู้ขาย — บัญชีต้องอนุมัติก่อนจึงจะอนุมัติใบสั่งซื้อได้ (2026-09-21)", () => {
+  /**
+   * เจอจาก code review 2026-09-21 — หน้าจอส่ง **ทุกฟิลด์** ไปกับทุกครั้งที่บันทึก (`toUpdateFields`)
+   * ใบเก่าจึงส่ง `vendorId: ""` มาด้วยเสมอ ถ้า resolveVendorLink() คืนค่าตรงนั้นทันที การกู้ใบเก่า
+   * ด้วยการจับคู่ชื่อจะไม่เคยทำงานเลย และใบร่างเก่าทุกใบใน production จะอนุมัติไม่ได้
+   */
+  it("ใบเก่าที่ส่ง vendorId ว่างมาพร้อมชื่อ ยังถูกจับคู่กับทะเบียนให้อัตโนมัติ", async () => {
+    const vendorId = await approvedVendorId();
+    const vendorName = (await json<{ vendor: { name: string } }>(await api(`/api/vendors/${vendorId}`))).vendor.name;
+    const po = await createPurchaseOrder();
+
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      // ทรงเดียวกับที่หน้าจอส่งจริง: มีคีย์ vendorId อยู่ด้วยและเป็นค่าว่าง
+      body: JSON.stringify({ vendorId: "", vendorName }),
+    });
+    expect(patched.status).toBe(200);
+    expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(patched)).purchaseOrder.vendorId).toBe(vendorId);
+
+    // และยังอนุมัติได้จริงโดยไม่ต้องไปเลือกผู้ขายใหม่ด้วยมือ
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/submit-approval`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/approve`, { method: "POST" })).status).toBe(200);
+  });
+
+  it("ล้างชื่อผู้ขายทิ้ง = ตัดการผูกจริง ไม่ใช่ค้างของเดิมไว้", async () => {
+    const vendorId = await approvedVendorId();
+    const po = await createPurchaseOrder();
+    await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorId }),
+    });
+    const cleared = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ vendorId: "", vendorName: "" }),
+    });
+    expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(cleared)).purchaseOrder.vendorId).toBe("");
+  });
+
+  /**
+   * เจอจาก code review 2026-09-21 — ยกเลิกบรรทัดบนใบสั่งซื้อแล้วของนั้นไม่ถูกซื้อจริง ไม่ถูกคิดเงิน
+   * และไม่ถูกลอกไปใบรับสินค้า บรรทัดต้นทางจึงต้องกลับมาสั่งกับผู้ขายรายอื่นได้
+   */
+  it("ยกเลิกบรรทัดบนใบสั่งซื้อ แล้วบรรทัดของใบขอซื้อกลับมาสั่งใหม่ได้", async () => {
+    const pr = await approvedPurchaseRequest();
+    await purchasingApproved(pr.id);
+    const first = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+
+    // ก่อนยกเลิก: สั่งซ้ำไม่ได้
+    expect((await api("/api/purchase-orders", {
+      method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id, lineIds: ["l1"] }),
+    })).status).toBe(400);
+
+    const cancelled = await api(`/api/purchase-orders/${encodeURIComponent(first.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: first.lines.map((l) => ({ ...l, cancelled: true, cancelRemark: "ผู้ขายยกเลิก" })) }),
+    });
+    expect(cancelled.status).toBe(200);
+
+    const second = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+    expect(second.lines[0].sourcePrLineId).toBe("l1");
+
+    // และหน้ารายการต้องไม่นับว่าซื้อครบ ทั้งที่มีใบสั่งซื้อสองใบอ้างอยู่
+    const rows = (await json<{ purchaseRequests: { id: string; purchaseState?: string }[] }>(
+      await api("/api/purchase-requests?ownerDepartment=all"))).purchaseRequests;
+    expect(rows.find((r) => r.id === pr.id)?.purchaseState).toBe("partial");
+  });
+
+  it("ผู้ขายที่เก็บถาวรแล้วเดินขั้นอนุมัติไม่ได้ และด่านสิทธิ์มาก่อนการอ่านฐานข้อมูล", async () => {
+    const res = await createVendor({ name: "ผู้ขายที่จะเก็บถาวร" });
+    const id = (await json<{ vendor: { id: string } }>(res)).vendor.id;
+    expect((await api(`/api/vendors/${id}/archive`, { method: "POST", body: JSON.stringify({ isDeleted: true }) })).status).toBe(200);
+    expect((await api(`/api/vendors/${id}/submit-approval`, { method: "POST" })).status).toBe(400);
+
+    // id ที่ไม่มีอยู่จริงต้องไม่รั่วว่ามีหรือไม่มีให้คนที่ยังไม่ได้ล็อกอิน
+    const anon = await fetch(`${baseUrl}/api/vendors/0123456789abcdef01234567/approve`, { method: "POST" });
+    expect(anon.status, "ต้องถูกปฏิเสธที่ด่านสิทธิ์ ไม่ใช่ตอบ 404 ว่าไม่พบผู้ขาย").toBe(401);
+  });
   it("ผู้ขายใหม่เริ่มที่ร่าง เดินครบสามขั้นแล้วจึงอนุมัติได้ และกดข้ามขั้นไม่ได้", async () => {
     const res = await createVendor({ name: "ผู้ขายรออนุมัติ" });
     const id = (await json<{ vendor: { id: string; approvalStatus: string } }>(res)).vendor.id;
