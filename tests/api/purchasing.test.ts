@@ -56,7 +56,7 @@ type PurchaseRequestDoc = {
 };
 type PurchaseOrderDoc = {
   id: string; documentNumber: string; status: string; vendorName: string; purchaseRequestId: string;
-  lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null }[];
+  lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null; sourcePrLineId?: string }[];
 };
 /** ใบขอซื้อเปล่าของฝ่ายที่ไม่มีเอกสารต้นทาง — ทางสร้างที่เพิ่มมาพร้อมโมดูลจัดซื้อ */
 async function createStandalonePurchaseRequest(): Promise<PurchaseRequestDoc> {
@@ -88,6 +88,12 @@ async function approvedPurchaseRequest(): Promise<PurchaseRequestDoc> {
   const approved = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
   expect(approved.status).toBe(200);
   return storeForwardsToPurchasing(pr.id);
+}
+
+/** จัดซื้อกดอนุมัติใบ — ด่านของการเปิดใบสั่งซื้อตั้งแต่ 2026-09-21 */
+async function purchasingApproved(id: string): Promise<void> {
+  const res = await api(`/api/purchase-requests/${encodeURIComponent(id)}/purchasing-approve`, { method: "POST" });
+  expect(res.status).toBe(200);
 }
 
 /** สโตร์เช็คแล้วบอกว่าไม่มีของทั้งสองบรรทัด → ใบถูกส่งต่อฝ่ายจัดซื้อ */
@@ -197,6 +203,7 @@ describe("ใบสั่งซื้อ (PO)", () => {
 
   it("สืบทอดรายการจากใบขอซื้อที่อนุมัติแล้วแบบ snapshot — แก้ PO ไม่ย้อนไปแตะใบขอซื้อ", async () => {
     const pr = await approvedPurchaseRequest();
+    await purchasingApproved(pr.id);
     const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
 
     expect(po.purchaseRequestId).toBe(pr.id);
@@ -334,6 +341,7 @@ describe("ใบขอซื้อ — ช่องที่ถอดออก�
 
   it("ใบสั่งซื้อที่สร้างจากใบขอซื้อเริ่มด้วยผู้ขายว่าง รอฝ่ายจัดซื้อเลือกจากทะเบียน", async () => {
     const pr = await approvedPurchaseRequest();
+    await purchasingApproved(pr.id);
     const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
     expect(po.vendorName).toBe("");
     // แต่สิ่งที่ควรสืบทอดยังสืบทอดอยู่
@@ -351,6 +359,7 @@ describe("ใบขอซื้อ — ช่องที่ถอดออก�
 describe("ใบสั่งซื้อ — รายละเอียดต่อบรรทัดที่ดึงมาจากใบขอซื้อ และส่วนลด", () => {
   it("ก๊อปวันต้องการ / รหัสแผนก / รหัสบัญชี ต่อบรรทัดมาด้วย", async () => {
     const pr = await approvedPurchaseRequest();
+    await purchasingApproved(pr.id);
     const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
     const first = po.lines[0] as unknown as Record<string, unknown>;
     expect(first.neededByDate).toBe("2026-09-15");
@@ -491,6 +500,9 @@ describe("ใบขอซื้อ — ขั้นสโตร์เช็ค�
     expect(reviewed.storeStage).toBe("forwarded");
     expect(reviewed.storeRemark).toBe("ไม่มีของทั้งสองรายการ");
     expect(reviewed.lines.every((l) => l.storeDecision === "purchase")).toBe(true);
+    // ตั้งแต่ 2026-09-21 ยังมีด่านของจัดซื้อคั่นอีกชั้นก่อนถึงใบสั่งซื้อ
+    expect((await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }) })).status).toBe(400);
+    await purchasingApproved(pr.id);
     const po = await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }) });
     expect(po.status).toBe(201);
   });
@@ -570,6 +582,7 @@ describe("ใบขอซื้อ — ขั้นสโตร์เช็ค�
     });
     expect((await json<{ purchaseRequest: PurchaseRequestDoc }>(reviewed)).purchaseRequest.storeStage).toBe("forwarded");
 
+    await purchasingApproved(pr.id);
     const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
     expect(po.lines).toHaveLength(1);
     expect(po.lines[0].description).toBe("ของที่ต้องซื้อ");
@@ -611,6 +624,107 @@ describe("ใบขอซื้อ — ขั้นสโตร์เช็ค�
  * **ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้ว (2026-09-09)** — เจ้าของสั่ง: *"จัดซื้อสามารถแก้ไข PR ได้ เนื่องจาก
  * ชื่อหรือยี่ห้อตอนซื้ออาจจะไม่ตรงตามที่พิมพ์ไว้ในใบ"* และเลือกให้แก้ได้ทุกช่องเหมือนใบร่าง
  */
+describe("ใบขอซื้อ — ติ๊กรายการแล้วเปิดใบสั่งซื้อทีละชุด (2026-09-21)", () => {
+  it("เปิดใบสั่งซื้อเฉพาะที่ติ๊ก แล้วบรรทัดที่เหลือยังซื้อได้ในใบถัดไป", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+
+    const first = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+    expect(first.lines).toHaveLength(1);
+    expect(first.lines[0].description).toBe("ปั๊มเคมี");
+    expect(first.lines[0].sourcePrLineId).toBe("l1");
+
+    // ติ๊กบรรทัดเดิมซ้ำ = 400 พร้อมบอกเลขใบเดิม
+    const dup = await api("/api/purchase-orders", {
+      method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id, lineIds: ["l1"] }),
+    });
+    expect(dup.status).toBe(400);
+    expect((await json<{ error: string }>(dup)).error).toContain(first.documentNumber);
+
+    // ไม่ติ๊ก = ที่เหลือทั้งหมด (ข้ามบรรทัดที่ซื้อไปแล้วเงียบ ๆ)
+    const second = await createPurchaseOrder({ purchaseRequestId: pr.id });
+    expect(second.lines).toHaveLength(1);
+    expect(second.lines[0].sourcePrLineId).toBe("l2");
+
+    // ครบแล้ว — เปิดอีกใบไม่ได้
+    const third = await api("/api/purchase-orders", {
+      method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }),
+    });
+    expect(third.status).toBe(400);
+  });
+
+  it("ลบใบสั่งซื้อแล้วบรรทัดกลับมาซื้อได้เอง — ไม่มีธงค้างบนใบขอซื้อ", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    const po = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, { method: "DELETE" })).status).toBe(204);
+
+    const again = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+    expect(again.lines[0].sourcePrLineId).toBe("l1");
+  });
+
+  it("ไคลเอนต์ย้ายตัวชี้ sourcePrLineId ผ่าน PATCH ไม่ได้", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    const po = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: [{ ...po.lines[0], sourcePrLineId: "l2" }] }),
+    });
+    expect(patched.status).toBe(200);
+    const updated = (await json<{ purchaseOrder: PurchaseOrderDoc }>(patched)).purchaseOrder;
+    expect(updated.lines[0].sourcePrLineId, "ค่าเดิมต้องถูกอ่านกลับด้วย line id ไม่ใช่รับจาก body").toBe("l1");
+
+    // และ l2 ยังซื้อได้ตามปกติ เพราะตัวชี้ไม่ถูกย้าย
+    const second = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l2"] });
+    expect(second.lines[0].sourcePrLineId).toBe("l2");
+  });
+
+  it("จัดซื้อยังไม่กดอนุมัติ เปิดใบสั่งซื้อไม่ได้ — แต่ใบเก่าที่ไม่มีขั้นนี้เลยยังเปิดได้", async () => {
+    const pr = await approvedPurchaseRequest();
+    expect(pr.purchasingStage).toBe("review");
+    const blocked = await api("/api/purchase-orders", {
+      method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }),
+    });
+    expect(blocked.status).toBe(400);
+
+    // ใบเก่า = ไม่มีฟิลด์นี้เลย · เลียนแบบด้วยการดึงมาที่จัดซื้อแล้วอนุมัติ ซึ่งเป็นทางที่ใบใหม่ต้องเดิน
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    expect((await api("/api/purchase-orders", {
+      method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }),
+    })).status).toBe(201);
+  });
+
+  it("หน้ารายการบอกได้ว่าใบไหนออกใบสั่งซื้อครบแล้ว", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+
+    const stateOf = async () => {
+      const res = await api("/api/purchase-requests?ownerDepartment=all");
+      const rows = (await json<{ purchaseRequests: { id: string; purchaseState?: string }[] }>(res)).purchaseRequests;
+      return rows.find((r) => r.id === pr.id)?.purchaseState;
+    };
+    expect(await stateOf()).toBe("none");
+    await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+    expect(await stateOf()).toBe("partial");
+    await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l2"] });
+    expect(await stateOf()).toBe("full");
+  });
+
+  it("เอกสารใบขอซื้อส่ง purchasedLines มาด้วยว่าบรรทัดไหนซื้อไปแล้วในใบไหน", async () => {
+    const pr = await approvedPurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/purchasing-approve`, { method: "POST" });
+    const po = await createPurchaseOrder({ purchaseRequestId: pr.id, lineIds: ["l1"] });
+
+    const res = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`);
+    const body = await json<{ purchasedLines: Record<string, string[]> }>(res);
+    expect(body.purchasedLines.l1).toEqual([po.documentNumber]);
+    expect(body.purchasedLines.l2).toBeUndefined();
+  });
+});
+
 describe("ใบขอซื้อ — ขั้นของฝ่ายจัดซื้อ (2026-09-21)", () => {
   it("สโตร์ส่งต่อ = ใบเข้าขั้น review ของจัดซื้อ แล้วจัดซื้ออนุมัติจนล็อกใบได้", async () => {
     const pr = await approvedPurchaseRequest();
@@ -687,6 +801,7 @@ describe("ใบขอซื้อ — ขั้นของฝ่ายจั�
     // ไม่แตะบรรทัดเลย — storeDecision ยังว่าง ซึ่งตัวกรองตอนสร้าง PO นับว่า "ต้องซื้อ"
     expect(pulled.lines.every((l) => !l.storeDecision)).toBe(true);
 
+    await purchasingApproved(pulled.id);
     const po = await createPurchaseOrder({ purchaseRequestId: pulled.id });
     expect(po.lines).toHaveLength(pulled.lines.length);
   });

@@ -99,7 +99,16 @@ export function PurchaseRequestPickerDialog({
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-mono font-semibold text-[#c9a84c]">{r.id}</span>
-                  <span className="text-xs font-mono text-muted-foreground">{formatQuoteDateThai(r.updatedAt)}</span>
+                  <span className="flex items-center gap-2">
+                    {/* ป้ายบอกว่าใบนี้ออกใบสั่งซื้อไปแค่ไหนแล้ว (2026-09-21) — ใบที่ครบแล้วยังกดได้
+                        เพราะเซิร์ฟเวอร์เป็นคนตอบว่าไม่เหลืออะไรให้ซื้อ ไม่ใช่ซ่อนไปเฉย ๆ ให้งง */}
+                    {r.purchaseState === "full" ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#2aa36b]/15 text-[#1c7a4e] whitespace-nowrap">{t("purchaseOrder.picker.orderedFull")}</span>
+                    ) : r.purchaseState === "partial" ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#3c7de0]/15 text-[#1a4fa7] whitespace-nowrap">{t("purchaseOrder.picker.orderedPartial")}</span>
+                    ) : null}
+                    <span className="text-xs font-mono text-muted-foreground">{formatQuoteDateThai(r.updatedAt)}</span>
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{r.jobCode || "—"}</p>
               </button>

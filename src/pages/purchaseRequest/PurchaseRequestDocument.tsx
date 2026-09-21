@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, ShoppingCart, PackageMinus } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, ShoppingCart, PackageMinus, ShoppingBag } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -14,6 +14,7 @@ import {
   purchasingApprovePurchaseRequest, purchasingReopenPurchaseRequest, pullPurchaseRequestToPurchasing,
   storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
 } from "../../lib/purchaseRequest";
+import { createPurchaseOrder } from "../../lib/purchaseOrder";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { createProductRequest } from "../../lib/productRequest";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
@@ -70,6 +71,8 @@ export function PurchaseRequestDocument({
   canDelete,
   canIssueStock,
   canEditApproved,
+  canCreatePurchaseOrder,
+  onOpenPurchaseOrder,
   onBack,
   onDeleted,
   onOpenOther,
@@ -88,6 +91,10 @@ export function PurchaseRequestDocument({
   canIssueStock: boolean;
   /** `purchaseRequest:editApproved` — ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้วได้ (2026-09-09) */
   canEditApproved: boolean;
+  /** `purchaseOrder:create` — การ์ด "ออกใบสั่งซื้อ" บนใบที่ผ่านจัดซื้อแล้ว (2026-09-21) */
+  canCreatePurchaseOrder: boolean;
+  /** พาไปเปิดใบสั่งซื้อที่เพิ่งสร้าง — ไม่มีก็ยังสร้างได้ แค่ไม่กระโดดไปให้ */
+  onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
   onBack: () => void;
   onDeleted: () => void;
   /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
@@ -129,6 +136,12 @@ export function PurchaseRequestDocument({
   const [confirmPurchasingApprove, setConfirmPurchasingApprove] = useState(false);
   const [confirmPurchasingReopen, setConfirmPurchasingReopen] = useState(false);
   const [confirmPurchasingPull, setConfirmPurchasingPull] = useState(false);
+  /** บรรทัดไหนออกใบสั่งซื้อไปแล้วในใบไหน — เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง (2026-09-21) */
+  const [purchasedLines, setPurchasedLines] = useState<Record<string, string[]>>({});
+  /** บรรทัดที่ติ๊กไว้รอเปิดใบสั่งซื้อ — เป็น state ของหน้าจอล้วน ไม่เคยถูกบันทึก */
+  const [buySelection, setBuySelection] = useState<string[]>([]);
+  const [buyDialogOpen, setBuyDialogOpen] = useState(false);
+  const [creatingPo, setCreatingPo] = useState(false);
   const [purchasingBusy, setPurchasingBusy] = useState(false);
   /** หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว — ส่งไปกับการกดบันทึก ไม่ใช่ฟิลด์ที่เก็บบนใบ */
   const [purchasingEditNote, setPurchasingEditNote] = useState("");
@@ -147,6 +160,7 @@ export function PurchaseRequestDocument({
       .then(([res, prod, cat]) => {
         if (cancelled) return;
         setDoc(res.purchaseRequest); setDraft(res.purchaseRequest); setStockByProduct(res.stockByProduct);
+        setPurchasedLines(res.purchasedLines);
         setProducts(prod); setCategories(cat); dirty.markSaved(toUpdateFields(res.purchaseRequest));
         setStoreRemark(res.purchaseRequest.storeRemark ?? "");
         // ตั้งค่าเริ่มต้นของตัวเลือกให้ตรงกับที่บันทึกไว้ สโตร์จะได้เห็นผลการเช็คครั้งก่อนไม่ใช่ช่องว่าง
@@ -305,6 +319,15 @@ export function PurchaseRequestDocument({
   /** การ์ดของฝ่ายจัดซื้อ — เห็นตลอดหลังหัวหน้าอนุมัติ ไม่ว่าจะยังแก้ได้หรือถูกล็อกไปแล้ว */
   const purchasingCardVisible = canEditApproved && isFinal;
   const editable = (canEdit && isDraftStatus) || purchasingEditMode;
+  /** การ์ด "ออกใบสั่งซื้อ" (2026-09-21) — บรรทัดที่สโตร์จ่ายจากสต๊อกแล้วไม่ต้องซื้อ จึงไม่นับ
+      ชุดเดียวกับที่ `handleCreate()` ของใบสั่งซื้อจะลอกไป ตัวเลขบนการ์ดจึงตรงกับของจริงเสมอ */
+  const buyableLines = (doc.lines ?? []).filter((l) => l.storeDecision !== "stock");
+  const orderedCount = buyableLines.filter((l) => (purchasedLines[l.id] ?? []).length > 0).length;
+  const remainingLines = buyableLines.filter((l) => (purchasedLines[l.id] ?? []).length === 0);
+  const selectedRemaining = buySelection.filter((id) => remainingLines.some((l) => l.id === id));
+  const isRevision = getRevisionNumber(doc.id) > 0;
+  const buyCardVisible = canCreatePurchaseOrder && isFinal
+    && doc.storeStage !== "pending" && doc.storeStage !== "closed" && buyableLines.length > 0;
   /** การ์ดของสโตร์ — ใบที่อนุมัติแล้วเท่านั้น และต้องมีสิทธิ์ขยับสต๊อก */
   const storeCardVisible = isFinal && canIssueStock;
   const issueBatches = storeIssueBatchesOf(doc);
@@ -476,6 +499,26 @@ export function PurchaseRequestDocument({
     }
   };
 
+  /**
+   * ออกใบสั่งซื้อจากใบขอซื้อใบนี้ (2026-09-21) — `lineIds === null` แปลว่าทุกบรรทัดที่ยังไม่ได้ซื้อ
+   *
+   * โหลดใบใหม่หลังสร้างเสร็จ เพื่อให้ `purchasedLines` ตรงกับความจริงทันที — ค่านั้นคำนวณฝั่ง
+   * เซิร์ฟเวอร์จากใบสั่งซื้อจริง หน้าจอเดาเองไม่ได้
+   */
+  const createPurchaseOrderFromRequest = async (lineIds: string[] | null) => {
+    setCreatingPo(true);
+    try {
+      const po = await createPurchaseOrder(doc.id, lineIds ?? undefined);
+      setBuySelection([]);
+      setBuyDialogOpen(false);
+      showToast(t("purchaseRequestDoc.buy.createdToast").replace("{id}", po.documentNumber || po.id));
+      const refreshed = await fetchPurchaseRequestWithStock(doc.id);
+      setPurchasedLines(refreshed.purchasedLines);
+      onOpenPurchaseOrder?.(po.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.errorSave"));
+    } finally { setCreatingPo(false); }
+  };
   const handlePrint = async () => {
     setPrinting(true);
     try {
@@ -579,6 +622,76 @@ export function PurchaseRequestDocument({
             : undefined
           }
         />
+        {/* ออกใบสั่งซื้อจากใบขอซื้อ (2026-09-21) — เจ้าของข้อ 7: ใบขอซื้อใบเดียว "อาจจะเปิดซื้อจาก
+            หลายบริษัทก็ได้ คือที่ติ้กไปแล้วก็เวลาจะเปิด PO ก็จะมีให้เลือกว่าจะเอาทั้งหมดหรือเอาแค่ที่ติ๊ก"
+
+            การติ๊กเป็นแค่ state ของหน้าจอ ไม่ใช่สถานะอนุมัติรายบรรทัดที่เก็บลงฐานข้อมูล (เจ้าของยืนยัน)
+            ส่วน "ซื้อไปแล้วหรือยัง" มาจาก purchasedLines ที่เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง ไม่ใช่ธงบนใบนี้
+            ลบใบสั่งซื้อทิ้งแล้วบรรทัดจึงกลับมาซื้อได้เอง */}
+        {buyCardVisible && (
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <ShoppingBag size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.buy.create")}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {orderedCount >= buyableLines.length
+                    ? t("purchaseRequestDoc.buy.summaryAll").replace("{total}", String(buyableLines.length))
+                    : t("purchaseRequestDoc.buy.summary")
+                        .replace("{done}", String(orderedCount))
+                        .replace("{total}", String(buyableLines.length))}
+                </p>
+              </div>
+              <button
+                onClick={() => setBuyDialogOpen(true)}
+                disabled={creatingPo || remainingLines.length === 0 || doc.purchasingStage === "review"}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
+              >
+                {creatingPo ? <Loader2 size={13} className="animate-spin" /> : <ShoppingBag size={13} />}
+                {t("purchaseRequestDoc.buy.create")}
+              </button>
+            </div>
+
+            {doc.purchasingStage === "review" && (
+              <p className="text-xs text-[#a75d1a]">{t("purchaseRequestDoc.buy.needApproval")}</p>
+            )}
+            {/* ฉบับแก้ไขเริ่มนับรายการที่ซื้อแล้วใหม่ (บรรทัดคง id เดิม แต่ใบสั่งซื้อยังชี้ฉบับก่อน) —
+                เลือกยอมรับตามความหมายของ Rewrite ทั้งระบบ แต่ต้องเตือนไม่ให้ซื้อซ้ำโดยไม่รู้ตัว */}
+            {isRevision && orderedCount === 0 && (
+              <p className="text-xs text-[#a75d1a] flex items-start gap-1.5">
+                <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {t("purchaseRequestDoc.buy.rewriteWarning")}
+              </p>
+            )}
+
+            <ul className="space-y-1">
+              {buyableLines.map((line) => {
+                const orderedIn = purchasedLines[line.id] ?? [];
+                const ordered = orderedIn.length > 0;
+                return (
+                  <li key={line.id} className="flex items-start gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={!ordered && buySelection.includes(line.id)}
+                      disabled={ordered}
+                      onChange={(e) => setBuySelection((prev) => (e.target.checked ? [...prev, line.id] : prev.filter((x) => x !== line.id)))}
+                      aria-label={line.description}
+                      className="mt-0.5 accent-[#c9a84c] disabled:opacity-40"
+                    />
+                    <span className={ordered ? "line-through text-muted-foreground" : "text-foreground"}>
+                      {line.description} · {(line.qtyRequested ?? 0).toLocaleString()} {line.unit}
+                    </span>
+                    {ordered && (
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        — {t("purchaseRequestDoc.buy.alreadyOrdered")}: {orderedIn.join(", ")}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
         {/* การ์ดของฝ่ายจัดซื้อ (2026-09-21) — ขั้นสุดท้ายของใบก่อนออกใบสั่งซื้อ
             อยู่เหนือกล่องแก้ไขสีส้ม เพราะเป็นปุ่มที่จบงานของการแก้ ไม่ใช่ส่วนหนึ่งของการแก้ */}
         {purchasingCardVisible && (
@@ -1118,6 +1231,37 @@ export function PurchaseRequestDocument({
         onConfirm={() => void runPurchasingStage("approve")}
         onCancel={() => setConfirmPurchasingApprove(false)}
       />
+      {/* เลือกว่ารอบนี้จะเอารายการไหน — ทำเป็นกล่องเฉพาะกิจเพราะ ConfirmDialog รับปุ่มยืนยันได้แค่ปุ่มเดียว */}
+      {buyDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setBuyDialogOpen(false)} />
+          <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-foreground">{t("purchaseRequestDoc.buy.dialogTitle")}</h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">{t("purchaseRequestDoc.buy.dialogBody")}</p>
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => void createPurchaseOrderFromRequest(null)}
+                disabled={creatingPo || remainingLines.length === 0}
+                className="w-full text-left px-3 py-2 text-xs border border-border rounded-lg hover:border-[#c9a84c]/50 transition-colors disabled:opacity-50"
+              >
+                {t("purchaseRequestDoc.buy.optionRemaining").replace("{n}", String(remainingLines.length))}
+              </button>
+              <button
+                onClick={() => void createPurchaseOrderFromRequest(selectedRemaining)}
+                disabled={creatingPo || selectedRemaining.length === 0}
+                className="w-full text-left px-3 py-2 text-xs border border-border rounded-lg hover:border-[#c9a84c]/50 transition-colors disabled:opacity-50"
+              >
+                {t("purchaseRequestDoc.buy.optionSelected").replace("{n}", String(selectedRemaining.length))}
+              </button>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button onClick={() => setBuyDialogOpen(false)} disabled={creatingPo} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ConfirmDialog
         open={confirmPurchasingPull}
         title={t("purchaseRequestDoc.purchasing.pullConfirmTitle")}

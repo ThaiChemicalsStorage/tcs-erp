@@ -64,6 +64,20 @@ export interface PurchaseOrderLine {
   departmentCode?: string;
   /** รหัสบัญชี/ศูนย์ต้นทุน — บนใบขอซื้อยังเป็นฟิลด์ตายอยู่ ที่นี่ก๊อปมาเก็บไว้ให้ครบสาย */
   costCode?: string;
+  /**
+   * บรรทัดต้นทางบนใบขอซื้อ (2026-09-21) — `""`/ไม่มีค่า = บรรทัดที่จัดซื้อพิมพ์เพิ่มเองบนใบสั่งซื้อ
+   *
+   * มีไว้ตอบคำถามเดียว: *บรรทัดนี้ของใบขอซื้อถูกออกใบสั่งซื้อไปแล้วหรือยัง* — เจ้าของสั่งว่าใบขอซื้อ
+   * ใบเดียว *"อาจจะเปิดซื้อจากหลายบริษัทก็ได้"* จึงต้องแยกได้ว่าบรรทัดไหนซื้อไปแล้วกับใคร
+   *
+   * **คำตอบถูกคำนวณจากใบสั่งซื้อจริงทุกครั้ง ไม่ได้เก็บเป็นธงไว้บนใบขอซื้อ** — ลบใบสั่งซื้อทิ้งแล้ว
+   * บรรทัดนั้นต้องกลับมาซื้อได้เอง ถ้าเก็บธงไว้บนใบขอซื้อ บรรทัดจะค้างเป็น "ซื้อไม่ได้ตลอดกาล"
+   * โดยไม่มีหน้าจอไหนไปเคลียร์ให้
+   *
+   * **เซิร์ฟเวอร์เขียนตอนสร้างใบเท่านั้น ไม่รับจาก PATCH** — ค่าเดิมถูกอ่านกลับมาด้วย line id
+   * ใน `sanitizeLines()` (กติกาเดียวกับ `storeDecision` ของใบขอซื้อ)
+   */
+  sourcePrLineId?: string;
   remark: string;
 }
 
@@ -213,10 +227,14 @@ export async function fetchPurchaseOrder(id: string): Promise<PurchaseOrder> {
 }
 
 /** สร้างจากใบขอซื้อที่อนุมัติแล้ว (เซิร์ฟเวอร์บังคับสถานะ Final) — ไม่ส่ง id มา = เปิดใบเปล่า */
-export async function createPurchaseOrder(purchaseRequestId?: string): Promise<PurchaseOrder> {
+/**
+ * `lineIds` (2026-09-21) — เลือกเฉพาะบางบรรทัดของใบขอซื้อ · **ไม่ส่ง = ทุกบรรทัดที่ยังไม่ได้ซื้อ**
+ * ใบขอซื้อใบเดียวจึงแตกเป็นใบสั่งซื้อหลายใบตามผู้ขายได้ ตามที่เจ้าของสั่ง
+ */
+export async function createPurchaseOrder(purchaseRequestId?: string, lineIds?: string[]): Promise<PurchaseOrder> {
   const { purchaseOrder } = await apiFetch<{ purchaseOrder: PurchaseOrder }>("/purchase-orders", {
     method: "POST",
-    body: JSON.stringify(purchaseRequestId ? { purchaseRequestId } : {}),
+    body: JSON.stringify(purchaseRequestId ? { purchaseRequestId, ...(lineIds ? { lineIds } : {}) } : {}),
   });
   return purchaseOrder;
 }

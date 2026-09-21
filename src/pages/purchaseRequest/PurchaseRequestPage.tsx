@@ -24,6 +24,8 @@ export function PurchaseRequestPage({
   canCreate,
   canIssueStock,
   canEditApproved,
+  canCreatePurchaseOrder,
+  onOpenPurchaseOrder,
   ownerDepartment = "project",
   storeStage,
   initialPurchaseRequestId,
@@ -39,6 +41,10 @@ export function PurchaseRequestPage({
   canIssueStock: boolean;
   /** `purchaseRequest:editApproved` — ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้วได้ (2026-09-09) */
   canEditApproved: boolean;
+  /** `purchaseOrder:create` — การ์ด "ออกใบสั่งซื้อ" บนใบขอซื้อที่ผ่านจัดซื้อแล้ว (2026-09-21) */
+  canCreatePurchaseOrder: boolean;
+  /** พาไปเปิดใบสั่งซื้อที่เพิ่งสร้างจากใบขอซื้อ */
+  onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
   /**
    * กล่องงานเข้าตามขั้นของสโตร์ (2026-09-09) — `"pending"` คือกล่องของสโตร์ (อนุมัติแล้วรอเช็คของ)
    * `"forwarded"` คือกล่องของจัดซื้อ · ไม่ระบุ = เห็นทุกใบตามปกติ
@@ -146,6 +152,8 @@ export function PurchaseRequestPage({
           canEdit={canEdit}
           canIssueStock={canIssueStock}
           canEditApproved={canEditApproved}
+          canCreatePurchaseOrder={canCreatePurchaseOrder}
+          onOpenPurchaseOrder={onOpenPurchaseOrder}
           canFinalize={canFinalize}
           canPrint={canPrint}
           canDelete={canDelete}

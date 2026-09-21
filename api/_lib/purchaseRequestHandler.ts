@@ -16,6 +16,7 @@ import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProj
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, notifyUser, PURCHASING_DEPARTMENT_NAMES, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf } from "./stockHandler.js";
+import { purchasedPrLineIds } from "./purchaseOrderHandler.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
@@ -187,7 +188,47 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
     ? { projectId, isDeleted: false, ...ownershipMatch }
     : { isDeleted: false, $and: [ownershipMatch, departmentClause, stageClause] };
   const docs = await purchaseRequests.find(filter).sort({ updatedAt: -1 }).toArray();
-  res.status(200).json({ purchaseRequests: docs.map(toSummary) });
+  /**
+   * ป้าย "ออกใบสั่งซื้อแล้ว" ในหน้ารายการ (2026-09-21) — ดึงใบสั่งซื้อของทุกใบในหน้าด้วย `$in`
+   * ครั้งเดียว ไม่ใช่ยิงต่อใบ · ใบที่ไม่มีบรรทัดเลยไม่นับว่าซื้อครบ (ไม่งั้นใบเปล่าจะขึ้นป้ายเขียว)
+   */
+  const purchaseStateById = await purchaseStateOf(docs);
+  res.status(200).json({
+    purchaseRequests: docs.map((d) => ({ ...toSummary(d), purchaseState: purchaseStateById.get(d._id) })),
+  });
+}
+
+/**
+ * ใบไหนออกใบสั่งซื้อไปแล้วแค่ไหน — `"none"` / `"partial"` / `"full"` (2026-09-21)
+ *
+ * นับเฉพาะบรรทัดที่**ต้องซื้อ**จริง ๆ คือบรรทัดที่สโตร์ไม่ได้จ่ายจากสต๊อกให้ ตรงกับชุดบรรทัดที่
+ * `handleCreate()` ของใบสั่งซื้อจะลอกไป ไม่งั้นใบที่สโตร์จ่ายให้ครึ่งหนึ่งจะไม่มีวันขึ้นเป็น `"full"`
+ */
+async function purchaseStateOf(
+  docs: (PurchaseRequestFields & { _id: string })[],
+): Promise<Map<string, "none" | "partial" | "full">> {
+  const result = new Map<string, "none" | "partial" | "full">();
+  const ids = docs.filter((d) => d.status === "Final").map((d) => d._id);
+  if (ids.length === 0) return result;
+  const purchaseOrders = await purchaseOrdersCollection();
+  const pos = await purchaseOrders
+    .find({ purchaseRequestId: { $in: ids }, isDeleted: false }, { projection: { purchaseRequestId: 1, lines: 1 } })
+    .toArray();
+  const boughtByPr = new Map<string, Set<string>>();
+  for (const po of pos) {
+    const set = boughtByPr.get(po.purchaseRequestId) ?? new Set<string>();
+    for (const l of po.lines ?? []) if (l.sourcePrLineId) set.add(l.sourcePrLineId);
+    boughtByPr.set(po.purchaseRequestId, set);
+  }
+  for (const doc of docs) {
+    if (doc.status !== "Final") continue;
+    const toBuy = (doc.lines ?? []).filter((l) => l.storeDecision !== "stock");
+    if (toBuy.length === 0) continue;
+    const bought = boughtByPr.get(doc._id) ?? new Set<string>();
+    const n = toBuy.filter((l) => bought.has(l.id)).length;
+    result.set(doc._id, n === 0 ? "none" : n >= toBuy.length ? "full" : "partial");
+  }
+  return result;
 }
 
 async function handleCreate(req: ApiRequest, res: ApiResponse) {
@@ -290,7 +331,12 @@ async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "purchaseRequest:view");
   const doc = await loadOrThrow(id);
-  res.status(200).json({ purchaseRequest: toClient(doc), stockByProduct: await stockByProductFor(doc.lines ?? []) });
+  res.status(200).json({
+    purchaseRequest: toClient(doc),
+    stockByProduct: await stockByProductFor(doc.lines ?? []),
+    // บรรทัดไหนออกใบสั่งซื้อไปแล้วบ้าง — คำนวณจากใบสั่งซื้อจริง ไม่ใช่ธงบนใบนี้ (ดู purchasedPrLineIds)
+    purchasedLines: Object.fromEntries(await purchasedPrLineIds(id)),
+  });
 }
 
 /**

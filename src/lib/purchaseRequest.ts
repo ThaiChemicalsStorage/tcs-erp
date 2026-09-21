@@ -286,6 +286,11 @@ export interface PurchaseRequestSummary {
   storeStage?: PurchaseRequestStoreStage;
   /** ขั้นของจัดซื้อ — ป้าย "จัดซื้ออนุมัติแล้ว" ในหน้ารายการ (2026-09-21) */
   purchasingStage?: PurchaseRequestPurchasingStage;
+  /**
+   * ออกใบสั่งซื้อไปแล้วแค่ไหน (2026-09-21) — นับเฉพาะบรรทัดที่ต้องซื้อจริง
+   * ไม่มีค่า = ใบที่ยังไม่อนุมัติ หรือไม่มีบรรทัดที่ต้องซื้อเลย
+   */
+  purchaseState?: "none" | "partial" | "full";
   updatedAt: string;
 }
 
@@ -386,13 +391,25 @@ export function storeOutstandingQtyOf(doc: PurchaseRequest, line: PurchaseReques
 export interface PurchaseRequestWithStock {
   purchaseRequest: PurchaseRequest;
   stockByProduct: Record<string, number>;
+  /**
+   * บรรทัดที่ออกใบสั่งซื้อไปแล้ว → เลขที่ใบที่ซื้อมัน (2026-09-21)
+   *
+   * มาจากการนับใบสั่งซื้อจริงฝั่งเซิร์ฟเวอร์ ไม่ใช่ธงที่เก็บบนใบขอซื้อ — ลบใบสั่งซื้อแล้วบรรทัดหายจาก
+   * ตารางนี้เอง เป็นเหตุผลเดียวกับที่ไม่เก็บธง (ดู `PurchaseOrderLine.sourcePrLineId`)
+   */
+  purchasedLines: Record<string, string[]>;
 }
 interface PurchaseRequestStockResponse {
   purchaseRequest: PurchaseRequest;
   stockByProduct?: Record<string, number>;
+  purchasedLines?: Record<string, string[]>;
 }
 function unwrapWithStock(res: PurchaseRequestStockResponse): PurchaseRequestWithStock {
-  return { purchaseRequest: res.purchaseRequest, stockByProduct: res.stockByProduct ?? {} };
+  return {
+    purchaseRequest: res.purchaseRequest,
+    stockByProduct: res.stockByProduct ?? {},
+    purchasedLines: res.purchasedLines ?? {},
+  };
 }
 
 /** บันทึกผลการเช็คของ — บรรทัดไหนมีของ บรรทัดไหนต้องซื้อ · มีบรรทัดต้องซื้อ = ส่งต่อจัดซื้อทันที */

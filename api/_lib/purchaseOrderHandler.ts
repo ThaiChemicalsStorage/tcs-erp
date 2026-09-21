@@ -74,11 +74,15 @@ function canEdit(ctx: AuthContext, doc: { createdBy: string }): boolean {
  * (โมดูล "คำขอเพิ่มสินค้า" มีอยู่ก็เพราะรหัสถูกตั้งทีหลัง) ถ้าผูกกับสินค้าจริง รหัส/ชื่อ/หน่วย
  * ถูก **ดึงจากฐานข้อมูลฝั่งเซิร์ฟเวอร์** ไม่เชื่อค่าที่ client ส่งมา
  */
-async function sanitizeLines(raw: unknown): Promise<PurchaseOrderLine[]> {
+async function sanitizeLines(raw: unknown, existing: PurchaseOrderLine[] = []): Promise<PurchaseOrderLine[]> {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายการไม่ถูกต้อง");
   if (raw.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
   const rows = raw as Record<string, unknown>[];
+  // ตัวชี้กลับไปบรรทัดของใบขอซื้อไม่รับจาก PATCH — อ่านค่าเดิมกลับด้วย line id แทน ไม่งั้นไคลเอนต์
+  // ย้ายตัวชี้ไปบรรทัดอื่นได้ แล้วบรรทัดที่ซื้อไปแล้วจะกลับมาซื้อได้อีก (แพตเทิร์นเดียวกับ
+  // `storeDecision` ใน purchaseRequestHandler.ts)
+  const existingById = new Map(existing.map((l) => [l.id, l]));
 
   const productIds = [...new Set(rows.map((r) => (typeof r.productId === "string" ? r.productId : "")).filter(Boolean))];
   const products = await productsCollection();
@@ -107,6 +111,7 @@ async function sanitizeLines(raw: unknown): Promise<PurchaseOrderLine[]> {
       neededByDate: validateIsoDateOrEmpty(r.neededByDate, `วันต้องการลำดับที่ ${idx + 1}`),
       departmentCode: sanitizeShortText(r.departmentCode, `แผนกลำดับที่ ${idx + 1}`),
       costCode: sanitizeShortText(r.costCode, `รหัสบัญชีลำดับที่ ${idx + 1}`),
+      sourcePrLineId: existingById.get(typeof r.id === "string" ? r.id : "")?.sourcePrLineId ?? "",
       remark: sanitizeShortText(r.remark, `หมายเหตุลำดับที่ ${idx + 1}`),
     };
   });
@@ -162,11 +167,48 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
   res.status(200).json({ purchaseOrders: docs.map(toSummary) });
 }
 
+/**
+ * บรรทัดของใบขอซื้อใบหนึ่งที่ถูกออกใบสั่งซื้อไปแล้ว → เลขที่ใบที่ซื้อมัน (2026-09-21)
+ *
+ * **คำนวณจากใบสั่งซื้อจริงทุกครั้ง ไม่ได้เก็บธงไว้บนใบขอซื้อ** — ลบใบสั่งซื้อทิ้ง (soft-delete)
+ * แล้วบรรทัดต้องกลับมาซื้อได้เองทันที ถ้าเก็บธงไว้จะค้างเป็น "ซื้อไม่ได้ตลอดกาล"
+ *
+ * ฉบับแก้ไขของใบสั่งซื้อ (`-R{n}`) นับเป็นอีกใบหนึ่งตามปกติ เพราะฉบับเดิมก็ยังอยู่จริงและยังไม่ถูกลบ
+ * **อย่าพยายามยุบสายแก้ไขให้เหลือใบเดียว** — จะกลายเป็นการซ่อนใบที่ยังเปิดค้างอยู่
+ */
+export async function purchasedPrLineIds(purchaseRequestId: string): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (!purchaseRequestId) return result;
+  const purchaseOrders = await purchaseOrdersCollection();
+  const docs = await purchaseOrders
+    .find({ purchaseRequestId, isDeleted: false }, { projection: { documentNumber: 1, lines: 1 } })
+    .toArray();
+  for (const po of docs) {
+    const label = po.documentNumber || po._id;
+    for (const line of po.lines ?? []) {
+      const source = line.sourcePrLineId ?? "";
+      if (!source) continue;
+      const list = result.get(source);
+      if (list) { if (!list.includes(label)) list.push(label); } else { result.set(source, [label]); }
+    }
+  }
+  return result;
+}
+
 async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseOrder:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
   const purchaseRequestId = typeof body.purchaseRequestId === "string" ? body.purchaseRequestId : "";
+  /**
+   * บรรทัดที่จัดซื้อติ๊กเลือกไว้บนใบขอซื้อ (2026-09-21) — ไม่ส่งมา = เอาทุกบรรทัดที่ยังไม่ได้ซื้อ
+   *
+   * การติ๊กเป็นแค่การ**เลือกว่าจะเอาไปเปิดใบสั่งซื้อ** ไม่ใช่สถานะอนุมัติรายบรรทัด (เจ้าของยืนยัน)
+   * จึงไม่มีฟิลด์ใหม่บนใบขอซื้อเลย เป็นแค่ `lineIds` ที่ส่งมากับคำสั่งสร้างครั้งนั้น
+   */
+  const selectedLineIds = Array.isArray(body.lineIds)
+    ? [...new Set((body.lineIds as unknown[]).filter((v): v is string => typeof v === "string" && v.trim() !== ""))]
+    : null;
 
   let jobCode = "";
   let neededByDate = "";
@@ -193,6 +235,17 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     if (pr.storeStage === "closed") {
       throw new HttpError(400, "ใบขอซื้อนี้สโตร์จ่ายของจากสต๊อกครบแล้ว ไม่ต้องสั่งซื้อ");
     }
+    /**
+     * **ฝ่ายจัดซื้อต้องอนุมัติใบขอซื้อก่อน (2026-09-21)** — ข้อตัดสินใจของเจ้าของข้อสุดท้าย
+     *
+     * เขียนเป็น `=== "review"` (บล็อกเฉพาะใบที่เข้าไหลใหม่แล้วแต่จัดซื้อยังไม่กดอนุมัติ)
+     * **ไม่ใช่ `!== "approved"`** เพราะใบทุกใบที่ค้างอยู่ในระบบวันนี้ยังไม่มีฟิลด์นี้เลย
+     * รูปแบบลบจะทำให้ใบเก่าทั้งหมดเปิดใบสั่งซื้อไม่ได้ทันทีที่ deploy — ตรงข้ามกับด่านล็อกการแก้ไข
+     * ใน `purchaseRequestHandler.ts` ที่ต้องเขียนเป็น `=== "approved"` ด้วยเหตุผลกลับกันพอดี
+     */
+    if (pr.purchasingStage === "review") {
+      throw new HttpError(400, "ฝ่ายจัดซื้อยังไม่ได้อนุมัติใบขอซื้อนี้ — กดอนุมัติ (ฝ่ายจัดซื้อ) บนใบก่อนจึงจะออกใบสั่งซื้อได้");
+    }
 
     jobCode = pr.jobCode ?? "";
     neededByDate = pr.neededByDate ?? "";
@@ -209,7 +262,40 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     if (linesToBuy.length === 0 && (pr.lines ?? []).length > 0) {
       throw new HttpError(400, "ทุกรายการในใบขอซื้อนี้สโตร์จ่ายจากสต๊อกแล้ว ไม่มีรายการที่ต้องสั่งซื้อ");
     }
-    lines = linesToBuy.map((l) => ({
+
+    /**
+     * กันซื้อซ้ำ (2026-09-21) — เจ้าของสั่งว่าใบขอซื้อใบเดียว *"อาจจะเปิดซื้อจากหลายบริษัทก็ได้"*
+     * บรรทัดที่ออกใบสั่งซื้อไปแล้วจึงต้องไม่ถูกลอกไปอีกใบ
+     *
+     * ติ๊กมาเอง → บรรทัดที่ซื้อไปแล้วเป็น **400 พร้อมบอกเลขใบเดิม** เพราะเป็นการเลือกผิดที่ต้องรู้ตัว
+     * ไม่ได้ติ๊ก (เอาทุกรายการ) → **ข้ามเงียบ ๆ** เพราะเจตนาคือ "ที่เหลือทั้งหมด" อยู่แล้ว
+     */
+    const purchased = await purchasedPrLineIds(purchaseRequestId);
+    let chosen: typeof linesToBuy;
+    if (selectedLineIds) {
+      const byId = new Map(linesToBuy.map((l) => [l.id, l]));
+      chosen = selectedLineIds.map((lineId) => {
+        const line = byId.get(lineId);
+        if (!line) {
+          const issued = (pr.lines ?? []).find((l) => l.id === lineId);
+          throw new HttpError(400, issued
+            ? `${issued.description}: สโตร์จ่ายของจากสต๊อกให้แล้ว ไม่ต้องสั่งซื้อ`
+            : "ไม่พบรายการที่เลือกในใบขอซื้อ");
+        }
+        const already = purchased.get(lineId);
+        if (already && already.length > 0) {
+          throw new HttpError(400, `${line.description}: ออกใบสั่งซื้อไปแล้วในใบ ${already.join(", ")}`);
+        }
+        return line;
+      });
+      if (chosen.length === 0) throw new HttpError(400, "กรุณาเลือกอย่างน้อยหนึ่งรายการ");
+    } else {
+      chosen = linesToBuy.filter((l) => !(purchased.get(l.id)?.length));
+      if (chosen.length === 0) {
+        throw new HttpError(400, "ทุกรายการในใบขอซื้อนี้ออกใบสั่งซื้อไปแล้ว");
+      }
+    }
+    lines = chosen.map((l) => ({
       id: newId("poline"),
       productId: l.productId || null,
       productCode: l.productCode ?? "",
@@ -227,6 +313,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       neededByDate: l.neededByDate ?? "",
       departmentCode: l.departmentCode ?? "",
       costCode: l.costCode ?? "",
+      // ตัวชี้กลับไปบรรทัดต้นทาง — หัวใจของการกันซื้อซ้ำ ดู purchasedPrLineIds()
+      sourcePrLineId: l.id,
       remark: "",
     }));
   }
@@ -325,7 +413,7 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<PurchaseOrderFields> = {};
-  if ("lines" in body) update.lines = await sanitizeLines(body.lines);
+  if ("lines" in body) update.lines = await sanitizeLines(body.lines, doc.lines ?? []);
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   if ("vatRate" in body) update.vatRate = sanitizeNullableNumber(body.vatRate, "อัตราภาษี (%)");
   if ("discount" in body) update.discount = sanitizeNullableNumber(body.discount, "ส่วนลดท้ายใบ");
