@@ -63,7 +63,7 @@
 - [x] **เฟส 7 — เลือกผู้อนุมัติ PO (ข้อ 2).** ✅ **เสร็จ 2026-09-21** — `intendedApproverUserId` + hook `recipients` แบบบวกเพิ่ม
   ใน `documentApproval.ts` (อีก 5 โมดูลไม่เซ็ต = ทำงานเหมือนเดิม) · ลอก `SignatoryEditor`
   (`ScopeOfWorkDocument.tsx:89-133`) มาเป็นตัวเลือกคน
-- [ ] **เฟส 8 — ย้อน PO ที่อนุมัติแล้ว (ข้อ 9).** route ใหม่ `revert-approval` เฉพาะ PO
+- [x] **เฟส 8 — ย้อน PO ที่อนุมัติแล้ว (ข้อ 9).** ✅ **เสร็จ 2026-09-21** — route ใหม่ `revert-approval` เฉพาะ PO
   **ห้ามไปขยาย `handleWithdrawApproval`** (`documentApproval.ts:228` ใช้ร่วมกัน 6 โมดูล) ·
   บล็อกเมื่อมีใบรับสินค้าแล้ว ตอบ 400 พร้อม `receivingReportId` ให้หน้าจอลิงก์ไปได้
 - [ ] **เฟส 9 — ยกเลิกรายการใน PO (ข้อ 11).** `cancelled` + `cancelRemark` ต่อบรรทัด · ยอดเงินแก้ที่เดียว

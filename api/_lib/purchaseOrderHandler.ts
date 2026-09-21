@@ -7,7 +7,7 @@ import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   purchaseOrdersCollection, purchaseRequestsCollection, productsCollection, countersCollection,
   auditLogCollection, toObjectId, withStringId, type PurchaseOrderFields, type CounterFields,
-  vendorsCollection, usersCollection,
+  vendorsCollection, usersCollection, receivingReportsCollection,
 } from "./collections.js";
 import { vendorApprovalStatusOf } from "../../src/lib/vendors.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -569,6 +569,62 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
   res.status(201).json({ purchaseOrder: toClient(next) });
 }
 
+/**
+ * ย้อนใบสั่งซื้อที่อนุมัติแล้วกลับเป็นร่าง (2026-09-21) — เจ้าของข้อ 9:
+ * *"ใบ PO ถ้าถูกหัวหน้า Approve ไปแล้วสามารถย้อนได้โดยไม่ต้องกด Rewrite"*
+ *
+ * **เขียนเป็น route ของใบสั่งซื้อเอง ห้ามไปขยาย `handleWithdrawApproval`** — ตัวนั้นบังคับให้เอกสาร
+ * อยู่ในสถานะ `PendingApproval` และถูกใช้ร่วมกัน 6 โมดูล การคลายด่านตรงนั้นจะทำให้คนที่มีสิทธิ์แก้
+ * ไปถอนการอนุมัติใบสั่งผลิต ใบเบิก ใบสั่งงาน Cost Control และใบขอซื้อได้ด้วย ซึ่งไม่มีใครสั่ง
+ *
+ * ใช้ `purchaseOrder:finalize` ไม่ใช่ `canEdit` — **คนที่อนุมัติได้คือคนที่ถอนได้** ถ้าใช้สิทธิ์แก้ไข
+ * คนเปิดใบจะถอนลายเซ็นของหัวหน้าตัวเองได้
+ *
+ * **ด่านใบรับสินค้า**: ของเข้าคลังไปแล้วย้อนไม่ได้ · ใช้ query เดียวกับที่ `receivingReportHandler.ts`
+ * ใช้ตอนกันสร้างซ้ำ (`1 PO = 1 RR` บังคับอยู่แล้ว `findOne` จึงครอบคลุมแน่นอน) และส่ง
+ * `receivingReportId` กลับไปด้วยเพื่อให้หน้าจอเสนอปุ่มเปิดใบนั้นได้
+ */
+async function handleRevertApproval(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseOrder:finalize");
+  const doc = await loadOrThrow(id);
+  if (doc.status !== "Final") throw new HttpError(400, "ย้อนได้เฉพาะใบสั่งซื้อที่อนุมัติแล้วเท่านั้น");
+
+  const receivingReports = await receivingReportsCollection();
+  const rr = await receivingReports.findOne({ purchaseOrderId: id, isDeleted: false });
+  if (rr) {
+    // `details` ถูก spread ขึ้นระดับบนสุดของ body (ดู sendJson ใน http.ts) — หน้าจอจึงอ่าน
+    // `receivingReportId` ได้ตรง ๆ แบบเดียวกับ 409 ของ receivingReportHandler ตอนกันสร้างซ้ำ
+    throw new HttpError(400, "ใบสั่งซื้อนี้มีใบรับสินค้าแล้ว (" + (rr.documentNumber || rr._id) + ") ย้อนการอนุมัติไม่ได้", {
+      details: { receivingReportId: rr._id },
+    });
+  }
+
+  const reason = sanitizeLongText((req.body ?? {}).reason, "เหตุผลที่ย้อนการอนุมัติ");
+  const now = nowIso();
+  const note = "ถอนการอนุมัติเมื่อ " + now.slice(0, 10) + " โดย " + ctx.user.fullName + (reason ? " — " + reason : "");
+  const previousNote = (doc.revisionNote ?? "").trim();
+  const purchaseOrders = await purchaseOrdersCollection();
+  await purchaseOrders.updateOne({ _id: id }, {
+    $set: {
+      status: "Draft",
+      // ชุดเดียวกับที่ `handleRewrite` ล้าง — ให้ "ล้างการอนุมัติ" มีนิยามเดียวในไฟล์นี้
+      approvedBy: "",
+      approvedByUserId: "",
+      approvedAt: "",
+      rejectionComment: "",
+      // ต่อท้าย ไม่เขียนทับ — และแสดงบนใบพิมพ์ด้วย คนที่ถือกระดาษใบเก่าจะได้รู้ว่าใบถูกถอน
+      revisionNote: previousNote ? previousNote + "\n" + note : note,
+      updatedAt: now,
+      updatedBy: ctx.user.id,
+    },
+  });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Purchase Order Approval Reverted",
+    "ถอนการอนุมัติใบสั่งซื้อ " + id + (reason ? " — " + reason : ""));
+  res.status(200).json({ purchaseOrder: toClient(updated) });
+}
+
 const approvalConfig: ApprovalConfig<PurchaseOrderFields & { _id: string }> = {
   label: "ใบสั่งซื้อ",
   approvePermission: "purchaseOrder:finalize",
@@ -644,6 +700,8 @@ export async function handlePurchaseOrder(req: ApiRequest, res: ApiResponse): Pr
     if (action === "approve" || action === "finalize") return handleApprove(req, res, id, approvalConfig);
     if (action === "reject") return handleReject(req, res, id, approvalConfig);
     if (action === "withdraw-approval") return handleWithdrawApproval(req, res, id, approvalConfig);
+    // ย้อนใบที่อนุมัติแล้ว (2026-09-21) — route ของใบสั่งซื้อเอง ไม่ใช่ helper ร่วม ดู handleRevertApproval()
+    if (action === "revert-approval") return handleRevertApproval(req, res, id);
   }
   throw new HttpError(404, "Not found");
 }

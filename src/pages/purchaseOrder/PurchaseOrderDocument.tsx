@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2, Undo2 } from "lucide-react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
@@ -20,7 +20,7 @@ import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vend
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
 import {
   type PurchaseOrder, type PurchaseOrderUpdateFields, blankPurchaseOrderLine,
-  fetchPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, rewritePurchaseOrder, logPurchaseOrderPrinted,
+  fetchPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, rewritePurchaseOrder, revertPurchaseOrderApproval, logPurchaseOrderPrinted,
   submitPurchaseOrderApproval, approvePurchaseOrder, rejectPurchaseOrder, withdrawPurchaseOrderApproval,
 } from "../../lib/purchaseOrder";
 import { PurchaseOrderPrintDocument } from "./PurchaseOrderPrintDocument";
@@ -92,6 +92,10 @@ export function PurchaseOrderDocument({
   const [showPrint, setShowPrint] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
+  /** ถอนการอนุมัติ (2026-09-21) — ใบกลับเป็นร่าง เลขที่เดิม */
+  const [confirmRevert, setConfirmRevert] = useState(false);
+  const [revertReason, setRevertReason] = useState("");
+  const [reverting, setReverting] = useState(false);
   const [receiving, setReceiving] = useState(false);
   // ทะเบียนผู้ขาย — ดึงในหน้านี้เอง แบบเดียวกับที่ใบสั่งงานดึงรายชื่อแผนก (fetchDepartments)
   // GET /vendors เปิดให้คนที่มี purchaseOrder:view อ่านได้ ไม่ต้องมีสิทธิ์ดูแลทะเบียน
@@ -152,6 +156,22 @@ export function PurchaseOrderDocument({
       setDoc(await updatePurchaseOrder(draft.id, fields, { autoSave: true }));
     },
   });
+
+  /** ถอนการอนุมัติ — ใบกลับเป็นร่าง เลขที่เดิม (ต่างจาก Rewrite ที่ออกเลขใหม่) */
+  const handleRevert = async () => {
+    if (!doc) return;
+    setReverting(true);
+    try {
+      const next = await revertPurchaseOrderApproval(doc.id, revertReason.trim());
+      setDoc(next);
+      setDraft(next);
+      dirty.markSaved(toUpdateFields(next));
+      setConfirmRevert(false);
+      showToast(t("purchaseOrderDoc.revertedToast"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
+    } finally { setReverting(false); }
+  };
 
   /** คืน true เมื่อบันทึกสำเร็จ — กล่อง "ยังไม่ได้บันทึก" ใช้ค่านี้ตัดสินว่าจะออกจากหน้าได้ไหม
    *  ถ้าบันทึกไม่ผ่าน ต้องค้างอยู่หน้าเดิมให้ผู้ใช้แก้ ไม่ใช่ออกไปแล้วงานหาย */
@@ -271,6 +291,14 @@ export function PurchaseOrderDocument({
               <button onClick={save} disabled={saving}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("purchaseOrderDoc.saveDraft")}
+              </button>
+            )}
+            {/* ถอนการอนุมัติ (2026-09-21) — คนที่อนุมัติได้คือคนที่ถอนได้ จึงผูกกับ canApprove
+                ไม่ใช่ canEdit · ต่างจาก Rewrite ตรงที่ไม่ได้ออกเลขที่เอกสารใหม่ */}
+            {draft.status === "Final" && canApprove && (
+              <button onClick={() => { setRevertReason(""); setConfirmRevert(true); }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <Undo2 size={13} /> {t("purchaseOrderDoc.revert")}
               </button>
             )}
             {draft.status === "Final" && canEdit && (
@@ -592,6 +620,30 @@ export function PurchaseOrderDocument({
           }
         }}
       />
+      {/* กล่องยืนยันการถอน — มีช่องเหตุผลจึงทำเองแทน ConfirmDialog ที่รับได้แค่ข้อความ */}
+      {confirmRevert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setConfirmRevert(false)} />
+          <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-foreground">{t("purchaseOrderDoc.revertConfirmTitle")}</h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">{t("purchaseOrderDoc.revertConfirmBody")}</p>
+            <textarea
+              autoFocus rows={2} value={revertReason} onChange={(e) => setRevertReason(e.target.value)}
+              placeholder={t("purchaseOrderDoc.revertReasonPlaceholder")}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setConfirmRevert(false)} disabled={reverting} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
+                {t("common.cancel")}
+              </button>
+              <button onClick={() => void handleRevert()} disabled={reverting}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#d8ba62] transition-colors disabled:opacity-60">
+                {reverting && <Loader2 size={12} className="animate-spin" />} {t("purchaseOrderDoc.revert")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ConfirmDialog
         open={confirmRewrite}
         title={t("purchaseOrderDoc.confirmRewrite.title")}

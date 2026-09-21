@@ -279,6 +279,18 @@ export async function deletePurchaseOrder(id: string): Promise<void> {
 }
 
 /** สร้างฉบับแก้ไขใหม่ (`-R{n}`) จากใบที่อนุมัติแล้ว — หมายเหตุการแก้ไขเริ่มว่างเสมอ */
+/**
+ * ย้อนใบที่อนุมัติแล้วกลับเป็นร่าง (2026-09-21) — เจ้าของข้อ 9: *"ถ้าถูกหัวหน้า Approve ไปแล้ว
+ * สามารถย้อนได้โดยไม่ต้องกด Rewrite"* · ทำไม่ได้ถ้ามีใบรับสินค้าแล้ว (ของเข้าคลังไปแล้ว)
+ */
+export async function revertPurchaseOrderApproval(id: string, reason: string): Promise<PurchaseOrder> {
+  const { purchaseOrder } = await apiFetch<{ purchaseOrder: PurchaseOrder }>(
+    `/purchase-orders/${encodeURIComponent(id)}/revert-approval`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+  return purchaseOrder;
+}
+
 export async function rewritePurchaseOrder(id: string): Promise<PurchaseOrder> {
   const { purchaseOrder } = await apiFetch<{ purchaseOrder: PurchaseOrder }>(`/purchase-orders/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
   return purchaseOrder;

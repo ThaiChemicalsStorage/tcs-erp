@@ -414,6 +414,48 @@ describe("ใบสั่งซื้อ — รายละเอียดต�
   });
 });
 
+describe("ใบสั่งซื้อ — ย้อนการอนุมัติ (2026-09-21)", () => {
+  it("ย้อนใบที่อนุมัติแล้วกลับเป็นร่าง เลขที่เดิม ลายเซ็นถูกล้าง และเหตุผลถูกจดไว้", async () => {
+    const po = await createPurchaseOrder();
+    const approved = await approvePurchaseOrder(po.id);
+    expect(approved.status).toBe("Final");
+
+    const res = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/revert-approval`, {
+      method: "POST", body: JSON.stringify({ reason: "ผู้ขายแจ้งของขาด" }),
+    });
+    expect(res.status).toBe(200);
+    const reverted = (await json<{ purchaseOrder: PurchaseOrderDoc & { revisionNote?: string } }>(res)).purchaseOrder;
+    expect(reverted.id, "ไม่ได้ออกเลขใหม่ ต่างจาก Rewrite").toBe(po.id);
+    expect(reverted.status).toBe("Draft");
+    expect(reverted.approvedBy ?? "").toBe("");
+    expect(reverted.revisionNote ?? "").toContain("ผู้ขายแจ้งของขาด");
+
+    // กลับมาแก้ได้จริง แล้วอนุมัติใหม่ได้
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH", body: JSON.stringify({ remarks: "แก้หลังถอน" }),
+    })).status).toBe(200);
+    expect((await approvePurchaseOrder(po.id)).status).toBe("Final");
+  });
+
+  it("ใบร่างย้อนไม่ได้ และใบที่มีใบรับสินค้าแล้วย้อนไม่ได้ พร้อมบอกเลขใบรับสินค้า", async () => {
+    const draft = await createPurchaseOrder();
+    expect((await api(`/api/purchase-orders/${encodeURIComponent(draft.id)}/revert-approval`, { method: "POST" })).status).toBe(400);
+
+    const po = await createPurchaseOrder();
+    await approvePurchaseOrder(po.id);
+    const rr = await api("/api/receiving-reports", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id }) });
+    expect(rr.status).toBe(201);
+    const rrId = (await json<{ receivingReport: { id: string } }>(rr)).receivingReport.id;
+
+    const blocked = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}/revert-approval`, { method: "POST" });
+    expect(blocked.status).toBe(400);
+    // `details` ถูก spread ขึ้นมาระดับบนสุดของ body โดย sendJson() ไม่ได้ซ้อนอยู่ใต้คีย์ details
+    const body = await json<{ error: string; receivingReportId?: string }>(blocked);
+    expect(body.receivingReportId, "หน้าจอต้องลิงก์ไปใบรับสินค้าได้").toBe(rrId);
+    // ใบยังเป็น Final เหมือนเดิม ไม่ได้ถูกแตะ
+    expect((await json<{ purchaseOrder: PurchaseOrderDoc }>(await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`))).purchaseOrder.status).toBe("Final");
+  });
+});
 describe("ใบสั่งซื้อ — เลือกคนอนุมัติ (2026-09-21)", () => {
   it("เลือกผู้อนุมัติได้ และแจ้งเตือนวิ่งไปหาคนนั้นคนเดียว", async () => {
     const me = await json<{ user: { id: string; fullName: string } }>(await api("/api/auth/session"));

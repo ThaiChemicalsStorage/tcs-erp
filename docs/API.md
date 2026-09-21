@@ -876,6 +876,29 @@ body รับ `newCategoryName` เพิ่มอีกหนึ่งช่�
 ไม่สร้างซ้ำ** · การสร้างหมวดทางนี้ใช้สิทธิ์ `productRequest:review` ของ route นี้เอง ไม่ได้ผ่าน
 `POST /api/categories` ซึ่งยังต้องการ `products:create` เหมือนเดิม
 
+## ใบสั่งซื้อ — ย้อนการอนุมัติ (2026-09-21)
+
+`POST /api/purchase-orders/:id/revert-approval` · `purchaseOrder:finalize` · body `{ reason? }`
+
+เจ้าของข้อ 9: *"ใบ PO ถ้าถูกหัวหน้า Approve ไปแล้วสามารถย้อนได้โดยไม่ต้องกด Rewrite"*
+
+**เป็น route ของใบสั่งซื้อเอง ไม่ได้ขยาย `handleWithdrawApproval`** — ตัวนั้นบังคับ `PendingApproval`
+และใช้ร่วมกัน 6 โมดูล การคลายด่านตรงนั้นจะทำให้ถอนการอนุมัติใบสั่งผลิต/ใบเบิก/ใบสั่งงาน/Cost Control/
+ใบขอซื้อ ได้ด้วย ซึ่งไม่มีใครสั่ง
+
+ใช้ `purchaseOrder:finalize` **ไม่ใช่ `canEdit`** — คนที่อนุมัติได้คือคนที่ถอนได้ ถ้าใช้สิทธิ์แก้ไข
+คนเปิดใบจะถอนลายเซ็นของหัวหน้าตัวเองได้
+
+| กรณี | ผล |
+|---|---|
+| ใบไม่ใช่ `Final` | 400 |
+| มีใบรับสินค้าที่ยังไม่ถูกลบ | 400 พร้อม `receivingReportId` ระดับบนสุดของ body ให้หน้าจอลิงก์ไปได้ (`1 PO = 1 RR` บังคับอยู่แล้ว `findOne` จึงครอบคลุม) |
+| ผ่าน | `status: "Draft"` · ล้าง `approvedBy`/`approvedByUserId`/`approvedAt`/`rejectionComment` (ชุดเดียวกับที่ `handleRewrite` ล้าง) · ต่อท้าย `revisionNote` ว่าใครถอนเมื่อไรและเพราะอะไร — **แสดงบนใบพิมพ์ด้วย** |
+
+**เลขที่เอกสารไม่เปลี่ยน** ต่างจาก Rewrite ที่ออก `-R{n}` ใหม่ · **การย้อนไม่ปลดล็อกบรรทัดของใบขอซื้อ**
+เพราะใบสั่งซื้อยังอยู่ มีแต่การลบใบสั่งซื้อที่ปลด (ดู `purchasedPrLineIds()`) · การอนุมัติใหม่จะผ่าน
+`beforeApprove` อีกครั้ง จึงตรวจผู้ขายกับทะเบียนซ้ำ
+
 ## ใบสั่งซื้อ — เลือกคนอนุมัติ (2026-09-21)
 
 `PurchaseOrder.intendedApproverUserId` / `intendedApproverName` · **ไม่ใช่การล็อกสิทธิ์** —
