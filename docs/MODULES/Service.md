@@ -417,8 +417,11 @@ link with a 7-day expiry** (the owner's recorded preference against always-live 
   (`linePairing` is server-only, stripped by `toPublicCustomer()`).
 - **The public page** — `/approve` renders `src/pages/approval/CustomerApprovalPage.tsx` with NO
   app shell or session (`src/main.tsx` branches before the auth gate). Thai-only, mobile-first:
-  report summary, full checklist read-out (incl. abnormal details + photos via their existing
-  capability URLs), then SignaturePad + อนุมัติ, or ไม่อนุมัติ + **required reason**. GET/respond
+  report summary, full checklist read-out (incl. abnormal details + photos — **since 2026-09-22
+  served by `GET /api/service-reports/:id/approval/photos/:photoId?key=`**, gated by the same
+  approval key; the payload rewrites every photo `url` to it, because photos uploaded through the
+  central upload service point at `/api/files/:id`, which needs a session the customer doesn't
+  have — that broke every new photo on this page for a day), then SignaturePad + อนุมัติ, or ไม่อนุมัติ + **required reason**. GET/respond
   use the key (wrong key = opaque 404; expired = shown as expired, respond = 410; one response
   per link).
 - **The summary block (`ข้อมูลงานบริการ`)** lists ชื่อบริษัท · ผู้ติดต่อ · สถานที่ให้บริการ ·

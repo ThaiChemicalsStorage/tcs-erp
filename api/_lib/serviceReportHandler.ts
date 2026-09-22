@@ -23,7 +23,8 @@ import type {
 } from "../../src/lib/serviceReports.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { companyCollection } from "./collections.js";
-import { storeUpload, deleteUpload } from "./upload/uploadService.js";
+import { storeUpload, deleteUpload, filesCollection } from "./upload/uploadService.js";
+import { sendFileRow } from "./upload/filesHandler.js";
 import { isLinePushConfigured, pushLineMessage, buildApprovalFlexMessage } from "./lineHandler.js";
 
 /**
@@ -879,7 +880,7 @@ async function loadReportForApprovalKey(id: string, key: string): Promise<{ doc:
 }
 
 /** Only the fields a customer may see — internal user ids resolved to a display name. */
-async function buildApprovalPublicPayload(doc: ServiceReportFields & { _id: string }, approval: NonNullable<ServiceReportFields["customerApproval"]>, expired: boolean) {
+async function buildApprovalPublicPayload(doc: ServiceReportFields & { _id: string }, approval: NonNullable<ServiceReportFields["customerApproval"]>, expired: boolean, key: string) {
   const [company, users] = await Promise.all([(await companyCollection()).findOne({}), usersCollection()]);
   let engineerName = "";
   if (doc.assignedServiceEngineerId) {
@@ -904,7 +905,7 @@ async function buildApprovalPublicPayload(doc: ServiceReportFields & { _id: stri
       overallCustomerSummary: doc.overallCustomerSummary,
       overallRemark: doc.overallRemark,
       templateSnapshot: doc.templateSnapshot,
-      checklist: doc.checklist,
+      checklist: withApprovalPhotoUrls(doc._id, doc.checklist, key),
       customerSignatureDataUrl: doc.customerSignatureDataUrl ?? "",
       customerSignedName: doc.customerSignedName ?? "",
     },
@@ -926,7 +927,59 @@ async function handleApprovalGet(req: ApiRequest, res: ApiResponse, id: string) 
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const key = typeof req.query.key === "string" ? req.query.key : "";
   const { doc, approval, expired } = await loadReportForApprovalKey(id, key);
-  res.status(200).json(await buildApprovalPublicPayload(doc, approval, expired));
+  res.status(200).json(await buildApprovalPublicPayload(doc, approval, expired, key));
+}
+
+/**
+ * ลูกค้าไม่มีบัญชี — รูปเช็คลิสต์ต้องเปิดผ่านกุญแจของลิงก์อนุมัติ ไม่ใช่ `/api/files/:id` ที่บังคับล็อกอิน
+ * (บั๊ก 2026-09-22: รูปทุกรูปที่อัปโหลดหลังย้ายเข้าระบบกลาง 2026-09-21 ไม่ขึ้นบนหน้า /approve)
+ * `fileId`/`thumbnailUrl` ถูกตัดทิ้ง — ลูกค้าไม่ต้องรู้ที่อยู่ภายในของไฟล์
+ */
+function withApprovalPhotoUrls(id: string, checklist: ServiceChecklistSectionValue[], key: string): ServiceChecklistSectionValue[] {
+  return checklist.map((s) => ({
+    ...s,
+    groups: s.groups.map((g) => ({
+      ...g,
+      items: g.items.map((it) => ({
+        ...it,
+        photos: (it.photos ?? []).map((p) => ({
+          id: p.id, fileName: p.fileName, size: p.size, uploadedAt: p.uploadedAt,
+          url: `/api/service-reports/${encodeURIComponent(id)}/approval/photos/${encodeURIComponent(p.id)}?key=${encodeURIComponent(key)}`,
+        })),
+      })),
+    })),
+  }));
+}
+
+/** GET /api/service-reports/:id/approval/photos/:photoId?key= — public, กุญแจลิงก์อนุมัติคือสิทธิ์
+ * เปิดได้เฉพาะรูปที่อยู่ในเช็คลิสต์ของรายงานนี้จริง · ผิดอะไรก็ตอบ 404 เหมือนกันหมด */
+async function handleApprovalPhoto(req: ApiRequest, res: ApiResponse, id: string, photoId: string) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  const key = typeof req.query.key === "string" ? req.query.key : "";
+  const { doc } = await loadReportForApprovalKey(id, key);
+  const photo = doc.checklist
+    .flatMap((s) => s.groups.flatMap((g) => g.items.flatMap((it) => it.photos ?? [])))
+    .find((p) => p.id === photoId);
+  if (!photo) throw new HttpError(404, "ไม่พบรูปภาพ");
+
+  if (photo.fileId) {
+    const row = await (await filesCollection()).findOne({ _id: photo.fileId });
+    if (!row || row.isDeleted || row.module !== "service-reports" || row.docId !== id) throw new HttpError(404, "ไม่พบรูปภาพ");
+    return sendFileRow(res, row, false);
+  }
+
+  // รูปเก่าที่ยังไม่ได้ย้ายเข้าตารางกลาง
+  await ensurePhotoIndexes();
+  const file = await (await serviceChecklistPhotoFilesCollection()).findOne({ serviceReportId: id, photoId });
+  if (!file) throw new HttpError(404, "ไม่พบรูปภาพ");
+  const buffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data.buffer);
+  const storedType = (file.contentType || "").split(";")[0].trim().toLowerCase();
+  const inlineSafe = INLINE_SAFE_PHOTO_TYPES.has(storedType);
+  res.setHeader("Content-Type", inlineSafe ? storedType : "application/octet-stream");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `${inlineSafe ? "inline" : "attachment"}; filename*=UTF-8''${encodeRfc5987(file.fileName)}`);
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.status(200).send(buffer);
 }
 
 /** POST /api/service-reports/:id/approval/respond — public. Approve requires a signature (written
@@ -991,7 +1044,7 @@ async function handleApprovalRespond(req: ApiRequest, res: ApiResponse, id: stri
     id,
   );
 
-  res.status(200).json(await buildApprovalPublicPayload(updated, nextApproval, false));
+  res.status(200).json(await buildApprovalPublicPayload(updated, nextApproval, false, key));
 }
 
 async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
@@ -1032,6 +1085,7 @@ export async function handleServiceReport(req: ApiRequest, res: ApiResponse): Pr
   if (parts.length === 2 && parts[1] === "send-approval") return handleSendApproval(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "approval") return handleApprovalGet(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "approval" && parts[2] === "respond") return handleApprovalRespond(req, res, parts[0]);
+  if (parts.length === 4 && parts[1] === "approval" && parts[2] === "photos") return handleApprovalPhoto(req, res, parts[0], parts[3]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "photos") return handlePhotoUpload(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "photos") return handlePhotoDelete(req, res, parts[0], parts[2]);

@@ -11,6 +11,9 @@ import { storage } from "./storage.js";
  * ทางเดียวที่ไฟล์ออกจากระบบ · **ตรวจสิทธิ์ตามโมดูลเจ้าของไฟล์เสมอ** (ข้อ 6) ไม่ใช่ลิงก์สาธารณะที่
  * ใครเดา id ถูกก็เปิดได้ — ต่างจากไฟล์แนบของ Scope of Work ที่ใช้ capability URL เพราะต้องส่งให้
  * คนนอกที่ไม่มีบัญชี ระบบใหม่นี้ไม่มี use case นั้น จึงล็อกด้วย session + permission ให้แน่นกว่า
+ *
+ * ⚠️ มี use case นั้นจริง: หน้าอนุมัติรายงานบริการของลูกค้า (`/approve`) แสดงรูปเช็คลิสต์ให้คนนอกดู
+ * รูปพวกนั้นจึงออกทาง `/api/service-reports/:id/approval/photos/:photoId?key=` แทน (ใช้ `sendFileRow()`)
  */
 
 /**
@@ -51,7 +54,21 @@ async function send(req: ApiRequest, res: ApiResponse, fileId: string, wantThumb
     throw new HttpError(403, "Forbidden");
   }
   await requirePermission(req, permission);
+  await sendFileRow(res, row, wantThumbnail);
+}
 
+/**
+ * ส่งเนื้อไฟล์ของแถวในตาราง `files` ออกไป **โดยไม่ตรวจสิทธิ์** — ผู้เรียกต้องตรวจเองก่อนเสมอ
+ *
+ * แยกออกมาให้ลิงก์อนุมัติของลูกค้า (`/api/service-reports/:id/approval/photos/:photoId`) ใช้ ซึ่งลูกค้า
+ * ไม่มีบัญชี ใช้กุญแจในลิงก์แทน session — เพิ่ม 2026-09-22 หลังรูปบนหน้าอนุมัติไม่ขึ้นเพราะ
+ * `/api/files/:id` บังคับล็อกอิน
+ */
+export async function sendFileRow(
+  res: ApiResponse,
+  row: { storageKey: string; thumbnailKey: string; originalName: string },
+  wantThumbnail: boolean,
+): Promise<void> {
   const key = wantThumbnail && row.thumbnailKey ? row.thumbnailKey : row.storageKey;
   const blob = await storage().get(key);
   if (!blob) throw new HttpError(404, "ไม่พบไฟล์");

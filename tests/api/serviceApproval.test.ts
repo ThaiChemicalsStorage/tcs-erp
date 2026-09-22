@@ -132,6 +132,40 @@ describe("service report customer approval", () => {
     expect(bad.status).toBe(404);
   });
 
+  // บั๊ก 2026-09-22: รูปที่อัปโหลดผ่านระบบกลางชี้ไป /api/files/:id ซึ่งบังคับล็อกอิน ลูกค้าบนหน้า
+  // /approve จึงเห็นรูปแตกทุกรูป — รูปต้องเปิดได้ด้วยกุญแจของลิงก์อนุมัติเพียงอย่างเดียว
+  it("checklist photos open with the approval key alone, no session", async () => {
+    const id = await insertReport({ status: "Draft" }); // แนบรูปได้เฉพาะร่าง แล้วค่อยปิดงานก่อนส่งลิงก์
+    const up = await fetch(`${baseUrl}/api/service-reports/${id}/photos`, {
+      method: "POST", headers: { cookie: adminCookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        sectionKey: "core", groupKey: "blower", itemKey: "vibration",
+        fileName: "หน้างาน.gif", contentType: "image/gif",
+        dataBase64: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      }),
+    });
+    expect(up.status).toBe(200);
+    const { serviceReportsCollection } = await import("../../api/_lib/collections.js");
+    await (await serviceReportsCollection()).updateOne({ _id: id }, { $set: { status: "Completed" } });
+    const { approvalUrl } = await sendApproval(id);
+    const key = keyFromUrl(approvalUrl);
+
+    const page = await fetch(`${baseUrl}/api/service-reports/${id}/approval?key=${key}`);
+    const data = (await page.json()) as { report: { checklist: { groups: { items: { photos: { url: string; fileId?: string }[] }[] }[] }[] } };
+    const photo = data.report.checklist[0].groups[0].items[0].photos[0];
+    expect(photo.url.startsWith(`/api/service-reports/${id}/approval/photos/`)).toBe(true);
+    expect(photo.fileId).toBeUndefined();
+
+    const img = await fetch(`${baseUrl}${photo.url}`); // no cookie — the customer has no account
+    expect(img.status).toBe(200);
+    expect(img.headers.get("content-type")).toMatch(/^image\//);
+
+    const wrongKey = await fetch(`${baseUrl}${photo.url.replace(/key=[^&]+/, "key=wrong-key")}`);
+    expect(wrongKey.status).toBe(404);
+    const notThisReport = await fetch(`${baseUrl}/api/service-reports/${id}/approval/photos/not-a-photo?key=${key}`);
+    expect(notThisReport.status).toBe(404);
+  });
+
   it("approve requires a signature, writes the sign-off fields, and answers only once", async () => {
     const id = await insertReport();
     const key = keyFromUrl((await sendApproval(id)).approvalUrl);
