@@ -89,6 +89,7 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 | [RBAC.md](./RBAC.md) | Roles/permissions model and where each check is enforced (server-side, real) |
 | [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) | ✅ **Migration complete (~2026-08-07)** — real production now runs on a self-hosted VPS (own domain + HTTPS, self-hosted MongoDB), Vercel artifacts removed from the repo 2026-09-14 (step H). Records the migration plan, go-live checklist, and the "no vendor-locked services" portability rule (added 2026-07-24) |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Standalone-server install guide (added 2026-08-06): Express via `npm start`, PM2/systemd, nginx/Caddy + HTTPS, backups |
+| `.claude/agents/` + `.claude/skills/team-meeting/` | Planning team (added 2026-09-22, local-only — `.claude/` is gitignored): `team-lead` + 8 read-only department agents. Run `/team-meeting` (or say "ประชุมทีม") before big or cross-cutting work — the lead's meeting summary goes to the owner for approval **before** any file is touched |
 | [MODULES/](./MODULES/) | Per-module deep dive (Dashboard, Quotation, QuotationTemplates, ScopeOfWork, DeliveryOrder, Project, Production, Purchasing, Store, Product, Accounting, Service, CostControl, Lead, Customer, Auth, Settings, CompanyProfiles) |
 
 ---
