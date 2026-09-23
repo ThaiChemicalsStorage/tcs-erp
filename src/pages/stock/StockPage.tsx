@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList } from "lucide-react";
+import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList, FileSpreadsheet } from "lucide-react";
+import { StockImportDialog } from "./StockImportDialog";
 import { type Product, type ProductCategory, updateProduct, fetchProducts } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { StockCountSheetPrintDocument } from "./StockCountSheetPrintDocument";
@@ -42,6 +43,7 @@ export function StockPage({
 }) {
   const [search, setSearch] = useState("");
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   /** สินค้าที่กำลังจะพิมพ์การ์ดสต๊อก — โหลดประวัติทั้งหมด (ไม่ใช่ 200 แถวล่าสุด) แล้วค่อยสั่งพิมพ์ */
   const [cardProduct, setCardProduct] = useState<Product | null>(null);
   const [cardMovements, setCardMovements] = useState<StockMovement[] | null>(null);
@@ -200,6 +202,14 @@ export function StockPage({
         >
           <Printer size={13} /> {t("stock.printCountSheet")}
         </button>
+        {canAdjust && (
+          <button
+            onClick={() => setImportOpen(true)}
+            className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+          >
+            <FileSpreadsheet size={13} /> {t("stock.import.button")}
+          </button>
+        )}
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
@@ -282,6 +292,16 @@ export function StockPage({
         )}
       </div>
 
+      {importOpen && (
+        <StockImportDialog
+          products={products}
+          onClose={() => setImportOpen(false)}
+          onImported={async () => {
+            localEditsRef.current += 1;
+            onProductsChange(await fetchProducts());
+          }}
+        />
+      )}
       {adjustTarget && (
         <AdjustStockDialog
           product={adjustTarget}

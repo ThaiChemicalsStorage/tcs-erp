@@ -8,6 +8,10 @@ import {
 import { nowIso } from "../../src/lib/products.js";
 import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { handleStockHistory } from "./stockHistory.js";
+import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
+import { countersCollection, auditLogCollection } from "./collections.js";
+import { STOCK_IMPORT_MAX_ROWS } from "../../src/lib/stockImport.js";
+import type { ObjectId } from "mongodb";
 
 /**
  * Product Stock (added 2026-08-18) — see the collections.ts doc comment above
@@ -310,6 +314,81 @@ async function handleMovementCreate(req: ApiRequest, res: ApiResponse) {
   res.status(201).json({ movement });
 }
 
+/**
+ * นำเข้ายอดสต๊อกจาก Excel (2026-09-23) — body `{ rows: [{ code, qty, unitCost? }], note? }` ยอดใน `qty` คือ
+ * **ยอดคงเหลือที่ควรเป็น** ไม่ใช่ยอดที่จะบวก ระบบคิดส่วนต่างกับยอดปัจจุบันแล้วลงเป็นความเคลื่อนไหวทีละสินค้า
+ *
+ * - ตรวจทั้งไฟล์ก่อนเขียนแถวแรก (รหัสไม่มีในทะเบียน / ซ้ำ / ตัวเลขผิด → 400 ทั้งชุด) ไม่ให้นำเข้าไปครึ่งไฟล์
+ * - แถวที่ยอดเพิ่มและมีต้นทุน → `receive` พร้อม `unitCost` (ถัวต้นทุนเฉลี่ยใหม่ แบบเดียวกับรับของ) ·
+ *   ยอดเพิ่มไม่มีต้นทุน หรือยอดลด → `adjust` · ยอดเท่าเดิมข้าม
+ * - ทุกแถวของครั้งนี้ประทับเลขชุดเดียวกัน `SI-YYYYMM-NNNN` ใน `sourceId`/`sourceLabel` ค้นย้อนหลังได้จากหน้าประวัติสต๊อก
+ * - ส่วนต่างคิดจากยอด ณ วินาทีที่เขียนแถวนั้น (อ่านสดทีละสินค้า) ไม่ใช่ยอดตอนผู้ใช้เปิดตัวอย่าง
+ */
+async function handleStockImport(req: ApiRequest, res: ApiResponse) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx: AuthContext = await requirePermission(req, "stock:adjust");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const note = typeof body.note === "string" ? body.note.trim().slice(0, 200) : "";
+  if (!Array.isArray(body.rows) || body.rows.length === 0) throw new HttpError(400, "ไม่มีรายการให้นำเข้า");
+  if (body.rows.length > STOCK_IMPORT_MAX_ROWS) throw new HttpError(400, `นำเข้าได้ไม่เกิน ${STOCK_IMPORT_MAX_ROWS} แถวต่อครั้ง`);
+
+  await backfillProductStockDefaults();
+  const products = await productsCollection();
+  const all = await products.find({ archived: { $ne: true } }, { projection: { code: 1 } }).toArray();
+  const idByCode = new Map(all.map((p) => [String(p.code ?? "").trim().toLowerCase(), p._id]));
+
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  const rows: { productId: ObjectId; code: string; qty: number; unitCost: number | null }[] = [];
+  (body.rows as Record<string, unknown>[]).forEach((r, idx) => {
+    const code = typeof r.code === "string" ? r.code.trim() : "";
+    const key = code.toLowerCase();
+    const qty = typeof r.qty === "number" && Number.isFinite(r.qty) && r.qty >= 0 ? r.qty : null;
+    const unitCost = typeof r.unitCost === "number" && Number.isFinite(r.unitCost) && r.unitCost >= 0 ? r.unitCost : null;
+    if (!code) problems.push(`แถว ${idx + 1}: ไม่มีรหัสสินค้า`);
+    else if (qty === null) problems.push(`${code}: ยอดคงเหลือต้องเป็นตัวเลขไม่ติดลบ`);
+    else if (seen.has(key)) problems.push(`${code}: รหัสซ้ำในไฟล์`);
+    else if (!idByCode.has(key)) problems.push(`${code}: ไม่พบรหัสนี้ในทะเบียนสินค้า`);
+    else rows.push({ productId: idByCode.get(key)!, code, qty, unitCost });
+    seen.add(key);
+  });
+  if (problems.length > 0) {
+    throw new HttpError(400, `นำเข้าไม่ได้ ${problems.length} แถว — ${problems.slice(0, 5).join(" · ")}${problems.length > 5 ? " …" : ""}`);
+  }
+
+  const counters = await countersCollection();
+  const batchLabel = await nextMonthlyDocumentNumber(counters, "SI", "stock_import");
+  let changed = 0;
+  let unchanged = 0;
+  for (const r of rows) {
+    const current = await products.findOne({ _id: r.productId }, { projection: { stockQty: 1 } });
+    const delta = Math.round((r.qty - (current?.stockQty ?? 0)) * 10000) / 10000;
+    if (delta === 0) { unchanged += 1; continue; }
+    const withCost = delta > 0 && r.unitCost !== null;
+    await applyStockMovement({
+      productId: r.productId.toString(),
+      kind: withCost ? "receive" : "adjust",
+      delta,
+      reason: `นำเข้ายอดสต๊อกจากไฟล์ ${batchLabel} (ตั้งยอดเป็น ${r.qty})${note ? ` — ${note}` : ""}`,
+      sourceType: "stock_import",
+      sourceId: batchLabel,
+      sourceLabel: batchLabel,
+      userId: ctx.user.id,
+      unitCost: withCost ? r.unitCost! : undefined,
+    });
+    changed += 1;
+  }
+
+  const auditLog = await auditLogCollection();
+  await auditLog.insertOne({
+    userId: ctx.user.id, userName: ctx.user.fullName, roleName: ctx.role?.name ?? ctx.user.roleKey,
+    module: "สต๊อกสินค้า", action: "Stock Imported",
+    details: `นำเข้ายอดสต๊อก ${batchLabel}: เปลี่ยน ${changed} รายการ ยอดเท่าเดิม ${unchanged} รายการ${note ? ` (${note})` : ""}`,
+    createdAt: nowIso(),
+  });
+  res.status(200).json({ batchLabel, changed, unchanged });
+}
+
 export async function handleStock(req: ApiRequest, res: ApiResponse): Promise<void> {
   // getPathSegments() already drops the prefix and any trailing slash, so a bare
   // /api/stock-movements (with or without one) is exactly the zero-segment case — routing it
@@ -319,5 +398,6 @@ export async function handleStock(req: ApiRequest, res: ApiResponse): Promise<vo
     return req.method === "POST" ? handleMovementCreate(req, res) : handleMovementsList(req, res);
   }
   if (parts.length === 1 && parts[0] === "history") return handleStockHistory(req, res);
+  if (parts.length === 1 && parts[0] === "import") return handleStockImport(req, res);
   throw new HttpError(404, "Not found");
 }

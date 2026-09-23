@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-09-23d (absolute latest) — นำเข้ายอดสต๊อกจาก Excel
+
+รายการงานจากเจ้าของ 2026-09-23 ข้อ 4: *"สต๊อกสินค้าทำให้สามารถรับข้อมูล stock สินค้าเป็น exel"*
+
+- `src/lib/stockImport.ts` (ตัวแกะ + ตัวอย่าง + API) · `POST /api/stock-movements/import` ใน `stockHandler.ts` — ยอดในไฟล์ =
+  ยอดที่ควรเป็น, ลงส่วนต่างผ่าน `applyStockMovement()` (`receive`+ต้นทุนเมื่อยอดเพิ่มและมีต้นทุน, นอกนั้น `adjust`),
+  ตรวจทั้งไฟล์ก่อนเขียน, เลขชุด `SI-YYYYMM-NNNN`, `sourceType: "stock_import"`, audit หนึ่งแถวต่อครั้ง
+- `StockImportDialog` + ปุ่มในหน้าสต๊อก (`stock:adjust`) · ไฟล์ตั้งต้นมีสินค้าทุกตัวพร้อมยอดปัจจุบัน · แกะในเบราว์เซอร์ ไม่อัปโหลดไฟล์
+- เทสต์: `tests/stockImport.test.ts` (5) + `tests/api/stockImport.test.ts` (3)
+- เอกสาร: `MODULES/Product.md`, `API.md`, What's New
+
+---
+
 ## 2026-09-23c (absolute latest) — หน้าประวัติสต๊อกแยก + ค้นหาว่าของไปงานไหน/มาจากไหน
 
 รายการงานจากเจ้าของ 2026-09-23 ข้อ 3 — ทำตามแบบร่างที่ออกแบบไว้วันเดียวกัน
