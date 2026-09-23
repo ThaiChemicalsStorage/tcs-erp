@@ -24,6 +24,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { StoreReceiptPrintDocument } from "./StoreReceiptPrintDocument";
+import { RequisitionSourcePicker } from "./RequisitionSourcePicker";
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
 const cellInputCls = "w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
@@ -258,7 +259,6 @@ export function StoreReceiptDocument({
     : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20";
   const linesTitle = kind === "return" ? t("storeReceipt.lines.return") : kind === "adjust" ? t("storeReceipt.lines.adjust") : t("storeReceipt.lines.receive");
   const targetLabel = code === "TK" ? t("storeReceipt.col.targetTK") : t("storeReceipt.col.targetJU");
-  const currentSourceMissing = !!draft.sourceRequisitionId && !candidates.some((c) => c.id === draft.sourceRequisitionId);
 
   return (
     <>
@@ -359,16 +359,23 @@ export function StoreReceiptDocument({
                 <>
                   <div className="sm:col-span-2">
                     <label htmlFor="sr-source" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.source").replace("{code}", info.pair ?? "")}</label>
-                    <select id="sr-source" disabled={!editable} value={draft.sourceRequisitionId}
-                      onChange={(e) => void chooseSource(e.target.value)} className={`${inputCls} font-mono`}>
-                      <option value="">{t("storeReceipt.field.sourcePlaceholder")}</option>
-                      {currentSourceMissing && <option value={draft.sourceRequisitionId}>{draft.sourceRequisitionNumber}</option>}
-                      {candidates.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {[c.documentNumber, c.ownerDepartment === "production" ? t("storeIssue.dept.production") : c.ownerDepartment === "store" ? t("storeIssue.dept.store") : t("storeIssue.dept.project"), c.jobCode, c.storeReference, [c.chargeDepartmentName, c.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")}
-                        </option>
-                      ))}
-                    </select>
+                    <RequisitionSourcePicker
+                      key={draft.sourceRequisitionId}
+                      inputId="sr-source"
+                      selectedId={draft.sourceRequisitionId}
+                      selectedNumber={draft.sourceRequisitionNumber}
+                      disabled={!editable}
+                      placeholder={t("storeDocs.sourceSearch")}
+                      onSelect={(id) => void chooseSource(id)}
+                      options={candidates.map((c) => ({
+                        id: c.id,
+                        number: c.documentNumber,
+                        hint: [
+                          c.ownerDepartment === "production" ? t("storeIssue.dept.production") : c.ownerDepartment === "store" ? t("storeIssue.dept.store") : t("storeIssue.dept.project"),
+                          c.jobCode, c.storeReference, [c.chargeDepartmentName, c.chargeTeamName].filter(Boolean).join(" / "),
+                        ].filter(Boolean).join(" · "),
+                      }))}
+                    />
                     <p className="text-xs text-muted-foreground mt-1">{t("storeReceipt.field.sourceHint").replace("{code}", info.pair ?? "")}</p>
                   </div>
                   <div>

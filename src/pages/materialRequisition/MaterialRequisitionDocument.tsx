@@ -30,6 +30,7 @@ import {
 } from "../../lib/materialRequisitionTemplate";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
 import { StoreIssuePrintDocument } from "../storeDocuments/StoreIssuePrintDocument";
+import { RequisitionSourcePicker } from "../storeDocuments/RequisitionSourcePicker";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -763,19 +764,24 @@ export function MaterialRequisitionDocument({
               <>
                 <div className="sm:col-span-2">
                   <label htmlFor="mr-store-source" className="text-xs text-muted-foreground block mb-1">{t("storeDocs.field.sourceRequisition")}</label>
-                  <select id="mr-store-source" disabled={!editable} value={draft.sourceRequisitionId ?? ""}
-                    onChange={(e) => void chooseStoreSource(e.target.value)} className={inputCls}>
-                    <option value="">{t("storeDocs.sourceNone")}</option>
-                    {draft.sourceRequisitionId && !storeSources.some((c) => c.id === draft.sourceRequisitionId) && (
-                      <option value={draft.sourceRequisitionId}>{draft.sourceRequisitionNumber}</option>
-                    )}
-                    {storeSources.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.documentNumber} · {c.ownerDepartment === "production" ? t("storeIssue.dept.production") : t("storeIssue.dept.project")}
-                        {c.jobCode ? ` · ${c.jobCode}` : ""}{c.chargeDepartmentName ? ` · ${c.chargeDepartmentName}` : ""} · {t("storeDocs.sourceOutstanding").replace("{n}", String(c.outstandingLineCount))}
-                      </option>
-                    ))}
-                  </select>
+                  <RequisitionSourcePicker
+                    key={draft.sourceRequisitionId ?? ""}
+                    inputId="mr-store-source"
+                    selectedId={draft.sourceRequisitionId ?? ""}
+                    selectedNumber={draft.sourceRequisitionNumber ?? ""}
+                    disabled={!editable}
+                    placeholder={t("storeDocs.sourceSearch")}
+                    onSelect={(id) => void chooseStoreSource(id)}
+                    options={storeSources.map((c) => ({
+                      id: c.id,
+                      number: c.documentNumber,
+                      hint: [
+                        c.ownerDepartment === "production" ? t("storeIssue.dept.production") : t("storeIssue.dept.project"),
+                        c.jobCode, c.customerName, c.chargeDepartmentName,
+                        t("storeDocs.sourceOutstanding").replace("{n}", String(c.outstandingLineCount)),
+                      ].filter(Boolean).join(" · "),
+                    }))}
+                  />
                   <p className="text-xs text-muted-foreground mt-1">{t("storeDocs.sourceHint")}</p>
                 </div>
                 <div>
