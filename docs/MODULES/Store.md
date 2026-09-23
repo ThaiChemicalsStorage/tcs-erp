@@ -395,5 +395,29 @@ shared attachment engine. Full writeup in [DeliveryOrder.md](./DeliveryOrder.md)
   store issued are never copied onto it. ⚠️ Unlike the requisition, that issue path has **no printed
   slip, no receiver signature and no return column** — the owner chose the shorter route knowingly;
   see [MODULES/Purchasing.md](./Purchasing.md) and [TODO.md](../TODO.md).
-- `ap_entries` only ever holds `entryType: "RR"`. The rest of the company's AP codes need their own
+- `ap_entries` holds `entryType` `RR`/`RX`/`RI` (the receiving code, since 2026-09-23). The rest of the company's AP codes need their own
   source documents first.
+
+
+## ใบรับสินค้า: ใบเปล่า + รหัสรับเข้า RR / RX / RI (2026-09-23)
+
+เจ้าของสั่ง: *"ใบรับสินค้าสามารถสร้างใบเปล่าได้และ เวลาสร้างใบที่ติด PO หรือไม่มี PO ก็ตามให้สามารถเลือกรหัสรับเข้าได้
+RR - ซื้อเชื่อ-วัตถุดิบ / RX - โรงงาน / RI - โครงการ"*
+
+- **รหัสรับเข้า** `receiveCode` เลือกตอนสร้างทุกทาง (หน้าต่าง `ReceivingReportCreateDialog` ในหน้ารายการ และ
+  `ReceiveCodeDialog` จากปุ่ม "รับสินค้า" บนใบสั่งซื้อ) · เป็นตัวอักษรหน้าเลขที่ใบ แต่ละรหัสนับเลขแยก · `RR` ใช้
+  ตัวนับเดิม · ใบเก่าอ่านเป็น `RR` (`receivingReportCodeOf()`) · **รหัสคือ `entryType` ของหนี้** ในทะเบียนเจ้าหนี้
+  ตรงกับรหัสในชีตบัญชีจ่ายจริงของบริษัท
+- **ใบเปล่า** = `purchaseOrderId: ""` — สโตร์เลือกผู้ขายจากทะเบียน (หรือพิมพ์เอง) ใส่รหัสงาน VAT และรายการเอง
+  (จากแคตตาล็อกหรือพิมพ์เอง) แล้วรับของเป็นรอบแบบเดียวกับใบที่มีใบสั่งซื้อทุกอย่าง: สต๊อก + ตั้งหนี้ + ยกเลิกรอบล่าสุด
+  - ใบเปล่าแก้หัวใบและรายการได้ตลอด แต่รายการที่รับของแล้ว **ลบไม่ได้ / เปลี่ยนสินค้าไม่ได้ / ลดต่ำกว่าที่รับไม่ได้**
+    เพราะรอบรับที่ลงบัญชีแล้วอ้าง `lineId` นั้นอยู่
+  - รับของได้เมื่อมีผู้ขายแล้วเท่านั้น (หนี้ต้องรู้ว่าเป็นหนี้ใคร)
+  - บรรทัดใหม่ใช้ id ที่หน้าจอตั้ง (`rrline_*`) เพื่อให้บันทึกอัตโนมัติไม่เปลี่ยน id ใต้มือผู้ใช้ และปุ่มรับของ
+    บันทึกรายการที่ค้างอยู่ก่อนเปิดหน้าต่างรับ
+  - ใบที่มาจากใบสั่งซื้อยังแก้หัวใบ/รายการไม่ได้เหมือนเดิม (400)
+- **index "1 ใบสั่งซื้อ = 1 ใบรับ"** ต้องไม่นับใบเปล่า: เปลี่ยนเป็น partial `{ isDeleted: false, purchaseOrderId: { $gt: "" } }`
+  ชื่อ `purchaseOrderId_1_linked` · handler ถอด index เก่า `purchaseOrderId_1` ทิ้งเองครั้งแรกที่มีการสร้างใบ
+  (ถ้าไม่ถอด ใบเปล่าใบที่สองจะชนใบแรก) · `ensureIndexes()` ของ Setup Wizard สร้างตัวใหม่แล้ว
+- ใบพิมพ์เขียนรหัสใต้หัวเรื่อง และช่องใบสั่งซื้อของใบเปล่าเขียนว่า "ไม่มี" · หน้ารายการมีคอลัมน์รหัส
+- เทสต์: บล็อก "ใบรับสินค้าแบบใบเปล่า + รหัสรับเข้า" ใน `tests/api/receivingReport.test.ts`

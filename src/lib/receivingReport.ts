@@ -22,9 +22,41 @@
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import { resolveDiscountAmount, lineSubtotal, type DiscountMode } from "./quoteMath.js";
 import type { DocumentAttachment } from "./documentAttachments.js";
+import type { TranslationKey } from "./i18n.js";
 import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from "./documentAttachments.js";
 
 export type ReceivingReportStatus = "Open" | "Closed";
+
+/**
+ * รหัสรับเข้า = ตัวอักษรหน้าเลขที่ใบ (คำสั่งเจ้าของ 2026-09-23: *"เวลาสร้างใบที่ติด PO หรือไม่มี PO ก็ตาม
+ * ให้สามารถเลือกรหัสรับเข้าได้ RR - ซื้อเชื่อ-วัตถุดิบ / RX - โรงงาน / RI - โครงการ"*) — รหัสเดียวกับชีต
+ * บัญชีจ่ายของบริษัท จึงเป็น `entryType` ของหนี้ที่ใบนี้ตั้งด้วย (ดู `apEntries.ts`)
+ *
+ * แต่ละรหัสนับเลขแยกกัน · `RR` ใช้ตัวนับเดิม เลขจึงต่อจากใบเก่า · ใบก่อนวันนี้ไม่มีฟิลด์ อ่านเป็น `RR`
+ */
+export type ReceivingReportCode = "RR" | "RX" | "RI";
+export const RECEIVING_REPORT_CODES: readonly ReceivingReportCode[] = ["RR", "RX", "RI"];
+export const RECEIVING_REPORT_CODE_LABEL_KEY: Record<ReceivingReportCode, TranslationKey> = {
+  RR: "receivingReport.code.RR", RX: "receivingReport.code.RX", RI: "receivingReport.code.RI",
+};
+
+export function isReceivingReportCode(v: unknown): v is ReceivingReportCode {
+  return typeof v === "string" && (RECEIVING_REPORT_CODES as readonly string[]).includes(v);
+}
+
+export function receivingReportCodeOf(doc: { id: string; receiveCode?: ReceivingReportCode }): ReceivingReportCode {
+  if (doc.receiveCode) return doc.receiveCode;
+  const prefix = doc.id.split("-")[0];
+  return isReceivingReportCode(prefix) ? prefix : "RR";
+}
+
+/**
+ * ใบเปล่า = ใบที่ไม่ได้สร้างจากใบสั่งซื้อ (2026-09-23) — สโตร์กรอกผู้ขายและรายการเอง แล้วรับของเป็นรอบ
+ * แบบเดียวกับใบที่มีใบสั่งซื้อทุกอย่าง (สต๊อก + ตั้งหนี้) ต่างกันแค่ใบเปล่าแก้หัวใบและรายการได้
+ */
+export function isBlankReceivingReport(doc: { purchaseOrderId: string }): boolean {
+  return !doc.purchaseOrderId;
+}
 
 /** หนึ่งบรรทัดที่สั่งซื้อไว้ — snapshot จากใบสั่งซื้อ ไม่เปลี่ยนอีกเลยหลังสร้าง */
 export interface ReceivingReportLine {
@@ -83,6 +115,8 @@ export interface ReceivingBatch {
 
 export interface ReceivingReport {
   id: string;
+  /** รหัสรับเข้า (2026-09-23) — ดู `ReceivingReportCode` · ใบเก่าไม่มี ใช้ `receivingReportCodeOf()` */
+  receiveCode?: ReceivingReportCode;
   /** เลขที่บนฟอร์ม แก้เองได้ ตั้งต้นเท่ากับ `id` — กติกาเดียวกับใบสั่งซื้อ/ใบเบิก */
   documentNumber: string;
   purchaseOrderId: string;
@@ -111,6 +145,7 @@ export interface ReceivingReport {
 
 export interface ReceivingReportSummary {
   id: string;
+  receiveCode?: ReceivingReportCode;
   documentNumber: string;
   purchaseOrderId: string;
   purchaseOrderNumber: string;
@@ -206,14 +241,38 @@ export async function fetchReceivingReport(id: string): Promise<ReceivingReport>
 }
 
 /** สร้างจากใบสั่งซื้อที่อนุมัติแล้ว — ถ้ามีใบอยู่แล้วเซิร์ฟเวอร์ตอบ 409 พร้อม id เดิมให้เปิดต่อ */
-export async function createReceivingReport(purchaseOrderId: string): Promise<ReceivingReport> {
+export async function createReceivingReport(purchaseOrderId: string, receiveCode?: ReceivingReportCode): Promise<ReceivingReport> {
   const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>("/receiving-reports", {
-    method: "POST", body: JSON.stringify({ purchaseOrderId }),
+    method: "POST", body: JSON.stringify(receiveCode ? { purchaseOrderId, receiveCode } : { purchaseOrderId }),
   });
   return receivingReport;
 }
 
-export type ReceivingReportUpdateFields = Partial<Pick<ReceivingReport, "documentNumber" | "remarks" | "status">>;
+/** ใบเปล่า — ไม่มีใบสั่งซื้อต้นทาง สโตร์กรอกผู้ขายและรายการเอง (2026-09-23) */
+export async function createBlankReceivingReport(receiveCode: ReceivingReportCode): Promise<ReceivingReport> {
+  const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>("/receiving-reports", {
+    method: "POST", body: JSON.stringify({ receiveCode }),
+  });
+  return receivingReport;
+}
+
+/** บรรทัดของใบเปล่าที่หน้าจอส่งไป — `poLineId`/`subDetails`/ส่วนลด ไม่มีความหมายกับใบที่ไม่มีใบสั่งซื้อ */
+export type ReceivingReportLineInput = Pick<ReceivingReportLine, "id" | "productId" | "productCode" | "description" | "unit" | "qtyOrdered" | "unitPriceOrdered">;
+
+export function blankReceivingReportLine(): ReceivingReportLine {
+  return {
+    id: `rrline_new_${Math.random().toString(36).slice(2, 10)}`, poLineId: "", productId: null, productCode: "",
+    description: "", subDetails: [], unit: "", qtyOrdered: 0, unitPriceOrdered: 0,
+  };
+}
+
+/**
+ * ช่องที่แก้ได้ — สามช่องแรกได้ทุกใบ ที่เหลือ **เฉพาะใบเปล่า** (เซิร์ฟเวอร์ตอบ 400 ถ้าส่งมากับใบที่มีใบสั่งซื้อ
+ * เพราะหัวใบและรายการของใบนั้นเป็น snapshot ของใบสั่งซื้อ)
+ */
+export type ReceivingReportUpdateFields = Partial<Pick<ReceivingReport, "documentNumber" | "remarks" | "status" | "jobCode" | "vendorName" | "vendorTaxId" | "vendorAddress" | "orderVatRate">> & {
+  lines?: ReceivingReportLineInput[];
+};
 
 export async function updateReceivingReport(id: string, fields: ReceivingReportUpdateFields, options?: WriteOptions): Promise<ReceivingReport> {
   const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>(

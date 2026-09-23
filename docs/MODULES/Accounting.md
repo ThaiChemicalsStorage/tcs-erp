@@ -692,7 +692,7 @@ Three deliberate limits:
   flag it. A wrong amount is corrected by reversing the receipt on the RR, which rolls back stock and
   payable together.
 - **Accounting may change only `status`/`paymentRef`.** Not the amounts, not the vendor.
-- **`entryType` is `"RR"` and nothing else.** The other codes on the real AP sheet (RM contractor, RD
+- **`entryType` is the receiving code — `RR` / `RX` / `RI` since 2026-09-23** (was `"RR"` only). The other codes on the real AP sheet (RM contractor, RD
   shipping, RO/RP general expenses, RH, RX, BR, OE) have no source document in this system yet, so the
   union holds one member rather than guessing at codes nobody can produce.
 

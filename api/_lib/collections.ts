@@ -1146,7 +1146,8 @@ export async function ensureIndexes() {
     // และตอนกรองใบที่ผู้ใช้เห็นได้เพราะถูกส่ง Scope ถึง · ไม่ unique โดยตั้งใจ ("ปกติใบเดียว แต่ไม่บังคับ")
     costControls.createIndex({ scopeOfWorkId: 1 }),
     // ใบรับสินค้า: หนึ่งใบสั่งซื้อมีได้ใบเดียว — partial index เพื่อให้ใบที่ลบไปแล้วไม่กันการเปิดใบใหม่
-    receivingReports.createIndex({ purchaseOrderId: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } }),
+    // ไม่นับใบเปล่า (purchaseOrderId ว่าง) ตั้งแต่ 2026-09-23 — ดู RECEIVING_REPORT_PO_UNIQUE_INDEX ใน receivingReportHandler.ts
+    receivingReports.createIndex({ purchaseOrderId: 1 }, { name: "purchaseOrderId_1_linked", unique: true, partialFilterExpression: { isDeleted: false, purchaseOrderId: { $gt: "" } } }),
     receivingReports.createIndex({ status: 1 }),
     receivingReports.createIndex({ isDeleted: 1 }),
     receivingReports.createIndex({ createdBy: 1 }),

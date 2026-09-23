@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { PackageCheck, Search, X } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
-import type { ReceivingReportSummary, ReceivingReportStatus } from "../../lib/receivingReport";
+import { receivingReportCodeOf, RECEIVING_REPORT_CODE_LABEL_KEY, type ReceivingReportSummary, type ReceivingReportStatus } from "../../lib/receivingReport";
 import { formatQuoteDateThai, fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
@@ -92,7 +92,7 @@ export function ReceivingReportList({
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   {[
-                    t("receivingReport.col.id"), t("receivingReport.col.purchaseOrder"), t("receivingReport.col.vendor"),
+                    t("receivingReport.col.id"), t("receivingReport.col.code"), t("receivingReport.col.purchaseOrder"), t("receivingReport.col.vendor"),
                     t("receivingReport.col.ordered"), t("receivingReport.col.received"), t("receivingReport.col.outstanding"),
                     t("receivingReport.col.status"), t("receivingReport.col.updatedAt"),
                   ].map((h) => (
@@ -112,6 +112,7 @@ export function ReceivingReportList({
                     className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 focus-visible:bg-secondary/30"
                   >
                     <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{r.documentNumber || r.id}</td>
+                    <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap"><span className="font-mono font-semibold text-[#866d28] mr-1.5">{receivingReportCodeOf(r)}</span>{t(RECEIVING_REPORT_CODE_LABEL_KEY[receivingReportCodeOf(r)])}</td>
                     <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{r.purchaseOrderNumber || "—"}</td>
                     <td className="px-4 py-3.5 text-sm text-foreground max-w-[220px] truncate" title={r.vendorName}>{r.vendorName || "—"}</td>
                     <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap">{fmt(r.orderedValue)}</td>

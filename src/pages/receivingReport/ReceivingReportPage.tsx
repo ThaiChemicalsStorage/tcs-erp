@@ -6,12 +6,12 @@ import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
-  fetchAllReceivingReports, createReceivingReport, fetchReceivingReportsByPurchaseOrder,
-  type ReceivingReportSummary,
+  fetchAllReceivingReports, createReceivingReport, createBlankReceivingReport, fetchReceivingReportsByPurchaseOrder,
+  type ReceivingReportSummary, type ReceivingReportCode,
 } from "../../lib/receivingReport";
 import { ReceivingReportList } from "./ReceivingReportList";
 import { ReceivingReportDocument } from "./ReceivingReportDocument";
-import { PurchaseOrderPickerDialog } from "./PurchaseOrderPickerDialog";
+import { ReceivingReportCreateDialog } from "./ReceivingReportCreateDialog";
 
 /**
  * หน้าใบรับสินค้า (แผนกสโตร์) — สลับระหว่างรายการกับเอกสาร ตามแพตเทิร์นเดียวกับใบสั่งซื้อ
@@ -76,9 +76,11 @@ export function ReceivingReportPage({
     if (initialReceivingReportId) onReceivingReportIdConsumed?.();
   }, [initialReceivingReportId, onReceivingReportIdConsumed]);
 
-  const createFrom = async (purchaseOrderId: string) => {
+  const createFrom = async (receiveCode: ReceivingReportCode, purchaseOrderId: string | null) => {
     try {
-      const created = await createReceivingReport(purchaseOrderId);
+      const created = purchaseOrderId
+        ? await createReceivingReport(purchaseOrderId, receiveCode)
+        : await createBlankReceivingReport(receiveCode);
       setPickerOpen(false);
       loadList();
       open(created.id);
@@ -86,7 +88,7 @@ export function ReceivingReportPage({
     } catch (err) {
       // 409 = ใบสั่งซื้อนี้มีใบรับสินค้าอยู่แล้ว (เพื่อนเพิ่งเปิดไปหนึ่งจังหวะก่อน) — พาไปเปิดใบเดิม
       // แทนที่จะเป็นทางตัน กติกา 1 ใบสั่งซื้อ = 1 ใบรับสินค้า บังคับที่ฐานข้อมูล ไม่ใช่ที่รายการในกล่องเลือก
-      if (err instanceof ApiError && err.status === 409) {
+      if (purchaseOrderId && err instanceof ApiError && err.status === 409) {
         const existing = await fetchReceivingReportsByPurchaseOrder(purchaseOrderId).catch(() => []);
         if (existing[0]) {
           setPickerOpen(false);
@@ -155,9 +157,9 @@ export function ReceivingReportPage({
         ) : undefined}
       />
       {pickerOpen && (
-        <PurchaseOrderPickerDialog
+        <ReceivingReportCreateDialog
           onCancel={() => setPickerOpen(false)}
-          onPick={(poId) => void createFrom(poId)}
+          onCreate={createFrom}
         />
       )}
       <Toast message={toast.message} />

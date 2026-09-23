@@ -1,5 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CheckCircle2, Loader2, LockOpen, PackageCheck, PackagePlus, Printer, RotateCcw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, LockOpen, PackageCheck, PackagePlus, Plus, Printer, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { Combobox } from "../../components/Combobox";
+import { ProductPickerModal } from "../products/ProductPickerModal";
+import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
+import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
@@ -16,16 +20,31 @@ import {
   fetchReceivingReport, updateReceivingReport, deleteReceivingReport, postReceivingBatch, deleteReceivingBatch,
   logReceivingReportPrinted, uploadReceivingReportAttachment, deleteReceivingReportAttachment,
   receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf,
+  isBlankReceivingReport, receivingReportCodeOf, blankReceivingReportLine, RECEIVING_REPORT_CODE_LABEL_KEY,
 } from "../../lib/receivingReport";
 import { ReceiveBatchDialog } from "./ReceiveBatchDialog";
 import { ReceivingReportPrintDocument } from "./ReceivingReportPrintDocument";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 
-/** payload เดียวที่ใช้ทั้งกดบันทึกเองและบันทึกอัตโนมัติ — บรรทัดกับรอบการรับไม่เคยอยู่ในนี้ */
+/**
+ * payload เดียวที่ใช้ทั้งกดบันทึกเองและบันทึกอัตโนมัติ — รอบการรับไม่เคยอยู่ในนี้
+ * ใบเปล่า (2026-09-23) ส่งหัวใบและรายการด้วย เพราะใบเปล่าไม่มีใบสั่งซื้อให้ลอก สโตร์กรอกเองทั้งหมด
+ */
 function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
-  return { documentNumber: d.documentNumber, remarks: d.remarks };
+  if (!isBlankReceivingReport(d)) return { documentNumber: d.documentNumber, remarks: d.remarks };
+  return {
+    documentNumber: d.documentNumber, remarks: d.remarks,
+    jobCode: d.jobCode, vendorName: d.vendorName, vendorTaxId: d.vendorTaxId, vendorAddress: d.vendorAddress,
+    orderVatRate: d.orderVatRate,
+    lines: d.lines.map((l) => ({
+      id: l.id, productId: l.productId, productCode: l.productCode, description: l.description, unit: l.unit,
+      qtyOrdered: l.qtyOrdered, unitPriceOrdered: l.unitPriceOrdered,
+    })),
+  };
 }
+
+const cellCls = "w-full px-2 py-1 text-xs bg-transparent border border-transparent rounded outline-none focus:bg-secondary focus:border-border text-foreground disabled:opacity-70";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -69,6 +88,21 @@ export function ReceivingReportDocument({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReverse, setConfirmReverse] = useState<string | null>(null);
   const [showPrint, setShowPrint] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const blank = !!draft && isBlankReceivingReport(draft);
+
+  // ใบเปล่าต้องใช้แคตตาล็อกกับทะเบียนผู้ขาย — โหลดเฉพาะใบเปล่าที่แก้ได้ ใบที่มาจากใบสั่งซื้อไม่ต้องใช้
+  useEffect(() => {
+    if (!blank || !canEdit) return;
+    let cancelled = false;
+    Promise.all([fetchProducts(), fetchCategories(), fetchVendors()])
+      .then(([p, c, v]) => { if (!cancelled) { setProducts(p); setCategories(c); setVendors(v); } })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [blank, canEdit]);
 
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
 
@@ -165,6 +199,28 @@ export function ReceivingReportDocument({
   const doneLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) <= 0);
   const isOpen = draft.status === "Open";
 
+
+  // ใบเปล่า: รายการที่เพิ่งพิมพ์อาจยังไม่ถึงเซิร์ฟเวอร์ (บันทึกอัตโนมัติรอจังหวะอยู่) — บันทึกก่อนเปิดรับของ
+  const openReceive = async () => {
+    if (blank && canEdit && dirty.isDirtyNow()) {
+      const ok = await save();
+      if (!ok) return;
+    }
+    setReceiveOpen(true);
+  };
+
+  const setLine = (id: string, patch: Partial<ReceivingReportLine>) =>
+    setDraft((d) => d && { ...d, lines: d.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
+  const addProductLine = (p: Product) => {
+    setDraft((d) => d && {
+      ...d,
+      lines: [...d.lines, {
+        ...blankReceivingReportLine(), productId: p.id, productCode: p.code, description: p.name, unit: p.unit,
+        unitPriceOrdered: p.lastCost ?? p.avgCost ?? 0,
+      }],
+    });
+    setProductPickerOpen(false);
+  };
 
   const runReceive = async (batch: ReceiveBatchInput) => {
     setBusy(true);
@@ -267,6 +323,10 @@ export function ReceivingReportDocument({
             <ArrowLeft size={15} /> {t("receivingReportDoc.backToList")}
           </button>
           <span className="text-sm font-mono font-semibold text-[#866d28] ml-2">{draft.documentNumber || draft.id}</span>
+          <span className="text-xs text-muted-foreground">{receivingReportCodeOf(draft)} · {t(RECEIVING_REPORT_CODE_LABEL_KEY[receivingReportCodeOf(draft)])}</span>
+          {blank && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">{t("receivingReportDoc.blankBadge")}</span>
+          )}
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${isOpen ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
             {isOpen ? t("receivingReport.status.open") : t("receivingReport.status.closed")}
           </span>
@@ -274,7 +334,7 @@ export function ReceivingReportDocument({
           <div className="ml-auto flex items-center gap-2">
             {canEdit && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             {canReceive && isOpen && (
-              <button onClick={() => setReceiveOpen(true)} disabled={busy || pendingLines.length === 0}
+              <button onClick={() => void openReceive()} disabled={busy || pendingLines.length === 0}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-60">
                 <PackagePlus size={13} /> {t("receivingReportDoc.receiveBtn")}
               </button>
@@ -311,7 +371,7 @@ export function ReceivingReportDocument({
           {/* สามตัวเลขที่เจ้าของขอไว้ข้อแรก: ซื้อมาเท่าไหร่ รับมาเท่าไหร่ ค้างรับเท่าไหร่ */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: t("receivingReportDoc.kpi.ordered"), value: totals.orderedValue, tone: "text-foreground" },
+              { label: blank ? t("receivingReportDoc.kpi.orderedBlank") : t("receivingReportDoc.kpi.ordered"), value: totals.orderedValue, tone: "text-foreground" },
               { label: t("receivingReportDoc.kpi.received"), value: totals.receivedValue, tone: "text-[#207e52]" },
               { label: t("receivingReportDoc.kpi.outstanding"), value: totals.outstandingValue, tone: totals.outstandingValue > 0 ? "text-[#a75d1a]" : "text-muted-foreground" },
             ].map((k) => (
@@ -330,27 +390,120 @@ export function ReceivingReportDocument({
                   onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })} />
               </Field>
               <Field label={t("receivingReportDoc.purchaseOrder")}>
-                <input className={inputCls} disabled value={draft.purchaseOrderNumber} />
+                <input className={inputCls} disabled value={draft.purchaseOrderNumber || "—"} />
               </Field>
-              <Field label={t("receivingReportDoc.jobCode")}>
-                <input className={inputCls} disabled value={draft.jobCode || "—"} />
-              </Field>
-              <Field label={t("receivingReportDoc.vendor")}>
-                <input className={inputCls} disabled value={draft.vendorName || "—"} />
-              </Field>
-              <Field label={t("receivingReportDoc.vendorTaxId")}>
-                <input className={inputCls} disabled value={draft.vendorTaxId || "—"} />
-              </Field>
-              <Field label={t("receivingReportDoc.vatRate")}>
-                <input className={inputCls} disabled value={draft.orderVatRate !== null && draft.orderVatRate !== undefined ? `${draft.orderVatRate}%` : "—"} />
-              </Field>
+              {blank ? (
+                <>
+                  <Field label={t("receivingReportDoc.jobCode")}>
+                    <input className={inputCls} disabled={!canEdit} value={draft.jobCode} onChange={(e) => setDraft({ ...draft, jobCode: e.target.value })} />
+                  </Field>
+                  <div className="block">
+                    <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.vendor")}</span>
+                    <Combobox
+                      className={inputCls}
+                      disabled={!canEdit}
+                      value={draft.vendorName}
+                      onChange={(next) => setDraft((d) => d && { ...d, vendorName: next })}
+                      options={vendorComboboxOptions(vendors)}
+                      ariaLabel={t("receivingReportDoc.vendor")}
+                      onPick={(opt) => {
+                        const v = vendors.find((x) => x.name === opt.value);
+                        if (v) setDraft((d) => d && { ...d, vendorName: v.name, vendorTaxId: v.taxId, vendorAddress: v.address });
+                      }}
+                    />
+                  </div>
+                  <Field label={t("receivingReportDoc.vendorTaxId")}>
+                    <input className={inputCls} disabled={!canEdit} value={draft.vendorTaxId} onChange={(e) => setDraft({ ...draft, vendorTaxId: e.target.value })} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vatRate")}>
+                    <input type="number" min={0} max={100} className={inputCls} disabled={!canEdit} value={draft.orderVatRate ?? ""}
+                      onChange={(e) => setDraft({ ...draft, orderVatRate: e.target.value === "" ? null : Number(e.target.value) })} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vendorAddress")}>
+                    <input className={inputCls} disabled={!canEdit} value={draft.vendorAddress} onChange={(e) => setDraft({ ...draft, vendorAddress: e.target.value })} />
+                  </Field>
+                </>
+              ) : (
+                <>
+                  <Field label={t("receivingReportDoc.jobCode")}>
+                    <input className={inputCls} disabled value={draft.jobCode || "—"} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vendor")}>
+                    <input className={inputCls} disabled value={draft.vendorName || "—"} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vendorTaxId")}>
+                    <input className={inputCls} disabled value={draft.vendorTaxId || "—"} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vatRate")}>
+                    <input className={inputCls} disabled value={draft.orderVatRate !== null && draft.orderVatRate !== undefined ? `${draft.orderVatRate}%` : "—"} />
+                  </Field>
+                </>
+              )}
             </div>
             <Field label={t("receivingReportDoc.remarks")}>
               <textarea rows={2} className={inputCls} disabled={!canEdit} value={draft.remarks}
                 onChange={(e) => setDraft({ ...draft, remarks: e.target.value })} />
             </Field>
-            <p className="text-xs text-muted-foreground">{t("receivingReportDoc.headerHint")}</p>
+            <p className="text-xs text-muted-foreground">{blank ? t("receivingReportDoc.blankHeaderHint") : t("receivingReportDoc.headerHint")}</p>
           </section>
+
+          {blank && (
+            <section className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReportDoc.linesTitle")}</h2>
+                {canEdit && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setProductPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                      <Plus size={13} /> {t("receivingReportDoc.addFromCatalog")}
+                    </button>
+                    <button onClick={() => setDraft((d) => d && { ...d, lines: [...d.lines, blankReceivingReportLine()] })} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                      <Plus size={13} /> {t("receivingReportDoc.addTyped")}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {draft.lines.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-muted-foreground text-center">{t("receivingReportDoc.linesEmpty")}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        {[t("receivingReportDoc.col.productCode"), t("receivingReportDoc.col.description"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.qty"), t("receivingReportDoc.col.unitPrice"), t("receivingReportDoc.col.received"), ""].map((h, i) => (
+                          <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {draft.lines.map((l) => {
+                        const received = receivedQtyOf(draft, l.id);
+                        const fromCatalog = !!l.productId;
+                        return (
+                          <tr key={l.id} className="border-b border-border/50 last:border-0">
+                            <td className="px-2 py-1.5 w-32"><input className={`${cellCls} font-mono`} disabled={!canEdit || fromCatalog} value={l.productCode} aria-label={t("receivingReportDoc.col.productCode")} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
+                            <td className="px-2 py-1.5"><input className={cellCls} disabled={!canEdit} value={l.description} aria-label={t("receivingReportDoc.col.description")} onChange={(e) => setLine(l.id, { description: e.target.value })} /></td>
+                            <td className="px-2 py-1.5 w-24"><input className={cellCls} disabled={!canEdit || fromCatalog} value={l.unit} aria-label={t("receivingReportDoc.col.unit")} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
+                            <td className="px-2 py-1.5 w-24"><input type="number" min={received} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.qtyOrdered} aria-label={t("receivingReportDoc.col.qty")} onChange={(e) => setLine(l.id, { qtyOrdered: Number(e.target.value) || 0 })} /></td>
+                            <td className="px-2 py-1.5 w-28"><input type="number" min={0} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.unitPriceOrdered} aria-label={t("receivingReportDoc.col.unitPrice")} onChange={(e) => setLine(l.id, { unitPriceOrdered: Number(e.target.value) || 0 })} /></td>
+                            <td className="px-3 py-2 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(received)}</td>
+                            <td className="px-2 py-1.5 w-8">
+                              {canEdit && received === 0 && (
+                                <button onClick={() => setDraft((d) => d && { ...d, lines: d.lines.filter((x) => x.id !== l.id) })} aria-label={t("receivingReportDoc.removeLine")} title={t("receivingReportDoc.removeLine")}
+                                  className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-[#e05252] transition-opacity">
+                                  <X size={13} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="px-5 py-3 text-xs text-muted-foreground border-t border-border">{t("receivingReportDoc.linesHint")}</p>
+            </section>
+          )}
 
           <section className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
@@ -432,6 +585,14 @@ export function ReceivingReportDocument({
           (บั๊กเดิมของหกโมดูลที่แก้ไปเมื่อ 2026-09-02: เรนเดอร์เฉพาะตอนกดปุ่ม แล้ว Ctrl+P ได้กระดาษเปล่า) */}
       <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} />
 
+      <ProductPickerModal
+        open={productPickerOpen}
+        products={products}
+        categories={categories}
+        showStock
+        onSelect={addProductLine}
+        onClose={() => setProductPickerOpen(false)}
+      />
       {receiveOpen && (
         <ReceiveBatchDialog doc={draft} busy={busy} onCancel={() => setReceiveOpen(false)} onSubmit={(b) => void runReceive(b)} />
       )}

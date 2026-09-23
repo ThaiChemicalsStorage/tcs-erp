@@ -16,7 +16,8 @@
 
 import { apiFetch } from "./apiClient.js";
 
-export type ApEntryType = "RR";
+/** รหัสรับเข้าของใบรับสินค้าที่ตั้งหนี้ก้อนนี้ — `RR` ซื้อเชื่อ-วัตถุดิบ / `RX` โรงงาน / `RI` โครงการ (2026-09-23) */
+export type ApEntryType = "RR" | "RX" | "RI";
 export type ApEntryStatus = "Unpaid" | "Paid";
 
 export interface ApEntry {

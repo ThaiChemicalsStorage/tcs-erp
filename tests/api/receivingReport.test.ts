@@ -260,3 +260,100 @@ describe("ใบรับสินค้า", () => {
     expect((await api("DELETE", `/api/receiving-reports/${rrId}`)).status).toBe(400);
   });
 });
+
+/**
+ * ใบเปล่าและรหัสรับเข้า (2026-09-23) — เจ้าของสั่งว่าใบรับสินค้าต้องสร้างได้โดยไม่มีใบสั่งซื้อ และเลือกรหัส
+ * RR (ซื้อเชื่อ-วัตถุดิบ) / RX (โรงงาน) / RI (โครงการ) ได้ทั้งใบที่มีและไม่มีใบสั่งซื้อ
+ *
+ * จุดที่ตรึง: ใบเปล่าหลายใบต้องไม่ชน unique index ของ "1 ใบสั่งซื้อ = 1 ใบรับ", รหัสเป็นตัวนับแยกและเป็นประเภทหนี้,
+ * รายการที่รับของไปแล้วต้องลบ/ลดต่ำกว่าที่รับไม่ได้, และใบที่มาจากใบสั่งซื้อยังแก้ผู้ขาย/รายการไม่ได้
+ */
+describe("ใบรับสินค้าแบบใบเปล่า + รหัสรับเข้า", () => {
+  let blankId = "";
+  let blankLineId = "";
+
+  it("สร้างใบเปล่าได้หลายใบ เลขที่ขึ้นต้นด้วยรหัสและนับแยกกัน", async () => {
+    const a = await api("POST", "/api/receiving-reports", { receiveCode: "RX" });
+    expect(a.status, JSON.stringify(a.body)).toBe(201);
+    const b = await api("POST", "/api/receiving-reports", { receiveCode: "RX" });
+    expect(b.status, JSON.stringify(b.body)).toBe(201);
+    expect(a.body.receivingReport.id).toMatch(/^RX-\d{6}-0001$/);
+    expect(b.body.receivingReport.id).toMatch(/^RX-\d{6}-0002$/);
+    expect(a.body.receivingReport.purchaseOrderId).toBe("");
+    expect(a.body.receivingReport.receiveCode).toBe("RX");
+    blankId = a.body.receivingReport.id;
+  });
+
+  it("รหัสที่ไม่รู้จักถูกปฏิเสธ", async () => {
+    expect((await api("POST", "/api/receiving-reports", { receiveCode: "RZ" })).status).toBe(400);
+  });
+
+  it("รับของก่อนใส่ผู้ขายไม่ได้", async () => {
+    const res = await api("PATCH", `/api/receiving-reports/${blankId}`, {
+      lines: [{ id: "new", productId, description: "", qtyOrdered: 5, unitPriceOrdered: 200 }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    blankLineId = res.body.receivingReport.lines[0].id;
+    // รหัส/ชื่อ/หน่วย อ่านจากทะเบียนสินค้า ไม่ใช่จากที่หน้าจอส่งมา
+    expect(res.body.receivingReport.lines[0]).toMatchObject({ productCode: "ST-01", description: "เหล็กแผ่น", unit: "แผ่น" });
+    const recv = await api("POST", `/api/receiving-reports/${blankId}/receipts`, {
+      invoiceNumber: "INV-B1", lines: [{ lineId: blankLineId, qty: 2, unitPrice: 200 }],
+    });
+    expect(recv.status).toBe(400);
+  });
+
+  it("ใส่ผู้ขายแล้วรับของได้ — สต๊อกเพิ่ม และหนี้เป็นประเภทตามรหัส (RX)", async () => {
+    const before = await productStock();
+    expect((await api("PATCH", `/api/receiving-reports/${blankId}`, { vendorName: "ร้านเหล็กหน้าโรงงาน", vendorTaxId: "0105500000009" })).status).toBe(200);
+    const recv = await api("POST", `/api/receiving-reports/${blankId}/receipts`, {
+      invoiceNumber: "INV-B1", vatRate: 7, lines: [{ lineId: blankLineId, qty: 2, unitPrice: 200 }],
+    });
+    expect(recv.status, JSON.stringify(recv.body)).toBe(200);
+    expect((await productStock()).stockQty).toBe(before.stockQty + 2);
+    const ap = await client.db("tcs_erp").collection("ap_entries").findOne({ receivingReportId: blankId });
+    expect(ap).toMatchObject({ entryType: "RX", vendorName: "ร้านเหล็กหน้าโรงงาน", subtotal: 400, total: 428 });
+  });
+
+  it("รายการที่รับของไปแล้ว ลบไม่ได้ และลดจำนวนต่ำกว่าที่รับไม่ได้", async () => {
+    expect((await api("PATCH", `/api/receiving-reports/${blankId}`, { lines: [] })).status).toBe(400);
+    expect((await api("PATCH", `/api/receiving-reports/${blankId}`, {
+      lines: [{ id: blankLineId, productId, qtyOrdered: 1, unitPriceOrdered: 200 }],
+    })).status).toBe(400);
+    // เพิ่มรายการพิมพ์เองต่อท้ายได้ และขยายจำนวนของเดิมได้
+    const ok = await api("PATCH", `/api/receiving-reports/${blankId}`, {
+      lines: [
+        { id: blankLineId, productId, qtyOrdered: 8, unitPriceOrdered: 200 },
+        { id: "new", productCode: "", description: "ค่าขนส่ง", unit: "เที่ยว", qtyOrdered: 1, unitPriceOrdered: 300 },
+      ],
+    });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.receivingReport.lines).toHaveLength(2);
+    expect(ok.body.receivingReport.lines[0].id).toBe(blankLineId);
+  });
+
+  it("ใบที่มาจากใบสั่งซื้อแก้ผู้ขายหรือรายการไม่ได้", async () => {
+    expect((await api("PATCH", `/api/receiving-reports/${rrId}`, { vendorName: "อื่น" })).status).toBe(400);
+  });
+
+  it("ใบจากใบสั่งซื้อเลือกรหัสได้ — ใบสั่งซื้อใบใหม่ด้วยรหัส RI", async () => {
+    const created = await api("POST", "/api/purchase-orders", {});
+    const poId = created.body.purchaseOrder.id;
+    const vendors = await api("GET", "/api/vendors");
+    const vendor = vendors.body.vendors[0];
+    expect((await api("PATCH", `/api/purchase-orders/${poId}`, {
+      vendorId: vendor.id, vendorName: vendor.name, vendorTaxId: vendor.taxId, vatRate: 7,
+      lines: [{ productId, qty: 1, unitPrice: 50 }],
+    })).status).toBe(200);
+    expect((await api("POST", `/api/purchase-orders/${poId}/submit-approval`)).status).toBe(200);
+    expect((await api("POST", `/api/purchase-orders/${poId}/approve`)).status).toBe(200);
+    const rr = await api("POST", "/api/receiving-reports", { purchaseOrderId: poId, receiveCode: "RI" });
+    expect(rr.status, JSON.stringify(rr.body)).toBe(201);
+    expect(rr.body.receivingReport.id).toMatch(/^RI-\d{6}-0001$/);
+    expect(rr.body.receivingReport.receiveCode).toBe("RI");
+  });
+
+  it("ใบเก่าที่ไม่มีฟิลด์รหัส อ่านเป็น RR", async () => {
+    const res = await api("GET", `/api/receiving-reports/${rrId}`);
+    expect(res.body.receivingReport.receiveCode).toBe("RR");
+  });
+});

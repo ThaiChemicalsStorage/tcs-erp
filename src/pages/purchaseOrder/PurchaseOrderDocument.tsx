@@ -24,7 +24,8 @@ import {
   submitPurchaseOrderApproval, approvePurchaseOrder, rejectPurchaseOrder, withdrawPurchaseOrderApproval,
 } from "../../lib/purchaseOrder";
 import { PurchaseOrderPrintDocument } from "./PurchaseOrderPrintDocument";
-import { createReceivingReport, fetchReceivingReportsByPurchaseOrder } from "../../lib/receivingReport";
+import { createReceivingReport, fetchReceivingReportsByPurchaseOrder, type ReceivingReportCode } from "../../lib/receivingReport";
+import { ReceiveCodeDialog } from "../receivingReport/ReceivingReportCreateDialog";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 const cellCls = "px-2 py-1.5 text-sm bg-transparent border border-transparent rounded focus:bg-secondary focus:border-[#c9a84c]/50 outline-none w-full transition-colors disabled:opacity-60";
@@ -97,6 +98,7 @@ export function PurchaseOrderDocument({
   const [revertReason, setRevertReason] = useState("");
   const [reverting, setReverting] = useState(false);
   const [receiving, setReceiving] = useState(false);
+  const [receiveCodeOpen, setReceiveCodeOpen] = useState(false);
   // ทะเบียนผู้ขาย — ดึงในหน้านี้เอง แบบเดียวกับที่ใบสั่งงานดึงรายชื่อแผนก (fetchDepartments)
   // GET /vendors เปิดให้คนที่มี purchaseOrder:view อ่านได้ ไม่ต้องมีสิทธิ์ดูแลทะเบียน
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -222,12 +224,24 @@ export function PurchaseOrderDocument({
     setReceiving(true);
     try {
       const existing = await fetchReceivingReportsByPurchaseOrder(draft.id);
-      const target = existing[0] ?? (await createReceivingReport(draft.id));
-      onOpenReceivingReport(target.id);
+      // มีใบอยู่แล้วเปิดเลย ยังไม่มีต้องเลือกรหัสรับเข้าก่อน (2026-09-23) เพราะรหัสอยู่หน้าเลขที่ใบ
+      if (existing[0]) onOpenReceivingReport(existing[0].id);
+      else setReceiveCodeOpen(true);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
     } finally {
       setReceiving(false);
+    }
+  };
+  const createReceivingReportWithCode = async (code: ReceivingReportCode) => {
+    if (!draft) return;
+    try {
+      const created = await createReceivingReport(draft.id, code);
+      setReceiveCodeOpen(false);
+      onOpenReceivingReport(created.id);
+    } catch (err) {
+      setReceiveCodeOpen(false);
+      showToast(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
     }
   };
   useUnsavedChangesGuard(
@@ -649,6 +663,9 @@ export function PurchaseOrderDocument({
 
       <PurchaseOrderPrintDocument doc={draft} />
 
+      {receiveCodeOpen && (
+        <ReceiveCodeDialog onCreate={createReceivingReportWithCode} onCancel={() => setReceiveCodeOpen(false)} />
+      )}
       <ConfirmDialog
         open={confirmDelete}
         title={t("purchaseOrderDoc.confirmDelete.title")}

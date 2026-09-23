@@ -19,8 +19,9 @@ import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import {
-  receivingReportTotals, outstandingQtyOf, isFullyReceived, batchTotals,
-  type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary,
+  receivingReportTotals, outstandingQtyOf, isFullyReceived, batchTotals, receivedQtyOf,
+  isReceivingReportCode, receivingReportCodeOf, isBlankReceivingReport,
+  type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary, type ReceivingReportCode,
 } from "../../src/lib/receivingReport.js";
 import type { ApEntryFields } from "./collections.js";
 
@@ -39,10 +40,23 @@ import type { ApEntryFields } from "./collections.js";
  */
 
 const MAX_BATCH_LINES = 200;
+const MAX_BLANK_LINES = 200;
 
-async function nextReceivingReportId(counters: Collection<CounterFields>): Promise<string> {
-  return nextMonthlyDocumentNumber(counters, "RR", "receiving_report");
+/** แต่ละรหัสรับเข้านับเลขแยกกัน (2026-09-23) · `RR` ใช้กุญแจตัวนับเดิม เลขจึงต่อจากใบเก่า */
+async function nextReceivingReportId(counters: Collection<CounterFields>, code: ReceivingReportCode): Promise<string> {
+  return nextMonthlyDocumentNumber(counters, code, code === "RR" ? "receiving_report" : `receiving_report_${code.toLowerCase()}`);
 }
+
+/**
+ * index "หนึ่งใบสั่งซื้อ = หนึ่งใบรับสินค้า" ต้อง **ไม่นับใบเปล่า** — ใบเปล่าทุกใบมี `purchaseOrderId: ""`
+ * ถ้าใช้ index เดิม (กรองแค่ `isDeleted: false`) ใบเปล่าใบที่สองจะชนใบแรกทันที
+ * `$gt: ""` ตัดทั้งค่าว่างและค่าที่ไม่มีออก (partial index ใช้ `$ne` ไม่ได้)
+ */
+const PO_UNIQUE_INDEX_NAME = "purchaseOrderId_1_linked";
+export const RECEIVING_REPORT_PO_UNIQUE_INDEX = {
+  key: { purchaseOrderId: 1 },
+  options: { name: PO_UNIQUE_INDEX_NAME, unique: true, partialFilterExpression: { isDeleted: false, purchaseOrderId: { $gt: "" } } },
+} as const;
 
 /**
  * `documentNumber` ต้องไม่ซ้ำ แต่ `ensureIndexes()` รันแค่ตอน Setup Wizard — ฐานข้อมูลที่ติดตั้งไปแล้ว
@@ -60,7 +74,10 @@ async function ensureReceivingReportIndexes(col: Collection<ReceivingReportField
       [{ $set: { documentNumber: "$_id" } }],
     );
     await col.createIndex({ documentNumber: 1 }, { unique: true });
-    await col.createIndex({ purchaseOrderId: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
+    // ฐานข้อมูลที่ติดตั้งก่อน 2026-09-23 มี index ตัวเก่าชื่อ `purchaseOrderId_1` ซึ่งนับใบเปล่ารวมด้วย — ถอดทิ้ง
+    const existing = await col.indexes();
+    if (existing.some((ix) => ix.name === "purchaseOrderId_1")) await col.dropIndex("purchaseOrderId_1");
+    await col.createIndex(RECEIVING_REPORT_PO_UNIQUE_INDEX.key, RECEIVING_REPORT_PO_UNIQUE_INDEX.options);
   } catch (err) {
     console.error("[receivingReport] ensure indexes failed", err);
   }
@@ -86,6 +103,7 @@ function toClient(doc: ReceivingReportFields & { _id: string }) {
   return withStringId({
     ...doc,
     documentNumber: doc.documentNumber || doc._id,
+    receiveCode: receivingReportCodeOf({ id: doc._id, receiveCode: doc.receiveCode }),
     lines: doc.lines ?? [],
     batches: doc.batches ?? [],
     attachments: doc.attachments ?? [],
@@ -97,6 +115,7 @@ function toSummary(doc: ReceivingReportFields & { _id: string }): ReceivingRepor
   const totals = receivingReportTotals(full);
   return {
     id: full.id,
+    receiveCode: full.receiveCode,
     documentNumber: full.documentNumber,
     purchaseOrderId: full.purchaseOrderId,
     purchaseOrderNumber: full.purchaseOrderNumber,
@@ -150,20 +169,45 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
 async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "receivingReport:create");
-  // ต้องมีสิทธิ์ดูใบสั่งซื้อด้วย ไม่งั้นปุ่มสร้างจะกลายเป็นช่องอ่านเนื้อหาใบสั่งซื้อที่ตัวเองไม่มีสิทธิ์ดู
-  if (!roleHasPermission(ctx.role, "purchaseOrder:view")) throw new HttpError(403, "Forbidden");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
+  if (body.receiveCode !== undefined && !isReceivingReportCode(body.receiveCode)) throw new HttpError(400, "รหัสรับเข้าไม่ถูกต้อง");
+  const receiveCode: ReceivingReportCode = isReceivingReportCode(body.receiveCode) ? body.receiveCode : "RR";
   const purchaseOrderId = typeof body.purchaseOrderId === "string" ? body.purchaseOrderId.trim() : "";
-  if (!purchaseOrderId) throw new HttpError(400, "กรุณาระบุใบสั่งซื้อ");
+
+  const receivingReports = await receivingReportsCollection();
+  await ensureReceivingReportIndexes(receivingReports);
+
+  /**
+   * ใบเปล่า (2026-09-23) — ไม่ต้องมีสิทธิ์ดูใบสั่งซื้อ เพราะไม่ได้อ่านใบสั่งซื้อใบไหนเลย
+   * หัวใบและรายการว่างทั้งหมด สโตร์กรอกเองในหน้าเอกสาร (`handleUpdate` เปิดช่องเหล่านี้ให้ใบเปล่าเท่านั้น)
+   */
+  if (!purchaseOrderId) {
+    const counters = await countersCollection();
+    const id = await nextReceivingReportId(counters, receiveCode);
+    const now = nowIso();
+    const doc: ReceivingReportFields & { _id: string } = {
+      _id: id, documentNumber: id, receiveCode,
+      purchaseOrderId: "", purchaseOrderNumber: "", jobCode: "",
+      vendorName: "", vendorTaxId: "", vendorAddress: "",
+      orderVatRate: 7, orderDiscount: null, orderDiscountMode: "percent",
+      lines: [], batches: [], status: "Open", remarks: "", attachments: [],
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+    };
+    await receivingReports.insertOne(doc);
+    await writeAuditEntry(ctx, "Receiving Report Created", `สร้างใบรับสินค้า ${id} (ใบเปล่า ไม่มีใบสั่งซื้อ)`);
+    res.status(201).json({ receivingReport: toClient(doc) });
+    return;
+  }
+
+  // ต้องมีสิทธิ์ดูใบสั่งซื้อด้วย ไม่งั้นปุ่มสร้างจะกลายเป็นช่องอ่านเนื้อหาใบสั่งซื้อที่ตัวเองไม่มีสิทธิ์ดู
+  if (!roleHasPermission(ctx.role, "purchaseOrder:view")) throw new HttpError(403, "Forbidden");
 
   const purchaseOrders = await purchaseOrdersCollection();
   const po = await purchaseOrders.findOne({ _id: purchaseOrderId });
   if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งซื้อต้นทาง");
   if (po.status !== "Final") throw new HttpError(400, "ใบสั่งซื้อต้องได้รับอนุมัติก่อนจึงจะรับสินค้าได้");
 
-  const receivingReports = await receivingReportsCollection();
-  await ensureReceivingReportIndexes(receivingReports);
   const existing = await receivingReports.findOne({ purchaseOrderId, isDeleted: false });
   if (existing) {
     throw new HttpError(409, `ใบสั่งซื้อนี้มีใบรับสินค้าอยู่แล้ว (${existing.documentNumber || existing._id})`, {
@@ -197,11 +241,12 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   }));
 
   const counters = await countersCollection();
-  const id = await nextReceivingReportId(counters);
+  const id = await nextReceivingReportId(counters, receiveCode);
   const now = nowIso();
   const doc: ReceivingReportFields & { _id: string } = {
     _id: id,
     documentNumber: id,
+    receiveCode,
     purchaseOrderId,
     purchaseOrderNumber: po.documentNumber || po._id,
     jobCode: po.jobCode ?? "",
@@ -247,6 +292,66 @@ async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
 }
 
 /**
+ * รายการของใบเปล่า (2026-09-23) — ประกอบใหม่ทั้งชุดจากที่หน้าจอส่งมา แต่ **ปกป้องรายการที่รับของไปแล้ว**:
+ * ลบทิ้งไม่ได้ เปลี่ยนสินค้าไม่ได้ และจำนวนต้องไม่ต่ำกว่าที่รับไปแล้ว — รอบรับที่ลงสต๊อกและตั้งหนี้ไปแล้ว
+ * อ้าง `lineId` ของบรรทัดนั้นอยู่ ถ้าบรรทัดหายไปหรือเปลี่ยนเป็นสินค้าตัวอื่น ประวัติการรับจะชี้ไปผิดของ
+ *
+ * บรรทัดที่เลือกจากแคตตาล็อก: รหัส/หน่วย อ่านจากทะเบียนสินค้าฝั่งเซิร์ฟเวอร์เสมอ ไม่เชื่อค่าที่หน้าจอส่งมา
+ */
+async function sanitizeBlankLines(raw: unknown, current: ReceivingReportFields & { id: string }): Promise<ReceivingReportLine[]> {
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายการไม่ถูกต้อง");
+  if (raw.length > MAX_BLANK_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_BLANK_LINES} รายการ`);
+  const existingById = new Map(current.lines.map((l) => [l.id, l]));
+  const productIds = [...new Set((raw as Record<string, unknown>[])
+    .map((r) => (typeof r.productId === "string" ? r.productId : ""))
+    .filter(Boolean))];
+  const productById = new Map<string, { code: string; name: string; unit: string }>();
+  if (productIds.length > 0) {
+    const products = await productsCollection();
+    const found = await products.find({ _id: { $in: productIds.map((pid) => toObjectId(pid)) } }).toArray();
+    for (const p of found) productById.set(p._id.toString(), { code: p.code ?? "", name: p.name ?? "", unit: p.unit ?? "" });
+  }
+
+  const seen = new Set<string>();
+  const lines: ReceivingReportLine[] = (raw as Record<string, unknown>[]).map((r, idx) => {
+    const n = idx + 1;
+    const incomingId = typeof r.id === "string" ? r.id : "";
+    const prior = existingById.get(incomingId);
+    // บรรทัดใหม่ใช้ id ที่หน้าจอตั้งมาได้ ถ้ารูปแบบถูก — บันทึกอัตโนมัติจะได้ไม่เปลี่ยน id ใต้มือผู้ใช้
+    // (ถ้าเปลี่ยน ปุ่มรับของที่อ่าน id จากหน้าจอจะส่ง id ที่เซิร์ฟเวอร์ไม่รู้จักมา)
+    const id = prior ? prior.id : /^rrline_[A-Za-z0-9_]{4,60}$/.test(incomingId) ? incomingId : newId("rrline");
+    if (seen.has(id)) throw new HttpError(400, `รายการลำดับที่ ${n}: ส่งบรรทัดเดียวกันมาซ้ำ`);
+    seen.add(id);
+    const productId = typeof r.productId === "string" && r.productId ? r.productId : null;
+    const product = productId ? productById.get(productId) : undefined;
+    if (productId && !product) throw new HttpError(400, `รายการลำดับที่ ${n}: ไม่พบสินค้าที่เลือก`);
+    const description = sanitizeShortText(r.description, `รายการลำดับที่ ${n}`) || product?.name || "";
+    if (!description) throw new HttpError(400, `รายการลำดับที่ ${n}: กรุณาระบุชื่อรายการ`);
+    const qtyOrdered = sanitizeNullableNumber(r.qtyOrdered, `จำนวนลำดับที่ ${n}`, { min: 0 }) ?? 0;
+    const unitPriceOrdered = sanitizeNullableNumber(r.unitPriceOrdered, `ราคาต่อหน่วยลำดับที่ ${n}`, { min: 0 }) ?? 0;
+    if (prior) {
+      const received = receivedQtyOf(current, prior.id);
+      if (received > 0 && prior.productId !== productId) throw new HttpError(400, `${description}: รับของไปแล้ว เปลี่ยนสินค้าไม่ได้`);
+      if (qtyOrdered < received) throw new HttpError(400, `${description}: รับไปแล้ว ${received} จำนวนต้องไม่น้อยกว่านี้`);
+    }
+    return {
+      id, poLineId: "", productId,
+      productCode: product ? product.code : sanitizeShortText(r.productCode, `รหัสลำดับที่ ${n}`),
+      description, subDetails: [],
+      unit: product ? product.unit : sanitizeShortText(r.unit, `หน่วยลำดับที่ ${n}`),
+      qtyOrdered, unitPriceOrdered,
+    };
+  });
+
+  for (const prior of current.lines) {
+    if (!seen.has(prior.id) && receivedQtyOf(current, prior.id) > 0) {
+      throw new HttpError(400, `${prior.productCode || prior.description}: รับของไปแล้ว ลบรายการนี้ไม่ได้`);
+    }
+  }
+  return lines;
+}
+
+/**
  * แก้ได้แค่ 3 อย่าง: เลขที่บนฟอร์ม, หมายเหตุ, และปิด/เปิดใบ
  *
  * **บรรทัดสินค้าและรอบการรับแก้ผ่าน PATCH ไม่ได้เลย** — บรรทัดเป็น snapshot ของใบสั่งซื้อ ส่วนรอบรับ
@@ -271,6 +376,19 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
     update.documentNumber = next;
   }
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
+
+  // หัวใบและรายการแก้ได้เฉพาะใบเปล่า — ใบที่มีใบสั่งซื้อเป็น snapshot ของใบสั่งซื้อ (ดูคอมเมนต์ด้านบน)
+  const blankOnly = ["jobCode", "vendorName", "vendorTaxId", "vendorAddress", "orderVatRate", "lines"] as const;
+  if (blankOnly.some((k) => k in body)) {
+    if (!isBlankReceivingReport(doc)) throw new HttpError(400, "ใบที่สร้างจากใบสั่งซื้อแก้ผู้ขายหรือรายการไม่ได้ — แก้ที่ใบสั่งซื้อแทน");
+    if ("jobCode" in body) update.jobCode = sanitizeShortText(body.jobCode, "รหัสงาน");
+    if ("vendorName" in body) update.vendorName = sanitizeShortText(body.vendorName, "ผู้ขาย");
+    if ("vendorTaxId" in body) update.vendorTaxId = sanitizeShortText(body.vendorTaxId, "เลขประจำตัวผู้เสียภาษีผู้ขาย");
+    if ("vendorAddress" in body) update.vendorAddress = sanitizeLongText(body.vendorAddress, "ที่อยู่ผู้ขาย");
+    if ("orderVatRate" in body) update.orderVatRate = sanitizeNullableNumber(body.orderVatRate, "อัตราภาษี (%)", { min: 0, max: 100 });
+    if ("lines" in body) update.lines = await sanitizeBlankLines(body.lines, toClient(doc));
+  }
+
   if ("status" in body) {
     const next = body.status === "Closed" ? "Closed" : "Open";
     // ปิดใบทั้งที่ยังรับไม่ครบ = "ยกเลิกส่วนที่เหลือ" ซึ่งเป็นเรื่องปกติของงานจริง (ผู้ขายส่งไม่ครบแล้ว
@@ -333,6 +451,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
   const doc = await loadOrThrow(id);
   const current = toClient(doc);
   if (current.status === "Closed") throw new HttpError(400, "ใบนี้ปิดแล้ว — เปิดใบก่อนจึงจะรับของเพิ่มได้");
+  // ใบเปล่าไม่มีผู้ขายจากใบสั่งซื้อ — หนี้ที่ตั้งต้องรู้ว่าเป็นหนี้ใคร ทะเบียนเจ้าหนี้กับภาษีซื้อใช้คอลัมน์นี้
+  if (isBlankReceivingReport(current) && !current.vendorName.trim()) throw new HttpError(400, "กรุณาระบุผู้ขายก่อนรับของ");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const invoiceNumber = sanitizeShortText(body.invoiceNumber, "เลขที่ใบกำกับภาษี/ใบส่งของ", true);
@@ -398,7 +518,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
 
   const apEntries = await apEntriesCollection();
   const apEntry: ApEntryFields = {
-    entryType: "RR",
+    // รหัสรับเข้าของใบคือประเภทหนี้ในชีตบัญชีจ่าย (RR / RX / RI) — 2026-09-23
+    entryType: current.receiveCode ?? "RR",
     receivingReportId: id,
     receivingReportNumber: current.documentNumber,
     batchId,
@@ -409,7 +530,9 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     vendorAddress: current.vendorAddress,
     invoiceNumber,
     invoiceDate,
-    description: `รับสินค้าตามใบสั่งซื้อ ${current.purchaseOrderNumber}`,
+    description: current.purchaseOrderNumber
+      ? `รับสินค้าตามใบสั่งซื้อ ${current.purchaseOrderNumber}`
+      : `รับสินค้าตามใบ ${current.documentNumber} (ไม่มีใบสั่งซื้อ)`,
     subtotal: round2(totals.subtotal),
     vatRate,
     vatAmt: round2(totals.vatAmt),

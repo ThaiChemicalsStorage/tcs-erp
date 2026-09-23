@@ -1,6 +1,6 @@
 import type { CompanyHeaderInfo } from "../../lib/storage";
-import type { ReceivingReport } from "../../lib/receivingReport";
-import { receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf } from "../../lib/receivingReport";
+import type { ReceivingReport, ReceivingReportCode } from "../../lib/receivingReport";
+import { receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf, receivingReportCodeOf } from "../../lib/receivingReport";
 import { fmt } from "../../lib/quotes";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { PrintSignatureLine } from "../../components/PrintSignature";
@@ -17,6 +17,10 @@ import { PrintPageFrame } from "../../components/PrintPageFrame";
  * ภาษาไทยฮาร์ดโค้ดเสมอ ห้ามเรียก `useI18n` — เอกสารธุรกิจที่พิมพ์ออกไปต้องไม่เปลี่ยนภาษาตาม
  * การตั้งค่าของคนกดพิมพ์ (ดู docs/CLAUDE.md)
  */
+const PRINT_CODE_LABEL: Record<ReceivingReportCode, string> = {
+  RR: "RR — ซื้อเชื่อ-วัตถุดิบ", RX: "RX — โรงงาน", RI: "RI — โครงการ",
+};
+
 export function ReceivingReportPrintDocument({ doc, companyHeader }: { doc: ReceivingReport; companyHeader: CompanyHeaderInfo }) {
   const totals = receivingReportTotals(doc);
   const cell: React.CSSProperties = { border: "1px solid #000", padding: "4px 6px", verticalAlign: "top" };
@@ -37,12 +41,14 @@ export function ReceivingReportPrintDocument({ doc, companyHeader }: { doc: Rece
       />
       <div style={{ textAlign: "center", margin: "0 0 10px" }}>
         <div style={{ fontSize: "16px", fontWeight: 700 }}>ใบรับสินค้า</div>
+        {/* รหัสรับเข้า (2026-09-23) — ใบพิมพ์เป็นภาษาไทยเสมอ จึงใช้ชื่อไทยตรง ๆ ไม่ผ่าน t() */}
+        <div style={{ fontSize: "12px" }}>{PRINT_CODE_LABEL[receivingReportCodeOf(doc)]}</div>
       </div>
 
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
         <tbody>
           <tr>
-            <td style={cell}><b>ใบสั่งซื้อ:</b> {printText(doc.purchaseOrderNumber)}</td>
+            <td style={cell}><b>ใบสั่งซื้อ:</b> {doc.purchaseOrderNumber ? printText(doc.purchaseOrderNumber) : "ไม่มี (รับของโดยไม่มีใบสั่งซื้อ)"}</td>
             <td style={cell}><b>รหัสงาน:</b> {printText(doc.jobCode)}</td>
             <td style={cell}><b>สถานะ:</b> {doc.status === "Closed" ? "ปิดใบแล้ว" : "ยังรับไม่ครบ"}</td>
           </tr>
