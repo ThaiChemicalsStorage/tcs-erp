@@ -224,6 +224,27 @@ const DATE_FIELDS: { key: keyof StoreReceiptFields; label: string }[] = [
   { key: "costDeptAt", label: "วันที่แผนกต้นทุน" },
 ];
 
+/**
+ * เลขที่ใบคืน = รหัสรับ + **เลขเดียวกับใบเบิกต้นทาง** (2026-09-23) — เจ้าของ: *"รหัสมันจะไม่ตรงกันแต่อยากให้เลข …
+ * ด้านหลังมันตรงกันทั้งหมด เพราะก่อนหน้านี้ … เลขมันไม่ตรงกันแล้วมันหากันยาก"* · ใบเบิก `P1-202609-0027` → ใบคืน
+ * `J1-202609-0027` · คืนจากใบเบิกเดียวกันหลายครั้ง ใบที่สองเป็นต้นไปต่อท้าย `/2`, `/3`
+ *
+ * `_id` ยังเป็นเลขรันของตัวนับตอนสร้าง (เปลี่ยน `_id` ไม่ได้) — เลขที่คนเห็นคือ `documentNumber` ซึ่งรายการ ใบพิมพ์
+ * ประวัติสต๊อก และการค้นหาใช้อยู่แล้ว · นับชนเฉพาะใบคืนที่ผูกใบเบิกแล้ว — ใบร่างที่ยังไม่เลือกใบเบิกถือเลขรันชั่วคราว
+ * ถ้าเอามานับด้วย ใบที่เลขรันบังเอิญตรงจะดันใบจริงไปเป็น `/2`
+ */
+async function pairedDocumentNumber(receiptCode: StoreReceiptCode, requisitionNumber: string, selfId: string): Promise<string> {
+  const dash = requisitionNumber.indexOf("-");
+  const base = `${receiptCode}-${dash > 0 ? requisitionNumber.slice(dash + 1) : requisitionNumber}`;
+  const col = await storeReceiptsCollection();
+  for (let n = 1; n < 100; n++) {
+    const candidate = n === 1 ? base : `${base}/${n}`;
+    const clash = await col.findOne({ _id: { $ne: selfId }, isDeleted: false, sourceRequisitionId: { $gt: "" }, documentNumber: candidate });
+    if (!clash) return candidate;
+  }
+  return selfId;
+}
+
 async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -240,9 +261,13 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   for (const f of SHORT_TEXT) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
   if ("documentNumber" in body) {
     update.documentNumber = (update.documentNumber as string) || id;
-    const col = await storeReceiptsCollection();
-    const clash = await col.findOne({ documentNumber: update.documentNumber, _id: { $ne: id } });
-    if (clash) throw new HttpError(409, `เลขที่ ${update.documentNumber} ถูกใช้แล้ว`);
+    // ตรวจชนเฉพาะตอนเลขเปลี่ยนจริง — หน้าจอส่งเลขเดิมมาทุกครั้งที่บันทึก และเลขที่ตามใบเบิก (pairedDocumentNumber)
+    // อาจบังเอิญตรงกับเลขรันชั่วคราวของใบร่างอื่นที่ยังไม่เลือกใบเบิก ซึ่งไม่ควรทำให้บันทึกไม่ได้
+    if (update.documentNumber !== (doc.documentNumber || id)) {
+      const col = await storeReceiptsCollection();
+      const clash = await col.findOne({ documentNumber: update.documentNumber, _id: { $ne: id }, isDeleted: false });
+      if (clash) throw new HttpError(409, `เลขที่ ${update.documentNumber} ถูกใช้แล้ว`);
+    }
   }
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
   if ("reason" in body) update.reason = sanitizeLongText(body.reason, "เหตุผล");
@@ -267,6 +292,11 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
         })),
       });
     }
+    // เลขที่ใบคืนตามใบเบิก (คำสั่งเจ้าของ 2026-09-23 "ขอแก้แบบเร็วๆด่วน") — ดู pairedDocumentNumber()
+    // ชนะเลขที่หน้าจอส่งมาพร้อมกันเสมอ (หน้าจอส่ง documentNumber เดิมมาทุกครั้งที่บันทึก)
+    update.documentNumber = update.sourceRequisitionNumber
+      ? await pairedDocumentNumber(doc.receiptCode, update.sourceRequisitionNumber, id)
+      : id;
   } else if ("lines" in body) {
     update.lines = await sanitizeLines(body.lines, { ...doc, ...update });
   }

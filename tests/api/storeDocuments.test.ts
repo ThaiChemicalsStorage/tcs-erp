@@ -135,6 +135,27 @@ describe("ใบรับคืน / รับเข้าคลัง", () => {
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
   });
 
+  it("เลขที่ใบคืน = รหัสรับ + เลขเดียวกับใบเบิก · คืนจากใบเบิกเดียวกันซ้ำต่อท้าย /2 (2026-09-23)", async () => {
+    const suffix = issueId.slice(issueId.indexOf("-") + 1);
+    expect((await api("GET", `/api/store-receipts/${jdId}`)).body.storeReceipt.documentNumber).toBe(`JD-${suffix}`);
+
+    // ใบคืนใบที่สอง เลขรันของตัวนับไม่ตรงกับใบเบิก — พอเลือกใบเบิกแล้วเลขที่ต้องตามใบเบิก
+    const second = await api("POST", "/api/store-receipts", { receiptCode: "JD" });
+    const secondId = second.body.storeReceipt.id;
+    expect(secondId).not.toBe(`JD-${suffix}`);
+    const paired = await api("PATCH", `/api/store-receipts/${secondId}`, { documentNumber: secondId, sourceRequisitionId: issueId });
+    expect(paired.status, JSON.stringify(paired.body)).toBe(200);
+    expect(paired.body.storeReceipt.documentNumber).toBe(`JD-${suffix}/2`);
+    // บันทึกอัตโนมัติส่งเลขเดิมกลับมาทุกครั้ง — ต้องไม่ชนและไม่ถูกเปลี่ยนกลับ
+    const again = await api("PATCH", `/api/store-receipts/${secondId}?autoSave=1`, { documentNumber: `JD-${suffix}/2`, reason: "" });
+    expect(again.status, JSON.stringify(again.body)).toBe(200);
+    expect(again.body.storeReceipt.documentNumber).toBe(`JD-${suffix}/2`);
+    // เลขที่ใบที่ผูกใบเบิกแล้วค้นเจอด้วยทางลัดเลขที่เอกสาร
+    const search = await api("GET", `/api/search?q=${encodeURIComponent(`JD-${suffix}/2`)}`);
+    expect(search.body.exact?.document?.id).toBe(secondId);
+    expect((await api("DELETE", `/api/store-receipts/${secondId}`)).status).toBe(204);
+  });
+
   it("รับเข้าคลังได้หลังอนุมัติเท่านั้น — สต๊อกคืน และยอดคืนในใบเบิกต้นทางขยับตาม", async () => {
     expect((await api("POST", `/api/store-receipts/${jdId}/post`)).status).toBe(400);
     await approve(`/api/store-receipts/${jdId}`);
