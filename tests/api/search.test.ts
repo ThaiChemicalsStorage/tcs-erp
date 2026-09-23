@@ -58,6 +58,8 @@ beforeAll(async () => {
     { _id: "MR-2569-0003", createdBy: ALICE, customerName: "เค ไทย ไฮดรอลิค", jobCode: "PQ202607-175", productName: "", responsibleEmployee: "", jobOrderCode: "", lines: [], status: "Final", isDeleted: false, updatedAt: "2026-08-03T00:00:00.000Z" },
     // ลบแล้ว ต้องไม่โผล่
     { _id: "MR-2569-0004", createdBy: ALICE, ownerDepartment: "project", customerName: "เค ไทย ไฮดรอลิค", jobCode: "", productName: "", responsibleEmployee: "", jobOrderCode: "", lines: [], status: "Draft", isDeleted: true, updatedAt: "2026-08-04T00:00:00.000Z" },
+    // ใบเบิกของสโตร์ (2026-09-23) — ต้องเปิดหน้าสโตร์ ไม่ใช่หน้าฝ่ายโครงการ
+    { _id: "PD-202609-0001", documentNumber: "PD-202609-0001", createdBy: ALICE, ownerDepartment: "store", issueCode: "PD", customerName: "เค ไทย ไฮดรอลิค", jobCode: "SC-2026-09-001", productName: "", responsibleEmployee: "", jobOrderCode: "", lines: [], status: "Final", isDeleted: false, updatedAt: "2026-08-05T00:00:00.000Z" },
   ] as never);
 
   await db.collection("job_orders").insertMany([
@@ -69,6 +71,12 @@ beforeAll(async () => {
     { docNo: "IV6908001", docType: "IV", reference: "PQ202607-174", customerSnapshot: { companyName: "เค ไทย ไฮดรอลิค", taxId: "", contactName: "" }, lines: [], status: "issued", docDate: "2026-08-10" },
     // ยกเลิกแล้วแต่ยังต้องค้นเจอ — เอกสารบัญชีไม่เคยถูกลบ ใช้สถานะ cancelled แทน
     { docNo: "IV6908002", docType: "IV", reference: "PQ202607-175", customerSnapshot: { companyName: "อีจ", taxId: "", contactName: "" }, lines: [], status: "cancelled", docDate: "2026-08-11" },
+  ] as never);
+
+  await db.collection("store_receipts").insertMany([
+    { _id: "JD-202609-0001", documentNumber: "JD-202609-0001", receiptCode: "JD", createdBy: ALICE, sourceRequisitionNumber: "PD-202609-0001", jobCode: "SC-2026-09-001", customerName: "", chargeDepartmentName: "ฝ่ายผลิต", reference: "", reason: "", lines: [{ productCode: "RS-01", productName: "เรซินใส" }], status: "PendingApproval", isDeleted: false, updatedAt: "2026-09-02T00:00:00.000Z" },
+    { _id: "TK-202609-0001", documentNumber: "TK-202609-0001", receiptCode: "TK", createdBy: BOB, sourceRequisitionNumber: "", jobCode: "", customerName: "", chargeDepartmentName: "", reference: "", reason: "ตรวจนับสิ้นเดือน", lines: [{ productCode: "RS-01", productName: "เรซินใส" }], status: "Draft", isDeleted: false, updatedAt: "2026-09-03T00:00:00.000Z" },
+    { _id: "FG-202609-0001", documentNumber: "FG-202609-0001", receiptCode: "FG", createdBy: ALICE, sourceRequisitionNumber: "", jobCode: "", customerName: "", chargeDepartmentName: "", reference: "", reason: "", lines: [{ productCode: "RS-01", productName: "เรซินใส" }], status: "Draft", isDeleted: true, updatedAt: "2026-09-04T00:00:00.000Z" },
   ] as never);
 
   docs = await import("../../api/_lib/searchDocuments.js");
@@ -90,6 +98,12 @@ describe("detectDocNumberFamily", () => {
     expect(shared.detectDocNumberFamily("Q#260814")).toBe("quotation");
     expect(shared.detectDocNumberFamily("IV6908001")).toBe("arDocument");
     expect(shared.detectDocNumberFamily("re6908")).toBe("arDocument");
+    // รหัสที่เพิ่ม 2026-09-23: ใบรับสินค้า RX/RI, ใบเบิกของสโตร์, ใบรับคืนของสโตร์
+    expect(shared.detectDocNumberFamily("RX-202609")).toBe("receivingReport");
+    expect(shared.detectDocNumberFamily("RI-202609")).toBe("receivingReport");
+    expect(shared.detectDocNumberFamily("PD-202609")).toBe("materialRequisition");
+    expect(shared.detectDocNumberFamily("jd-202609")).toBe("storeReceipt");
+    expect(shared.detectDocNumberFamily("TK-202609-0001")).toBe("storeReceipt");
   });
 
   it("does not hijack ordinary words that happen to start with a letters-only prefix", () => {
@@ -115,6 +129,7 @@ describe("searchMaterialRequisitions", () => {
     expect(byId["MR-2569-0002"].ownerDepartment).toBe("production");
     // เอกสารเก่าที่ไม่มีฟิลด์นี้ ต้อง normalize เป็นฝ่ายโครงการ ไม่ใช่ undefined
     expect(byId["MR-2569-0003"].ownerDepartment).toBe("project");
+    expect(byId["PD-202609-0001"].ownerDepartment).toBe("store");
   });
 
   it("excludes soft-deleted documents", async () => {
@@ -139,6 +154,34 @@ describe("searchMaterialRequisitions", () => {
   it("honours the result limit", async () => {
     const rows = await docs.searchMaterialRequisitions("ไฮดรอลิค", ctxFor(ALICE, viewAll), 2);
     expect(rows).toHaveLength(2);
+  });
+});
+
+describe("searchStoreReceipts (2026-09-23)", () => {
+  const viewAll = roleWith("materialRequisition:view", "materialRequisition:viewAll");
+  const ownOnly = roleWith("materialRequisition:view");
+
+  it("finds by the source requisition number, the adjust reason and line products — deleted ones excluded", async () => {
+    expect((await docs.searchStoreReceipts("PD-202609-0001", ctxFor(ALICE, viewAll), 20)).map((r) => r.id)).toEqual(["JD-202609-0001"]);
+    expect((await docs.searchStoreReceipts("ตรวจนับ", ctxFor(ALICE, viewAll), 20)).map((r) => r.id)).toEqual(["TK-202609-0001"]);
+    expect((await docs.searchStoreReceipts("เรซินใส", ctxFor(ALICE, viewAll), 20)).map((r) => r.id).sort()).toEqual(["JD-202609-0001", "TK-202609-0001"]);
+  });
+
+  it("scopes to own documents without viewAll", async () => {
+    const rows = await docs.searchStoreReceipts("เรซินใส", ctxFor(ALICE, ownOnly), 20);
+    expect(rows.map((r) => r.id)).toEqual(["JD-202609-0001"]);
+  });
+
+  it("shows the source requisition as lineage and the charged department as party", async () => {
+    const [row] = await docs.searchStoreReceipts("JD-202609", ctxFor(ALICE, viewAll), 20);
+    expect(row).toMatchObject({ docNumber: "JD-202609-0001", lineage: "PD-202609-0001", party: "ฝ่ายผลิต", status: "PendingApproval" });
+  });
+
+  it("resolves through the document-number fast path, with ownership reapplied", async () => {
+    const hit = await docs.searchByDocNumber("storeReceipt", "TK-202609-0001", ctxFor(ALICE, viewAll));
+    expect(hit?.type).toBe("storeReceipt");
+    expect(hit?.result.id).toBe("TK-202609-0001");
+    expect(await docs.searchByDocNumber("storeReceipt", "TK-202609-0001", ctxFor(ALICE, ownOnly))).toBeNull();
   });
 });
 

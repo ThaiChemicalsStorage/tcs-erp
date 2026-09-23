@@ -408,6 +408,12 @@ async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
 const approvalConfig: ApprovalConfig<StoreReceiptFields & { _id: string }> = {
   label: "ใบรับคืน",
   approvePermission: "materialRequisition:finalize",
+  // แจ้งคนที่กดอนุมัติได้ตอนส่งขออนุมัติ (2026-09-23) — เดิมขึ้นแค่ในกล่อง "เอกสารรออนุมัติ"
+  submitNotification: {
+    type: "store_receipt_submitted", module: "ใบรับคืน (สโตร์)",
+    relatedField: "relatedStoreReceiptId",
+    context: (doc) => doc.sourceRequisitionNumber || doc.jobCode || doc.reference || "",
+  },
   collection: async () => (await storeReceiptsCollection()) as unknown as Collection<StoreReceiptFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

@@ -2,7 +2,7 @@ import type { AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, serviceReportsCollection, projectsCollection,
   materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection, costControlsCollection,
-  receivingReportsCollection,
+  receivingReportsCollection, storeReceiptsCollection,
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -45,7 +45,7 @@ export interface SearchDocumentResult {
   /** ISO timestamp, last touched — what the results are sorted by. */
   date: string;
   /** ใบเบิกของ/ใบขอซื้อ เท่านั้น — picks which sidebar page the result opens ("general" = กล่องงานเข้าจัดซื้อ). */
-  ownerDepartment?: "project" | "production" | "general";
+  ownerDepartment?: "project" | "production" | "general" | "store";
   /** เอกสารบัญชีเท่านั้น — picks which of the four accounting pages the result opens. */
   docType?: "AR" | "BI" | "RE" | "IV";
 }
@@ -153,6 +153,14 @@ export async function searchProjects(query: string, ctx: AuthContext, limit: num
  * Filtering one out here would hide a document the user can reach in two clicks — the opposite of
  * what this feature is for. `ownerDepartment` rides along so the result opens the right page.
  */
+/**
+ * ใบเบิกของไปเปิดหน้าไหน — ใบของสโตร์ (2026-09-23) อยู่ในหน้า "ใบเบิก-คืนวัสดุ (สโตร์)" ไม่ใช่หน้าฝ่ายโครงการ
+ * ก่อนหน้านี้ใบสโตร์ถูกรายงานเป็น "project" ผลค้นหาจึงพาไปผิดหน้า
+ */
+function mrDepartment(raw: unknown): "project" | "production" | "store" {
+  return raw === "production" ? "production" : raw === "store" ? "store" : "project";
+}
+
 export async function searchMaterialRequisitions(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
   const col = await materialRequisitionsCollection();
   const rx = containsRegex(query);
@@ -174,7 +182,7 @@ export async function searchMaterialRequisitions(query: string, ctx: AuthContext
     status: d.status ?? "",
     date: isoOf(d),
     // เอกสารเก่าไม่มีฟิลด์นี้ ถือเป็นของฝ่ายโครงการ (ไม่ได้ทำ migration) — ตรงกับ handler ของหน้ารายการ
-    ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : ("project" as const),
+    ownerDepartment: mrDepartment(d.ownerDepartment),
   }));
 }
 
@@ -276,6 +284,37 @@ export async function searchReceivingReports(query: string, ctx: AuthContext, li
     status: d.status ?? "",
     date: isoOf(d),
   }));
+}
+
+/**
+ * ใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23) — `_id` คือเลขที่ใบ (`JD-202609-0001`) · ค้นได้ทั้งเลขใบเบิกต้นทาง
+ * รหัสงาน เลขอ้างอิง เหตุผลการปรับยอด และสินค้าในรายการ · `party` เป็นลูกค้า (ถ้ามี) ถอยไปเป็นฝ่ายที่คิดค่าใช้จ่าย
+ * การมองเห็นตรงกับหน้ารายการใน storeReceiptHandler (`materialRequisition:viewAll` เห็นทุกใบ นอกนั้นเห็นใบตัวเอง)
+ */
+export async function searchStoreReceipts(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await storeReceiptsCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [
+      { _id: rx }, { documentNumber: rx }, { sourceRequisitionNumber: rx }, { jobCode: rx }, { customerName: rx },
+      { reference: rx }, { reason: rx }, { "lines.productCode": rx }, { "lines.productName": rx },
+    ]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map(storeReceiptRow);
+}
+
+function storeReceiptRow(d: { _id: string; documentNumber?: string; customerName?: string; chargeDepartmentName?: string;
+  sourceRequisitionNumber?: string; jobCode?: string; reference?: string; status?: string; updatedAt?: unknown; createdAt?: unknown }): SearchDocumentResult {
+  return {
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.customerName || d.chargeDepartmentName || "",
+    lineage: d.sourceRequisitionNumber || d.jobCode || d.reference || "",
+    status: d.status ?? "",
+    date: isoOf(d),
+  };
 }
 
 /**
@@ -450,7 +489,7 @@ export async function searchByDocNumber(
       return first("materialRequisition", docs.map((d) => ({
         id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
         party: d.customerName ?? "", lineage: d.jobCode ?? "", status: d.status ?? "", date: isoOf(d),
-        ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : ("project" as const),
+        ownerDepartment: mrDepartment(d.ownerDepartment),
       })));
     }
     case "jobOrder": {
@@ -499,7 +538,16 @@ export async function searchByDocNumber(
         status: d.status ?? "", date: isoOf(d),
       })));
     }
-        case "costControl": {
+    case "storeReceipt": {
+      const col = await storeReceiptsCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("storeReceipt", docs.map(storeReceiptRow));
+    }
+    case "costControl": {
       const col = await costControlsCollection();
       const ownership = await buildCostControlVisibilityClause(ctx, roleHasPermission(ctx.role, "costControl:viewAll"));
       const docs = await col.find(

@@ -93,6 +93,14 @@ export function isStoreIssueCode(v: unknown): v is StoreIssueCode {
 export function isStoreReceiptCode(v: unknown): v is StoreReceiptCode {
   return typeof v === "string" && RECEIPT_BY_CODE.has(v as StoreReceiptCode);
 }
+/**
+ * เลขที่ใบนี้เป็นใบเบิกของสโตร์ไหม (`PD-202609-0001`) — ใช้ตอนมีแค่เลขที่ใบ เช่นแจ้งเตือน ซึ่งไม่ได้พกแผนกมา
+ * ใบเบิกฝ่ายโครงการ/ผลิตขึ้นต้นด้วย `MR-` เสมอ จึงไม่ชนกัน
+ */
+export function isStoreIssueDocumentId(id: string): boolean {
+  const dash = id.indexOf("-");
+  return dash > 0 && isStoreIssueCode(id.slice(0, dash));
+}
 export function storeIssueCodeInfo(code: StoreIssueCode): StoreIssueCodeInfo {
   return ISSUE_BY_CODE.get(code)!;
 }

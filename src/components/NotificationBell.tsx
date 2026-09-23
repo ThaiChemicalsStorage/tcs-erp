@@ -33,6 +33,7 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   production_order_submitted: <Send size={14} />,
   purchase_order_submitted: <Send size={14} />,
   cost_control_submitted: <Send size={14} />,
+  store_receipt_submitted: <Send size={14} />,
   purchase_request_approved: <ShoppingCart size={14} />,
   purchase_request_edited: <ShoppingCart size={14} />,
   purchase_request_purchasing_approved: <ShoppingCart size={14} />,

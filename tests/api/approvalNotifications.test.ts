@@ -141,6 +141,21 @@ describe("แจ้งเตือนผู้มีสิทธิ์อนุ�
     expect(got).toHaveLength(2);
   });
 
+  it("ใบรับคืนของสโตร์ (2026-09-23): แจ้งผู้อนุมัติ พร้อม deep-link ของตัวเอง", async () => {
+    const created = await api("/api/store-receipts", { method: "POST", body: JSON.stringify({ receiptCode: "TK" }) });
+    expect(created.status).toBe(201);
+    const id = ((await created.json()) as { storeReceipt: { id: string } }).storeReceipt.id;
+
+    const submitted = await api(`/api/store-receipts/${id}/submit-approval`, { method: "POST" });
+    expect(submitted.status).toBe(200);
+
+    const got = (await notificationsFor(approverId)).filter((n) => n.type === "store_receipt_submitted");
+    expect(got).toHaveLength(1);
+    expect(got[0].title).toBe("ใบรับคืนรออนุมัติ");
+    expect(got[0].description).toContain(id);
+    expect((got[0] as NotificationDoc & { relatedStoreReceiptId?: string }).relatedStoreReceiptId).toBe(id);
+  });
+
   it("ไม่มีผู้รับเลยก็ยังส่งขออนุมัติสำเร็จ — แจ้งเตือนเป็น best-effort", async () => {
     const { usersCollection } = await import("../../api/_lib/collections.js");
     const users = await usersCollection();

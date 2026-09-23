@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, FileText, Contact, Package, Menu as MenuIcon, Users as UsersIcon, Layers, ClipboardList,
-  Truck, Wrench, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, PackageCheck, Calculator, Factory, Receipt, PackagePlus,
+  Truck, Wrench, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, PackageCheck, Calculator, Factory, Receipt, PackagePlus, PackageOpen,
   Loader2, AlertTriangle, RotateCw, X, CornerDownLeft, Clock,
 } from "lucide-react";
 import {
@@ -52,6 +52,7 @@ const CATEGORY_ICON: Record<SearchCategory, typeof FileText> = {
   purchaseRequests: ShoppingCart,
   purchaseOrders: ShoppingBag,
   receivingReports: PackageCheck,
+  storeReceipts: PackageOpen,
   costControls: Calculator,
   productionOrders: Factory,
   arDocuments: Receipt,
@@ -94,7 +95,9 @@ const NUMBER_LEGEND: { prefix: string; key: TranslationKey }[] = [
   { prefix: "SC-", key: "search.group.productionOrders" },
   { prefix: "SR-", key: "search.group.serviceReports" },
   { prefix: "PO-", key: "search.group.purchaseOrders" },
-  { prefix: "RR-", key: "search.group.receivingReports" },
+  { prefix: "RR- RX- RI-", key: "search.group.receivingReports" },
+  { prefix: "PD- PP- OU- …", key: "search.legend.storeIssues" },
+  { prefix: "JD- FG- TK- …", key: "search.group.storeReceipts" },
   { prefix: "CC-", key: "search.group.costControls" },
 ];
 

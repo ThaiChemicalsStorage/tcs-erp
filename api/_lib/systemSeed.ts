@@ -97,6 +97,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   production_order_submitted: { label: "ใบสั่งผลิตรออนุมัติ", module: "ใบสั่งผลิต" },
   purchase_order_submitted: { label: "ใบสั่งซื้อรออนุมัติ", module: "ใบสั่งซื้อ" },
   cost_control_submitted: { label: "Cost Control รออนุมัติ", module: "Cost Control" },
+  store_receipt_submitted: { label: "ใบรับคืน/รับเข้าคลังรออนุมัติ", module: "ใบรับคืน (สโตร์)" },
   purchase_request_approved: { label: "อนุมัติใบขอซื้อ", module: "ใบขอซื้อ" },
   purchase_request_edited: { label: "ฝ่ายจัดซื้อแก้ใบขอซื้อที่อนุมัติแล้ว", module: "ใบขอซื้อ" },
   purchase_request_purchasing_approved: { label: "ฝ่ายจัดซื้ออนุมัติใบขอซื้อ", module: "ใบขอซื้อ" },

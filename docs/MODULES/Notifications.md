@@ -82,6 +82,10 @@ None of its own — delivery is inherently role-based (see Business Flow), but r
   exported, alongside a new `notifyUsers()` (the by-user-id counterpart of `notifyDepartments()`).
   It had been copied byte-for-byte into three handlers and exported from none; adding a fourth
   caller was the moment to collapse it rather than copy it again.
+- **2026-09-23f**: `store_receipt_submitted` — ใบรับคืน/รับเข้าคลังของสโตร์ส่งขออนุมัติ แจ้งผู้มี
+  `materialRequisition:finalize` · deep-link ฟิลด์ใหม่ `relatedStoreReceiptId` เปิดหน้า "ใบเบิก-คืนวัสดุ (สโตร์)" · ตรวจใน
+  `onNavigate` ต่อจาก `relatedMaterialRequisitionId` (เหนือ `relatedScopeId`) · แจ้งเตือนของใบเบิกสโตร์ (`material_requisition_*`)
+  ไม่ได้พกแผนก จึงให้ `navigateToMaterialRequisition()` ดูรหัสหน้าเลขที่ใบ (PD-/OU-/…) แล้วพาไปหน้าสโตร์แทนหน้าฝ่ายโครงการ
 - **2026-07-29**: `scope_of_work_po_chase` ("ทวงเลข PO", BellRing icon) — fired by `POST /api/scope-of-works/:id/chase-po` to the record's resolved salesperson (name-matched user → seller link → creator) when someone chases a missing customer PO number; deep-links via `relatedScopeId` like the other Scope of Work types. See [MODULES/ScopeOfWork.md](./ScopeOfWork.md) "PO Chasing".
 
 ## Future Improvements

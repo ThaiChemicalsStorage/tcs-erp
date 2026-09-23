@@ -1,4 +1,4 @@
-import { STORE_ISSUE_CODES } from "../../src/lib/storeCodes.js";
+import { STORE_ISSUE_CODES, STORE_RECEIPT_CODES } from "../../src/lib/storeCodes.js";
 /**
  * Shared primitives for Global Search, split out 2026-08-28 when search grew from 7 categories to
  * 16. `searchHandler.ts` (master data, menu pages, orchestration) and `searchDocuments.ts` (the 9
@@ -68,6 +68,11 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   { prefix: "PO-", type: "purchaseOrder" },
   { prefix: "CC-", type: "costControl" },
   { prefix: "RR-", type: "receivingReport" },
+  // ใบรับสินค้ารหัส RX (โรงงาน) / RI (โครงการ) — รันเลขแยกจาก RR ตั้งแต่ 2026-09-23
+  { prefix: "RX-", type: "receivingReport" },
+  { prefix: "RI-", type: "receivingReport" },
+  // ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) — 15 รหัสรับ อยู่ใน store_receipts
+  ...STORE_RECEIPT_CODES.map((c) => ({ prefix: `${c.code}-`, type: "storeReceipt" as const })),
   { prefix: "SC-", type: "productionOrder" },
   { prefix: "AR", type: "arDocument" },
   { prefix: "BI", type: "arDocument" },
@@ -78,7 +83,7 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
 export type DocNumberFamily =
   | "quotation" | "serviceReport" | "materialRequisition" | "jobOrder"
   | "purchaseRequest" | "productionOrder" | "arDocument" | "purchaseOrder" | "costControl"
-  | "receivingReport";
+  | "receivingReport" | "storeReceipt";
 
 /**
  * Which document family a query looks like, or `null` when it doesn't look like a number at all.

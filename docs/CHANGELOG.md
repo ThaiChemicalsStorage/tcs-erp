@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-09-23f (absolute latest) — ใบรับคืนของสโตร์: Global Search + แจ้งเตือนตอนส่งขออนุมัติ + ใบพิมพ์ตามแบบ FM-ST-04
+
+เจ้าของสั่ง "ทำเลย" กับสามข้อที่ค้างจาก 2026-09-23e
+
+- **Global Search** — หมวดใหม่ `storeReceipts` (`searchStoreReceipts()` ค้นเลขที่ใบ ใบเบิกต้นทาง รหัสงาน ลูกค้า อ้างอิง เหตุผล สินค้าในรายการ)
+  + ทางลัดเลขที่เอกสารของรหัสรับ 15 ตัว (`DOC_NUMBER_PREFIXES` family `storeReceipt`) · ขึ้นเฉพาะคนที่เปิดหน้าสโตร์ได้ (`STORE_DOCUMENTS_ANY`)
+  · เพิ่ม prefix **RX- / RI-** ของใบรับสินค้าที่ตกหล่นจาก 2026-09-23b · เพิ่มทางลัดหน้า "ใบเบิก-คืนวัสดุ (สโตร์)" · legend ในแผงค้นหา
+- **บั๊กที่เจอระหว่างทาง: ใบเบิกสโตร์ที่เปิดจากผลค้นหาหรือแจ้งเตือนไปหน้าฝ่ายโครงการ** — ผลค้นหาแปลงแผนก `store` เป็น `project`
+  (`mrDepartment()` แก้แล้ว) และแจ้งเตือนไม่พกแผนก → `navigateToMaterialRequisition()` ดูรหัสหน้าเลขที่ใบผ่าน `isStoreIssueDocumentId()`
+- **แจ้งเตือน** — `store_receipt_submitted` + deep-link `relatedStoreReceiptId` ผ่าน `submitNotification` ของเครื่องอนุมัติร่วม
+  (ผู้รับ = ผู้มี `materialRequisition:finalize`) · เมนูสโตร์เปิดให้ผู้อนุมัติด้วย: `materialRequisition:view` + (`stock:adjust` **หรือ**
+  `materialRequisition:finalize`) ไม่งั้นแจ้งเตือนพาไปหน้าที่เปิดไม่ได้
+- **ใบพิมพ์** — `StoreReceiptPrintDocument` เขียนใหม่ตามฟอร์มคู่ FM-ST-04 สามแบบตามชนิดรหัส (ใบรับคืนวัสดุ / ใบรับสินค้าเข้าคลัง /
+  ใบปรับปรุงยอดสินค้า) · เจ้าของยังไม่ได้ส่งฟอร์มจริง จึงไม่ใส่รหัสฟอร์ม ISO · ตรวจเป็นภาพที่ความกว้างพิมพ์ 703px ทั้งสามแบบ ไม่ล้นขอบ
+  (เจอป้ายข้าง "STOCK ADJUSTMENT" ยาวจนถูกตัด → "STOCK ADJUST")
+- เทสต์: `tests/api/search.test.ts` +5 (prefix ใหม่, แผนก store, หมวดใบรับคืน, ownership, ทางลัด) · `tests/api/approvalNotifications.test.ts` +1 · รวม 903 ผ่าน
+- เอกสาร: `MODULES/Store.md`, `MODULES/Notifications.md`, `RBAC.md`, `TODO.md`, What's New
+
+---
+
 ## 2026-09-23e (absolute latest) — ใบเบิกของสโตร์แยกรหัสจ่าย + ใบรับคืน/รับเข้าคลังแยกรหัสรับ
 
 รายการงานจากเจ้าของ 2026-09-23 ข้อ 6: *"สร้างหน้าใบรับและคืนสินค้าที่ออกแบบใหม่มาด้วย ตรงใบรับคืนสินค้าทำให้เป็น dropdown ก็ได้"*

@@ -15,7 +15,7 @@ import {
 } from "./searchShared.js";
 import {
   searchDeliveryOrders, searchServiceReports, searchProjects, searchMaterialRequisitions,
-  searchJobOrders, searchPurchaseRequests, searchPurchaseOrders, searchReceivingReports, searchCostControls, searchProductionOrders, searchProductRequests,
+  searchJobOrders, searchPurchaseRequests, searchPurchaseOrders, searchReceivingReports, searchStoreReceipts, searchCostControls, searchProductionOrders, searchProductRequests,
   searchArDocuments, searchByDocNumber, scopeOfWorkOwnership,
   type SearchDocumentResult,
 } from "./searchDocuments.js";
@@ -190,6 +190,8 @@ export interface SearchResults {
   purchaseRequests: SearchDocumentResult[];
   purchaseOrders: SearchDocumentResult[];
   receivingReports: SearchDocumentResult[];
+  /** ใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23) */
+  storeReceipts: SearchDocumentResult[];
   costControls: SearchDocumentResult[];
   productionOrders: SearchDocumentResult[];
   arDocuments: SearchDocumentResult[];
@@ -217,13 +219,13 @@ export interface ExactMatch {
 /** Every key of `SearchResults` that carries results — the vocabulary `?types=` accepts. */
 export type SearchCategory =
   | "quotations" | "scopeOfWorks" | "deliveryOrders" | "serviceReports" | "projects"
-  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "purchaseOrders" | "receivingReports" | "costControls" | "productionOrders"
+  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "purchaseOrders" | "receivingReports" | "storeReceipts" | "costControls" | "productionOrders"
   | "arDocuments" | "productRequests" | "customers" | "products" | "templates"
   | "users" | "pages";
 
 const ALL_CATEGORIES: SearchCategory[] = [
   "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
-  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "costControls", "productionOrders",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "costControls", "productionOrders",
   "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
 ];
 
@@ -244,9 +246,17 @@ const ALL_CATEGORIES: SearchCategory[] = [
  * create permission gating today, a pre-existing documented gap, not something this feature
  * should silently paper over with a permission the actual page doesn't enforce).
  */
+/**
+ * หน้า "ใบเบิก-คืนวัสดุ (สโตร์)" เปิดได้เมื่อมี `materialRequisition:view` **และ** สิทธิ์ใดสิทธิ์หนึ่งในนี้
+ * (สโตร์ที่จ่ายของ หรือหัวหน้าที่อนุมัติ) — ต้องตรงกับเมนู `storeDocuments` ใน App.tsx ไม่งั้นผลค้นหาจะพาไปหน้าที่เปิดไม่ได้
+ */
+const STORE_DOCUMENTS_ANY: Permission[] = ["stock:adjust", "materialRequisition:finalize"];
+
 const SEARCHABLE_PAGES: {
   id: string; titleTh: string; titleEn: string; navKey: string;
   action?: "create" | "categories"; permission: Permission | null;
+  /** ต้องมีสิทธิ์ใดสิทธิ์หนึ่งในนี้ด้วย — ตรงกับ `anyPermission` ของเมนูใน App.tsx */
+  anyPermission?: Permission[];
   aliases: string[];
 }[] = [
   { id: "dashboard", titleTh: "แดชบอร์ด", titleEn: "Dashboard", navKey: "dashboard", permission: "dashboard:view", aliases: ["แดชบอร์ด", "dashboard", "ภาพรวม", "overview"] },
@@ -285,6 +295,7 @@ const SEARCHABLE_PAGES: {
   { id: "productionPurchase", titleTh: "ใบขอซื้อ (ฝ่ายผลิต)", titleEn: "Purchase Requests (Production)", navKey: "productionPurchase", permission: "purchaseRequest:view", aliases: ["ใบขอซื้อ ฝ่ายผลิต", "purchase request production"] },
   { id: "stock", titleTh: "สต๊อกสินค้า", titleEn: "Stock", navKey: "stock", permission: "stock:view", aliases: ["สต๊อกสินค้า", "สต๊อก", "stock", "คลัง"] },
   { id: "stockHistory", titleTh: "ประวัติสต๊อก", titleEn: "Stock history", navKey: "stockHistory", permission: "stock:view", aliases: ["ประวัติสต๊อก", "ความเคลื่อนไหวสต๊อก", "ตัดของไปงานไหน", "stock history", "movement"] },
+  { id: "storeDocuments", titleTh: "ใบเบิก-คืนวัสดุ (สโตร์)", titleEn: "Store issues & receipts", navKey: "storeDocuments", permission: "materialRequisition:view", anyPermission: STORE_DOCUMENTS_ANY, aliases: ["ใบเบิก-คืนวัสดุ สโตร์", "ใบเบิกของสโตร์", "ใบรับคืน", "รับเข้าคลัง", "ปรับยอดสินค้า", "store issue", "store receipt"] },
   { id: "productRequest", titleTh: "คำขอเพิ่มสินค้า", titleEn: "Product Requests", navKey: "productRequest", permission: "productRequest:view", aliases: ["คำขอเพิ่มสินค้า", "ขอเพิ่มสินค้า", "product request", "ขอรหัสสินค้า"] },
   { id: "departments", titleTh: "แผนกและทีม", titleEn: "Departments and Teams", navKey: "departments", permission: "departments:manage", aliases: ["แผนกและทีม", "แผนก", "ทีม", "departments", "teams"] },
 ];
@@ -453,6 +464,7 @@ function searchPages(query: string, ctx: AuthContext, limit: number): SearchPage
   const q = query.toLowerCase();
   return SEARCHABLE_PAGES
     .filter((p) => p.permission === null || roleHasPermission(ctx.role, p.permission))
+    .filter((p) => !p.anyPermission || p.anyPermission.some((perm) => roleHasPermission(ctx.role, perm)))
     // Same per-role nav hiding the sidebar applies (2026-08-07) — offering a page here that the
     // role has no sidebar entry for would immediately undo the hiding. Presentation only: this
     // filters *menu shortcuts*, never business results, and the underlying permission is untouched
@@ -527,6 +539,7 @@ const FAST_PATH_GATES: Record<string, { permission: Permission; category: Search
   purchaseRequest: { permission: "purchaseRequest:view", category: "purchaseRequests" },
   purchaseOrder: { permission: "purchaseOrder:view", category: "purchaseOrders" },
   receivingReport: { permission: "receivingReport:view", category: "receivingReports" },
+  storeReceipt: { permission: "materialRequisition:view", category: "storeReceipts" },
   costControl: { permission: "costControl:view", category: "costControls" },
   productionOrder: { permission: "productionOrder:view", category: "productionOrders" },
   arDocument: { permission: "ar:view", category: "arDocuments" },
@@ -537,11 +550,18 @@ const FAST_PATH_GATES: Record<string, { permission: Permission; category: Search
  * can pin it above every group and pre-select it. Never throws: a failure here degrades to "no
  * pinned match" and the ordinary substring groups still answer the query.
  */
+/** เปิดหน้าเอกสารสโตร์ได้ไหม — เงื่อนไขเดียวกับเมนู (ดู `STORE_DOCUMENTS_ANY`) */
+function canOpenStoreDocuments(ctx: AuthContext): boolean {
+  return roleHasPermission(ctx.role, "materialRequisition:view")
+    && STORE_DOCUMENTS_ANY.some((p) => roleHasPermission(ctx.role, p));
+}
+
 async function findExactMatch(query: string, ctx: AuthContext): Promise<ExactMatch | null> {
   const family = detectDocNumberFamily(query);
   if (!family) return null;
   const gate = FAST_PATH_GATES[family];
   if (!gate || !roleHasPermission(ctx.role, gate.permission)) return null;
+  if (family === "storeReceipt" && !canOpenStoreDocuments(ctx)) return null;
   try {
     if (family === "quotation") {
       const quotation = await quotationByNumber(query, ctx);
@@ -589,7 +609,7 @@ export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<v
 
   const [
     quotations, scopeOfWorkResults, deliveryOrders, serviceReports, projects,
-    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, costControls, productionOrders, arDocuments,
+    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, storeReceipts, costControls, productionOrders, arDocuments,
     productRequests, customerResults, productResults, templateResults, userResults, exact,
   ] = await Promise.all([
     runCategory("quotations", wanted, has("quotations:view"), () => searchQuotations(query, ctx, limit)),
@@ -604,6 +624,7 @@ export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<v
     runCategory("purchaseRequests", wanted, has("purchaseRequest:view"), () => searchPurchaseRequests(query, ctx, limit)),
     runCategory("purchaseOrders", wanted, has("purchaseOrder:view"), () => searchPurchaseOrders(query, ctx, limit)),
     runCategory("receivingReports", wanted, has("receivingReport:view"), () => searchReceivingReports(query, ctx, limit)),
+    runCategory("storeReceipts", wanted, canOpenStoreDocuments(ctx), () => searchStoreReceipts(query, ctx, limit)),
     runCategory("costControls", wanted, has("costControl:view"), () => searchCostControls(query, ctx, limit)),
     runCategory("productionOrders", wanted, has("productionOrder:view"), () => searchProductionOrders(query, ctx, limit)),
     runCategory("arDocuments", wanted, has("ar:view"), () => searchArDocuments(query, limit)),
@@ -620,7 +641,7 @@ export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<v
 
   const results: SearchResults = {
     quotations, scopeOfWorks: scopeOfWorkResults, deliveryOrders, serviceReports, projects,
-    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, costControls, productionOrders, arDocuments,
+    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, storeReceipts, costControls, productionOrders, arDocuments,
     productRequests, customers: customerResults, products: productResults,
     templates: templateResults, users: userResults, pages, exact,
   };

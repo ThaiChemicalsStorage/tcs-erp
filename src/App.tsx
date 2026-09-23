@@ -34,6 +34,7 @@ import {
 } from "./lib/notifications";
 import { logAudit } from "./lib/auditLog";
 import { hasTourCompleted, markTourCompleted } from "./lib/tour";
+import { isStoreIssueDocumentId } from "./lib/storeCodes";
 import { NotificationBell } from "./components/NotificationBell";
 import { WhatsNewPanel } from "./components/WhatsNewPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -267,7 +268,9 @@ const navItems: NavItem[] = [
   { key: "receivingReport", icon: PackageCheck, labelKey: "nav.receivingReport", permission: "receivingReport:view" },
   // ใบเบิก-คืนวัสดุของสโตร์ (2026-09-23) — ใบเบิกแยกรหัสจ่าย + ใบรับคืน/รับเข้าคลังแยกรหัสรับ ใช้สิทธิ์ใบเบิกชุดเดิม
   // ต้องมี `stock:adjust` ด้วย (สิทธิ์ของสโตร์) ไม่งั้นทุกคนที่ดูใบเบิกได้จะเห็นเมนูของสโตร์ไปด้วย
-  { key: "storeDocuments", icon: ClipboardList, labelKey: "nav.storeDocuments", permission: "materialRequisition:view", anyPermission: ["stock:adjust"] },
+  { key: "storeDocuments", icon: ClipboardList, labelKey: "nav.storeDocuments", permission: "materialRequisition:view",
+    // สโตร์ที่จ่ายของ หรือหัวหน้าที่อนุมัติ — ผู้อนุมัติต้องเปิดใบจากแจ้งเตือน/ผลค้นหาได้ (ตรงกับ STORE_DOCUMENTS_ANY ใน searchHandler.ts)
+    anyPermission: ["stock:adjust", "materialRequisition:finalize"] },
   // กล่องงานเข้าของสโตร์ (2026-09-09) — ใบขอซื้อที่อนุมัติแล้วและรอสโตร์เช็คว่ามีของในสต๊อกไหม
   // ไม่สร้างสิทธิ์ใหม่ แต่ต้องมีทั้งคู่ (2026-09-10): `stock:adjust` คือสิทธิ์ที่ทำให้ *ทำงานในกล่องนี้ได้จริง*
   // ส่วน `purchaseRequest:view` คือด่านของรายการที่หน้านี้อ่าน — เดิมมีแค่ตัวหลัง ผู้ขอซื้อธรรมดาจึงเห็น
@@ -671,7 +674,10 @@ export default function App() {
   });
   const navigateToMaterialRequisition = (materialRequisitionId: string, ownerDepartment?: "project" | "production" | "general" | "store") => {
     // ใบเบิกของสโตร์เปิดในหน้ารวมเอกสารสโตร์ ไม่ใช่เมนูของฝ่ายโครงการ (2026-09-23)
-    if (ownerDepartment === "store") return navigateToStoreDocument("issue", materialRequisitionId);
+    // แจ้งเตือนไม่ได้พกแผนกมา — ดูจากเลขที่ใบแทน (ใบสโตร์ขึ้นต้นด้วยรหัสจ่าย PD-/OU-/… ไม่ใช่ MR-)
+    if (ownerDepartment === "store" || (!ownerDepartment && isStoreIssueDocumentId(materialRequisitionId))) {
+      return navigateToStoreDocument("issue", materialRequisitionId);
+    }
     guardedNav(() => {
       setMaterialRequisitionDeepLinkId(materialRequisitionId);
       setActiveNav(ownerDepartment === "production" ? "productionRequisition" : "materialRequisition");
@@ -781,9 +787,10 @@ export default function App() {
       case "productRequests": navigateToProductRequest(hit.data.id); break;
       // ใบเบิกของ/ใบขอซื้อ ของฝ่ายผลิตอยู่คนละหน้ากับของฝ่ายโครงการ แม้เป็นเอกสารชนิดเดียวกัน
       case "materialRequisitions": navigateToMaterialRequisition(hit.data.id, hit.data.ownerDepartment); break;
-      case "purchaseRequests": navigateToPurchaseRequest(hit.data.id, hit.data.ownerDepartment); break;
+      case "purchaseRequests": navigateToPurchaseRequest(hit.data.id, hit.data.ownerDepartment === "store" ? "general" : hit.data.ownerDepartment); break;
       case "purchaseOrders": navigateToPurchaseOrder(hit.data.id); break;
       case "receivingReports": navigateToReceivingReport(hit.data.id); break;
+      case "storeReceipts": navigateToStoreDocument("receipt", hit.data.id); break;
       case "costControls": navigateToCostControl(hit.data.id); break;
       case "arDocuments": if (hit.data.docType) navigateToArDocument(hit.data.docType, hit.data.id); break;
       case "customers": navigateToCustomer(hit.data.id); break;
@@ -1167,6 +1174,7 @@ export default function App() {
                 // เอกสารกลุ่มโครงการ/ผลิต (2026-08-27) — ต้องมาก่อน relatedScopeId เพราะแจ้งเตือนพวกนี้
                 // แนบ scope มาด้วยเสมอ (audit ของโมดูลเหล่านี้ผูกกับ scope) ถ้าเช็ค scope ก่อน จะพาไปผิดหน้า
                 else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
+                else if (n.relatedStoreReceiptId) navigateToStoreDocument("receipt", n.relatedStoreReceiptId);
                 else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);
                 else if (n.relatedProductRequestId) navigateToProductRequest(n.relatedProductRequestId);
                 // อีก 4 ใบบนเครื่องอนุมัติร่วม (2026-08-31) — มาพร้อมแจ้งเตือน "รออนุมัติ" ซึ่งเป็น

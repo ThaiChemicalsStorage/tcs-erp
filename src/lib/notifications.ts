@@ -44,6 +44,8 @@ export type NotificationType =
   | "production_order_submitted"
   | "purchase_order_submitted"
   | "cost_control_submitted"
+  /** ใบรับคืน/รับเข้าคลังของสโตร์ส่งขออนุมัติ (2026-09-23) */
+  | "store_receipt_submitted"
   // ── คำขอเพิ่มสินค้า (2026-08-27) ──
   | "product_request_submitted"
   | "product_request_approved"
@@ -79,6 +81,8 @@ export interface Notification {
   relatedProductionOrderId?: string;
   relatedPurchaseOrderId?: string;
   relatedCostControlId?: string;
+  /** ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) — เปิดในหน้า "ใบเบิก-คืนวัสดุ (สโตร์)" */
+  relatedStoreReceiptId?: string;
   createdAt: string;
   read: boolean;
 }
