@@ -5,7 +5,7 @@ import {
   quotesCollection, scopeOfWorksCollection, deliveryOrdersCollection,
   materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection,
   purchaseOrdersCollection, productionOrdersCollection, costControlsCollection,
-  productRequestsCollection,
+  productRequestsCollection, storeReceiptsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
@@ -136,7 +136,22 @@ async function materialRequisitions(): Promise<PendingApprovalItem[]> {
     submittedBy: d.responsibleEmployee ?? "",
     waitingSince: isoOf(d),
     // เอกสารเก่าไม่มีฟิลด์นี้ ถือเป็นของฝ่ายโครงการ — ตรงกับ handler ของหน้ารายการ
-    ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : ("project" as const),
+    ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : d.ownerDepartment === "store" ? ("store" as const) : ("project" as const),
+  }));
+}
+
+/** ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) — อนุมัติด้วยสิทธิ์เดียวกับใบเบิก */
+async function storeReceipts(): Promise<PendingApprovalItem[]> {
+  const col = await storeReceiptsCollection();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  return docs.map((d) => ({
+    kind: "storeReceipt" as const,
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.customerName ?? "",
+    lineage: d.jobCode || d.sourceRequisitionNumber || d.reference || "",
+    submittedBy: d.preparedBy ?? "",
+    waitingSince: isoOf(d),
   }));
 }
 
@@ -237,6 +252,7 @@ const KINDS: { kind: PendingApprovalKind; permission: Permission; run: () => Pro
   { kind: "scopeOfWork", permission: "scopeOfWork:finalize", run: scopeOfWorks, count: countWhere(scopeOfWorksCollection, SHARED_PENDING_FILTER) },
   { kind: "deliveryOrder", permission: "deliveryOrder:finalize", run: deliveryOrders, count: countWhere(deliveryOrdersCollection, SHARED_PENDING_FILTER) },
   { kind: "materialRequisition", permission: "materialRequisition:finalize", run: materialRequisitions, count: countWhere(materialRequisitionsCollection, SHARED_PENDING_FILTER) },
+  { kind: "storeReceipt", permission: "materialRequisition:finalize", run: storeReceipts, count: countWhere(storeReceiptsCollection, SHARED_PENDING_FILTER) },
   { kind: "jobOrder", permission: "jobOrder:finalize", run: jobOrders, count: countWhere(jobOrdersCollection, SHARED_PENDING_FILTER) },
   { kind: "purchaseRequest", permission: "purchaseRequest:finalize", run: purchaseRequests, count: countWhere(purchaseRequestsCollection, SHARED_PENDING_FILTER) },
   { kind: "purchaseOrder", permission: "purchaseOrder:finalize", run: purchaseOrders, count: countWhere(purchaseOrdersCollection, SHARED_PENDING_FILTER) },

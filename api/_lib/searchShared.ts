@@ -1,3 +1,4 @@
+import { STORE_ISSUE_CODES } from "../../src/lib/storeCodes.js";
 /**
  * Shared primitives for Global Search, split out 2026-08-28 when search grew from 7 categories to
  * 16. `searchHandler.ts` (master data, menu pages, orchestration) and `searchDocuments.ts` (the 9
@@ -62,6 +63,8 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   { prefix: "FD-", type: "purchaseRequest" },
   { prefix: "ED-", type: "purchaseRequest" },
   { prefix: "SD-", type: "purchaseRequest" },
+  // ใบเบิกของสโตร์ (2026-09-23) — เลขขึ้นต้นด้วยรหัสการจ่าย 15 ตัว ทั้งหมดอยู่ใน material_requisitions
+  ...STORE_ISSUE_CODES.map((c) => ({ prefix: `${c.code}-`, type: "materialRequisition" as const })),
   { prefix: "PO-", type: "purchaseOrder" },
   { prefix: "CC-", type: "costControl" },
   { prefix: "RR-", type: "receivingReport" },

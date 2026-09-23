@@ -22,6 +22,7 @@ import type { ProductionOrder } from "../../src/lib/productionOrder.js";
 import type { PurchaseOrder } from "../../src/lib/purchaseOrder.js";
 import type { CostControl } from "../../src/lib/costControl.js";
 import type { ReceivingReport } from "../../src/lib/receivingReport.js";
+import type { StoreReceipt } from "../../src/lib/storeReceipt.js";
 import type { ApEntry } from "../../src/lib/apEntries.js";
 import type { VendorApprovalStatus } from "../../src/lib/vendors.js";
 
@@ -978,6 +979,16 @@ export async function costControlsCollection() {
  * ยอด รับแล้ว/ค้างรับ **ไม่ได้เก็บ** คิดจาก `batches` ตอนอ่านเสมอ (ดู `receivingReportTotals()`)
  */
 export type ReceivingReportFields = Omit<ReceivingReport, "id">;
+
+/**
+ * ใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23) — `_id` คือเลขที่ใบที่ขึ้นต้นด้วยรหัสรับ (`JD-202609-0001`)
+ * ดู `src/lib/storeReceipt.ts` สำหรับสามพฤติกรรมตามรหัส และ `api/_lib/storeReceiptHandler.ts` สำหรับการรับเข้าคลัง
+ */
+export type StoreReceiptFields = Omit<StoreReceipt, "id">;
+export async function storeReceiptsCollection() {
+  const db = await getDb();
+  return db.collection<StoreReceiptFields & { _id: string }>("store_receipts");
+}
 export async function receivingReportsCollection() {
   const db = await getDb();
   return db.collection<ReceivingReportFields & { _id: string }>("receiving_reports");

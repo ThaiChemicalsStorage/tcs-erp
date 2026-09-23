@@ -1,6 +1,7 @@
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import { newId } from "./products.js";
 import type { Product } from "./products.js";
+import type { StoreIssueCode } from "./storeCodes.js";
 
 /**
  * Material Requisition & Return (FM-ST-04 Rev.02) — added 2026-08-18 (Stage 2 data layer, Stage 3
@@ -117,7 +118,14 @@ export interface MaterialRequisition {
    * (ยืนยันกับเจ้าของ 2026-08-20). optional เพราะเอกสารที่บันทึกก่อนหน้านั้นไม่มีฟิลด์นี้ — อ่านแล้ว
    * normalize เป็น "project" เสมอ ไม่ได้ทำ migration
    */
-  ownerDepartment?: "project" | "production";
+  ownerDepartment?: "project" | "production" | "store";
+  /**
+   * รหัสการจ่ายของใบเบิกสโตร์ (2026-09-23) — มีเฉพาะ `ownerDepartment: "store"` · เป็นตัวอักษรหน้าเลขที่ใบ
+   * เลือกตอนสร้าง เปลี่ยนไม่ได้ · ดู `src/lib/storeCodes.ts`
+   */
+  issueCode?: StoreIssueCode;
+  /** เลขอ้างอิงของใบสโตร์ — ใบสั่งผลิต / เอกสารขาย / ใบสั่งงาน / เหตุผลการเบิก แล้วแต่กลุ่มรหัส (พิมพ์เอง) */
+  storeReference?: string;
   /** ใบสั่งผลิตต้นทาง — มีค่าเฉพาะเอกสารของฝ่ายผลิต (ฝั่งโครงการใช้ projectId แทน) */
   productionOrderId?: string;
   scopeOfWorkId: string;
@@ -201,7 +209,10 @@ export interface MaterialRequisitionSummary {
   /** จำนวนบรรทัดที่ยังค้างจ่าย (0 ถ้าใบยังไม่อนุมัติ) — หน้าตัดของบอกขนาดงานต่อใบด้วยค่านี้ */
   outstandingLineCount?: number;
   /** แผนกเจ้าของใบ — หน้าตัดของรวมสองฝ่ายไว้ด้วยกัน จึงต้องบอกได้ว่าแถวนี้ของใคร */
-  ownerDepartment?: "project" | "production";
+  ownerDepartment?: "project" | "production" | "store";
+  /** รหัสการจ่ายของใบสโตร์ (2026-09-23) */
+  issueCode?: StoreIssueCode;
+  storeReference?: string;
   /** "ชื่อลูกค้า" — บริบทของงานในหน้าตัดของ ว่างได้ */
   customerName?: string;
   projectId: string;
@@ -326,7 +337,7 @@ export async function fetchMaterialRequisitionsByProject(projectId: string): Pro
 }
 // ดึงรายการใบเบิกและใบคืนวัสดุทั้งหมดในระบบ สำหรับหน้ารายการแบบแยกต่างหาก (ไม่ผูกกับโครงการใดโครงการหนึ่ง)
 // Fetches every Material Requisition company-wide, for the standalone management page's list
-export async function fetchAllMaterialRequisitions(ownerDepartment: "project" | "production" | "all" = "project"): Promise<MaterialRequisitionSummary[]> {
+export async function fetchAllMaterialRequisitions(ownerDepartment: "project" | "production" | "store" | "all" = "project"): Promise<MaterialRequisitionSummary[]> {
   const { materialRequisitions } = await apiFetch<{ materialRequisitions: MaterialRequisitionSummary[] }>(`/material-requisitions?ownerDepartment=${ownerDepartment}`);
   return materialRequisitions;
 }
@@ -353,6 +364,14 @@ export async function fetchStoreIssueQueue(): Promise<MaterialRequisitionSummary
 export async function createBlankMaterialRequisition(ownerDepartment: "project" | "production" = "project"): Promise<MaterialRequisition> {
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>("/material-requisitions", {
     method: "POST", body: JSON.stringify({ ownerDepartment }),
+  });
+  return materialRequisition;
+}
+
+/** ใบเบิกของสโตร์ (2026-09-23) — ใบเปล่าที่เลขขึ้นต้นด้วยรหัสการจ่าย */
+export async function createStoreMaterialRequisition(issueCode: StoreIssueCode): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>("/material-requisitions", {
+    method: "POST", body: JSON.stringify({ ownerDepartment: "store", issueCode }),
   });
   return materialRequisition;
 }

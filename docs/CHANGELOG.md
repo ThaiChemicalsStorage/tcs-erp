@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-09-23e (absolute latest) — ใบเบิกของสโตร์แยกรหัสจ่าย + ใบรับคืน/รับเข้าคลังแยกรหัสรับ
+
+รายการงานจากเจ้าของ 2026-09-23 ข้อ 6: *"สร้างหน้าใบรับและคืนสินค้าที่ออกแบบใหม่มาด้วย ตรงใบรับคืนสินค้าทำให้เป็น dropdown ก็ได้"*
+ทำตามแบบร่างที่ออกแบบไว้ในวันเดียวกัน (ตัวเลือกที่แนะนำทุกข้อ — เจ้าของสั่ง "ไม่ต้องถาม")
+
+- `src/lib/storeCodes.ts` — รหัสจ่าย 15 ตัว (OU, FOC / PD, P1–P3, PN / PP, PB, PU / PM, PX, PT, PA, PW) และรหัสรับ 15 ตัว
+  (คืน: JD, J1–J3, JP, JB, JS, JC, JT คู่กับรหัสจ่าย · รับเข้า: FG, FP, GC, JN · ปรับยอด: JU, TK) · ตัวนับ `store_issue_{code}` / `store_receipt_{code}`
+- **ใบเบิกสโตร์** ใช้ `material_requisitions` เดิม (`ownerDepartment: "store"`, `issueCode`, `storeReference`) — เลขที่ `{รหัส}-YYYYMM-NNNN`,
+  การ์ด/route คืนของในใบถูกปิดสำหรับใบสโตร์ (คืนผ่านใบรับคืนทางเดียว กันนับซ้ำ) · ค้นใน Global Search ได้ด้วยคำนำหน้ารหัส
+- **ใบรับคืน** คอลเลกชันใหม่ `store_receipts` + `api/_lib/storeReceiptHandler.ts` (`/api/store-receipts/*`) — Draft → อนุมัติ →
+  `/post` (`stock:adjust`, ครั้งเดียว): คืน = `return` ที่ต้นทุนแถวของใบเบิก + เพิ่ม `returnQty` ของใบเบิก (ห้ามเกินที่จ่าย),
+  รับเข้า = `receive` (GC มูลค่าแถว 0), ปรับยอด = ส่วนต่างเทียบยอดจริง ณ ตอนลง · สิทธิ์ใช้ `materialRequisition:*` เดิม
+- หน้า `src/pages/storeDocuments/` (รายการรวม, ดรอปดาวน์เลือกรหัสแบ่งกลุ่ม, ตัวแก้ใบรับคืน, ใบพิมพ์) · เมนู `storeDocuments` ·
+  กล่องเอกสารรออนุมัติมีชนิด `storeReceipt` · ประวัติสต๊อกลิงก์กลับใบรับคืน
+- เทสต์: `tests/api/storeDocuments.test.ts` (10) · รวม 898 ผ่าน
+- **ยังไม่ได้ทำ:** ใบรับคืนใน Global Search, แจ้งเตือนตอนส่งขออนุมัติ, ฟอร์มกระดาษจริง, กดทดสอบบนเบราว์เซอร์ (ดู TODO)
+- เอกสาร: `DATABASE.md`, `API.md`, `RBAC.md`, `FOLDER_MAP.md`, `MODULE_STATUS.md`, `MODULES/Store.md`, `TODO.md`, What's New
+
+---
+
 ## 2026-09-23d (absolute latest) — นำเข้ายอดสต๊อกจาก Excel
 
 รายการงานจากเจ้าของ 2026-09-23 ข้อ 4: *"สต๊อกสินค้าทำให้สามารถรับข้อมูล stock สินค้าเป็น exel"*

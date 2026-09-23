@@ -5,7 +5,7 @@ import { HttpError } from "./http.js";
 import { requirePermission } from "./auth.js";
 import {
   stockMovementsCollection, materialRequisitionsCollection, receivingReportsCollection, purchaseRequestsCollection,
-  usersCollection, withStringId,
+  storeReceiptsCollection, usersCollection, withStringId,
   type StockMovementFields, type StockMovementKind, type StockMovementSourceType,
 } from "./collections.js";
 import { escapeRegExp } from "./searchShared.js";
@@ -54,9 +54,9 @@ function str(v: unknown): string {
 
 /** เอกสารต้นทางที่ช่องงาน/ผู้ขาย/เลขที่ตรงกับคำค้น — คืน sourceId ไปรวมกับเงื่อนไขอื่นด้วย $or */
 async function sourceIdsMatching(rx: RegExp): Promise<string[]> {
-  const [mrs, rrs, prs] = await Promise.all([
+  const [mrs, rrs, prs, srs] = await Promise.all([
     materialRequisitionsCollection().then((c) => c.find(
-      { $or: [{ jobCode: rx }, { jobOrderCode: rx }, { productionOrderId: rx }, { customerName: rx }, { documentNumber: rx }] },
+      { $or: [{ jobCode: rx }, { jobOrderCode: rx }, { productionOrderId: rx }, { customerName: rx }, { documentNumber: rx }, { storeReference: rx }] },
       { projection: { _id: 1 } },
     ).limit(MAX_SOURCE_MATCHES).toArray()),
     receivingReportsCollection().then((c) => c.find(
@@ -64,8 +64,12 @@ async function sourceIdsMatching(rx: RegExp): Promise<string[]> {
       { projection: { _id: 1 } },
     ).limit(MAX_SOURCE_MATCHES).toArray()),
     purchaseRequestsCollection().then((c) => c.find({ jobCode: rx }, { projection: { _id: 1 } }).limit(MAX_SOURCE_MATCHES).toArray()),
+    storeReceiptsCollection().then((c) => c.find(
+      { $or: [{ jobCode: rx }, { reference: rx }, { sourceRequisitionNumber: rx }, { customerName: rx }, { documentNumber: rx }] },
+      { projection: { _id: 1 } },
+    ).limit(MAX_SOURCE_MATCHES).toArray()),
   ]);
-  return [...mrs, ...rrs, ...prs].map((d) => String(d._id));
+  return [...mrs, ...rrs, ...prs, ...srs].map((d) => String(d._id));
 }
 
 /** เติม `link` + ชื่อผู้ทำรายการ ให้แถวในหน้านี้เท่านั้น — อ่านเอกสารต้นทางชนิดละหนึ่ง query */
@@ -74,12 +78,14 @@ async function enrich(rows: (StockMovementFields & { _id: ObjectId })[]): Promis
   const mrIds = idsOf("material_requisition");
   const rrIds = idsOf("receiving_report");
   const prIds = idsOf("purchase_request");
+  const srIds = idsOf("store_receipt");
   const userIds = [...new Set(rows.map((r) => r.createdBy).filter((id) => ObjectId.isValid(id)))];
 
-  const [mrs, rrs, prs, users] = await Promise.all([
+  const [mrs, rrs, prs, srs, users] = await Promise.all([
     mrIds.length ? materialRequisitionsCollection().then((c) => c.find({ _id: { $in: mrIds } }).toArray()) : [],
     rrIds.length ? receivingReportsCollection().then((c) => c.find({ _id: { $in: rrIds } }).toArray()) : [],
     prIds.length ? purchaseRequestsCollection().then((c) => c.find({ _id: { $in: prIds } }).toArray()) : [],
+    srIds.length ? storeReceiptsCollection().then((c) => c.find({ _id: { $in: srIds } }).toArray()) : [],
     userIds.length ? usersCollection().then((c) => c.find({ _id: { $in: userIds.map((id) => new ObjectId(id)) } }, { projection: { fullName: 1 } }).toArray()) : [],
   ]);
 
@@ -93,6 +99,7 @@ async function enrich(rows: (StockMovementFields & { _id: ObjectId })[]): Promis
       customerName: str(doc.customerName) || undefined,
       ownerDepartment: str(doc.ownerDepartment) || "project",
       code: str(doc.issueCode) || undefined,
+      reference: str(doc.storeReference) || undefined,
     });
   }
   for (const r of rrs) {
@@ -104,6 +111,12 @@ async function enrich(rows: (StockMovementFields & { _id: ObjectId })[]): Promis
     });
   }
   for (const p of prs) links.set(String(p._id), { jobCode: p.jobCode || undefined, code: p.requestCode ?? String(p._id).split("-")[0] });
+  for (const s of srs) {
+    links.set(String(s._id), {
+      jobCode: s.jobCode || undefined, customerName: s.customerName || undefined, code: s.receiptCode,
+      reference: s.sourceRequisitionNumber || s.reference || undefined,
+    });
+  }
   const nameById = new Map(users.map((u) => [String(u._id), (u as unknown as { fullName?: string }).fullName ?? ""]));
 
   return rows.map((r) => ({

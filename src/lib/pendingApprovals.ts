@@ -14,6 +14,8 @@ export type PendingApprovalKind =
   | "scopeOfWork"
   | "deliveryOrder"
   | "materialRequisition"
+  /** ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) */
+  | "storeReceipt"
   | "jobOrder"
   | "purchaseRequest"
   | "purchaseOrder"
@@ -38,7 +40,7 @@ export interface PendingApprovalItem {
    */
   waitingSince: string;
   /** ใบเบิก/ใบขอซื้อเท่านั้น — บอกว่าให้เปิดหน้าไหน */
-  ownerDepartment?: "project" | "production" | "general";
+  ownerDepartment?: "project" | "production" | "general" | "store";
 }
 
 export async function fetchPendingApprovals(): Promise<PendingApprovalItem[]> {

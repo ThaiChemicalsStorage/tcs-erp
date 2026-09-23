@@ -112,6 +112,8 @@ export interface StockMovementLink {
   code?: string;
   purchaseOrderNumber?: string;
   vendorName?: string;
+  /** เลขอ้างอิงของใบสโตร์ (ใบสั่งผลิต/เอกสารขาย/ใบเบิกต้นทางของใบคืน) — 2026-09-23 */
+  reference?: string;
 }
 
 export interface StockHistoryRow extends StockMovement {

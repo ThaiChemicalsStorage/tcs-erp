@@ -725,6 +725,7 @@ the same `runCategory` discipline Global Search uses.
 | `GET /api/material-requisitions?issueStage=pending` | **Store's issue queue (2026-09-10).** Narrows to `status: "Final"` documents that still have at least one line with outstanding quantity, oldest first (a work queue, so a just-part-issued document falls to the back). Requires **`stock:adjust`** on top of `materialRequisition:view` (`403` without it) and, uniquely among the list modes, **does not filter by `createdBy`** — the permission to issue goods is stronger than "see other people's documents", and ownership filtering would leave Store looking at an empty page. Rows carry `ownerDepartment`, `outstandingLineCount` and `customerName`. |
 | `POST /api/{material-requisitions,purchase-requests}` | Now accepts **either** `{ projectId, itemId }` (Project-owned; still performs the atomic ProjectItem link) **or** `{ productionOrderId }` (Production-owned; no item to link, so that step is skipped entirely). |
 | `POST /api/material-requisitions` with an **empty body** | **Blank requisition (2026-09-10).** No source document at all — for stock withdrawn against maintenance or internal work that belongs to no job. Returns a Draft with empty `projectId`/`scopeOfWorkId`/`jobCode`, its own `MR-YYYYMM-NNNN` number, the caller as `preparedBy`, and the caller's department/team as the default charge; no `ProjectItem` is touched. `ownerDepartment` is read from the body (`"production"`, else `"project"`) so the new document lands in the menu it was created from — unlike Purchase Request's blank path, which uses a third `"general"` department. **`project:view` is not required on this path** (it still is for the project-item path). Sending a `projectId` without `itemIds` is still a `400`. |
+| `POST /api/material-requisitions` `{ ownerDepartment: "store", issueCode }` | **Store requisition (2026-09-23).** A blank requisition whose number is prefixed by `issueCode` (15 codes, `src/lib/storeCodes.ts`; missing/unknown → 400), `ownerDepartment: "store"`. `GET ?ownerDepartment=store` lists them; the Store issue queue (`=all`) includes them. PATCH additionally accepts `jobCode` and `storeReference` **for store documents only**. The in-document `POST /:id/return` is refused (400) for store documents — returns go through `/api/store-receipts`. |
 
 ## Purchasing (added 2026-08-28)
 
@@ -1009,3 +1010,20 @@ body รับ `newCategoryName` เพิ่มอีกหนึ่งช่�
 ถ้าไม่ล้าง ฉบับแก้ไขจะเกิดมาพร้อม `"approved"` แล้วถูกล็อกทันทีที่หัวหน้าอนุมัติ ทั้งที่จัดซื้อยังไม่เคยเห็น
 (มีเทสต์ดักไว้เช่นกัน)
 
+
+
+## Store receipts (`api/_lib/storeReceiptHandler.ts`, mounted at `/api/store-receipts` via `api/handlers/quotes.ts` — added 2026-09-23)
+
+ใบรับคืน / รับเข้าคลังของสโตร์. Permissions reuse the requisition set (`materialRequisition:*`) — no new permission; posting needs `stock:adjust`.
+
+| Route | Permission | Behaviour |
+|---|---|---|
+| `GET /api/store-receipts` | `materialRequisition:view` | Summaries, ownership-scoped by `materialRequisition:viewAll`. |
+| `POST /api/store-receipts` | `materialRequisition:create` | Body `{ receiptCode }` (15 codes; 400 otherwise) → Draft numbered `{code}-YYYYMM-NNNN`. |
+| `GET /api/store-receipts/:id` | `materialRequisition:view` | `{ storeReceipt, stockByProduct, sourceLines }` — `sourceLines` = the paired requisition's lines with issued/returned (return codes). |
+| `PATCH /api/store-receipts/:id` | `materialRequisition:edit` (owner or `:viewAll`) | Draft only (auto-save → 409 otherwise, no audit entry). Header fields, signatories, `lines`. **`sourceRequisitionId`** (return codes): must be a Final store requisition with the *paired* issue code (400 otherwise); copies job/customer/charge and **replaces the lines** with every still-returnable source line. Return lines are capped at issued − returned; receive/adjust lines must be catalog products (code/name/unit read from the register). |
+| `DELETE /api/store-receipts/:id` | `materialRequisition:delete` | Soft delete; 400 once posted. |
+| `GET /api/store-receipts/source-requisitions?receiptCode=` | `materialRequisition:view` | Final store requisitions with the paired code and something still out — not ownership-filtered (Store takes back goods anyone drew). |
+| `POST /api/store-receipts/:id/submit-approval` · `/approve` · `/reject` · `/withdraw-approval` | shared approval engine, approve = `materialRequisition:finalize` | `beforeApprove` refuses a document with no usable line, or an adjustment without a reason. |
+| `POST /api/store-receipts/:id/post` | `stock:adjust` | Final + not yet posted. Validates every line first (return caps re-checked against the live requisition). return → `return` movements at last-purchase cost + source `returnQty` += qty · receive → `receive` with `unitCost` (GC: row value 0, average untouched) · adjust → `adjust` by (target − live balance), unchanged skipped. `sourceType: "store_receipt"`. Once only. |
+| `POST /api/store-receipts/:id/print` | `materialRequisition:print` | Audit entry only. |

@@ -1091,3 +1091,11 @@ Three things worth knowing before touching it:
    document-number fast path). Note the guard inside it — with `:viewAll` the ownership clause is
    `{}` with no `$or`, and merging into that would *narrow* an all-seeing user down to their own
    Scopes.
+
+
+## Store requisitions & returns (2026-09-23) — no new permission
+
+- The new menu **ใบเบิก-คืนวัสดุ (สโตร์)** (`storeDocuments`) needs `materialRequisition:view` **and** `stock:adjust` — the second one keeps it off the sidebar of everyone who merely reads requisitions.
+- Store requisitions are ordinary `material_requisitions` rows → the existing `materialRequisition:*` checks apply unchanged.
+- Store receipts (`store_receipts`) reuse the same set: view/create/edit/finalize/print/delete = `materialRequisition:*`; **posting to stock = `stock:adjust`**. They appear in the Pending Approvals inbox for `materialRequisition:finalize` holders (kind `storeReceipt`).
+- Nothing to tick by hand — any role that can already work requisitions and issue stock can use both documents.

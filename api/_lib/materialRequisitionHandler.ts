@@ -24,6 +24,7 @@ import {
 } from "./stockHandler.js";
 import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch } from "../../src/lib/materialRequisition.js";
+import { isStoreIssueCode, storeIssueCounterKey, type StoreIssueCode } from "../../src/lib/storeCodes.js";
 
 /**
  * Material Requisition API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts`
@@ -86,6 +87,11 @@ const MATERIAL_CATEGORIES: readonly MaterialRequisitionCategory[] = ["chemical",
  * (see docs/DATABASE.md "Project module" for why). */
 async function nextMaterialRequisitionId(counters: Collection<CounterFields>): Promise<string> {
   return nextMonthlyDocumentNumber(counters, "MR", "material_requisition");
+}
+
+/** ใบเบิกของสโตร์ (2026-09-23) — เลขขึ้นต้นด้วยรหัสการจ่ายและนับแยกต่อรหัส ดู `src/lib/storeCodes.ts` */
+async function nextStoreRequisitionId(counters: Collection<CounterFields>, code: StoreIssueCode): Promise<string> {
+  return nextMonthlyDocumentNumber(counters, code, storeIssueCounterKey(code));
 }
 
 /**
@@ -320,6 +326,7 @@ function toClient(doc: MaterialRequisitionFields & { _id: string }) {
     chargeDepartmentId: doc.chargeDepartmentId ?? "", chargeDepartmentName: doc.chargeDepartmentName ?? "",
     chargeTeamId: doc.chargeTeamId ?? "", chargeTeamName: doc.chargeTeamName ?? "",
     chargeWorkTypeCode: doc.chargeWorkTypeCode ?? "", chargeWorkTypeName: doc.chargeWorkTypeName ?? "",
+    storeReference: doc.storeReference ?? "",
   }));
 }
 function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRequisitionSummary {
@@ -335,6 +342,8 @@ function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRe
     // เอกสารก่อน 2026-08-20 ไม่มีฟิลด์นี้ — normalize ตอนอ่าน ไม่ได้ทำ migration
     productionOrderId: full.productionOrderId ?? "",
     ownerDepartment: full.ownerDepartment ?? "project",
+    issueCode: full.issueCode,
+    storeReference: full.storeReference ?? "",
     customerName: full.customerName ?? "",
     status: full.status, updatedAt: full.updatedAt,
   };
@@ -383,9 +392,10 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
   // 2026-09-10: `"all"` = เห็นทั้งสองฝ่ายรวมกัน สำหรับหน้าตัดของของสโตร์ (และคิดแบบเดียวกับ
   // `ownerDepartment=all` ของใบขอซื้อ ที่กล่องงานเข้าฝ่ายจัดซื้อใช้มาตั้งแต่ 2026-08-28)
   const q = req.query.ownerDepartment;
-  const ownerDepartment = q === "production" || q === "all" ? q : "project";
+  const ownerDepartment = q === "production" || q === "store" || q === "all" ? q : "project";
   const departmentClause: Filter<MaterialRequisitionFields & { _id: string }> =
     ownerDepartment === "production" ? { ownerDepartment: "production" }
+    : ownerDepartment === "store" ? { ownerDepartment: "store" }
     : ownerDepartment === "all" ? {}
     : { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
   // เวลาระบุ projectId คือเช็คของโครงการนั้นโดยตรง ไม่ต้องกรองแผนกซ้ำ
@@ -445,6 +455,14 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
    */
   const standalone = !fromProduction && !projectId && itemIds.length === 0;
   if (!fromProduction && !standalone && !projectId) throw new HttpError(400, "กรุณาระบุโครงการ หรือใบสั่งผลิต");
+  /**
+   * **ใบเบิกของสโตร์ (2026-09-23)** — ใบเปล่าชนิดพิเศษ: เลขขึ้นต้นด้วยรหัสการจ่าย (PD / PP / OU …) ที่ต้องระบุตอน
+   * สร้างเสมอ และอยู่ในแผนก `"store"` ของตัวเอง ไม่ปนกับใบของฝ่ายโครงการหรือผลิต · อย่างอื่นเหมือนใบเบิกทุกประการ
+   */
+  const storeIssueCode = standalone && body.ownerDepartment === "store" ? body.issueCode : undefined;
+  if (standalone && body.ownerDepartment === "store" && !isStoreIssueCode(storeIssueCode)) {
+    throw new HttpError(400, "กรุณาเลือกรหัสการจ่ายของใบเบิกสโตร์");
+  }
   // สิทธิ์ project:view จำเป็นเฉพาะทางที่อ่านโครงการจริง ๆ — ถ้าบังคับกับใบเปล่าด้วย ฝ่ายที่ไม่มีสิทธิ์
   // ดูโครงการจะเปิดใบเปล่าของตัวเองไม่ได้เลย ซึ่งคือสิ่งที่รอบนี้ตั้งใจแก้ (ด่านของทางอื่นไม่เปลี่ยน)
   if (!standalone && !roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
@@ -512,7 +530,9 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   const materialRequisitions = await materialRequisitionsCollection();
   await ensureMaterialRequisitionNumberIndex(materialRequisitions);
   const counters = await countersCollection();
-  const id = await nextMaterialRequisitionId(counters);
+  const id = isStoreIssueCode(storeIssueCode)
+    ? await nextStoreRequisitionId(counters, storeIssueCode)
+    : await nextMaterialRequisitionId(counters);
   const documentNumber = fromProduction
     ? await nextProductionFormNumber(counters, productionOrderId, productionOrderNumber)
     : id;
@@ -524,7 +544,9 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
     customerName: source.customerName,
     // ใบเปล่ารับแผนกมาจากเมนูที่กดสร้าง (ไม่ส่งมา = โครงการ) — ไม่งั้นกดจากเมนูผลิตแล้วใบไปโผล่เมนูโครงการ
-    ownerDepartment: fromProduction || (standalone && body.ownerDepartment === "production") ? "production" : "project",
+    ownerDepartment: isStoreIssueCode(storeIssueCode) ? "store"
+      : fromProduction || (standalone && body.ownerDepartment === "production") ? "production" : "project",
+    ...(isStoreIssueCode(storeIssueCode) ? { issueCode: storeIssueCode, storeReference: "" } : {}),
     revisionNote: "",
     productionOrderId: fromProduction ? productionOrderId : "",
     jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
@@ -653,6 +675,12 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   }
   Object.assign(update, await resolveChargeFromBody(body));
   for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
+  // ใบสโตร์ไม่มีโครงการ/ใบสั่งผลิตให้สืบรหัสงาน จึงให้พิมพ์รหัสงานและเลขอ้างอิงเองได้ — ใบของฝ่ายอื่นรหัสงาน
+  // เป็น snapshot ของโครงการ แก้ไม่ได้เหมือนเดิม (ช่องนี้ถูกค้นในหน้าประวัติสต๊อก "ตัดไปงานไหน")
+  if (doc.ownerDepartment === "store") {
+    if ("jobCode" in body) update.jobCode = sanitizeShortText(body.jobCode, "รหัสงาน");
+    if ("storeReference" in body) update.storeReference = sanitizeShortText(body.storeReference, "เลขอ้างอิง");
+  }
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
 
   update.updatedAt = nowIso();
@@ -879,6 +907,8 @@ async function handleReturn(req: ApiRequest, res: ApiResponse, id: string) {
   const doc = await loadOrThrow(id);
   if (!canEdit(ctx, doc) && !roleHasPermission(ctx.role, "stock:adjust")) throw new HttpError(403, "Forbidden");
   assertFinalForStock(doc, "บันทึกการคืนของ");
+  // ใบเบิกของสโตร์คืนของผ่านใบรับคืน (รหัสคู่ JD/JP/…) เท่านั้น — ไม่งั้นมีสองทางคืนของและยอดคืนนับซ้ำ
+  if (doc.ownerDepartment === "store") throw new HttpError(400, "ใบเบิกของสโตร์คืนของผ่านใบรับคืนเท่านั้น");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const returns = Array.isArray(body.lines) ? (body.lines as Record<string, unknown>[]) : [];

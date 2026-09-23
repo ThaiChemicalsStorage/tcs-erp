@@ -10,6 +10,7 @@ export const PENDING_KIND_LABEL_KEY: Record<PendingApprovalKind, TranslationKey>
   scopeOfWork: "nav.scopeOfWork",
   deliveryOrder: "nav.deliveryOrder",
   materialRequisition: "nav.materialRequisition",
+  storeReceipt: "storeReceipt.kindLabel",
   jobOrder: "nav.jobOrder",
   purchaseRequest: "nav.purchaseRequest",
   purchaseOrder: "nav.purchaseOrder",

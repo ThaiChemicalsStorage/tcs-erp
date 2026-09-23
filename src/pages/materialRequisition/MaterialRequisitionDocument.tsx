@@ -36,6 +36,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { storeIssueCodeInfo } from "../../lib/storeCodes";
 
 /**
  * payload ที่ปุ่ม "บันทึกฉบับร่าง" ส่ง — เบิกครั้งที่ 1/2 และคืนของ**ไม่อยู่ในนี้** ตั้งแต่ 2026-09-03
@@ -44,6 +45,8 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
  */
 function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields {
   return {
+    // ใบเบิกของสโตร์ (2026-09-23) พิมพ์รหัสงานและเลขอ้างอิงเองได้ — ใบของฝ่ายอื่นไม่ส่งสองช่องนี้เลย
+    ...(m.ownerDepartment === "store" ? { jobCode: m.jobCode, storeReference: m.storeReference ?? "" } : {}),
     lines: m.lines.map((l) => ({ ...l, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null })),
     revisionNote: m.revisionNote,
     documentNumber: m.documentNumber ?? "",
@@ -386,6 +389,13 @@ export function MaterialRequisitionDocument({
 
   const isDraftStatus = doc.status === "Draft";
   const isFinal = doc.status === "Final";
+  /** ใบเบิกของสโตร์ (2026-09-23) — มีรหัสการจ่าย, พิมพ์รหัสงาน/เลขอ้างอิงเอง และคืนของผ่านใบรับคืนแทนการ์ดคืนของ */
+  const isStoreDoc = doc.ownerDepartment === "store";
+  const storeGroup = isStoreDoc && doc.issueCode ? storeIssueCodeInfo(doc.issueCode).group : null;
+  const storeReferenceLabel = storeGroup === "production" ? t("storeDocs.field.productionOrder")
+    : storeGroup === "sale" ? t("storeDocs.field.salesDocument")
+    : storeGroup === "project" ? t("storeDocs.field.jobOrder")
+    : t("storeDocs.field.reason");
   const editable = canEdit && isDraftStatus;
   /** สโตร์จ่ายของได้เฉพาะใบที่อนุมัติแล้ว */
   const canIssue = canIssueStock && isFinal;
@@ -673,7 +683,12 @@ export function MaterialRequisitionDocument({
         )}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold">{t("materialRequisitionDoc.title")}</h1>
+            <h1 className="text-[#c9a84c] text-xl font-bold">{isStoreDoc ? t("storeDocs.issueTitle") : t("materialRequisitionDoc.title")}</h1>
+            {isStoreDoc && doc.issueCode && (
+              <p className="text-[#a8bed8] text-xs mt-1">
+                {t("storeDocs.issueCodeLabel")} <span className="font-mono font-semibold text-[#c9a84c]">{doc.issueCode}</span> · {t(storeIssueCodeInfo(doc.issueCode).nameKey)}
+              </p>
+            )}
             {/* สายที่มาของใบนี้ทั้งเส้น: มาจากใบสั่งผลิตใบไหน และใบสั่งผลิตนั้นมาจากงาน PQ ตัวไหน
                 (เจ้าของขอ 2026-09-02) — เลขใบสั่งผลิตขึ้นเฉพาะใบของฝ่ายผลิต ฝั่งโครงการไม่มีต้นทางนี้ */}
             <p className="text-[#a8bed8] text-xs mt-1">
@@ -714,6 +729,22 @@ export function MaterialRequisitionDocument({
                 onChange={(e) => setDraft({ ...draft, productionStartDate: e.target.value })}
                 className={`${inputCls} font-mono`} />
             </div>
+            {isStoreDoc && (
+              <>
+                <div>
+                  <label htmlFor="mr-store-jobCode" className="text-xs text-muted-foreground block mb-1">{t("storeDocs.field.jobCode")}</label>
+                  <input id="mr-store-jobCode" disabled={!editable} value={draft.jobCode}
+                    onChange={(e) => setDraft({ ...draft, jobCode: e.target.value })}
+                    className={`${inputCls} font-mono`} />
+                </div>
+                <div>
+                  <label htmlFor="mr-store-reference" className="text-xs text-muted-foreground block mb-1">{storeReferenceLabel}</label>
+                  <input id="mr-store-reference" disabled={!editable} value={draft.storeReference ?? ""}
+                    onChange={(e) => setDraft({ ...draft, storeReference: e.target.value })}
+                    className={inputCls} />
+                </div>
+              </>
+            )}
             {/* ตัดของให้แผนก/ทีม/ประเภทงาน — ตั้งได้ตอนร่าง สโตร์แก้ได้อีกครั้งตอนจ่ายของ (การ์ดด้านล่าง) */}
             {renderChargeSelectors(!editable, "mr")}
           </div>
@@ -962,6 +993,11 @@ export function MaterialRequisitionDocument({
           </div>
         )}
 
+        {isStoreDoc ? (
+          <div className="flex items-start gap-2 rounded-xl border border-[#c9a84c]/30 bg-[#c9a84c]/5 px-4 py-3 text-sm text-[#866d28]">
+            <Undo2 size={15} className="mt-0.5 flex-shrink-0" /> {t("storeDocs.returnViaReceipt")}
+          </div>
+        ) : (
         <div data-tour="mrdoc-returnCard" className="bg-card border border-[#c9a84c]/30 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Undo2 size={15} className="text-[#c9a84c]" />
@@ -988,6 +1024,7 @@ export function MaterialRequisitionDocument({
             </button>
           )}
         </div>
+        )}
 
         <div className="bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisitionDoc.signatoriesTitle")}</h2>

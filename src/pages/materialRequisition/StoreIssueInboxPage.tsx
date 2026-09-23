@@ -40,7 +40,7 @@ export function StoreIssueInboxPage({
   /** ชื่อผู้ใช้ปัจจุบัน — เติมให้ช่อง "ผู้จ่ายของ" ไว้ก่อน แก้ได้ (เซิร์ฟเวอร์ก็ fallback ตัวเดียวกัน) */
   currentUserName: string;
   /** เปิดใบเบิกเต็มใบ — ไปที่เมนูของฝ่ายเจ้าของใบ ไม่ใช่ฝ่ายที่ผู้ใช้เปิดค้างไว้ */
-  onOpenDocument?: (id: string, ownerDepartment: "project" | "production") => void;
+  onOpenDocument?: (id: string, ownerDepartment: "project" | "production" | "store") => void;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -121,7 +121,7 @@ export function StoreIssueInboxPage({
   };
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const departmentLabel = (dept: string) => (dept === "production" ? t("storeIssue.dept.production") : t("storeIssue.dept.project"));
+  const departmentLabel = (dept: string) => (dept === "production" ? t("storeIssue.dept.production") : dept === "store" ? t("storeIssue.dept.store") : t("storeIssue.dept.project"));
   const rows = queue
     .map((m) => ({ ...m, documentNumber: m.documentNumber || m.id, ownerDepartment: m.ownerDepartment ?? "project" }))
     .filter((m) => filterDept === FILTER_ALL || m.ownerDepartment === filterDept)
@@ -207,7 +207,7 @@ export function StoreIssueInboxPage({
           )}
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "project", "production"] as const).map((d) => (
+          {([FILTER_ALL, "project", "production", "store"] as const).map((d) => (
             <button key={d} onClick={() => setFilterDept(d)}
               className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterDept === d ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
               {d === FILTER_ALL ? t("quotation.filterAll") : departmentLabel(d)}
