@@ -119,8 +119,10 @@ describe("ใบรับคืน / รับเข้าคลัง", () => {
     expect(jdId).toMatch(/^JD-\d{6}-0001$/);
     const candidates = await api("GET", "/api/store-receipts/source-requisitions?receiptCode=JD");
     expect(candidates.body.requisitions.map((r: { id: string }) => r.id)).toEqual([issueId]);
-    const wrongPair = await api("POST", "/api/store-receipts", { receiptCode: "JP" });
-    const res = await api("PATCH", `/api/store-receipts/${wrongPair.body.storeReceipt.id}`, { sourceRequisitionId: issueId });
+    // ใบร่างยังเป็นต้นทางของใบคืนไม่ได้ (ตั้งแต่ 2026-09-23 ไม่จำกัดรหัสคู่แล้ว แต่ต้องอนุมัติแล้ว)
+    const draftMr = await api("POST", "/api/material-requisitions", { ownerDepartment: "store", issueCode: "PP" });
+    const other = await api("POST", "/api/store-receipts", { receiptCode: "JP" });
+    const res = await api("PATCH", `/api/store-receipts/${other.body.storeReceipt.id}`, { sourceRequisitionId: draftMr.body.materialRequisition.id });
     expect(res.status).toBe(400);
   });
 
@@ -226,5 +228,92 @@ describe("ใบรับคืน / รับเข้าคลัง", () => {
     expect((await api("POST", `/api/store-receipts/${id}/submit-approval`)).status).toBe(200);
     const inbox = await api("GET", "/api/pending-approvals");
     expect(inbox.body.items.some((it: { kind: string; id: string }) => it.kind === "storeReceipt" && it.id === id)).toBe(true);
+  });
+});
+
+/**
+ * สโตร์จ่ายของ/รับคืนแทนแผนก (2026-09-23) — เจ้าของ: *"อยากให้มันขึ้นเลขใบเบิกของแผนกอื่นมาให้หมด … สโตร์ก็จะมาจ่ายของ
+ * คืนของในหน้านี้แทน แผนกอื่นไม่สามารถคืนของเองได้"* · ใบจ่ายอ้างใบเบิกแผนก → จ่ายแล้วยอดของแผนกลดตาม · ใบคืนอ้างใบเบิกแผนก
+ * · เลขที่ทั้งสองใบตามเลขใบเบิก
+ */
+describe("ใบจ่าย/ใบคืนของสโตร์ อ้างใบเบิกของแผนก", () => {
+  let deptId = "";
+  let deptLineId = "";
+  let slipId = "";
+  let slipBatchId = "";
+  const suffixOf = (id: string) => id.slice(id.indexOf("-") + 1);
+
+  it("ใบเบิกแผนกที่อนุมัติแล้วขึ้นให้ใบจ่ายเลือก — เลือกแล้วรายการที่ค้างและเลขที่ใบตามใบเบิก", async () => {
+    // เลขรันของใบเบิกแผนก (MR-) กับของใบสโตร์ (PD-) ใช้ช่วงเลขเดียวกัน — ขยับเลขใบเบิกแผนกให้พ้นเลขที่ใบสโตร์ในไฟล์นี้ใช้ไปแล้ว
+    // ไม่งั้นเลขที่ตามใบเบิกจะชนแล้วถูกต่อท้าย /2 (พฤติกรรมที่ถูกต้อง แต่ไม่ใช่สิ่งที่ข้อนี้ตรวจ)
+    for (let i = 0; i < 3; i++) await api("POST", "/api/material-requisitions", {});
+    const created = await api("POST", "/api/material-requisitions", {});
+    deptId = created.body.materialRequisition.id;
+    const patched = await api("PATCH", `/api/material-requisitions/${deptId}`, { lines: [{ productId: boltId, category: "chemical", plannedQty: 4 }] });
+    deptLineId = patched.body.materialRequisition.lines[0].id;
+    await approve(`/api/material-requisitions/${deptId}`);
+
+    const sources = await api("GET", "/api/material-requisitions/store-sources");
+    expect(sources.status).toBe(200);
+    expect(sources.body.requisitions.map((r: { id: string }) => r.id)).toContain(deptId);
+
+    const slip = await api("POST", "/api/material-requisitions", { ownerDepartment: "store", issueCode: "PD" });
+    slipId = slip.body.materialRequisition.id;
+    const set = await api("PATCH", `/api/material-requisitions/${slipId}`, { documentNumber: slipId, sourceRequisitionId: deptId });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+    expect(set.body.materialRequisition).toMatchObject({ sourceRequisitionId: deptId, documentNumber: `PD-${suffixOf(deptId)}` });
+    expect(set.body.materialRequisition.lines).toHaveLength(1);
+    expect(set.body.materialRequisition.lines[0]).toMatchObject({ productId: boltId, plannedQty: 4, sourceLineId: deptLineId });
+  });
+
+  it("สโตร์จ่ายจากใบจ่าย → สต๊อกลด และใบเบิกแผนกเห็นยอดจ่าย (ไม่ตัดสต๊อกซ้ำ)", async () => {
+    await approve(`/api/material-requisitions/${slipId}`);
+    const slip = (await api("GET", `/api/material-requisitions/${slipId}`)).body.materialRequisition;
+    const before = (await stock(boltId)).qty;
+    const issued = await api("POST", `/api/material-requisitions/${slipId}/issues`, { lines: [{ lineId: slip.lines[0].id, qty: 3 }] });
+    expect(issued.status, JSON.stringify(issued.body)).toBe(200);
+    slipBatchId = issued.body.materialRequisition.issues[0].id;
+    expect((await stock(boltId)).qty).toBe(before - 3);
+    const dept = (await api("GET", `/api/material-requisitions/${deptId}`)).body.materialRequisition;
+    expect(dept.lines[0].withdrawal1Qty).toBe(3);
+    expect(dept.issues[0]).toMatchObject({ storeSlipId: slipId, stockMovementIds: [] });
+    // ใบเบิกแผนกยกเลิกรอบที่มาจากใบจ่ายเองไม่ได้
+    expect((await api("DELETE", `/api/material-requisitions/${deptId}/issues/${dept.issues[0].id}`)).status).toBe(400);
+  });
+
+  it("ใบจ่ายใบที่สองจากใบเบิกเดียวกัน — เลขต่อท้าย /2 และจ่ายเกินที่แผนกยังค้างไม่ได้", async () => {
+    const slip2 = await api("POST", "/api/material-requisitions", { ownerDepartment: "store", issueCode: "PD" });
+    const id2 = slip2.body.materialRequisition.id;
+    const set = await api("PATCH", `/api/material-requisitions/${id2}`, { sourceRequisitionId: deptId });
+    expect(set.body.materialRequisition.documentNumber).toBe(`PD-${suffixOf(deptId)}/2`);
+    expect(set.body.materialRequisition.lines[0].plannedQty).toBe(1);
+    const line = set.body.materialRequisition.lines[0];
+    await api("PATCH", `/api/material-requisitions/${id2}`, { lines: [{ ...line, plannedQty: 5 }] });
+    await approve(`/api/material-requisitions/${id2}`);
+    const over = await api("POST", `/api/material-requisitions/${id2}/issues`, { lines: [{ lineId: line.id, qty: 2 }] });
+    expect(over.status).toBe(400);
+  });
+
+  it("ใบคืนอ้างใบเบิกของแผนกได้ เลขที่ตามใบเบิก — รับเข้าคลังแล้วยอดคืนลงใบเบิกแผนก", async () => {
+    const candidates = await api("GET", "/api/store-receipts/source-requisitions?receiptCode=JD");
+    const ids = candidates.body.requisitions.map((r: { id: string }) => r.id);
+    expect(ids).toContain(deptId);
+    expect(ids).not.toContain(slipId); // ใบจ่ายที่อ้างใบเบิกแผนก ให้คืนที่ใบเบิกแผนกแทน
+    const receipt = await api("POST", "/api/store-receipts", { receiptCode: "JD" });
+    const rid = receipt.body.storeReceipt.id;
+    const set = await api("PATCH", `/api/store-receipts/${rid}`, { sourceRequisitionId: deptId });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+    expect(set.body.storeReceipt.documentNumber).toBe(`JD-${suffixOf(deptId)}`);
+    const line = set.body.storeReceipt.lines[0];
+    await api("PATCH", `/api/store-receipts/${rid}`, { lines: [{ ...line, qty: 1 }] });
+    await approve(`/api/store-receipts/${rid}`);
+    expect((await api("POST", `/api/store-receipts/${rid}/post`)).status).toBe(200);
+    const dept = (await api("GET", `/api/material-requisitions/${deptId}`)).body.materialRequisition;
+    expect(dept.lines[0].returnQty).toBe(1);
+  });
+
+  it("ยกเลิกรอบจ่ายของใบจ่ายไม่ได้ถ้าแผนกคืนของไปแล้วเกินที่จะเหลือ", async () => {
+    const res = await api("DELETE", `/api/material-requisitions/${slipId}/issues/${slipBatchId}`);
+    expect(res.status).toBe(400);
   });
 });

@@ -113,6 +113,8 @@ export interface StoreReceiptSourceCandidate {
   chargeDepartmentName: string;
   chargeTeamName: string;
   updatedAt: string;
+  /** แผนกเจ้าของใบเบิก — ใบคืนเลือกใบเบิกของทุกแผนกได้ตั้งแต่ 2026-09-23 */
+  ownerDepartment?: "project" | "production" | "store";
 }
 
 export interface StoreReceiptBundle {

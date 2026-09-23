@@ -48,6 +48,11 @@ export interface MaterialRequisitionLine {
    * Scope of Work's PO-chasing fields use — since the paper form's own footer has separate
    * returner/receiver-of-return signatures implying the return happens after the document is done. */
   returnQty: number | null;
+  /**
+   * บรรทัดของใบเบิกแผนกอื่นที่บรรทัดนี้จ่ายให้ — มีเฉพาะใบจ่ายของสโตร์ที่อ้างอิงใบเบิกของแผนกอื่น (2026-09-23)
+   * ตอนสโตร์จ่ายของ ระบบบันทึกรอบการจ่ายลงบรรทัดนี้ของใบเบิกต้นทางด้วย ยอดค้างเบิกของแผนกนั้นจึงลดตาม
+   */
+  sourceLineId?: string;
   /** "ใช้จริง" — actual quantity used, for reconciliation. */
   actualUsedQty: number | null;
 }
@@ -84,6 +89,12 @@ export interface MaterialIssueBatch {
   postedBy: string;
   postedByName: string;
   stockMovementIds: string[];
+  /**
+   * รอบที่มาจากใบจ่ายของสโตร์ (2026-09-23) — บันทึกซ้ำลงใบเบิกของแผนกให้เห็นยอดจ่าย แต่**ไม่ได้ตัดสต๊อกเอง**
+   * (`stockMovementIds` ว่าง การตัดสต๊อกอยู่ที่ใบจ่าย) · ยกเลิกได้จากใบจ่ายเท่านั้น
+   */
+  storeSlipId?: string;
+  storeSlipNumber?: string;
 }
 
 export interface MaterialRequisition {
@@ -126,6 +137,12 @@ export interface MaterialRequisition {
   issueCode?: StoreIssueCode;
   /** เลขอ้างอิงของใบสโตร์ — ใบสั่งผลิต / เอกสารขาย / ใบสั่งงาน / เหตุผลการเบิก แล้วแต่กลุ่มรหัส (พิมพ์เอง) */
   storeReference?: string;
+  /**
+   * ใบเบิกของแผนกอื่นที่ใบจ่ายของสโตร์ใบนี้จ่ายให้ (2026-09-23 — เจ้าของ: *"อยากให้มันขึ้นเลขใบเบิกของแผนกอื่นมาให้หมด"*)
+   * เลือกแล้วหัวใบ/รายการตั้งตามใบนั้น และเลขที่ใบเป็นรหัสจ่าย + เลขเดียวกับใบเบิก (`MR-202609-0012` → `PD-202609-0012`)
+   */
+  sourceRequisitionId?: string;
+  sourceRequisitionNumber?: string;
   /** ใบสั่งผลิตต้นทาง — มีค่าเฉพาะเอกสารของฝ่ายผลิต (ฝั่งโครงการใช้ projectId แทน) */
   productionOrderId?: string;
   scopeOfWorkId: string;
@@ -213,6 +230,7 @@ export interface MaterialRequisitionSummary {
   /** รหัสการจ่ายของใบสโตร์ (2026-09-23) */
   issueCode?: StoreIssueCode;
   storeReference?: string;
+  sourceRequisitionNumber?: string;
   /** "ชื่อลูกค้า" — บริบทของงานในหน้าตัดของ ว่างได้ */
   customerName?: string;
   projectId: string;
@@ -374,6 +392,24 @@ export async function createStoreMaterialRequisition(issueCode: StoreIssueCode):
     method: "POST", body: JSON.stringify({ ownerDepartment: "store", issueCode }),
   });
   return materialRequisition;
+}
+
+/** ใบเบิกของแผนกอื่นที่ใบจ่ายของสโตร์อ้างอิงได้ — อนุมัติแล้วและยังมีของค้างเบิก (2026-09-23) */
+export interface StoreIssueSourceCandidate {
+  id: string;
+  documentNumber: string;
+  ownerDepartment: "project" | "production";
+  jobCode: string;
+  customerName: string;
+  chargeDepartmentName: string;
+  chargeTeamName: string;
+  outstandingLineCount: number;
+  updatedAt: string;
+}
+
+export async function fetchStoreIssueSources(): Promise<StoreIssueSourceCandidate[]> {
+  const { requisitions } = await apiFetch<{ requisitions: StoreIssueSourceCandidate[] }>("/material-requisitions/store-sources");
+  return requisitions;
 }
 
 /** สร้างจากใบสั่งผลิต — เอกสารฝั่งฝ่ายผลิต (ฝั่งโครงการใช้ createMaterialRequisition(projectId, itemId)) */

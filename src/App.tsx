@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, PackageMinus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History, FileStack,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History, FileStack,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -294,7 +294,8 @@ const navItems: NavItem[] = [
   // หน้าตัดของของสโตร์ (2026-09-10) — ใบเบิกที่อนุมัติแล้วและยังจ่ายไม่ครบ ของทั้งฝ่ายโครงการและฝ่ายผลิต
   // ต้องมีทั้งสองสิทธิ์: `stock:adjust` คือสิทธิ์ที่ทำให้กดจ่ายได้จริง (และเป็นด่านของ API ตัวเดียวกัน)
   // ส่วน `materialRequisition:view` คือด่านของรายการที่หน้านี้อ่าน — คนที่ดูใบเบิกไม่ได้เห็นเมนูแล้วหน้าว่าง
-  { key: "storeIssueInbox", icon: PackageMinus, labelKey: "nav.storeIssueInbox", permission: "stock:adjust", anyPermission: ["materialRequisition:view"] },
+  // "ตัดของตามใบเบิก" ถอดออกจากเมนู 2026-09-23 (เจ้าของ: สโตร์จ่ายของ/คืนของในหน้า "ใบเบิก-คืนวัสดุ (สโตร์)" แทน โดยอ้างเลขใบเบิก
+  // ของแผนกในใบจ่าย) · ไฟล์หน้า StoreIssueInboxPage ยังอยู่ แต่ไม่มีทางเข้าแล้ว — navResolution ไม่ปล่อยให้เปิดคีย์ที่ไม่อยู่ในเมนู
   // หมวดหมู่สินค้าเป็นเมนูของตัวเองตั้งแต่ 2026-09-09 (เจ้าของขอ "จัดการหมวดหมู่สินค้าได้ด้วย") —
   // เดิมซ่อนอยู่หลังปุ่มในหน้าสินค้า ซึ่งเป็นหน้าของฝ่ายอื่นและต้องมีสิทธิ์คนละชุด · เปิดให้คนที่เห็น
   // คลังสินค้าอยู่แล้วเข้าได้ ปุ่มแก้ไขข้างในยังคุมด้วยสิทธิ์จริงอีกชั้น
@@ -328,7 +329,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "storeRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "stockHistory", "toolControl", "receivingReport", "vendorBills", "storeDocuments", "storePurchaseRequest", "storeRequestInbox", "storeIssueInbox", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "stockHistory", "toolControl", "receivingReport", "vendorBills", "storeDocuments", "storePurchaseRequest", "storeRequestInbox", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 

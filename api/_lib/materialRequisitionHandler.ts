@@ -91,7 +91,41 @@ async function nextMaterialRequisitionId(counters: Collection<CounterFields>): P
 
 /** ใบเบิกของสโตร์ (2026-09-23) — เลขขึ้นต้นด้วยรหัสการจ่ายและนับแยกต่อรหัส ดู `src/lib/storeCodes.ts` */
 async function nextStoreRequisitionId(counters: Collection<CounterFields>, code: StoreIssueCode): Promise<string> {
-  return nextMonthlyDocumentNumber(counters, code, storeIssueCounterKey(code));
+  // ใบจ่ายที่อ้างใบเบิกแผนกอื่นใช้เลขตามใบเบิกนั้น (pairedStoreSlipNumber) ซึ่งอาจเป็นเลขที่ตัวนับยังไปไม่ถึง —
+  // ข้ามเลขที่ถูกใช้แล้ว ไม่งั้น unique index ของ documentNumber จะทำให้สร้างใบใหม่ไม่ได้
+  const col = await materialRequisitionsCollection();
+  for (let i = 0; i < 50; i++) {
+    const id = await nextMonthlyDocumentNumber(counters, code, storeIssueCounterKey(code));
+    if (!(await col.findOne({ $or: [{ _id: id }, { documentNumber: id }] }, { projection: { _id: 1 } }))) return id;
+  }
+  throw new HttpError(500, "ออกเลขที่ใบเบิกไม่สำเร็จ");
+}
+
+/**
+ * เลขที่ใบจ่ายของสโตร์ = รหัสจ่าย + เลขเดียวกับใบเบิกของแผนกที่อ้างอิง (2026-09-23) — `MR-202609-0012` → `PD-202609-0012`
+ * ใช้ส่วนหลังขีดแรกของ `_id` ใบเบิก (เลขรันที่ไม่เปลี่ยน) ใบคืนก็คิดแบบเดียวกัน (`JD-202609-0012`) สามใบจึงหากันเจอ ·
+ * ซ้ำ (จ่ายหลายใบจากใบเบิกเดียวกัน หรือบังเอิญตรงเลขรัน) ต่อท้าย `/2`, `/3` — ตรวจกับทุกใบเพราะ documentNumber เป็น unique
+ */
+async function pairedStoreSlipNumber(code: StoreIssueCode, sourceId: string, selfId: string): Promise<string> {
+  const dash = sourceId.indexOf("-");
+  const base = `${code}-${dash > 0 ? sourceId.slice(dash + 1) : sourceId}`;
+  const col = await materialRequisitionsCollection();
+  for (let n = 1; n < 100; n++) {
+    const candidate = n === 1 ? base : `${base}/${n}`;
+    const clash = await col.findOne({ _id: { $ne: selfId }, $or: [{ documentNumber: candidate }, { _id: candidate }] }, { projection: { _id: 1 } });
+    if (!clash) return candidate;
+  }
+  return selfId;
+}
+
+/** ใบเบิกของแผนกอื่น (โครงการ/ผลิต) ที่ใบจ่ายของสโตร์อ้างได้ — อนุมัติแล้ว ไม่ถูกลบ */
+async function loadDepartmentRequisition(id: string) {
+  const col = await materialRequisitionsCollection();
+  const mr = await col.findOne({ _id: id });
+  if (!mr || mr.isDeleted) throw new HttpError(400, "ไม่พบใบเบิกที่อ้างอิง");
+  if (mr.ownerDepartment === "store") throw new HttpError(400, "ใบจ่ายของสโตร์อ้างได้เฉพาะใบเบิกของแผนกอื่น");
+  if (mr.status !== "Final") throw new HttpError(400, "ใบเบิกที่อ้างอิงต้องอนุมัติแล้ว");
+  return mr;
 }
 
 /**
@@ -311,6 +345,8 @@ async function sanitizeLines(raw: unknown, existing: MaterialRequisitionLine[]):
       withdrawal2Qty: prev?.withdrawal2Qty ?? null,
       returnQty: prev?.returnQty ?? null,
       actualUsedQty: sanitizeNullableNumber(r.actualUsedQty, `ใช้จริงลำดับที่ ${idx + 1}`),
+      // บรรทัดของใบจ่ายสโตร์ที่ผูกบรรทัดใบเบิกแผนกไว้ — เปลี่ยนสินค้าแล้วถือว่าไม่ใช่บรรทัดเดิมอีกต่อไป
+      ...(prev?.sourceLineId && prev.productId === productId ? { sourceLineId: prev.sourceLineId } : {}),
     };
   });
 }
@@ -327,6 +363,7 @@ function toClient(doc: MaterialRequisitionFields & { _id: string }) {
     chargeTeamId: doc.chargeTeamId ?? "", chargeTeamName: doc.chargeTeamName ?? "",
     chargeWorkTypeCode: doc.chargeWorkTypeCode ?? "", chargeWorkTypeName: doc.chargeWorkTypeName ?? "",
     storeReference: doc.storeReference ?? "",
+    sourceRequisitionId: doc.sourceRequisitionId ?? "", sourceRequisitionNumber: doc.sourceRequisitionNumber ?? "",
   }));
 }
 function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRequisitionSummary {
@@ -344,6 +381,7 @@ function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRe
     ownerDepartment: full.ownerDepartment ?? "project",
     issueCode: full.issueCode,
     storeReference: full.storeReference ?? "",
+    sourceRequisitionNumber: full.sourceRequisitionNumber ?? "",
     customerName: full.customerName ?? "",
     status: full.status, updatedAt: full.updatedAt,
   };
@@ -680,6 +718,33 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   if (doc.ownerDepartment === "store") {
     if ("jobCode" in body) update.jobCode = sanitizeShortText(body.jobCode, "รหัสงาน");
     if ("storeReference" in body) update.storeReference = sanitizeShortText(body.storeReference, "เลขอ้างอิง");
+    // เลือก/เปลี่ยนใบเบิกของแผนกที่อ้างอิง = ตั้งหัวใบ รายการ (เฉพาะที่ยังค้างเบิก) และเลขที่ใบตามใบนั้น
+    // ชนะค่าที่หน้าจอส่งมาพร้อมกันเสมอ (หน้าจอส่ง documentNumber/lines เดิมมาทุกครั้งที่บันทึก)
+    if ("sourceRequisitionId" in body && body.sourceRequisitionId !== (doc.sourceRequisitionId ?? "")) {
+      const srcId = typeof body.sourceRequisitionId === "string" ? body.sourceRequisitionId.trim() : "";
+      if (!srcId) {
+        Object.assign(update, { sourceRequisitionId: "", sourceRequisitionNumber: "", lines: [], documentNumber: id });
+      } else {
+        const src = await loadDepartmentRequisition(srcId);
+        const srcIssues = issueBatchesOf(src);
+        Object.assign(update, {
+          sourceRequisitionId: src._id, sourceRequisitionNumber: src.documentNumber || src._id,
+          jobCode: src.jobCode ?? "", customerName: src.customerName ?? "", productName: src.productName ?? "",
+          chargeDepartmentId: src.chargeDepartmentId ?? "", chargeDepartmentName: src.chargeDepartmentName ?? "",
+          chargeTeamId: src.chargeTeamId ?? "", chargeTeamName: src.chargeTeamName ?? "",
+          chargeWorkTypeCode: src.chargeWorkTypeCode ?? "", chargeWorkTypeName: src.chargeWorkTypeName ?? "",
+          lines: (src.lines ?? [])
+            .map((l) => ({ l, outstanding: (l.plannedQty ?? 0) - batchIssuedQtyOf(srcIssues, l.id) }))
+            .filter(({ outstanding }) => outstanding > 0)
+            .map(({ l, outstanding }) => ({
+              id: newId("mrline"), productId: l.productId, productCode: l.productCode, productName: l.productName, unit: l.unit,
+              category: l.category, plannedQty: outstanding, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null,
+              actualUsedQty: null, sourceLineId: l.id,
+            })),
+          documentNumber: await pairedStoreSlipNumber(doc.issueCode as StoreIssueCode, src._id, id),
+        });
+      }
+    }
   }
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
 
@@ -767,6 +832,26 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   }
   if (qtyByLineId.size === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่จ่ายอย่างน้อยหนึ่งรายการ");
 
+  // ใบจ่ายของสโตร์ที่อ้างใบเบิกแผนก — จ่ายเกินที่แผนกนั้นยังค้างเบิกไม่ได้ (ตรวจกับยอดล่าสุดของใบเบิก ณ ตอนกด)
+  const source = doc.ownerDepartment === "store" && doc.sourceRequisitionId ? await loadDepartmentRequisition(doc.sourceRequisitionId) : null;
+  if (source) {
+    const srcIssues = issueBatchesOf(source);
+    const srcLineById = new Map((source.lines ?? []).map((l) => [l.id, l]));
+    const bySourceLine = new Map<string, number>();
+    for (const [lineId, qty] of qtyByLineId) {
+      const sid = lineById.get(lineId)?.sourceLineId;
+      if (sid) bySourceLine.set(sid, (bySourceLine.get(sid) ?? 0) + qty);
+    }
+    for (const [sid, qty] of bySourceLine) {
+      const srcLine = srcLineById.get(sid);
+      if (!srcLine) throw new HttpError(400, `ไม่พบรายการในใบเบิก ${source.documentNumber || source._id} แล้ว`);
+      const srcOutstanding = (srcLine.plannedQty ?? 0) - batchIssuedQtyOf(srcIssues, sid);
+      if (qty > srcOutstanding) {
+        throw new HttpError(400, `จ่าย ${srcLine.productName} ${qty} เกินที่ใบเบิก ${source.documentNumber || source._id} ยังค้างเบิก ${Math.max(0, srcOutstanding)} ${srcLine.unit}`);
+      }
+    }
+  }
+
   const charge = await resolveChargeFromBody(body);
   const merged: MaterialRequisitionFields = { ...doc, ...charge };
   // เช็คก่อนเขียน: ทุกสินค้าต้องมีพอ — applyStockMovement() ยังมีด่าน $gte ของตัวเองปิดช่องแข่ง
@@ -813,6 +898,7 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
       updatedAt: now, updatedBy: ctx.user.id,
     },
   });
+  if (source) await mirrorIssueToSource(source, doc, batch);
   const updated = await loadOrThrow(id);
   await writeAuditEntry(
     ctx, "Material Requisition Issued",
@@ -824,6 +910,75 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
     stockByProduct: await stockByProductFor(updated.lines ?? []),
     costByProduct: await costByProductFor(updated.lines ?? []),
   });
+}
+
+/**
+ * บันทึกรอบการจ่ายของใบจ่ายสโตร์ลงใบเบิกของแผนกต้นทางด้วย (2026-09-23) — ยอด "จ่ายแล้ว/ค้างเบิก" ของแผนกนั้นจึงถูกต้อง
+ * โดยแผนกไม่ต้องเปิดใบจ่ายของสโตร์ · **ไม่ตัดสต๊อกซ้ำ** (`stockMovementIds` ว่าง — ตัดที่ใบจ่ายแล้ว) · id รอบเดียวกับที่ใบจ่าย
+ * ใช้ย้อนกลับตอนยกเลิก · บรรทัดที่ไม่ได้ผูกบรรทัดต้นทาง (สโตร์เพิ่มเอง) ไม่ถูกบันทึกลงใบแผนก
+ */
+async function mirrorIssueToSource(source: MaterialRequisitionFields & { _id: string }, slip: MaterialRequisitionFields & { _id: string }, batch: MaterialIssueBatch): Promise<void> {
+  const slipLines = new Map(slip.lines.map((l) => [l.id, l]));
+  const bySource = new Map<string, number>();
+  for (const bl of batch.lines) {
+    const sid = slipLines.get(bl.lineId)?.sourceLineId;
+    if (sid) bySource.set(sid, (bySource.get(sid) ?? 0) + bl.qty);
+  }
+  if (bySource.size === 0) return;
+  const previous = issueBatchesOf(source);
+  const slipNumber = slip.documentNumber || slip._id;
+  const mirror: MaterialIssueBatch = {
+    ...batch,
+    seq: previous.length > 0 ? Math.max(...previous.map((b) => b.seq)) + 1 : 1,
+    lines: [...bySource].map(([lineId, qty]) => ({ lineId, qty })),
+    remark: [`จ่ายตามใบจ่ายของสโตร์ ${slipNumber}`, batch.remark].filter(Boolean).join(" · "),
+    stockMovementIds: [],
+    storeSlipId: slip._id, storeSlipNumber: slipNumber,
+  };
+  const issues = [...previous, mirror];
+  await (await materialRequisitionsCollection()).updateOne({ _id: source._id }, {
+    $set: {
+      issues, lines: linesWithDerivedWithdrawals(source.lines ?? [], issues),
+      storeDeptBy: batch.issuedBy, storeDeptAt: batch.issuedDate, updatedAt: nowIso(),
+    },
+  });
+}
+
+async function removeMirrorFromSource(source: MaterialRequisitionFields & { _id: string }, batchId: string): Promise<void> {
+  const issues = issueBatchesOf(source).filter((b) => b.id !== batchId);
+  const stillLast = issues[issues.length - 1];
+  await (await materialRequisitionsCollection()).updateOne({ _id: source._id }, {
+    $set: {
+      issues, lines: linesWithDerivedWithdrawals(source.lines ?? [], issues),
+      storeDeptBy: stillLast?.issuedBy ?? "", storeDeptAt: stillLast?.issuedDate ?? "", updatedAt: nowIso(),
+    },
+  });
+}
+
+/**
+ * ใบเบิกของแผนกอื่นที่สโตร์อ้างในใบจ่ายได้ (2026-09-23) — อนุมัติแล้วและยังมีของค้างเบิก ทุกแผนก ไม่กรองเจ้าของใบ
+ * (สโตร์จ่ายของให้ทุกแผนก แบบเดียวกับหน้าตัดของที่ถูกแทนที่) · เก่าสุดก่อน เหมือนคิวงาน
+ */
+async function handleStoreSources(req: ApiRequest, res: ApiResponse) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  await requirePermission(req, "materialRequisition:view");
+  const col = await materialRequisitionsCollection();
+  const docs = await col.find({ isDeleted: false, status: "Final", ownerDepartment: { $ne: "store" } } as Filter<MaterialRequisitionFields & { _id: string }>)
+    .sort({ updatedAt: 1 }).limit(500).toArray();
+  const requisitions = docs
+    .map((d) => {
+      const issues = issueBatchesOf(d);
+      const outstandingLineCount = (d.lines ?? []).filter((l) => (l.plannedQty ?? 0) - batchIssuedQtyOf(issues, l.id) > 0).length;
+      return {
+        id: d._id, documentNumber: d.documentNumber || d._id,
+        ownerDepartment: d.ownerDepartment === "production" ? "production" as const : "project" as const,
+        jobCode: d.jobCode ?? "", customerName: d.customerName ?? "",
+        chargeDepartmentName: d.chargeDepartmentName ?? "", chargeTeamName: d.chargeTeamName ?? "",
+        outstandingLineCount, updatedAt: d.updatedAt,
+      };
+    })
+    .filter((r) => r.outstandingLineCount > 0);
+  res.status(200).json({ requisitions });
 }
 
 /**
@@ -842,7 +997,21 @@ async function handleCancelIssueBatch(req: ApiRequest, res: ApiResponse, id: str
   const previous = issueBatchesOf(doc);
   const last = previous[previous.length - 1];
   if (!last || last.id !== batchId) throw new HttpError(400, "ยกเลิกได้เฉพาะรอบการจ่ายล่าสุดเท่านั้น");
+  if (last.storeSlipId) throw new HttpError(400, `รอบนี้จ่ายผ่านใบจ่ายของสโตร์ ${last.storeSlipNumber || last.storeSlipId} — ยกเลิกที่ใบจ่ายนั้น`);
   const issues = previous.slice(0, -1);
+  const source = doc.ownerDepartment === "store" && doc.sourceRequisitionId
+    ? await (await materialRequisitionsCollection()).findOne({ _id: doc.sourceRequisitionId })
+    : null;
+  if (source) {
+    // ใบเบิกแผนกคืนของไปแล้วมากกว่าที่จะเหลือว่าจ่าย → ยกเลิกไม่ได้ (กติกาเดียวกับด้านล่าง แต่ตรวจที่ใบต้นทาง)
+    const srcRemaining = issueBatchesOf(source).filter((b) => b.id !== last.id);
+    for (const line of source.lines ?? []) {
+      const remaining = batchIssuedQtyOf(srcRemaining, line.id);
+      if (remaining < (line.returnQty ?? 0)) {
+        throw new HttpError(400, `ยกเลิกไม่ได้: ใบเบิก ${source.documentNumber || source._id} คืน ${line.productName} มาแล้ว ${line.returnQty} ${line.unit} มากกว่าที่จะเหลือว่าจ่ายไป ${remaining} ${line.unit}`);
+      }
+    }
+  }
 
   for (const line of doc.lines) {
     const remaining = batchIssuedQtyOf(issues, line.id);
@@ -866,6 +1035,7 @@ async function handleCancelIssueBatch(req: ApiRequest, res: ApiResponse, id: str
     });
   }
 
+  if (source) await removeMirrorFromSource(source, last.id);
   const stillLast = issues[issues.length - 1];
   const materialRequisitions = await materialRequisitionsCollection();
   await materialRequisitions.updateOne({ _id: id }, {
@@ -905,7 +1075,9 @@ async function handleReturn(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
   const doc = await loadOrThrow(id);
-  if (!canEdit(ctx, doc) && !roleHasPermission(ctx.role, "stock:adjust")) throw new HttpError(403, "Forbidden");
+  // คืนของได้เฉพาะแผนกสโตร์ (2026-09-23 — เจ้าของ: *"แผนกอื่นไม่สามารถคืนของเองได้ต้องให้สโตร์กรอกเองได้อย่างเดียว"*)
+  // หน้าจอของแผนกไม่มีการ์ดคืนของแล้ว สโตร์คืนผ่านใบรับคืนในหน้า "ใบเบิก-คืนวัสดุ (สโตร์)"
+  if (!roleHasPermission(ctx.role, "stock:adjust")) throw new HttpError(403, "คืนของได้เฉพาะแผนกสโตร์ — ทำผ่านใบรับคืนของสโตร์");
   assertFinalForStock(doc, "บันทึกการคืนของ");
   // ใบเบิกของสโตร์คืนของผ่านใบรับคืน (รหัสคู่ JD/JP/…) เท่านั้น — ไม่งั้นมีสองทางคืนของและยอดคืนนับซ้ำ
   if (doc.ownerDepartment === "store") throw new HttpError(400, "ใบเบิกของสโตร์คืนของผ่านใบรับคืนเท่านั้น");
@@ -1164,6 +1336,7 @@ export async function handleMaterialRequisition(req: ApiRequest, res: ApiRespons
     if (req.method === "POST") return handleCreate(req, res);
     return handleList(req, res);
   }
+  if (parts.length === 1 && parts[0] === "store-sources") return handleStoreSources(req, res);
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "issues") return handlePostIssueBatch(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "issues") return handleCancelIssueBatch(req, res, parts[0], parts[2]);

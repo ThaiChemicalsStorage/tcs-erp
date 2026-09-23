@@ -174,7 +174,7 @@ export function StoreDocumentsPage({
       return {
         kind: "issue", id: m.id, number: m.documentNumber || m.id, code: c,
         codeName: known ? t(storeIssueCodeInfo(c).nameKey) : "",
-        reference: [m.jobCode, m.storeReference].filter(Boolean).join(" · "),
+        reference: [m.sourceRequisitionNumber, m.jobCode, m.storeReference].filter(Boolean).join(" · "),
         charge: [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / "),
         status: m.status, pendingStore: m.hasOutstanding, posted: false, updatedAt: m.updatedAt,
       };

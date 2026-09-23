@@ -77,14 +77,18 @@ async function loadOrThrow(id: string) {
   return doc;
 }
 
-/** ใบเบิกต้นทางของใบคืน — ต้องเป็นใบของสโตร์ รหัสคู่กัน และอนุมัติแล้ว */
-async function loadSourceRequisition(receiptCode: StoreReceiptCode, requisitionId: string) {
-  const pair = storeReceiptCodeInfo(receiptCode).pair;
+/**
+ * ใบเบิกที่ใบคืนอ้างได้ (เปลี่ยน 2026-09-23 — เจ้าของ: *"อยากให้มันขึ้นเลขใบเบิกของแผนกอื่นมาให้หมดเลย"*)
+ * ใบเบิกของทุกแผนก + ใบจ่ายของสโตร์ที่**ไม่ได้**อ้างใบเบิกแผนก (จ่ายตรง เช่น OU/PX) · ไม่จำกัดรหัสคู่อีกต่อไป
+ * ใบจ่ายสโตร์ที่อ้างใบเบิกแผนกไม่อยู่ในรายการ — ยอดจ่ายของมันถูกบันทึกลงใบเบิกแผนกแล้ว ให้คืนที่ใบเบิกแผนกนั้น
+ * ไม่งั้นยอดคืนจะไปอยู่คนละใบกับยอดจ่ายที่แผนกเห็น
+ */
+async function loadSourceRequisition(_receiptCode: StoreReceiptCode, requisitionId: string) {
   const col = await materialRequisitionsCollection();
   const mr = await col.findOne({ _id: requisitionId });
   if (!mr || mr.isDeleted) throw new HttpError(404, "ไม่พบใบเบิกต้นทาง");
-  if (mr.ownerDepartment !== "store" || mr.issueCode !== pair) {
-    throw new HttpError(400, `ใบรับคืน ${receiptCode} คืนของได้เฉพาะใบเบิกรหัส ${pair}`);
+  if (mr.ownerDepartment === "store" && mr.sourceRequisitionId) {
+    throw new HttpError(400, `ใบจ่าย ${mr.documentNumber || mr._id} จ่ายตามใบเบิก ${mr.sourceRequisitionNumber || mr.sourceRequisitionId} — ให้เลือกใบเบิกนั้นแทน`);
   }
   if (mr.status !== "Final") throw new HttpError(400, "ใบเบิกต้นทางต้องอนุมัติแล้ว");
   return mr;
@@ -233,9 +237,10 @@ const DATE_FIELDS: { key: keyof StoreReceiptFields; label: string }[] = [
  * ประวัติสต๊อก และการค้นหาใช้อยู่แล้ว · นับชนเฉพาะใบคืนที่ผูกใบเบิกแล้ว — ใบร่างที่ยังไม่เลือกใบเบิกถือเลขรันชั่วคราว
  * ถ้าเอามานับด้วย ใบที่เลขรันบังเอิญตรงจะดันใบจริงไปเป็น `/2`
  */
-async function pairedDocumentNumber(receiptCode: StoreReceiptCode, requisitionNumber: string, selfId: string): Promise<string> {
-  const dash = requisitionNumber.indexOf("-");
-  const base = `${receiptCode}-${dash > 0 ? requisitionNumber.slice(dash + 1) : requisitionNumber}`;
+async function pairedDocumentNumber(receiptCode: StoreReceiptCode, requisitionId: string, selfId: string): Promise<string> {
+  // ใช้ _id ของใบเบิก (เลขรันที่ไม่เปลี่ยน) — ใบเบิกฝ่ายผลิตพิมพ์เลขบนฟอร์มเป็น {ใบสั่งผลิต}-MR{n} ซึ่งไม่ใช่รูปแบบเดียวกัน
+  const dash = requisitionId.indexOf("-");
+  const base = `${receiptCode}-${dash > 0 ? requisitionId.slice(dash + 1) : requisitionId}`;
   const col = await storeReceiptsCollection();
   for (let n = 1; n < 100; n++) {
     const candidate = n === 1 ? base : `${base}/${n}`;
@@ -294,8 +299,8 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
     }
     // เลขที่ใบคืนตามใบเบิก (คำสั่งเจ้าของ 2026-09-23 "ขอแก้แบบเร็วๆด่วน") — ดู pairedDocumentNumber()
     // ชนะเลขที่หน้าจอส่งมาพร้อมกันเสมอ (หน้าจอส่ง documentNumber เดิมมาทุกครั้งที่บันทึก)
-    update.documentNumber = update.sourceRequisitionNumber
-      ? await pairedDocumentNumber(doc.receiptCode, update.sourceRequisitionNumber, id)
+    update.documentNumber = update.sourceRequisitionId
+      ? await pairedDocumentNumber(doc.receiptCode, update.sourceRequisitionId, id)
       : id;
   } else if ("lines" in body) {
     update.lines = await sanitizeLines(body.lines, { ...doc, ...update });
@@ -314,19 +319,21 @@ async function handleSourceCandidates(req: ApiRequest, res: ApiResponse) {
   await requirePermission(req, "materialRequisition:view");
   const code = req.query.receiptCode;
   if (!isStoreReceiptCode(code)) throw new HttpError(400, "รหัสการรับไม่ถูกต้อง");
-  const pair = storeReceiptCodeInfo(code).pair;
-  if (!pair) {
+  if (storeReceiptCodeInfo(code).kind !== "return") {
     res.status(200).json({ requisitions: [] });
     return;
   }
-  // ไม่กรองเจ้าของใบ — สโตร์รับคืนของที่ใครเบิกไปก็ได้ ของกลับเข้าคลังเดียวกัน
+  // ไม่กรองเจ้าของใบและไม่จำกัดรหัสคู่ (2026-09-23) — สโตร์รับคืนของที่ใครเบิกไปก็ได้ ของกลับเข้าคลังเดียวกัน
+  // ดูกติกาใน loadSourceRequisition()
   const col = await materialRequisitionsCollection();
-  const docs = await col.find({ isDeleted: false, ownerDepartment: "store", issueCode: pair, status: "Final" }).sort({ updatedAt: -1 }).limit(300).toArray();
+  const docs = await col.find({ isDeleted: false, status: "Final" }).sort({ updatedAt: -1 }).limit(500).toArray();
   const requisitions: StoreReceiptSourceCandidate[] = docs
+    .filter((d) => !(d.ownerDepartment === "store" && d.sourceRequisitionId))
     .filter((d) => (d.lines ?? []).some((l) => issuedQtyOf(l) - (l.returnQty ?? 0) > 0))
     .map((d) => ({
       id: d._id, documentNumber: d.documentNumber || d._id, jobCode: d.jobCode ?? "", storeReference: d.storeReference ?? "",
       chargeDepartmentName: d.chargeDepartmentName ?? "", chargeTeamName: d.chargeTeamName ?? "", updatedAt: d.updatedAt,
+      ownerDepartment: d.ownerDepartment === "store" ? "store" as const : d.ownerDepartment === "production" ? "production" as const : "project" as const,
     }));
   res.status(200).json({ requisitions });
 }

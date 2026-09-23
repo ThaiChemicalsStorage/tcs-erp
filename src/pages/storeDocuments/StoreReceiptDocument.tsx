@@ -365,7 +365,7 @@ export function StoreReceiptDocument({
                       {currentSourceMissing && <option value={draft.sourceRequisitionId}>{draft.sourceRequisitionNumber}</option>}
                       {candidates.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {[c.documentNumber, c.jobCode, c.storeReference, [c.chargeDepartmentName, c.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")}
+                          {[c.documentNumber, c.ownerDepartment === "production" ? t("storeIssue.dept.production") : c.ownerDepartment === "store" ? t("storeIssue.dept.store") : t("storeIssue.dept.project"), c.jobCode, c.storeReference, [c.chargeDepartmentName, c.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")}
                         </option>
                       ))}
                     </select>

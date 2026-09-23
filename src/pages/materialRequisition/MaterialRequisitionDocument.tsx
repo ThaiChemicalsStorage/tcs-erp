@@ -10,6 +10,7 @@ import {
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
   rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf,
+  fetchStoreIssueSources, type StoreIssueSourceCandidate,
 } from "../../lib/materialRequisition";
 import { fetchDepartments, type Department } from "../../lib/departments";
 import { fetchTeams, type Team } from "../../lib/teams";
@@ -136,7 +137,9 @@ export function MaterialRequisitionDocument({
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [savingReturn, setSavingReturn] = useState(false);
+  const [, setSavingReturn] = useState(false);
+  // ใบเบิกของแผนกอื่นที่ใบจ่ายของสโตร์อ้างได้ (2026-09-23)
+  const [storeSources, setStoreSources] = useState<StoreIssueSourceCandidate[]>([]);
   const [savingIssue, setSavingIssue] = useState(false);
   /** ช่อง "จ่ายรอบนี้" ต่อบรรทัด — state แยกจากเอกสาร เพราะเป็นรอบที่ยังไม่ได้บันทึก ไม่ใช่ค่าในใบ */
   const [issueQty, setIssueQty] = useState<Record<string, string>>({});
@@ -217,6 +220,14 @@ export function MaterialRequisitionDocument({
     },
   });
 
+  const storeSlipEditable = !!doc && doc.ownerDepartment === "store" && canEdit && doc.status === "Draft";
+  useEffect(() => {
+    if (!storeSlipEditable) return;
+    let cancelled = false;
+    fetchStoreIssueSources().then((list) => { if (!cancelled) setStoreSources(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [storeSlipEditable]);
+
   const applySaved = (updated: MaterialRequisition, stock?: Record<string, number>, cost?: Record<string, ProductCostBasis>) => {
     setDoc(updated);
     setDraft(updated);
@@ -251,6 +262,21 @@ export function MaterialRequisitionDocument({
     chargeWorkTypeCode: m.chargeWorkTypeCode ?? "",
     chargeWorkTypeName: m.chargeWorkTypeName ?? "",
   });
+
+  /**
+   * เลือกใบเบิกของแผนกที่ใบจ่ายนี้จ่ายให้ = บันทึกทันที — เซิร์ฟเวอร์ตั้งหัวใบ รายการที่ยังค้างเบิก และเลขที่ใบตามใบเบิกนั้น
+   * (`lines: undefined` = ไม่ส่งรายการเดิมไปทับ)
+   */
+  const chooseStoreSource = async (sourceRequisitionId: string) => {
+    if (!draft) return;
+    try {
+      const updated = await updateMaterialRequisition(draft.id, { ...toUpdateFields(draft), lines: undefined, sourceRequisitionId });
+      applySaved(updated);
+      autoSave.markSaved(toUpdateFields(updated));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSave"));
+    }
+  };
 
   const saveReturn = async (): Promise<boolean> => {
     if (!draft) return false;
@@ -400,10 +426,11 @@ export function MaterialRequisitionDocument({
     : storeGroup === "project" ? t("storeDocs.field.jobOrder")
     : t("storeDocs.field.reason");
   const editable = canEdit && isDraftStatus;
-  /** สโตร์จ่ายของได้เฉพาะใบที่อนุมัติแล้ว */
-  const canIssue = canIssueStock && isFinal;
-  /** คืนของ: ใบอนุมัติแล้ว โดยเจ้าของใบหรือสโตร์ */
-  const canReturn = (canEdit || canIssueStock) && isFinal;
+  /**
+   * สโตร์จ่ายของได้เฉพาะใบที่อนุมัติแล้ว และ**เฉพาะใบจ่ายของสโตร์** (2026-09-23 — เจ้าของ: สโตร์จ่ายของ/คืนของในหน้า
+   * "ใบเบิก-คืนวัสดุ (สโตร์)" แทน) · ใบเบิกของแผนกเห็นยอดจ่าย/คืนที่สโตร์บันทึกให้ แต่ไม่มีปุ่มจ่าย/คืนในใบตัวเอง
+   */
+  const canIssue = canIssueStock && isFinal && isStoreDoc;
   const outstandingLines = doc.lines.filter((l) => outstandingQtyOf(l) > 0).length;
   /** รอบการจ่ายที่บันทึกแล้ว — ใบที่จ่ายไปก่อน 2026-09-07 ถูกแปลงยอดเดิมมาเป็นรอบให้อัตโนมัติ */
   const issueBatches = issueBatchesOf(doc);
@@ -734,6 +761,23 @@ export function MaterialRequisitionDocument({
             </div>
             {isStoreDoc && (
               <>
+                <div className="sm:col-span-2">
+                  <label htmlFor="mr-store-source" className="text-xs text-muted-foreground block mb-1">{t("storeDocs.field.sourceRequisition")}</label>
+                  <select id="mr-store-source" disabled={!editable} value={draft.sourceRequisitionId ?? ""}
+                    onChange={(e) => void chooseStoreSource(e.target.value)} className={inputCls}>
+                    <option value="">{t("storeDocs.sourceNone")}</option>
+                    {draft.sourceRequisitionId && !storeSources.some((c) => c.id === draft.sourceRequisitionId) && (
+                      <option value={draft.sourceRequisitionId}>{draft.sourceRequisitionNumber}</option>
+                    )}
+                    {storeSources.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.documentNumber} · {c.ownerDepartment === "production" ? t("storeIssue.dept.production") : t("storeIssue.dept.project")}
+                        {c.jobCode ? ` · ${c.jobCode}` : ""}{c.chargeDepartmentName ? ` · ${c.chargeDepartmentName}` : ""} · {t("storeDocs.sourceOutstanding").replace("{n}", String(c.outstandingLineCount))}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">{t("storeDocs.sourceHint")}</p>
+                </div>
                 <div>
                   <label htmlFor="mr-store-jobCode" className="text-xs text-muted-foreground block mb-1">{t("storeDocs.field.jobCode")}</label>
                   <input id="mr-store-jobCode" disabled={!editable} value={draft.jobCode}
@@ -817,7 +861,7 @@ export function MaterialRequisitionDocument({
                       <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${isFinal && outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
                       <td className="px-2 py-1.5">
                         <input
-                          type="number" disabled={!canReturn}
+                          type="number" disabled
                           title={t("materialRequisitionDoc.returnQtyHint")}
                           value={line.returnQty ?? ""}
                           onChange={(e) => updateLine(line.id, { returnQty: numberOrNull(e.target.value) })}
@@ -872,7 +916,7 @@ export function MaterialRequisitionDocument({
         )}
 
         {/* การ์ด "จ่ายของ (สโตร์)" — ขึ้นให้คนที่มี stock:adjust เห็นเสมอ (ล็อกจนกว่าใบจะอนุมัติ) เพื่อให้รู้ว่ามีขั้นนี้อยู่ */}
-        {canIssueStock && (
+        {canIssueStock && isStoreDoc && (
           <div data-tour="mrdoc-issueCard" className="bg-card border border-[#2aa36b]/30 rounded-xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <PackageCheck size={15} className="text-[#207e52]" />
@@ -996,38 +1040,10 @@ export function MaterialRequisitionDocument({
           </div>
         )}
 
-        {isStoreDoc ? (
-          <div className="flex items-start gap-2 rounded-xl border border-[#c9a84c]/30 bg-[#c9a84c]/5 px-4 py-3 text-sm text-[#866d28]">
-            <Undo2 size={15} className="mt-0.5 flex-shrink-0" /> {t("storeDocs.returnViaReceipt")}
-          </div>
-        ) : (
-        <div data-tour="mrdoc-returnCard" className="bg-card border border-[#c9a84c]/30 rounded-xl p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Undo2 size={15} className="text-[#c9a84c]" />
-            <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.returnTitle")}</h2>
-          </div>
-          <p className="text-xs text-muted-foreground">{t("materialRequisitionDoc.returnHint")}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="mr-returnedBy" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.returnedBy")}</label>
-              <input id="mr-returnedBy" disabled={!canReturn} value={draft.returnedBy}
-                onChange={(e) => setDraft({ ...draft, returnedBy: e.target.value })}
-                className={inputCls} />
-            </div>
-            <div>
-              <label htmlFor="mr-returnReceivedBy" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.returnReceivedBy")}</label>
-              <input id="mr-returnReceivedBy" disabled={!canReturn} value={draft.returnReceivedBy}
-                onChange={(e) => setDraft({ ...draft, returnReceivedBy: e.target.value })}
-                className={inputCls} />
-            </div>
-          </div>
-          {canReturn && (
-            <button onClick={saveReturn} disabled={savingReturn} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c9a84c]/40 text-[#a5822f] rounded-lg font-medium hover:bg-[#c9a84c]/10 transition-colors disabled:opacity-60">
-              {savingReturn ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("materialRequisitionDoc.saveReturn")}
-            </button>
-          )}
+        {/* คืนของทำที่สโตร์เท่านั้น (2026-09-23) — ใบเบิกของแผนกและใบจ่ายของสโตร์ต่างก็ไม่มีการ์ดคืนของในตัว */}
+        <div className="flex items-start gap-2 rounded-xl border border-[#c9a84c]/30 bg-[#c9a84c]/5 px-4 py-3 text-sm text-[#866d28]">
+          <Undo2 size={15} className="mt-0.5 flex-shrink-0" /> {isStoreDoc ? t("storeDocs.returnViaReceipt") : t("storeDocs.deptViaStore")}
         </div>
-        )}
 
         <div className="bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisitionDoc.signatoriesTitle")}</h2>

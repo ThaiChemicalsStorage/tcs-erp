@@ -1098,6 +1098,11 @@ Three things worth knowing before touching it:
 - Menu **ใบรับวางบิล** (`vendorBills`, inventory group) needs `receivingReport:view`; create/edit/delete/print map to `receivingReport:create/edit/delete/print`, and `receivingReport:viewAll` lifts the own-documents scope — the same set as ใบรับสินค้า, because the bill only reads payables that receiving reports posted. Global Search's `vendorBills` category and `BR-` fast path use `receivingReport:view` too.
 - Nothing to tick by hand.
 
+## Store issues & returns for every department (2026-09-23h+) — no new permission
+
+- **Returning goods now needs `stock:adjust`** (`POST /api/material-requisitions/:id/return`, previously the document's owner could return too). Owner's order: *"แผนกอื่นไม่สามารถคืนของเองได้ต้องให้สโตร์กรอกเองได้อย่างเดียว"*. The department page shows no issue/return card any more; the store issues through a store slip that references the requisition and returns through a store receipt.
+- The **ตัดของตามใบเบิก** menu (`storeIssueInbox`) was removed from the sidebar (page file kept, unreachable).
+
 ## Store requisitions & returns (2026-09-23) — no new permission
 
 - The new menu **ใบเบิก-คืนวัสดุ (สโตร์)** (`storeDocuments`) needs `materialRequisition:view` **and** one of `stock:adjust` / `materialRequisition:finalize` — the second condition keeps it off the sidebar of everyone who merely reads requisitions. `materialRequisition:finalize` was added 2026-09-23f: approvers now get a notification for store receipts and must be able to open the page it links to. Global Search's `storeReceipts` category, its document-number fast path and the page shortcut apply the same rule (`STORE_DOCUMENTS_ANY` in `searchHandler.ts`).

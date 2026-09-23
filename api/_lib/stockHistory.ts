@@ -56,7 +56,7 @@ function str(v: unknown): string {
 async function sourceIdsMatching(rx: RegExp): Promise<string[]> {
   const [mrs, rrs, prs, srs] = await Promise.all([
     materialRequisitionsCollection().then((c) => c.find(
-      { $or: [{ jobCode: rx }, { jobOrderCode: rx }, { productionOrderId: rx }, { customerName: rx }, { documentNumber: rx }, { storeReference: rx }] },
+      { $or: [{ jobCode: rx }, { jobOrderCode: rx }, { productionOrderId: rx }, { customerName: rx }, { documentNumber: rx }, { storeReference: rx }, { sourceRequisitionNumber: rx }] },
       { projection: { _id: 1 } },
     ).limit(MAX_SOURCE_MATCHES).toArray()),
     receivingReportsCollection().then((c) => c.find(
@@ -99,7 +99,7 @@ async function enrich(rows: (StockMovementFields & { _id: ObjectId })[]): Promis
       customerName: str(doc.customerName) || undefined,
       ownerDepartment: str(doc.ownerDepartment) || "project",
       code: str(doc.issueCode) || undefined,
-      reference: str(doc.storeReference) || undefined,
+      reference: [str(doc.sourceRequisitionNumber), str(doc.storeReference)].filter(Boolean).join(" · ") || undefined,
     });
   }
   for (const r of rrs) {
