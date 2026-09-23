@@ -1,5 +1,6 @@
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import type { DocumentAttachment } from "./documentAttachments.js";
+import type { TranslationKey } from "./i18n.js";
 import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from "./documentAttachments.js";
 
 /**
@@ -12,6 +13,35 @@ import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from
  */
 
 export type PurchaseRequestStatus = "Draft" | "PendingApproval" | "Final";
+
+/**
+ * รหัสฝ่ายที่ขอซื้อ = ตัวอักษรหน้าเลขที่ใบ (คำสั่งเจ้าของ 2026-09-23: *"ใบขออนุมัติซื้อจากสโตร์ จะมี
+ * 4 ฝ่าย ... แต่ละรหัสรันเลขแยกกัน"*) — ตรงกับใบกระดาษจริงที่ใช้ `ED6908027` อยู่แล้ว
+ *
+ * รหัสถูกเลือกตอนสร้างครั้งเดียวและฝังอยู่ในเลขที่ใบ จึงเปลี่ยนภายหลังไม่ได้ · ใบเก่าก่อนวันนี้ไม่มีฟิลด์นี้
+ * และขึ้นต้นด้วย `PR-` ทั้งหมด อ่านแล้วถือเป็น `PR` (ตัวนับของ `PR` คือตัวนับเดิม เลขจึงต่อเนื่อง)
+ */
+export type PurchaseRequestCode = "PR" | "FD" | "ED" | "SD";
+export const PURCHASE_REQUEST_CODES: readonly PurchaseRequestCode[] = ["PR", "FD", "ED", "SD"];
+export const PURCHASE_REQUEST_CODE_LABEL_KEY: Record<PurchaseRequestCode, TranslationKey> = {
+  PR: "purchaseRequest.code.PR", FD: "purchaseRequest.code.FD", ED: "purchaseRequest.code.ED", SD: "purchaseRequest.code.SD",
+};
+
+export function isPurchaseRequestCode(v: unknown): v is PurchaseRequestCode {
+  return typeof v === "string" && (PURCHASE_REQUEST_CODES as readonly string[]).includes(v);
+}
+
+/** รหัสตั้งต้นตามทางที่สร้าง — ใบจากใบสั่งผลิตเป็นของฝ่ายผลิต ใบจากโครงการเป็นของฝ่ายโครงการ */
+export function defaultPurchaseRequestCode(ownerDepartment: "project" | "production" | "general" | undefined): PurchaseRequestCode {
+  return ownerDepartment === "production" ? "FD" : ownerDepartment === "general" ? "PR" : "ED";
+}
+
+/** รหัสของใบ — ใบก่อน 2026-09-23 ไม่มีฟิลด์ อ่านจากตัวอักษรหน้าเลขแทน */
+export function purchaseRequestCodeOf(doc: { id: string; requestCode?: PurchaseRequestCode }): PurchaseRequestCode {
+  if (doc.requestCode) return doc.requestCode;
+  const prefix = doc.id.split("-")[0];
+  return isPurchaseRequestCode(prefix) ? prefix : "PR";
+}
 
 export interface PurchaseRequestLine {
   id: string;
@@ -140,6 +170,8 @@ export interface PurchaseRequest {
    * normalize เป็น "project" เสมอ ไม่ได้ทำ migration
    */
   ownerDepartment?: "project" | "production" | "general";
+  /** รหัสฝ่ายที่ขอซื้อ (2026-09-23) — ดู `PurchaseRequestCode` · ใบเก่าไม่มี ใช้ `purchaseRequestCodeOf()` */
+  requestCode?: PurchaseRequestCode;
   /** ใบสั่งผลิตต้นทาง — มีค่าเฉพาะเอกสารของฝ่ายผลิต (ฝั่งโครงการใช้ projectId แทน) */
   productionOrderId?: string;
   scopeOfWorkId: string;
@@ -278,6 +310,7 @@ export interface PurchaseRequestSummary {
   id: string;
   /** แผนกเจ้าของ — ใช้เฉพาะกล่องงานเข้าของจัดซื้อ ที่เห็นใบของทุกฝ่ายรวมกัน (2026-08-28) */
   ownerDepartment?: "project" | "production" | "general";
+  requestCode?: PurchaseRequestCode;
   projectId: string;
   scopeOfWorkId: string;
   jobCode: string;
@@ -321,9 +354,9 @@ export async function fetchAllPurchaseRequests(
  * (สโตร์ เซอร์วิส บัญชี บุคคล จัดซื้อเอง) ตามผังกระบวนการจัดซื้อที่เจ้าของส่งมา 2026-08-28
  * ใบที่ได้มี `ownerDepartment: "general"` และผู้ใช้พิมพ์รายการเองทั้งใบ
  */
-export async function createStandalonePurchaseRequest(): Promise<PurchaseRequest> {
+export async function createStandalonePurchaseRequest(requestCode?: PurchaseRequestCode): Promise<PurchaseRequest> {
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>("/purchase-requests", {
-    method: "POST", body: JSON.stringify({}),
+    method: "POST", body: JSON.stringify(requestCode ? { requestCode } : {}),
   });
   return purchaseRequest;
 }

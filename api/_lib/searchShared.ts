@@ -58,6 +58,10 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   { prefix: "MR-", type: "materialRequisition" },
   { prefix: "JO-", type: "jobOrder" },
   { prefix: "PR-", type: "purchaseRequest" },
+  // ใบขอซื้อแยกรหัสตามฝ่าย (2026-09-23): Support = PR, ผลิต = FD, โครงการ = ED, งานเหล็ก = SD
+  { prefix: "FD-", type: "purchaseRequest" },
+  { prefix: "ED-", type: "purchaseRequest" },
+  { prefix: "SD-", type: "purchaseRequest" },
   { prefix: "PO-", type: "purchaseOrder" },
   { prefix: "CC-", type: "costControl" },
   { prefix: "RR-", type: "receivingReport" },

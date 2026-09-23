@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { type PurchaseRequestSummary, type PurchaseRequestScope, fetchAllPurchaseRequests, createPurchaseRequest, createPurchaseRequestFromProductionOrder, createStandalonePurchaseRequest } from "../../lib/purchaseRequest";
+import { type PurchaseRequestSummary, type PurchaseRequestScope, fetchAllPurchaseRequests, createPurchaseRequest, createPurchaseRequestFromProductionOrder, createStandalonePurchaseRequest, type PurchaseRequestCode } from "../../lib/purchaseRequest";
+import { PurchaseRequestCodeDialog } from "./PurchaseRequestCodeDialog";
 import { PurchaseRequestList } from "./PurchaseRequestList";
 import { PurchaseRequestDocument } from "./PurchaseRequestDocument";
 import { ProjectItemSourcePickerDialog, ProductionOrderSourcePickerDialog } from "../project/ProjectSourcePickers";
@@ -85,11 +86,15 @@ export function PurchaseRequestPage({
   };
 
   // ฝ่ายที่ไม่มีเอกสารต้นทาง (และกล่องงานเข้าของจัดซื้อ) เปิดใบเปล่าได้ทันที ไม่ต้องเลือกต้นทาง
-  const handleCreateStandalone = async () => {
+  // เลือกรหัสฝ่ายก่อนสร้าง (2026-09-23) — รหัสอยู่หน้าเลขที่ใบ จึงต้องรู้ตั้งแต่ตอนสร้าง
+  const [codePickerOpen, setCodePickerOpen] = useState(false);
+  const handleCreateStandalone = async (code: PurchaseRequestCode) => {
     try {
-      const created = await createStandalonePurchaseRequest();
+      const created = await createStandalonePurchaseRequest(code);
+      setCodePickerOpen(false);
       openPurchaseRequest(created.id);
     } catch (err) {
+      setCodePickerOpen(false);
       toast.show(err instanceof ApiError ? err.message : t("purchaseRequest.loadError"));
     }
   };
@@ -209,7 +214,7 @@ export function PurchaseRequestPage({
         stageFilter={ownerDepartment === "all" && storeStage === undefined}
         headerAction={canCreate ? (
           <button
-            onClick={() => (needsSourcePicker ? setPickerOpen(true) : void handleCreateStandalone())}
+            onClick={() => (needsSourcePicker ? setPickerOpen(true) : setCodePickerOpen(true))}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
           >
             <Plus size={15} /> {t("purchaseRequest.createBtn")}
@@ -234,6 +239,9 @@ export function PurchaseRequestPage({
           allowNoItems
         />
       ))}
+      {codePickerOpen && (
+        <PurchaseRequestCodeDialog onCreate={handleCreateStandalone} onCancel={() => setCodePickerOpen(false)} />
+      )}
       <Toast message={toast.message} />
     </>
   );

@@ -1,4 +1,4 @@
-import type { PurchaseRequest } from "../../lib/purchaseRequest";
+import { purchaseRequestCodeOf, type PurchaseRequest, type PurchaseRequestCode } from "../../lib/purchaseRequest";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatArDocDate } from "../../lib/accounting";
 import { PrintSignatureLine } from "../../components/PrintSignature";
@@ -46,12 +46,14 @@ const EDGE_GUARD = "2px";
 /** จำนวนแถวขั้นต่ำของตาราง เพื่อให้กล่องหมายเหตุกับช่องเซ็นลงไปอยู่ท้ายหน้าเหมือนกระดาษ */
 const MIN_BODY_ROWS = 10;
 
-/** ชื่อแผนกในวงเล็บใต้หัวเรื่อง — ฝ่ายผลิตกับฝ่ายโครงการใช้ฟอร์มเดียวกัน ต่างกันที่บรรทัดนี้ */
-function departmentLabel(ownerDepartment: PurchaseRequest["ownerDepartment"]): string {
-  if (ownerDepartment === "production") return "(ฝ่ายผลิต)";
-  if (ownerDepartment === "general") return "";
-  return "(ฝ่ายโครงการ)";
-}
+/**
+ * ชื่อแผนกในวงเล็บใต้หัวเรื่อง — ทุกฝ่ายใช้ฟอร์มเดียวกัน ต่างกันที่บรรทัดนี้
+ * อ่านจากรหัสฝ่ายที่ขอซื้อ (2026-09-23) ไม่ใช่ `ownerDepartment` เพราะใบเปล่าของสโตร์เลือกรหัสได้ทั้ง 4 ฝ่าย
+ * ใบพิมพ์เป็นภาษาไทยเสมอ (ดู docs/CLAUDE.md) จึงไม่ผ่าน t()
+ */
+const PRINT_DEPARTMENT_LABEL: Record<PurchaseRequestCode, string> = {
+  PR: "(ฝ่าย Support)", FD: "(ฝ่ายผลิต)", ED: "(ฝ่ายโครงการ)", SD: "(งานเหล็ก)",
+};
 
 /** ป้าย + ค่า วางเป็นสองคอลัมน์คงที่ เพื่อให้ค่าของทุกบรรทัดตรงแนวกันเหมือนกระดาษ */
 function Field({ label, value, labelWidth = "112px" }: { label: string; value: string; labelWidth?: string }) {
@@ -73,7 +75,7 @@ export function PurchaseRequestPrintDocument({
   const padding = Math.max(0, MIN_BODY_ROWS - p.lines.length);
   const cell: React.CSSProperties = { border: LINE, padding: "2px 5px", verticalAlign: "top" };
   const headCell: React.CSSProperties = { ...cell, textAlign: "center", fontWeight: 700 };
-  const dept = departmentLabel(p.ownerDepartment);
+  const dept = PRINT_DEPARTMENT_LABEL[purchaseRequestCodeOf(p)];
 
   // ใบจริงเขียนวันที่แบบ พ.ศ. สองหลัก (26/08/69) — ตัวช่วยตัวนี้มีอยู่แล้วสำหรับเอกสารบัญชี
   // ซึ่งลอกรูปแบบมาจากซอฟต์แวร์ Express ตัวเดียวกับที่ออกใบขอซื้อใบนี้

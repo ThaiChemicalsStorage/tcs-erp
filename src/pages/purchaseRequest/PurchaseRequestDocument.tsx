@@ -13,6 +13,7 @@ import {
   reviewPurchaseRequestStock, postPurchaseRequestIssue, cancelPurchaseRequestIssue,
   purchasingApprovePurchaseRequest, purchasingReopenPurchaseRequest, pullPurchaseRequestToPurchasing,
   storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
+  purchaseRequestCodeOf, PURCHASE_REQUEST_CODE_LABEL_KEY,
 } from "../../lib/purchaseRequest";
 import { createPurchaseOrder } from "../../lib/purchaseOrder";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
@@ -551,6 +552,7 @@ export function PurchaseRequestDocument({
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#866d28] font-mono font-semibold">{doc.id}</span>
+        <span className="text-xs text-muted-foreground">{t(PURCHASE_REQUEST_CODE_LABEL_KEY[purchaseRequestCodeOf(doc)])}</span>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${doc.status === "Draft" ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
           {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
         </span>

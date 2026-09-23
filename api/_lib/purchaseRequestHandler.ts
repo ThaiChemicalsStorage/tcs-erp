@@ -24,9 +24,9 @@ import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import type {
   PurchaseRequestLine, PurchaseRequestSummary, PurchaseRequestIssueBatch, PurchaseRequestStoreStage,
-  PurchaseRequestPurchasingStage,
+  PurchaseRequestPurchasingStage, PurchaseRequestCode,
 } from "../../src/lib/purchaseRequest.js";
-import { storeIssueBatchesOf, storeIssuedQtyOf } from "../../src/lib/purchaseRequest.js";
+import { storeIssueBatchesOf, storeIssuedQtyOf, defaultPurchaseRequestCode, isPurchaseRequestCode, purchaseRequestCodeOf } from "../../src/lib/purchaseRequest.js";
 
 /**
  * Purchase Request API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts` alongside
@@ -36,8 +36,12 @@ import { storeIssueBatchesOf, storeIssuedQtyOf } from "../../src/lib/purchaseReq
 
 const MAX_LINES = 100;
 
-async function nextPurchaseRequestId(counters: Collection<CounterFields>): Promise<string> {
-  return nextMonthlyDocumentNumber(counters, "PR", "purchase_request");
+/**
+ * เลขที่ใบขอซื้อขึ้นต้นด้วยรหัสฝ่าย (2026-09-23) และแต่ละรหัสนับแยกกัน · `PR` ใช้กุญแจตัวนับเดิม
+ * (`purchase_request`) เพื่อให้เลขของใบฝ่าย Support ต่อจากใบเก่าทุกใบที่ออกไปแล้ว
+ */
+async function nextPurchaseRequestId(counters: Collection<CounterFields>, code: PurchaseRequestCode): Promise<string> {
+  return nextMonthlyDocumentNumber(counters, code, code === "PR" ? "purchase_request" : `purchase_request_${code.toLowerCase()}`);
 }
 
 async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {
@@ -135,11 +139,12 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
     storeRemark: doc.storeRemark ?? "",
     storeIssues: doc.storeIssues ?? [],
     purchasingEdits: doc.purchasingEdits ?? [],
+    requestCode: purchaseRequestCodeOf({ id: doc._id, requestCode: doc.requestCode }),
   }));
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
   const full = withStringId(doc);
-  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, storeStage: full.storeStage, purchasingStage: full.purchasingStage, updatedAt: full.updatedAt, ownerDepartment: full.ownerDepartment ?? "project" };
+  return { id: full.id, requestCode: purchaseRequestCodeOf(full), projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, storeStage: full.storeStage, purchasingStage: full.purchasingStage, updatedAt: full.updatedAt, ownerDepartment: full.ownerDepartment ?? "project" };
 }
 
 async function loadOrThrow(id: string) {
@@ -303,12 +308,15 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     source = { projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber };
   }
 
+  const ownerDepartment = standalone ? "general" : fromProduction ? "production" : "project";
+  if (body.requestCode !== undefined && !isPurchaseRequestCode(body.requestCode)) throw new HttpError(400, "รหัสฝ่ายที่ขอซื้อไม่ถูกต้อง");
+  const requestCode: PurchaseRequestCode = isPurchaseRequestCode(body.requestCode) ? body.requestCode : defaultPurchaseRequestCode(ownerDepartment);
   const counters = await countersCollection();
-  const id = await nextPurchaseRequestId(counters);
+  const id = await nextPurchaseRequestId(counters, requestCode);
   const now = nowIso();
   const doc: PurchaseRequestFields = {
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
-    ownerDepartment: standalone ? "general" : fromProduction ? "production" : "project",
+    ownerDepartment, requestCode,
     productionOrderId: fromProduction ? productionOrderId : "",
     neededByDate: "", deliveryLocation: "",
     deliveryContact: "", deliveryPhone: "", headerRemark: "",
