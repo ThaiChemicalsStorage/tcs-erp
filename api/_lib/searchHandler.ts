@@ -284,6 +284,7 @@ const SEARCHABLE_PAGES: {
   { id: "productionRequisition", titleTh: "ใบเบิกและคืนวัสดุ (ฝ่ายผลิต)", titleEn: "Material Requisitions (Production)", navKey: "productionRequisition", permission: "materialRequisition:view", aliases: ["ใบเบิกและคืนวัสดุ ฝ่ายผลิต", "ใบเบิกของ ฝ่ายผลิต", "material requisition production"] },
   { id: "productionPurchase", titleTh: "ใบขอซื้อ (ฝ่ายผลิต)", titleEn: "Purchase Requests (Production)", navKey: "productionPurchase", permission: "purchaseRequest:view", aliases: ["ใบขอซื้อ ฝ่ายผลิต", "purchase request production"] },
   { id: "stock", titleTh: "สต๊อกสินค้า", titleEn: "Stock", navKey: "stock", permission: "stock:view", aliases: ["สต๊อกสินค้า", "สต๊อก", "stock", "คลัง"] },
+  { id: "stockHistory", titleTh: "ประวัติสต๊อก", titleEn: "Stock history", navKey: "stockHistory", permission: "stock:view", aliases: ["ประวัติสต๊อก", "ความเคลื่อนไหวสต๊อก", "ตัดของไปงานไหน", "stock history", "movement"] },
   { id: "productRequest", titleTh: "คำขอเพิ่มสินค้า", titleEn: "Product Requests", navKey: "productRequest", permission: "productRequest:view", aliases: ["คำขอเพิ่มสินค้า", "ขอเพิ่มสินค้า", "product request", "ขอรหัสสินค้า"] },
   { id: "departments", titleTh: "แผนกและทีม", titleEn: "Departments and Teams", navKey: "departments", permission: "departments:manage", aliases: ["แผนกและทีม", "แผนก", "ทีม", "departments", "teams"] },
 ];

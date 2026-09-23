@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, PackageMinus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, PackageMinus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -76,6 +76,7 @@ const ArDocumentListPage = lazy(() => import("./pages/accounting/ArDocumentListP
 const ArMonthlyReportPage = lazy(() => import("./pages/accounting/ArMonthlyReportPage").then((m) => ({ default: m.ArMonthlyReportPage })));
 const AccountingDashboardPage = lazy(() => import("./pages/accounting/AccountingDashboardPage").then((m) => ({ default: m.AccountingDashboardPage })));
 const StockPage = lazy(() => import("./pages/stock/StockPage").then((m) => ({ default: m.StockPage })));
+const StockHistoryPage = lazy(() => import("./pages/stock/StockHistoryPage").then((m) => ({ default: m.StockHistoryPage })));
 const ToolControlPage = lazy(() => import("./pages/toolControl/ToolControlPage").then((m) => ({ default: m.ToolControlPage })));
 const ReceivingReportPage = lazy(() => import("./pages/receivingReport/ReceivingReportPage").then((m) => ({ default: m.ReceivingReportPage })));
 const PurchaseTaxRegisterPage = lazy(() => import("./pages/accounting/PurchaseTaxRegisterPage").then((m) => ({ default: m.PurchaseTaxRegisterPage })));
@@ -153,7 +154,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "stockHistory" | "toolControl" | "receivingReport" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -163,6 +164,7 @@ const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   quotationTemplates: ["jobTypes", "products", "categories"],
   products: ["products", "categories"],
   stock: ["products", "categories"],
+  stockHistory: ["products"],
   customers: ["customers"],
   vendors: ["vendors"],
   codeRegister: ["codeEntries"],
@@ -256,6 +258,8 @@ const navItems: NavItem[] = [
   { key: "productionPurchase", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
+  // ประวัติความเคลื่อนไหวสต๊อก (2026-09-23) — แยกจากการ์ดท้ายหน้าสต๊อก ใช้สิทธิ์ stock:view เดิม
+  { key: "stockHistory", icon: History, labelKey: "nav.stockHistory", permission: "stock:view" },
   // เครื่องมือประจำทีม (2026-09-03) — มุมมองของบัญชีสต๊อก ใช้สิทธิ์ stock:view เดิม ไม่สร้างสิทธิ์ใหม่
   { key: "toolControl", icon: Hammer, labelKey: "nav.toolControl", permission: "stock:view" },
   // ใบรับสินค้า (2026-09-03) — สโตร์เป็นคนรับของและเป็นเจ้าของใบ จึงอยู่กลุ่มคลังสินค้า ไม่ใช่จัดซื้อ
@@ -314,7 +318,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "storeRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "toolControl", "receivingReport", "storePurchaseRequest", "storeRequestInbox", "storeIssueInbox", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "stockHistory", "toolControl", "receivingReport", "storePurchaseRequest", "storeRequestInbox", "storeIssueInbox", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -353,6 +357,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   purchasingRequestInbox: "nav.purchasingRequestInbox",
   products: "nav.products",
   stock: "nav.stock",
+  stockHistory: "nav.stockHistory",
   toolControl: "nav.toolControl",
   receivingReport: "nav.receivingReport",
   productRequest: "nav.productRequest",
@@ -432,6 +437,8 @@ export default function App() {
   const [quotationDeepLinkId, setQuotationDeepLinkId] = useState<string | null>(null);
   const [customerDeepLinkId, setCustomerDeepLinkId] = useState<string | null>(null);
   const [productDeepLinkId, setProductDeepLinkId] = useState<string | null>(null);
+  /** สินค้าที่หน้าประวัติสต๊อกควรเปิดแท็บติดตามให้ — มาจากปุ่มประวัติของแถวในหน้าสต๊อก */
+  const [stockHistoryProductId, setStockHistoryProductId] = useState<string | null>(null);
   const [userDeepLinkId, setUserDeepLinkId] = useState<string | null>(null);
   const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
@@ -732,6 +739,10 @@ export default function App() {
     });
   };
   const clearPageAction = () => setPageAction(null);
+  const navigateToStockHistory = (productId: string) => guardedNav(() => {
+    setStockHistoryProductId(productId);
+    setActiveNav("stockHistory");
+  });
 
   /**
    * เปิดผลค้นหาหนึ่งรายการ — จุดเดียวที่แปลงชนิดของผลลัพธ์เป็นหน้าปลายทาง (2026-08-28)
@@ -1283,7 +1294,9 @@ export default function App() {
               : effectiveNav === "products"
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} currentUserId={currentUser.id} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "stock"
-              ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} />
+              ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} onOpenHistory={navigateToStockHistory} />
+              : effectiveNav === "stockHistory"
+              ? <StockHistoryPage products={products} initialProductId={stockHistoryProductId} onInitialProductConsumed={() => setStockHistoryProductId(null)} />
               : effectiveNav === "toolControl"
               ? <ToolControlPage company={company} currentUserId={currentUser.id} canIssue={canAdjustStock} />
               : effectiveNav === "productCategories"

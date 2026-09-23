@@ -11,7 +11,11 @@ import type { TranslationKey } from "./i18n.js";
  * being written by the server for two days before it existed here — fixed 2026-09-03.)
  */
 export type StockMovementKind = "receive" | "deduct" | "adjust" | "return";
-export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue" | "purchase_request";
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue" | "purchase_request"
+  /** นำเข้ายอดสต๊อกจากไฟล์ Excel (2026-09-23) */
+  | "stock_import"
+  /** ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) */
+  | "store_receipt";
 
 export interface StockMovement {
   id: string;
@@ -87,4 +91,67 @@ export async function createStockMovement(fields: {
     body: JSON.stringify(fields),
   });
   return movement;
+}
+
+// ── ประวัติความเคลื่อนไหวสต๊อก (หน้าแยก 2026-09-23) ─────────────────────────────
+
+/**
+ * ที่มาของความเคลื่อนไหวหนึ่งแถว เติมตอนอ่านจากเอกสารต้นทาง — ไม่ได้เก็บในแถวสต๊อก
+ *
+ * เจ้าของสั่ง: *"ค้นหาดูได้ว่าของชิ้นนี้ตัดไปกับงานไหนบ้างเข้ายังไงบ้าง"* · แถวสต๊อกเก็บแค่เลขเอกสาร
+ * งาน/โครงการอยู่บนใบเบิก ส่วนใบสั่งซื้อ/ผู้ขายอยู่บนใบรับสินค้า จึงต้องตามไปอ่านอีกทอดหนึ่ง
+ */
+export interface StockMovementLink {
+  jobCode?: string;
+  jobOrderCode?: string;
+  productionOrderId?: string;
+  customerName?: string;
+  /** เจ้าของใบเบิก — "project" | "production" | "store" */
+  ownerDepartment?: string;
+  /** รหัสการจ่าย/รับของใบสโตร์ (PD, JD, …) หรือรหัสรับเข้าของใบรับสินค้า (RR/RX/RI) */
+  code?: string;
+  purchaseOrderNumber?: string;
+  vendorName?: string;
+}
+
+export interface StockHistoryRow extends StockMovement {
+  /** ชื่อผู้ทำรายการ — แถวสต๊อกเก็บแค่ id ผู้ใช้ */
+  createdByName: string;
+  link: StockMovementLink;
+}
+
+export interface StockHistoryFilter {
+  q?: string;
+  kind?: StockMovementKind | "";
+  sourceType?: StockMovementSourceType | "";
+  productId?: string;
+  departmentId?: string;
+  /** วันที่แบบ YYYY-MM-DD ตามเวลาไทย ทั้งสองฝั่งรวมวันนั้น */
+  from?: string;
+  to?: string;
+  skip?: number;
+  limit?: number;
+}
+
+export interface StockHistorySummaryRow {
+  kind: StockMovementKind;
+  count: number;
+  /** ผลรวมมูลค่า (บวกเสมอ) — แถวเก่าที่ไม่มีมูลค่าไม่ถูกนับ */
+  amount: number;
+}
+
+export interface StockHistoryResult {
+  movements: StockHistoryRow[];
+  /** จำนวนแถวทั้งหมดที่ตรงตัวกรอง (ไม่ใช่แค่หน้านี้) */
+  total: number;
+  summary: StockHistorySummaryRow[];
+}
+
+export async function fetchStockHistory(filter: StockHistoryFilter): Promise<StockHistoryResult> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filter)) {
+    if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+  }
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<StockHistoryResult>(`/stock-movements/history${qs}`);
 }

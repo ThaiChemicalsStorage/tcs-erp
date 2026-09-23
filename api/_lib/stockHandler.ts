@@ -7,6 +7,7 @@ import {
 } from "./collections.js";
 import { nowIso } from "../../src/lib/products.js";
 import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
+import { handleStockHistory } from "./stockHistory.js";
 
 /**
  * Product Stock (added 2026-08-18) — see the collections.ts doc comment above
@@ -317,5 +318,6 @@ export async function handleStock(req: ApiRequest, res: ApiResponse): Promise<vo
   if (parts.length === 0) {
     return req.method === "POST" ? handleMovementCreate(req, res) : handleMovementsList(req, res);
   }
+  if (parts.length === 1 && parts[0] === "history") return handleStockHistory(req, res);
   throw new HttpError(404, "Not found");
 }

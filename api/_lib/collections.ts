@@ -848,7 +848,11 @@ export type StockMovementKind = "receive" | "deduct" | "adjust" | "return";
  * `purchase_request` เพิ่ม 2026-09-09 — สโตร์เช็คใบขอซื้อแล้วพบว่ามีของในสต๊อก จึงจ่ายจากใบขอซื้อนั้นเลย
  * (เจ้าของเลือกทางนี้แทนการสร้างใบเบิกอีกใบ ดู src/lib/purchaseRequest.ts `PurchaseRequestIssueBatch`)
  */
-export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue" | "purchase_request";
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue" | "purchase_request"
+  /** นำเข้ายอดสต๊อกจากไฟล์ Excel (2026-09-23) */
+  | "stock_import"
+  /** ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) */
+  | "store_receipt";
 
 export interface StockMovementFields {
   productId: string;

@@ -11,9 +11,6 @@ import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 
-const KIND_FILTERS = ["all", "receive", "deduct", "return", "adjust"] as const;
-type KindFilter = (typeof KIND_FILTERS)[number];
-
 const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // หน้าสต๊อกสินค้า — เพิ่ม 2026-08-18 เป็นโครงสร้างที่ตั้งใจให้ใช้ร่วมกันได้ในอนาคต (ไม่ใช่ของฝ่ายบัญชี
@@ -30,6 +27,7 @@ export function StockPage({
   canAdjust,
   company,
   currentUserName,
+  onOpenHistory,
 }: {
   products: Product[];
   onProductsChange: (products: Product[]) => void;
@@ -39,12 +37,11 @@ export function StockPage({
   company: Company;
   /** ชื่อคนที่กดพิมพ์ เติมให้ในช่อง "ผู้นับ" ของใบนับ */
   currentUserName: string;
+  /** ประวัติความเคลื่อนไหวย้ายไปอยู่หน้าของตัวเองแล้ว (2026-09-23) — ปุ่มประวัติของแถวพาไปแท็บติดตามสินค้าตัวนั้น */
+  onOpenHistory: (productId: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
-  const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
-  const [historyRetryToken, setHistoryRetryToken] = useState(0);
-  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   /** สินค้าที่กำลังจะพิมพ์การ์ดสต๊อก — โหลดประวัติทั้งหมด (ไม่ใช่ 200 แถวล่าสุด) แล้วค่อยสั่งพิมพ์ */
   const [cardProduct, setCardProduct] = useState<Product | null>(null);
   const [cardMovements, setCardMovements] = useState<StockMovement[] | null>(null);
@@ -59,10 +56,6 @@ export function StockPage({
     !normalizedSearch || p.code.toLowerCase().includes(normalizedSearch) || p.name.toLowerCase().includes(normalizedSearch),
   );
 
-  // เก็บผลลัพธ์พร้อม key ของรอบที่ fetch — loading คำนวณจากการเทียบ key แทนการ setState แบบ
-  // synchronous ใน effect (ต้องห้ามตาม react-hooks/set-state-in-effect) — pattern เดียวกับ
-  // AccountingDashboardPage.tsx
-  const [movementsResult, setMovementsResult] = useState<{ key: string; movements?: StockMovement[]; error?: boolean } | null>(null);
   /**
    * ดึงยอดสินค้าใหม่ทุกครั้งที่เปิดหน้านี้ (2026-09-03b)
    *
@@ -86,25 +79,6 @@ export function StockPage({
     // ครั้งเดียวตอน mount — ตั้งใจไม่ผูกกับ onProductsChange ที่เปลี่ยน identity ทุก render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const key = `${historyProduct?.id ?? ""}#${historyRetryToken}`;
-    fetchStockMovements(historyProduct?.id ? { productId: historyProduct.id } : undefined)
-      .then((movements) => { if (!cancelled) setMovementsResult({ key, movements }); })
-      .catch(() => { if (!cancelled) { setMovementsResult({ key, error: true }); toast.show(t("stock.toast.loadHistoryFailed")); } });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyProduct?.id, historyRetryToken]);
-  const movementsKey = `${historyProduct?.id ?? ""}#${historyRetryToken}`;
-  const currentMovements = movementsResult?.key === movementsKey ? movementsResult : null;
-  const loadingMovements = currentMovements === null;
-  // ต้องแยกสถานะ "โหลดพัง" ออกจาก "ไม่มีประวัติ" — ไม่งั้นรอบที่ fetch ไม่สำเร็จจะขึ้นข้อความว่า
-  // ยังไม่มีประวัติการปรับสต๊อก ซึ่งอ่านเหมือนข้อมูลจริงทั้งที่แค่โหลดไม่ได้ (pattern เดียวกับ ArMonthlyReportPage)
-  const movementsError = currentMovements?.error === true;
-  const allMovements = currentMovements?.movements ?? [];
-  // กรองฝั่งจอจากชุดที่โหลดมาแล้ว — "คืนของ" คือสิ่งที่เจ้าของขอให้เห็นแยกออกมา (2026-09-03)
-  const movements = kindFilter === "all" ? allMovements : allMovements.filter((m) => m.kind === kindFilter);
 
   const totalUnits = activeProducts.reduce((sum, p) => sum + p.stockQty, 0);
   const totalValue = activeProducts.reduce((sum, p) => sum + stockValueOf(p), 0);
@@ -155,7 +129,6 @@ export function StockPage({
         }
       : p)));
     setAdjustTarget(null);
-    setHistoryRetryToken((n) => n + 1);
     toast.show(t("stock.toast.adjustSaved"));
   };
 
@@ -285,7 +258,7 @@ export function StockPage({
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => setHistoryProduct(p)} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity" title={t("stock.action.viewHistoryTitle")} aria-label={t("stock.action.viewHistoryTitle")}>
+                        <button onClick={() => onOpenHistory(p.id)} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity" title={t("stock.action.viewHistoryTitle")} aria-label={t("stock.action.viewHistoryTitle")}>
                           <History size={14} />
                         </button>
                         <button onClick={() => void printStockCard(p)} disabled={cardProduct !== null} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity disabled:opacity-30" title={t("stock.action.stockCardTitle")} aria-label={t("stock.action.stockCardTitle")}>
@@ -307,79 +280,6 @@ export function StockPage({
             </table>
           </div>
         )}
-      </div>
-
-      <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
-            {historyProduct ? `${t("stock.history.heading")} — ${historyProduct.name}` : t("stock.history.headingLatest")}
-          </h2>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-8 w-fit" role="group" aria-label={t("stock.history.col.kind")}>
-              {KIND_FILTERS.map((k) => (
-                <button key={k} onClick={() => setKindFilter(k)}
-                  className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all ${kindFilter === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
-                  {k === "all" ? t("stock.history.filter.all") : t(STOCK_MOVEMENT_KIND_LABEL_KEY[k])}
-                </button>
-              ))}
-            </div>
-            {historyProduct && (
-              <button onClick={() => setHistoryProduct(null)} className="text-xs text-muted-foreground hover:text-foreground">{t("stock.history.showAll")}</button>
-            )}
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
-                <th className="text-left font-medium px-4 py-3">{t("stock.history.col.date")}</th>
-                {!historyProduct && <th className="text-left font-medium px-4 py-3">{t("stock.history.col.product")}</th>}
-                <th className="text-left font-medium px-4 py-3">{t("stock.history.col.kind")}</th>
-                <th className="text-right font-medium px-4 py-3">{t("stock.history.col.qty")}</th>
-                <th className="text-right font-medium px-4 py-3">{t("stock.history.col.unitCost")}</th>
-                <th className="text-right font-medium px-4 py-3">{t("stock.history.col.amount")}</th>
-                <th className="text-right font-medium px-4 py-3">{t("stock.history.col.balanceAfter")}</th>
-                <th className="text-left font-medium px-4 py-3">{t("stock.history.col.chargeTo")}</th>
-                <th className="text-left font-medium px-4 py-3">{t("stock.history.col.reason")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movements.map((m) => (
-                <tr key={m.id} className="border-b border-border/60 last:border-0 hover:bg-secondary/30 transition-colors">
-                  <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{new Date(m.createdAt).toLocaleString("th-TH")}</td>
-                  {!historyProduct && <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">{m.productCode} — {m.productName}</td>}
-                  <td className="px-4 py-3 text-xs whitespace-nowrap">{t(STOCK_MOVEMENT_KIND_LABEL_KEY[m.kind])}</td>
-                  <td className={`px-4 py-3 text-xs font-mono text-right whitespace-nowrap ${m.delta < 0 ? "text-[#c23f3f]" : "text-[#207e52]"}`}>{m.delta > 0 ? "+" : ""}{m.delta.toLocaleString("th-TH")}</td>
-                  <td className="px-4 py-3 text-xs font-mono text-right whitespace-nowrap text-muted-foreground">{m.unitCost !== undefined ? money(m.unitCost) : "—"}</td>
-                  <td className="px-4 py-3 text-xs font-mono text-right whitespace-nowrap">{m.amount !== undefined ? money(m.amount) : "—"}</td>
-                  <td className="px-4 py-3 text-xs font-mono text-right whitespace-nowrap">{m.balanceAfter.toLocaleString("th-TH")}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    {[m.departmentName, m.teamName].filter(Boolean).join(" / ") || "—"}
-                    {m.workTypeName && <span className="block text-xs">{m.workTypeName}</span>}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{m.sourceLabel ? `${m.sourceLabel} — ` : ""}{m.reason}</td>
-                </tr>
-              ))}
-              {movements.length === 0 && (
-                <tr>
-                  <td colSpan={historyProduct ? 8 : 9} className="text-center text-xs text-muted-foreground py-10">
-                    {loadingMovements ? t("stock.history.loading") : movementsError ? (
-                      <span className="inline-flex items-center gap-2">
-                        {t("stock.toast.loadHistoryFailed")}
-                        <button
-                          onClick={() => setHistoryRetryToken((n) => n + 1)}
-                          className="px-2 py-1 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
-                        >
-                          {t("stock.history.retry")}
-                        </button>
-                      </span>
-                    ) : t("stock.history.empty")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {adjustTarget && (
