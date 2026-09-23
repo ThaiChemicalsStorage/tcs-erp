@@ -19,7 +19,7 @@ import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
 import {
-  applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf,
+  applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf, postedUnitCostsByProduct,
   type StockMovementOrgTags, type ProductCostBasis,
 } from "./stockHandler.js";
 import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
@@ -1028,7 +1028,24 @@ async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "materialRequisition:print");
   const doc = await loadOrThrow(id);
   await writeAuditEntry(ctx, "Material Requisition Printed", `พิมพ์ใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
-  res.status(200).json({ ok: true });
+  res.status(200).json({ ok: true, unitCostByProduct: await printUnitCostsFor(doc) });
+}
+
+/**
+ * ต้นทุนต่อหน่วยสำหรับใบพิมพ์ "ใบจ่ายวัสดุ" ของสโตร์ (2026-09-23 — ฟอร์มโปรแกรมบัญชีเดิมมีช่อง หน่วยละ/รวม)
+ * ส่งมากับการกดพิมพ์ ไม่ได้ใส่ในทุก route ที่คืนเอกสาร — ตัวเลขนี้ใช้แค่ตอนพิมพ์ และต้องสดเสมอ
+ *
+ * ของที่จ่ายไปแล้ว = ต้นทุนที่ลงสต๊อกจริงในรอบจ่าย · ของที่ยังไม่ได้จ่าย = ต้นทุนเฉลี่ยปัจจุบัน (ซึ่งเป็นราคาที่
+ * การจ่ายจะใช้ ดู `applyStockMovement()`) จึงเป็นตัวเลขประมาณจนกว่าสโตร์จะจ่ายจริง
+ */
+async function printUnitCostsFor(doc: MaterialRequisitionFields): Promise<Record<string, number>> {
+  const posted = await postedUnitCostsByProduct(issueBatchesOf(doc).flatMap((b) => b.stockMovementIds ?? []));
+  const basis = await costByProductFor(doc.lines ?? []);
+  const out: Record<string, number> = {};
+  for (const l of doc.lines ?? []) {
+    if (l.productId) out[l.productId] = posted[l.productId] ?? basis[l.productId]?.avgCost ?? 0;
+  }
+  return out;
 }
 
 /** ตัวนับเลขฉบับแก้ไขต่อสายเอกสาร — idiom เดียวกับ Scope of Work และใบสั่งผลิต */

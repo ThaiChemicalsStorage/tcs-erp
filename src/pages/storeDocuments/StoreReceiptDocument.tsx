@@ -80,6 +80,9 @@ export function StoreReceiptDocument({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  // ต้นทุนต่อหน่วยสำหรับช่อง หน่วยละ/รวม ของใบพิมพ์ — มากับการกดพิมพ์ทุกครั้งจึงสดเสมอ
+  const [printCosts, setPrintCosts] = useState<Record<string, number>>({});
 
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
 
@@ -218,6 +221,18 @@ export function StoreReceiptDocument({
     }
   };
 
+  const handlePrint = async () => {
+    setPrinting(true);
+    try {
+      setPrintCosts(await logStoreReceiptPrinted(draft.id));
+      setShowPrint(true);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("storeReceipt.errorPrint"));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const runDelete = async () => {
     setDeleting(true);
     try {
@@ -265,9 +280,9 @@ export function StoreReceiptDocument({
           <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
             {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             {canPrint && (
-              <button onClick={() => { void logStoreReceiptPrinted(draft.id).catch(() => {}); setShowPrint(true); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                <Printer size={13} /> {t("storeReceipt.print")}
+              <button onClick={() => void handlePrint()} disabled={printing}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("storeReceipt.print")}
               </button>
             )}
             {editable && (
@@ -546,7 +561,7 @@ export function StoreReceiptDocument({
         </div>
       </div>
 
-      <StoreReceiptPrintDocument doc={draft} sourceLines={sourceLines} companyHeader={companyHeader} />
+      <StoreReceiptPrintDocument doc={draft} unitCostByProduct={printCosts} companyHeader={companyHeader} />
 
       <ProductPickerModal
         open={pickerOpen}

@@ -8,7 +8,7 @@ import {
   toObjectId, withStringId, type StoreReceiptFields, type MaterialRequisitionFields,
 } from "./collections.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
-import { applyStockMovement, productCostBasis, returnUnitCostOf, type StockMovementOrgTags } from "./stockHandler.js";
+import { applyStockMovement, productCostBasis, returnUnitCostOf, postedUnitCostsByProduct, type StockMovementOrgTags } from "./stockHandler.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -400,9 +400,30 @@ async function handlePost(req: ApiRequest, res: ApiResponse, id: string) {
 
 async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "materialRequisition:print");
-  await loadOrThrow(id);
+  const doc = await loadOrThrow(id);
   await writeAuditEntry(ctx, "Store Receipt Printed", `พิมพ์ใบรับคืน ${id}`);
-  res.status(204).end();
+  res.status(200).json({ unitCostByProduct: await printUnitCostsFor(doc) });
+}
+
+/**
+ * ต้นทุนต่อหน่วยสำหรับใบพิมพ์ (2026-09-23 — ฟอร์มโปรแกรมบัญชีเดิมมีช่อง หน่วยละ/รวม) · รับเข้าคลังแล้ว = ต้นทุนที่ลง
+ * สต๊อกจริง · ยังไม่รับเข้า = ราคาที่ `handlePost()` จะใช้: คืน = ราคาซื้อล่าสุด, รับเข้า = ต้นทุนที่กรอก (ไม่กรอก = เฉลี่ย,
+ * GC = 0), ปรับยอด = ต้นทุนเฉลี่ย
+ */
+async function printUnitCostsFor(doc: StoreReceiptFields): Promise<Record<string, number>> {
+  const kind = storeReceiptCodeInfo(doc.receiptCode).kind;
+  const posted = await postedUnitCostsByProduct(doc.stockMovementIds ?? []);
+  const lines = (doc.lines ?? []).filter((l) => l.productId);
+  const basis = await productCostBasis(lines.map((l) => l.productId));
+  const out: Record<string, number> = {};
+  for (const l of lines) {
+    if (posted[l.productId] !== undefined) { out[l.productId] = posted[l.productId]; continue; }
+    const b = basis[l.productId];
+    out[l.productId] = kind === "return" ? (returnUnitCostOf(b) ?? 0)
+      : kind === "receive" ? (doc.receiptCode === "GC" ? 0 : l.unitCost ?? b?.avgCost ?? 0)
+        : (b?.avgCost ?? 0);
+  }
+  return out;
 }
 
 const approvalConfig: ApprovalConfig<StoreReceiptFields & { _id: string }> = {

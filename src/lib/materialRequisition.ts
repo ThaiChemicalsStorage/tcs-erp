@@ -490,8 +490,13 @@ export async function rewriteMaterialRequisition(id: string): Promise<MaterialRe
   return materialRequisition;
 }
 
-export async function logMaterialRequisitionPrinted(id: string): Promise<void> {
-  await apiFetch<{ ok: boolean }>(`/material-requisitions/${encodeURIComponent(id)}/print`, { method: "POST" });
+/**
+ * บันทึกการพิมพ์ — คืนต้นทุนต่อหน่วยของทุกสินค้าในใบ (key = productId) ที่ใบพิมพ์ "ใบจ่ายวัสดุ" ของสโตร์ใช้
+ * (ของที่จ่ายแล้ว = ต้นทุนที่ลงสต๊อกจริง, ยังไม่จ่าย = ต้นทุนเฉลี่ยปัจจุบัน)
+ */
+export async function logMaterialRequisitionPrinted(id: string): Promise<Record<string, number>> {
+  const res = await apiFetch<{ ok: boolean; unitCostByProduct?: Record<string, number> }>(`/material-requisitions/${encodeURIComponent(id)}/print`, { method: "POST" });
+  return res.unitCostByProduct ?? {};
 }
 export async function deleteMaterialRequisition(id: string): Promise<void> {
   await apiFetch<void>(`/material-requisitions/${encodeURIComponent(id)}`, { method: "DELETE" });

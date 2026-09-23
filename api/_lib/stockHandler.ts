@@ -96,6 +96,31 @@ export function returnUnitCostOf(basis: ProductCostBasis | undefined): number | 
   return basis.lastCost > 0 ? basis.lastCost : (basis.avgCost > 0 ? basis.avgCost : undefined);
 }
 
+/**
+ * ต้นทุนต่อหน่วยที่เอกสารใบหนึ่ง **ลงสต๊อกไปจริง** แยกตามสินค้า (2026-09-23 — ใบพิมพ์ใบจ่าย/ใบรับคืนของสโตร์)
+ *
+ * รับรายการ id ของ movement ที่เอกสารเก็บไว้เอง (`issues[].stockMovementIds` ของใบเบิก, `stockMovementIds` ของ
+ * ใบรับคืน) ไม่ได้ค้นด้วย `sourceId` — รอบจ่ายที่ถูกยกเลิกจะหลุดจากเอกสารไปแล้ว แต่ movement ของมันยังอยู่ในสมุด
+ * · สินค้าเดียวกันหลายบรรทัด/หลายรอบ = มูลค่ารวม ÷ จำนวนรวม · สินค้าที่ไม่มีในรายการ = ยังไม่ได้ลงสต๊อก
+ * (ผู้เรียกตัดสินใจเองว่าจะประมาณจากต้นทุนปัจจุบันอย่างไร)
+ */
+export async function postedUnitCostsByProduct(movementIds: string[]): Promise<Record<string, number>> {
+  const ids = [...new Set(movementIds.filter((id) => /^[0-9a-f]{24}$/i.test(id)))];
+  if (ids.length === 0) return {};
+  const movements = await stockMovementsCollection();
+  const rows = await movements.find({ _id: { $in: ids.map((id) => toObjectId(id)) } } as never,
+    { projection: { productId: 1, delta: 1, amount: 1, unitCost: 1 } }).toArray();
+  const sums = new Map<string, { qty: number; amount: number }>();
+  for (const m of rows as unknown as { productId: string; delta: number; amount?: number; unitCost?: number }[]) {
+    const qty = Math.abs(m.delta ?? 0);
+    if (qty === 0) continue;
+    const amount = typeof m.amount === "number" ? m.amount : qty * (m.unitCost ?? 0);
+    const s = sums.get(m.productId) ?? { qty: 0, amount: 0 };
+    sums.set(m.productId, { qty: s.qty + qty, amount: s.amount + amount });
+  }
+  return Object.fromEntries([...sums].map(([productId, s]) => [productId, round2(s.amount / s.qty)]));
+}
+
 /** แผนก/ทีม/ประเภทงานที่ประทับลง movement — ดู StockMovementFields */
 export interface StockMovementOrgTags {
   departmentId?: string;

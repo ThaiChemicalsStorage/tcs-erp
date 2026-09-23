@@ -150,6 +150,29 @@ describe("ใบรับคืน / รับเข้าคลัง", () => {
     expect((await api("DELETE", `/api/store-receipts/${jdId}`)).status).toBe(400);
   });
 
+  it("กดพิมพ์ได้ต้นทุนต่อหน่วยของใบ — ลงสต๊อกแล้วใช้ต้นทุนจริง ยังไม่ลงใช้ต้นทุนปัจจุบัน (ใบพิมพ์แบบโปรแกรมเดิม)", async () => {
+    const products = client.db("tcs_erp").collection("products");
+    // ต้นทุนเฉลี่ยเปลี่ยนหลังจ่าย/รับคืนไปแล้ว — ใบที่ลงสต๊อกแล้วต้องยังพิมพ์ต้นทุนตอนลง (100) ไม่ใช่ค่าใหม่
+    await products.updateOne({ _id: new ObjectId(resinId) }, { $set: { avgCost: 999 } });
+    try {
+      const mrPrint = await api("POST", `/api/material-requisitions/${issueId}/print`);
+      expect(mrPrint.status).toBe(200);
+      expect(mrPrint.body.unitCostByProduct[resinId]).toBe(100);
+      const jdPrint = await api("POST", `/api/store-receipts/${jdId}/print`);
+      expect(jdPrint.status).toBe(200);
+      expect(jdPrint.body.unitCostByProduct[resinId]).toBe(100);
+
+      const draft = await api("POST", "/api/store-receipts", { receiptCode: "JU" });
+      const draftId = draft.body.storeReceipt.id;
+      await api("PATCH", `/api/store-receipts/${draftId}`, { reason: "ทดสอบ", lines: [{ id: "srline_print_1", productId: resinId, qty: 17 }] });
+      const draftPrint = await api("POST", `/api/store-receipts/${draftId}/print`);
+      expect(draftPrint.body.unitCostByProduct[resinId]).toBe(999);
+      await api("DELETE", `/api/store-receipts/${draftId}`);
+    } finally {
+      await products.updateOne({ _id: new ObjectId(resinId) }, { $set: { avgCost: 100 } });
+    }
+  });
+
   it("รับสินค้าสำเร็จรูป (FG) พร้อมต้นทุน — ถัวต้นทุนเฉลี่ยใหม่", async () => {
     const created = await api("POST", "/api/store-receipts", { receiptCode: "FG" });
     const id = created.body.storeReceipt.id;

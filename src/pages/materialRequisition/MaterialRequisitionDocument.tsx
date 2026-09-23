@@ -28,6 +28,7 @@ import {
   type MaterialRequisitionTemplate, fetchMaterialRequisitionTemplates, templateLinesToRequisitionLines,
 } from "../../lib/materialRequisitionTemplate";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
+import { StoreIssuePrintDocument } from "../storeDocuments/StoreIssuePrintDocument";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -144,6 +145,8 @@ export function MaterialRequisitionDocument({
   const [confirmCancelBatch, setConfirmCancelBatch] = useState<MaterialIssueBatch | null>(null);
   const [cancellingBatch, setCancellingBatch] = useState(false);
   const [printing, setPrinting] = useState(false);
+  // ต้นทุนต่อหน่วยสำหรับใบจ่ายของสโตร์ (ช่อง หน่วยละ/รวม) — มากับการกดพิมพ์ทุกครั้งจึงสดเสมอ
+  const [printCosts, setPrintCosts] = useState<Record<string, number>>({});
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
@@ -503,7 +506,7 @@ export function MaterialRequisitionDocument({
   const handlePrint = async () => {
     setPrinting(true);
     try {
-      await logMaterialRequisitionPrinted(doc.id);
+      setPrintCosts(await logMaterialRequisitionPrinted(doc.id));
       setShowPrint(true);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorPrint"));
@@ -1054,7 +1057,10 @@ export function MaterialRequisitionDocument({
         </div>
       </div>
 
-      <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />
+      {/* ใบเบิกของสโตร์พิมพ์เป็นฟอร์ม "ใบจ่ายวัสดุ" ของโปรแกรมบัญชีเดิม (2026-09-23) — ฝ่ายอื่นยังเป็น FM-ST-04 */}
+      {isStoreDoc
+        ? <StoreIssuePrintDocument materialRequisition={doc} unitCostByProduct={printCosts} companyHeader={companyHeader} />
+        : <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />}
 
       <ProductPickerModal
         open={pickerOpen}

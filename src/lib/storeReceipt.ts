@@ -178,6 +178,8 @@ export const withdrawStoreReceiptApproval = (id: string) => action(id, "withdraw
 export async function postStoreReceipt(id: string): Promise<StoreReceiptBundle> {
   return apiFetch<StoreReceiptBundle>(`/store-receipts/${encodeURIComponent(id)}/post`, { method: "POST" });
 }
-export async function logStoreReceiptPrinted(id: string): Promise<void> {
-  await apiFetch(`/store-receipts/${encodeURIComponent(id)}/print`, { method: "POST" });
+/** บันทึกการพิมพ์ — คืนต้นทุนต่อหน่วยของทุกสินค้าในใบ (key = productId) สำหรับช่อง หน่วยละ/รวม ของใบพิมพ์ */
+export async function logStoreReceiptPrinted(id: string): Promise<Record<string, number>> {
+  const res = await apiFetch<{ unitCostByProduct?: Record<string, number> }>(`/store-receipts/${encodeURIComponent(id)}/print`, { method: "POST" });
+  return res.unitCostByProduct ?? {};
 }
