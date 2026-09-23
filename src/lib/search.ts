@@ -100,7 +100,7 @@ export interface SearchPageResult {
 export type DocumentCategory =
   | "deliveryOrders" | "serviceReports" | "projects" | "materialRequisitions"
   | "jobOrders" | "purchaseRequests" | "productionOrders" | "arDocuments" | "productRequests"
-  | "purchaseOrders" | "costControls" | "receivingReports" | "storeReceipts";
+  | "purchaseOrders" | "costControls" | "receivingReports" | "storeReceipts" | "vendorBills";
 
 export type SearchCategory =
   | "quotations" | "scopeOfWorks" | DocumentCategory
@@ -113,13 +113,13 @@ export type SearchCategory =
  */
 export const SEARCH_CATEGORY_ORDER: SearchCategory[] = [
   "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
-  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "costControls", "productionOrders",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "vendorBills", "costControls", "productionOrders",
   "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
 ];
 
 export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   "deliveryOrders", "serviceReports", "projects", "materialRequisitions",
-  "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "costControls", "productionOrders", "arDocuments", "productRequests",
+  "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "vendorBills", "costControls", "productionOrders", "arDocuments", "productRequests",
 ];
 
 export function isDocumentCategory(c: SearchCategory): c is DocumentCategory {
@@ -145,6 +145,7 @@ export interface SearchResults {
   purchaseOrders: SearchDocumentResult[];
   receivingReports: SearchDocumentResult[];
   storeReceipts: SearchDocumentResult[];
+  vendorBills: SearchDocumentResult[];
   costControls: SearchDocumentResult[];
   productionOrders: SearchDocumentResult[];
   arDocuments: SearchDocumentResult[];
@@ -186,6 +187,7 @@ export const SEARCH_CATEGORY_LABEL_KEY: Record<SearchCategory, string> = {
   purchaseOrders: "search.group.purchaseOrders",
   receivingReports: "search.group.receivingReports",
   storeReceipts: "search.group.storeReceipts",
+  vendorBills: "search.group.vendorBills",
   costControls: "search.group.costControls",
   productionOrders: "search.group.productionOrders",
   arDocuments: "search.group.arDocuments",

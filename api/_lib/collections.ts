@@ -23,6 +23,7 @@ import type { PurchaseOrder } from "../../src/lib/purchaseOrder.js";
 import type { CostControl } from "../../src/lib/costControl.js";
 import type { ReceivingReport } from "../../src/lib/receivingReport.js";
 import type { StoreReceipt } from "../../src/lib/storeReceipt.js";
+import type { VendorBill } from "../../src/lib/vendorBill.js";
 import type { ApEntry } from "../../src/lib/apEntries.js";
 import type { VendorApprovalStatus } from "../../src/lib/vendors.js";
 
@@ -989,6 +990,15 @@ export async function storeReceiptsCollection() {
   const db = await getDb();
   return db.collection<StoreReceiptFields & { _id: string }>("store_receipts");
 }
+/**
+ * ใบรับวางบิลของสโตร์ (2026-09-23) — `_id` คือเลขที่ใบ (`BR-202609-0001`) · เก็บแค่ `apEntryIds` ยอดเงินอ่านจาก
+ * `ap_entries` ตอนเปิด ดู `src/lib/vendorBill.ts` · คนละคอลเลกชันกับ `bill_receipts` ที่ถูกทิ้งไว้จาก 2026-08-28
+ */
+export type VendorBillFields = Omit<VendorBill, "id">;
+export async function vendorBillsCollection() {
+  const db = await getDb();
+  return db.collection<VendorBillFields & { _id: string }>("vendor_bill_receipts");
+}
 export async function receivingReportsCollection() {
   const db = await getDb();
   return db.collection<ReceivingReportFields & { _id: string }>("receiving_reports");
@@ -1016,7 +1026,7 @@ export async function ensureIndexes() {
     projects, materialRequisitions, jobOrders, purchaseRequests, productionOrders,
     productRequests,
     purchaseOrders, costControls,
-    receivingReports, apEntries,
+    receivingReports, apEntries, vendorBills,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -1033,7 +1043,7 @@ export async function ensureIndexes() {
     productionOrdersCollection(),
     productRequestsCollection(),
     purchaseOrdersCollection(), costControlsCollection(),
-    receivingReportsCollection(), apEntriesCollection(),
+    receivingReportsCollection(), apEntriesCollection(), vendorBillsCollection(),
   ]);
 
   await Promise.all([
@@ -1172,6 +1182,9 @@ export async function ensureIndexes() {
     apEntries.createIndex({ status: 1 }),
     apEntries.createIndex({ receivingReportId: 1 }),
     apEntries.createIndex({ batchId: 1 }),
+    // ใบรับวางบิล: หาว่าหนี้ก้อนนี้อยู่ในใบไหนแล้ว (กันซ้ำ + กันยกเลิกรอบรับ) และรายการเรียงตามเวลาแก้
+    vendorBills.createIndex({ apEntryIds: 1 }),
+    vendorBills.createIndex({ isDeleted: 1, updatedAt: -1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

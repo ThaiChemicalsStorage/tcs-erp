@@ -73,6 +73,8 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   { prefix: "RI-", type: "receivingReport" },
   // ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) — 15 รหัสรับ อยู่ใน store_receipts
   ...STORE_RECEIPT_CODES.map((c) => ({ prefix: `${c.code}-`, type: "storeReceipt" as const })),
+  // ใบรับวางบิลของสโตร์ (2026-09-23)
+  { prefix: "BR-", type: "vendorBill" },
   { prefix: "SC-", type: "productionOrder" },
   { prefix: "AR", type: "arDocument" },
   { prefix: "BI", type: "arDocument" },
@@ -83,7 +85,7 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
 export type DocNumberFamily =
   | "quotation" | "serviceReport" | "materialRequisition" | "jobOrder"
   | "purchaseRequest" | "productionOrder" | "arDocument" | "purchaseOrder" | "costControl"
-  | "receivingReport" | "storeReceipt";
+  | "receivingReport" | "storeReceipt" | "vendorBill";
 
 /**
  * Which document family a query looks like, or `null` when it doesn't look like a number at all.

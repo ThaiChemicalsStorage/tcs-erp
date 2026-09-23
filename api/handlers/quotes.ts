@@ -16,6 +16,7 @@ import { handlePurchaseOrder } from "../_lib/purchaseOrderHandler.js";
 import { handleCostControl } from "../_lib/costControlHandler.js";
 import { handleReceivingReport } from "../_lib/receivingReportHandler.js";
 import { handleStoreReceipt } from "../_lib/storeReceiptHandler.js";
+import { handleVendorBill } from "../_lib/vendorBillHandler.js";
 import { handleApEntries } from "../_lib/apHandler.js";
 import { handleProductRequest } from "../_lib/productRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
@@ -1005,6 +1006,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // ใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23)
     if (pathname === "/api/store-receipts" || pathname.startsWith("/api/store-receipts/")) {
       return handleStoreReceipt(req, res);
+    }
+    // ใบรับวางบิลของสโตร์ (2026-09-23)
+    if (pathname === "/api/vendor-bills" || pathname.startsWith("/api/vendor-bills/")) {
+      return handleVendorBill(req, res);
     }
     if (pathname === "/api/ap-entries" || pathname.startsWith("/api/ap-entries/")) {
       return handleApEntries(req, res);

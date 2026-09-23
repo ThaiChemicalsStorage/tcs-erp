@@ -14,6 +14,8 @@
  * ภาษาไทยฮาร์ดโค้ดเสมอ ห้ามเรียก `useI18n` — เอกสารที่พิมพ์ออกไปต้องไม่เปลี่ยนภาษาตามคนกด (ดู docs/CLAUDE.md)
  */
 
+import { printDateShortBE } from "../../lib/printFormat";
+
 export interface StoreSlipRow {
   key: string;
   code: string;
@@ -38,13 +40,6 @@ export interface StoreSlipProps {
 }
 
 const STORE_SLIP_ROWS_PER_PAGE = 18;
-
-/** วว/ดด/ปป แบบ พ.ศ. สองหลัก — ตัวอย่าง "18/09/69" */
-function slipDate(value: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((value ?? "").trim());
-  if (!m) return "";
-  return `${m[3]}/${m[2]}/${String((Number(m[1]) + 543) % 100).padStart(2, "0")}`;
-}
 
 function money(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -104,7 +99,7 @@ export function StoreSlipPrint({ variant, companyName, title, jobCode, documentN
                 <>
                   <div style={{ position: "absolute", top: 0, left: "108mm" }}>เลขที่เอกสาร</div>
                   <div style={{ position: "absolute", top: 0, left: "146mm", whiteSpace: "nowrap" }}>{documentNumber}</div>
-                  <div style={{ position: "absolute", top: "6.4mm", left: "146mm" }}>{slipDate(date)}</div>
+                  <div style={{ position: "absolute", top: "6.4mm", left: "146mm" }}>{printDateShortBE(date)}</div>
                 </>
               ) : (
                 <>
@@ -112,7 +107,7 @@ export function StoreSlipPrint({ variant, companyName, title, jobCode, documentN
                   <div style={{ position: "absolute", top: 0, right: "40mm" }}>เลขที่เอกสาร</div>
                   <div style={{ position: "absolute", top: 0, left: "161mm", whiteSpace: "nowrap" }}>{documentNumber}</div>
                   <div style={{ position: "absolute", top: "6.4mm", right: "40mm" }}>วันที่</div>
-                  <div style={{ position: "absolute", top: "6.4mm", left: "161mm" }}>{slipDate(date)}</div>
+                  <div style={{ position: "absolute", top: "6.4mm", left: "161mm" }}>{printDateShortBE(date)}</div>
                 </>
               )}
             </div>

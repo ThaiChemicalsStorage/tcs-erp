@@ -71,3 +71,40 @@ export function printAmount(value: number | null | undefined, fractionDigits = 2
   if (value === null || value === undefined || Number.isNaN(value)) return EMPTY_MARK;
   return value.toLocaleString("en-US", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 }
+
+/**
+ * `YYYY-MM-DD…` → `วว/ดด/ปป` แบบ **พ.ศ. สองหลัก** (`2026-09-18` → `18/09/69`) · ค่าว่าง/ผิดรูป → `""`
+ *
+ * ใช้เฉพาะใบพิมพ์ที่ลอกฟอร์มของโปรแกรมบัญชีเดิม (2026-09-23 — ใบจ่าย/ใบรับคืน/ใบรับสินค้า/ใบรับวางบิลของสโตร์)
+ * ซึ่งพิมพ์วันที่แบบนี้ทุกช่อง · ใบพิมพ์อื่นยังเป็น ค.ศ. เต็มตาม `printDate()` ด้านบน
+ */
+export function printDateShortBE(value: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((value ?? "").trim());
+  if (!m) return "";
+  return `${m[3]}/${m[2]}/${String((Number(m[1]) + 543) % 100).padStart(2, "0")}`;
+}
+
+/** บวกจำนวนวันให้วันที่ `YYYY-MM-DD` (คิดแบบปฏิทิน ไม่สนเขตเวลา) · ค่าผิดรูป → `""` */
+export function addDaysIso(value: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((value ?? "").trim());
+  if (!m) return "";
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * ที่อยู่สองบรรทัดตามฟอร์มของโปรแกรมบัญชีเดิม — ขึ้นบรรทัดใหม่ตามที่กรอกไว้ ถ้าไม่มีตัดที่ช่องว่างใกล้กลางที่สุด
+ * (ที่อยู่ไม่เกิน 40 ตัวอักษรอยู่บรรทัดเดียว)
+ */
+export function splitAddressTwoLines(address: string): [string, string] {
+  const text = (address ?? "").trim();
+  const byLine = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (byLine.length > 1) return [byLine[0], byLine.slice(1).join(" ")];
+  if (text.length <= 40) return [text, ""];
+  const mid = Math.floor(text.length / 2);
+  for (let d = 0; d < mid; d++) {
+    if (text[mid - d] === " ") return [text.slice(0, mid - d), text.slice(mid - d + 1)];
+    if (text[mid + d] === " ") return [text.slice(0, mid + d), text.slice(mid + d + 1)];
+  }
+  return [text, ""];
+}

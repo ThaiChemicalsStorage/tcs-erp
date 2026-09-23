@@ -5,11 +5,13 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   receivingReportsCollection, purchaseOrdersCollection, productsCollection, apEntriesCollection,
+  purchaseRequestsCollection, vendorsCollection,
   countersCollection, auditLogCollection,
   toObjectId, withStringId, type ReceivingReportFields, type CounterFields,
 } from "./collections.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import { applyStockMovement } from "./stockHandler.js";
+import { vendorBillHoldingEntry } from "./vendorBillHandler.js";
 import {
   handleAttachmentUpload, handleAttachmentDelete, handleAttachmentDownload, type AttachmentConfig,
 } from "./documentAttachments.js";
@@ -21,7 +23,7 @@ import { sanitizeNullableNumber } from "./projectValidation.js";
 import {
   receivingReportTotals, outstandingQtyOf, isFullyReceived, batchTotals, receivedQtyOf,
   isReceivingReportCode, receivingReportCodeOf, isBlankReceivingReport,
-  type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary, type ReceivingReportCode,
+  type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary, type ReceivingReportCode, type ReceivingReportPrintInfo,
 } from "../../src/lib/receivingReport.js";
 import type { ApEntryFields } from "./collections.js";
 
@@ -429,7 +431,33 @@ async function handlePrint(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "receivingReport:print");
   const doc = await loadOrThrow(id);
   await writeAuditEntry(ctx, "Receiving Report Printed", `พิมพ์ใบรับสินค้า ${doc._id}`);
-  res.status(204).end();
+  const receivingReports = await receivingReportsCollection();
+  await receivingReports.updateOne({ _id: id }, { $inc: { printCount: 1 } } as never);
+  res.status(200).json({ printInfo: await printInfoFor(doc, (doc.printCount ?? 0) + 1) });
+}
+
+/**
+ * ข้อมูลเสริมของใบพิมพ์ FM-ST-01 (2026-09-23) — ฟอร์มจริงพิมพ์รหัสผู้ขาย เครดิต/วันครบกำหนด วันที่ใบสั่งซื้อ
+ * ขนส่งโดย และเลขที่ใบขอซื้อต้นทาง ซึ่งอยู่ในใบสั่งซื้อ/ใบขอซื้อ/ทะเบียนผู้ขาย ไม่ได้อยู่ในใบรับสินค้า
+ * อ่านสด ณ ตอนกดพิมพ์ ไม่ก๊อปมาเก็บ · ใบเปล่า (ไม่มีใบสั่งซื้อ) หารหัสผู้ขายจากชื่อในทะเบียนแทน
+ */
+async function printInfoFor(doc: ReceivingReportFields & { _id: string }, printCount: number): Promise<ReceivingReportPrintInfo> {
+  const po = doc.purchaseOrderId ? await (await purchaseOrdersCollection()).findOne({ _id: doc.purchaseOrderId }) : null;
+  const pr = po?.purchaseRequestId ? await (await purchaseRequestsCollection()).findOne({ _id: po.purchaseRequestId }) : null;
+  const vendors = await vendorsCollection();
+  const vendor = po?.vendorId && /^[0-9a-f]{24}$/i.test(po.vendorId)
+    ? await vendors.findOne({ _id: toObjectId(po.vendorId) })
+    : doc.vendorName.trim() ? await vendors.findOne({ name: doc.vendorName.trim(), isDeleted: { $ne: true } }) : null;
+  return {
+    printCount,
+    vendorCode: vendor?.code ?? "",
+    creditDays: po?.creditDays ?? null,
+    purchaseOrderDate: po?.orderDate ?? "",
+    shippingText: [po?.shippingMethod ?? "", po?.deliveryLocation ?? ""].map((s) => s.trim()).filter(Boolean).join(" "),
+    headerRemark: (doc.remarks ?? "").trim() || (po?.remarks ?? "").trim(),
+    purchaseRequestNumber: pr ? (pr._id as string) : "",
+    purchaseRequestDate: pr?.issueDate ?? "",
+  };
 }
 
 /**
@@ -601,6 +629,11 @@ async function handleDeleteBatch(req: ApiRequest, res: ApiResponse, id: string, 
   const ap = await apEntries.findOne({ batchId });
   if (ap && ap.status === "Paid") {
     throw new HttpError(409, "รอบนี้ถูกบันทึกว่าจ่ายเงินแล้ว — ยกเลิกการจ่ายในทะเบียนเจ้าหนี้ก่อน");
+  }
+  // อยู่ในใบรับวางบิลแล้ว (2026-09-23) — ยกเลิกรอบ = ลบหนี้ก้อนนี้ แถวในใบรับวางบิลจะชี้ไปหาหนี้ที่ไม่มีแล้ว
+  const holdingBill = ap ? await vendorBillHoldingEntry(ap._id.toString()) : null;
+  if (holdingBill) {
+    throw new HttpError(409, `รอบนี้อยู่ในใบรับวางบิล ${holdingBill} — เอาออกจากใบรับวางบิลก่อนจึงจะยกเลิกได้`);
   }
 
   const lineById = new Map(current.lines.map((l) => [l.id, l]));

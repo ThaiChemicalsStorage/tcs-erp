@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, PackageMinus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, PackageMinus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History, FileStack,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -80,6 +80,7 @@ const StockPage = lazy(() => import("./pages/stock/StockPage").then((m) => ({ de
 const StoreDocumentsPage = lazy(() => import("./pages/storeDocuments/StoreDocumentsPage").then((m) => ({ default: m.StoreDocumentsPage })));
 const StockHistoryPage = lazy(() => import("./pages/stock/StockHistoryPage").then((m) => ({ default: m.StockHistoryPage })));
 const ToolControlPage = lazy(() => import("./pages/toolControl/ToolControlPage").then((m) => ({ default: m.ToolControlPage })));
+const VendorBillPage = lazy(() => import("./pages/vendorBill/VendorBillPage").then((m) => ({ default: m.VendorBillPage })));
 const ReceivingReportPage = lazy(() => import("./pages/receivingReport/ReceivingReportPage").then((m) => ({ default: m.ReceivingReportPage })));
 const PurchaseTaxRegisterPage = lazy(() => import("./pages/accounting/PurchaseTaxRegisterPage").then((m) => ({ default: m.PurchaseTaxRegisterPage })));
 const ApRegisterPage = lazy(() => import("./pages/accounting/ApRegisterPage").then((m) => ({ default: m.ApRegisterPage })));
@@ -156,7 +157,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "stockHistory" | "toolControl" | "receivingReport" | "storeDocuments" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "stockHistory" | "toolControl" | "receivingReport" | "vendorBills" | "storeDocuments" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -266,6 +267,8 @@ const navItems: NavItem[] = [
   { key: "toolControl", icon: Hammer, labelKey: "nav.toolControl", permission: "stock:view" },
   // ใบรับสินค้า (2026-09-03) — สโตร์เป็นคนรับของและเป็นเจ้าของใบ จึงอยู่กลุ่มคลังสินค้า ไม่ใช่จัดซื้อ
   { key: "receivingReport", icon: PackageCheck, labelKey: "nav.receivingReport", permission: "receivingReport:view" },
+  // ใบรับวางบิลของสโตร์ (2026-09-23) — อ่านหนี้ที่ใบรับสินค้าตั้งไว้ จึงใช้สิทธิ์ชุดเดียวกับใบรับสินค้า
+  { key: "vendorBills", icon: FileStack, labelKey: "nav.vendorBills", permission: "receivingReport:view" },
   // ใบเบิก-คืนวัสดุของสโตร์ (2026-09-23) — ใบเบิกแยกรหัสจ่าย + ใบรับคืน/รับเข้าคลังแยกรหัสรับ ใช้สิทธิ์ใบเบิกชุดเดิม
   // ต้องมี `stock:adjust` ด้วย (สิทธิ์ของสโตร์) ไม่งั้นทุกคนที่ดูใบเบิกได้จะเห็นเมนูของสโตร์ไปด้วย
   { key: "storeDocuments", icon: ClipboardList, labelKey: "nav.storeDocuments", permission: "materialRequisition:view",
@@ -325,7 +328,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "storeRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "stockHistory", "toolControl", "receivingReport", "storeDocuments", "storePurchaseRequest", "storeRequestInbox", "storeIssueInbox", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "stockHistory", "toolControl", "receivingReport", "vendorBills", "storeDocuments", "storePurchaseRequest", "storeRequestInbox", "storeIssueInbox", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -367,6 +370,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   stockHistory: "nav.stockHistory",
   toolControl: "nav.toolControl",
   receivingReport: "nav.receivingReport",
+  vendorBills: "nav.vendorBills",
   storeDocuments: "nav.storeDocuments",
   productRequest: "nav.productRequest",
   customers: "nav.customers",
@@ -461,6 +465,7 @@ export default function App() {
   const [productionOrderDeepLinkId, setProductionOrderDeepLinkId] = useState<string | null>(null);
   const [purchaseOrderDeepLinkId, setPurchaseOrderDeepLinkId] = useState<string | null>(null);
   const [receivingReportDeepLinkId, setReceivingReportDeepLinkId] = useState<string | null>(null);
+  const [vendorBillDeepLinkId, setVendorBillDeepLinkId] = useState<string | null>(null);
   const [costControlDeepLinkId, setCostControlDeepLinkId] = useState<string | null>(null);
   // เอกสารบัญชีมีสี่ชนิดอยู่คนละหน้า จึงต้องพก docType มาด้วยเพื่อรู้ว่าจะเปิดหน้าไหน (2026-08-28)
   const [arDocumentDeepLink, setArDocumentDeepLink] = useState<{ docType: ArDocumentType; id: string } | null>(null);
@@ -710,6 +715,10 @@ export default function App() {
     setActiveNav("purchaseOrder");
   });
 
+  const navigateToVendorBill = (vendorBillId: string) => guardedNav(() => {
+    setVendorBillDeepLinkId(vendorBillId);
+    setActiveNav("vendorBills");
+  });
   const navigateToReceivingReport = (receivingReportId: string) => guardedNav(() => {
     setReceivingReportDeepLinkId(receivingReportId);
     setActiveNav("receivingReport");
@@ -791,6 +800,7 @@ export default function App() {
       case "purchaseOrders": navigateToPurchaseOrder(hit.data.id); break;
       case "receivingReports": navigateToReceivingReport(hit.data.id); break;
       case "storeReceipts": navigateToStoreDocument("receipt", hit.data.id); break;
+      case "vendorBills": navigateToVendorBill(hit.data.id); break;
       case "costControls": navigateToCostControl(hit.data.id); break;
       case "arDocuments": if (hit.data.docType) navigateToArDocument(hit.data.docType, hit.data.id); break;
       case "customers": navigateToCustomer(hit.data.id); break;
@@ -1335,6 +1345,8 @@ export default function App() {
               ? <StoreDocumentsPage company={company} currentUserId={currentUser.id} canCreate={canCreateMaterialRequisition} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canIssueStock={canAdjustStock} canRequestProductCode={canCreateProductRequest} initialDocument={storeDocumentDeepLink} onInitialDocumentConsumed={() => setStoreDocumentDeepLink(null)} />
               : effectiveNav === "receivingReport"
               ? <ReceivingReportPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
+              : effectiveNav === "vendorBills"
+              ? <VendorBillPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialVendorBillId={vendorBillDeepLinkId} onVendorBillIdConsumed={() => setVendorBillDeepLinkId(null)} />
               : effectiveNav === "productRequest"
               ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} onProductsChanged={refreshCatalog} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"

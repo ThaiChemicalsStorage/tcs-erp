@@ -193,8 +193,8 @@ handler. Full model writeup in
 | `PATCH /api/receiving-reports/:id` | `receivingReport:edit` (owner or `:viewAll`) | Accepts `documentNumber` (unique, `409` on collision), `remarks` and `status`; **a blank report also accepts** `jobCode`, `vendorName`, `vendorTaxId`, `vendorAddress`, `orderVatRate` and `lines` (`400` on a PO-based report). Blank lines are rebuilt from the body, but a line with receipts cannot be removed, change product, or drop below its received quantity; catalog lines take code/unit from the product register. New line ids matching `rrline_*` are kept so auto-save never renames a line under the user. Lines and batches are never client-writable — one is a snapshot, the other is posted accounting fact. Reopening a fully received document is refused. Auto-save eligible. |
 | `DELETE /api/receiving-reports/:id` | `receivingReport:delete` | Soft delete, and **`400` if any receipt has been posted** — reverse the rounds first so stock and payables unwind properly. |
 | `POST /api/receiving-reports/:id/receipts` | `receivingReport:receive` | One round of receiving. A blank report needs `vendorName` first (`400`) — the payable must name a creditor. Validates `qty ≤ outstanding` per line, at least one positive line, a non-empty `invoiceNumber`, and that every referenced product still exists — all **before** the first stock write, so a rejected round writes nothing at all. Then: `applyStockMovement(kind:"receive", unitCost, sourceType:"receiving_report")` per line that has a `productId` (a hand-typed line posts a payable but no stock) → one `ap_entries` row → push the batch → auto-close when nothing is outstanding. Returns the updated document. |
-| `DELETE /api/receiving-reports/:id/receipts/:batchId` | `receivingReport:receive` | Reverses a round: stock back out (`kind: "adjust"`), payable deleted, document reopened. **Latest round only** (`400` otherwise — the moving average walks forward through receipts) and only while the payable is `Unpaid` (`409`). ⚠️ The reversal uses the *current* average cost, so quantities always return exactly but value may not if a different-priced receipt landed in between. |
-| `POST /api/receiving-reports/:id/print` | `receivingReport:print` | Audit entry only. |
+| `DELETE /api/receiving-reports/:id/receipts/:batchId` | `receivingReport:receive` | Reverses a round: stock back out (`kind: "adjust"`), payable deleted, document reopened. **Latest round only** (`400` otherwise — the moving average walks forward through receipts) and only while the payable is `Unpaid` (`409`) **and not on a ใบรับวางบิล** (`409` naming the bill — since 2026-09-23). ⚠️ The reversal uses the *current* average cost, so quantities always return exactly but value may not if a different-priced receipt landed in between. |
+| `POST /api/receiving-reports/:id/print` | `receivingReport:print` | Audit entry + `$inc printCount`; returns `{ printInfo }` (2026-09-23) — the extra data the FM-ST-01 print needs that the RR itself does not hold: `printCount`, `vendorCode` (vendor register, via the PO's `vendorId` or by name for a blank RR), `creditDays` / `purchaseOrderDate` / `shippingText` (PO), `headerRemark` (RR remarks, else PO remarks), `purchaseRequestNumber` / `purchaseRequestDate` (the PO's source PR). |
 | `POST|DELETE /api/receiving-reports/:id/attachments[/:attachmentId]` | `receivingReport:edit` | Shared attachment engine, `docType: "receiving-reports"` — scanned vendor delivery notes and tax invoices. |
 | `GET /api/receiving-reports/:id/attachments/:attachmentId/download?key=` | **none — capability URL** | Same unauthenticated capability-key rules as every other attachment download; dispatched before `requireUser`. |
 
@@ -1011,6 +1011,20 @@ body รับ `newCategoryName` เพิ่มอีกหนึ่งช่�
 (มีเทสต์ดักไว้เช่นกัน)
 
 
+
+## Vendor bills — ใบรับวางบิล (`api/_lib/vendorBillHandler.ts`, mounted at `/api/vendor-bills` via `api/handlers/quotes.ts` — added 2026-09-23)
+
+No approval step (owner's choice). Permissions reuse the receiving-report set (`receivingReport:*`) — no new permission. Rows are assembled from `ap_entries` on every read; the bill stores only `apEntryIds`.
+
+| Route | Permission | Behaviour |
+|---|---|---|
+| `GET /api/vendor-bills` | `receivingReport:view` | Summaries (`rowCount`, `total`, `outstanding`), ownership-scoped by `receivingReport:viewAll`. |
+| `GET /api/vendor-bills/candidates?vendor=` | `receivingReport:view` | `Unpaid` AP entries not on any non-deleted bill, as rows + `vendorName` (all vendors when `vendor` is omitted — the create dialog groups them). |
+| `POST /api/vendor-bills` | `receivingReport:create` | Body `{ vendorName }` → `BR-YYYYMM-NNNN` with **every** candidate of that vendor ticked; header credit days from the first entry's PO. `400` when the vendor has none. |
+| `GET /api/vendor-bills/:id` | `receivingReport:view` | `{ vendorBill, rows }` — row = RR number (`/seq` when the RR has several rounds), invoice no./date, due date (invoice date + the PO's credit days, else the bill's), amount, paid (`Paid` → full amount), outstanding. |
+| `PATCH /api/vendor-bills/:id` | `receivingReport:edit` (own, or `viewAll`) | `billDate`, `creditDays`, `paymentDate`, `remarks`, `apEntryIds`. Added entries must exist (`400`), belong to the bill's vendor (`400`) and not be on another bill (`409`). `?autoSave=1` writes no audit row. |
+| `DELETE /api/vendor-bills/:id` | `receivingReport:delete` | Soft delete — its entries become candidates again. |
+| `POST /api/vendor-bills/:id/print` | `receivingReport:print` | Audit entry only (`204`). |
 
 ## Store receipts (`api/_lib/storeReceiptHandler.ts`, mounted at `/api/store-receipts` via `api/handlers/quotes.ts` — added 2026-09-23)
 

@@ -136,11 +136,30 @@ export interface ReceivingReport {
   closedAt?: string;
   remarks: string;
   attachments: DocumentAttachment[];
+  /** จำนวนครั้งที่กดพิมพ์ (2026-09-23) — ฟอร์ม FM-ST-01 มีช่อง "พิมพ์ครั้งที่" · เซิร์ฟเวอร์เพิ่มเองตอนกดพิมพ์ */
+  printCount?: number;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
   isDeleted: boolean;
+}
+
+/**
+ * ข้อมูลที่ใบพิมพ์ FM-ST-01 ต้องใช้แต่ไม่ได้อยู่ในใบรับสินค้าเอง (2026-09-23) — มากับการกดพิมพ์
+ * (`POST /:id/print`) อ่านจากใบสั่งซื้อ/ใบขอซื้อ/ทะเบียนผู้ขาย ณ ตอนนั้น · ใบเปล่าไม่มีใบสั่งซื้อ ช่องพวกนี้ว่าง
+ */
+export interface ReceivingReportPrintInfo {
+  printCount: number;
+  vendorCode: string;
+  creditDays: number | null;
+  purchaseOrderDate: string;
+  /** "ขนส่งโดย" — วิธีจัดส่ง + สถานที่ส่งของ ของใบสั่งซื้อ */
+  shippingText: string;
+  /** หมายเหตุหัวใบ — หมายเหตุของใบรับสินค้า ถ้าว่างใช้ของใบสั่งซื้อ */
+  headerRemark: string;
+  purchaseRequestNumber: string;
+  purchaseRequestDate: string;
 }
 
 export interface ReceivingReportSummary {
@@ -314,8 +333,10 @@ export async function deleteReceivingReport(id: string): Promise<void> {
   await apiFetch(`/receiving-reports/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function logReceivingReportPrinted(id: string): Promise<void> {
-  await apiFetch(`/receiving-reports/${encodeURIComponent(id)}/print`, { method: "POST" });
+/** บันทึกการพิมพ์ — คืนข้อมูลเสริมของใบพิมพ์ FM-ST-01 (ดู `ReceivingReportPrintInfo`) */
+export async function logReceivingReportPrinted(id: string): Promise<ReceivingReportPrintInfo> {
+  const { printInfo } = await apiFetch<{ printInfo: ReceivingReportPrintInfo }>(`/receiving-reports/${encodeURIComponent(id)}/print`, { method: "POST" });
+  return printInfo;
 }
 
 export async function uploadReceivingReportAttachment(id: string, file: File): Promise<ReceivingReport> {

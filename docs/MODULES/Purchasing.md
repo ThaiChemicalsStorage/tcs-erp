@@ -514,6 +514,8 @@ Two things were **deliberately left alone**:
    announcement log, not a description of the current system; rewriting history there would be
    wrong. A later entry records the withdrawal instead.
 
+**2026-09-23 — a ใบรับวางบิล came back, for the Store department.** The owner sent the old accounting program's BR form and asked for *"หน้าใบวางบิลของสโตร์"*. It is a new design (bills group unpaid payables from `ap_entries`, no approval), a new collection (`vendor_bill_receipts`) and lives in the store menu — see [Store.md](./Store.md). `bill_receipts` is still untouched.
+
 One thing that had to go with them: **`PurchaseOrderPickerDialog.tsx`**. It was shared by the two
 removed pages and by nothing else, so it became dead code — and neither `noUnusedLocals` nor ESLint
 catches a file that simply has no importers.

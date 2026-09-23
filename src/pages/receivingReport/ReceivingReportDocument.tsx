@@ -16,7 +16,7 @@ import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
-  type ReceivingReport, type ReceivingReportUpdateFields, type ReceivingReportLine, type ReceiveBatchInput,
+  type ReceivingReport, type ReceivingReportUpdateFields, type ReceivingReportLine, type ReceiveBatchInput, type ReceivingReportPrintInfo,
   fetchReceivingReport, updateReceivingReport, deleteReceivingReport, postReceivingBatch, deleteReceivingBatch,
   logReceivingReportPrinted, uploadReceivingReportAttachment, deleteReceivingReportAttachment,
   receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf,
@@ -88,6 +88,10 @@ export function ReceivingReportDocument({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReverse, setConfirmReverse] = useState<string | null>(null);
   const [showPrint, setShowPrint] = useState(false);
+  // ข้อมูลเสริมของใบพิมพ์ FM-ST-01 มากับการกดพิมพ์ · printBatchId = พิมพ์เฉพาะรอบนั้น (null = ทุกรอบ)
+  const [printInfo, setPrintInfo] = useState<ReceivingReportPrintInfo | null>(null);
+  const [printBatchId, setPrintBatchId] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -249,6 +253,19 @@ export function ReceivingReportDocument({
     }
   };
 
+  const handlePrint = async (batchId: string | null) => {
+    setPrinting(true);
+    try {
+      setPrintInfo(await logReceivingReportPrinted(draft.id));
+      setPrintBatchId(batchId);
+      setShowPrint(true);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("receivingReportDoc.errorPrint"));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const toggleStatus = async () => {
     setBusy(true);
     try {
@@ -353,9 +370,9 @@ export function ReceivingReportDocument({
               </button>
             )}
             {canPrint && (
-              <button onClick={() => { void logReceivingReportPrinted(draft.id).catch(() => {}); setShowPrint(true); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                <Printer size={13} /> {t("receivingReportDoc.print")}
+              <button onClick={() => void handlePrint(null)} disabled={printing}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("receivingReportDoc.print")}
               </button>
             )}
             {canDelete && draft.batches.length === 0 && (
@@ -551,6 +568,14 @@ export function ReceivingReportDocument({
                       <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.total")}</p>
                       <p className="text-sm font-mono font-semibold text-[#c9a84c]">{fmt(b.total)}</p>
                     </div>
+                    {/* ใบพิมพ์ FM-ST-01 คือหนึ่งบิลต่อหนึ่งใบ — พิมพ์เฉพาะรอบนี้ได้ (2026-09-23) */}
+                    {canPrint && (
+                      <button onClick={() => void handlePrint(b.id)} disabled={printing}
+                        title={t("receivingReportDoc.printBatch")} aria-label={t("receivingReportDoc.printBatch")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                        <Printer size={12} /> {t("receivingReportDoc.printBatch")}
+                      </button>
+                    )}
                     {/* ยกเลิกได้เฉพาะรอบล่าสุด — ต้นทุนถัวเฉลี่ยเดินไปตามลำดับการรับ ถอนรอบกลางย้อนไม่ได้ */}
                     {canReceive && idx === draft.batches.length - 1 && (
                       <button onClick={() => setConfirmReverse(b.id)} disabled={busy}
@@ -583,7 +608,7 @@ export function ReceivingReportDocument({
 
       {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
           (บั๊กเดิมของหกโมดูลที่แก้ไปเมื่อ 2026-09-02: เรนเดอร์เฉพาะตอนกดปุ่ม แล้ว Ctrl+P ได้กระดาษเปล่า) */}
-      <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} />
+      <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} printInfo={printInfo} batchId={printBatchId ?? undefined} />
 
       <ProductPickerModal
         open={productPickerOpen}

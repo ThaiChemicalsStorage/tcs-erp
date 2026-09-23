@@ -71,7 +71,7 @@ beforeAll(async () => {
    * ผู้ขายต้องอยู่ในทะเบียนและผ่านบัญชีแล้ว ใบสั่งซื้อจึงจะอนุมัติได้ (2026-09-21) — ด่านอยู่ที่
    * `beforeApprove` ของใบสั่งซื้อ ดู api/_lib/purchaseOrderHandler.ts
    */
-  const vendorRes = await api("POST", "/api/vendors", { name: "บริษัท เหล็กดี จำกัด", taxId: "0105500000001" });
+  const vendorRes = await api("POST", "/api/vendors", { name: "บริษัท เหล็กดี จำกัด", code: "W-0022", taxId: "0105500000001" });
   expect(vendorRes.status, JSON.stringify(vendorRes.body)).toBe(201);
   const vendorId = vendorRes.body.vendor.id;
   expect((await api("POST", `/api/vendors/${vendorId}/submit-approval`)).status).toBe(200);
@@ -83,6 +83,7 @@ beforeAll(async () => {
   purchaseOrderId = created.body.purchaseOrder.id;
   const patched = await api("PATCH", `/api/purchase-orders/${purchaseOrderId}`, {
     vendorId, vendorName: "บริษัท เหล็กดี จำกัด", vendorTaxId: "0105500000001", vatRate: 7,
+    creditDays: 90, shippingMethod: "มาส่งของที่โรงงาน", orderDate: "2026-09-18",
     lines: [
       { productId, qty: 10, unitPrice: 100 },
       { productCode: "MISC", description: "ค่าขนส่ง", unit: "เที่ยว", qty: 5, unitPrice: 20 },
@@ -258,6 +259,16 @@ describe("ใบรับสินค้า", () => {
 
   it("ลบใบที่ยังมีรอบการรับค้างอยู่ไม่ได้", async () => {
     expect((await api("DELETE", `/api/receiving-reports/${rrId}`)).status).toBe(400);
+  });
+
+  it("กดพิมพ์ได้ข้อมูลเสริมของฟอร์ม FM-ST-01 จากใบสั่งซื้อ/ทะเบียนผู้ขาย และนับครั้งที่พิมพ์ (2026-09-23)", async () => {
+    const first = await api("POST", `/api/receiving-reports/${rrId}/print`);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(first.body.printInfo).toMatchObject({
+      printCount: 1, vendorCode: "W-0022", creditDays: 90, purchaseOrderDate: "2026-09-18", shippingText: "มาส่งของที่โรงงาน",
+    });
+    const second = await api("POST", `/api/receiving-reports/${rrId}/print`);
+    expect(second.body.printInfo.printCount).toBe(2);
   });
 });
 

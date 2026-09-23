@@ -15,7 +15,7 @@ import {
 } from "./searchShared.js";
 import {
   searchDeliveryOrders, searchServiceReports, searchProjects, searchMaterialRequisitions,
-  searchJobOrders, searchPurchaseRequests, searchPurchaseOrders, searchReceivingReports, searchStoreReceipts, searchCostControls, searchProductionOrders, searchProductRequests,
+  searchJobOrders, searchPurchaseRequests, searchPurchaseOrders, searchReceivingReports, searchStoreReceipts, searchVendorBills, searchCostControls, searchProductionOrders, searchProductRequests,
   searchArDocuments, searchByDocNumber, scopeOfWorkOwnership,
   type SearchDocumentResult,
 } from "./searchDocuments.js";
@@ -192,6 +192,8 @@ export interface SearchResults {
   receivingReports: SearchDocumentResult[];
   /** ใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23) */
   storeReceipts: SearchDocumentResult[];
+  /** ใบรับวางบิลของสโตร์ (2026-09-23) */
+  vendorBills: SearchDocumentResult[];
   costControls: SearchDocumentResult[];
   productionOrders: SearchDocumentResult[];
   arDocuments: SearchDocumentResult[];
@@ -219,13 +221,13 @@ export interface ExactMatch {
 /** Every key of `SearchResults` that carries results — the vocabulary `?types=` accepts. */
 export type SearchCategory =
   | "quotations" | "scopeOfWorks" | "deliveryOrders" | "serviceReports" | "projects"
-  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "purchaseOrders" | "receivingReports" | "storeReceipts" | "costControls" | "productionOrders"
+  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "purchaseOrders" | "receivingReports" | "storeReceipts" | "vendorBills" | "costControls" | "productionOrders"
   | "arDocuments" | "productRequests" | "customers" | "products" | "templates"
   | "users" | "pages";
 
 const ALL_CATEGORIES: SearchCategory[] = [
   "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
-  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "costControls", "productionOrders",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "receivingReports", "storeReceipts", "vendorBills", "costControls", "productionOrders",
   "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
 ];
 
@@ -296,6 +298,7 @@ const SEARCHABLE_PAGES: {
   { id: "stock", titleTh: "สต๊อกสินค้า", titleEn: "Stock", navKey: "stock", permission: "stock:view", aliases: ["สต๊อกสินค้า", "สต๊อก", "stock", "คลัง"] },
   { id: "stockHistory", titleTh: "ประวัติสต๊อก", titleEn: "Stock history", navKey: "stockHistory", permission: "stock:view", aliases: ["ประวัติสต๊อก", "ความเคลื่อนไหวสต๊อก", "ตัดของไปงานไหน", "stock history", "movement"] },
   { id: "storeDocuments", titleTh: "ใบเบิก-คืนวัสดุ (สโตร์)", titleEn: "Store issues & receipts", navKey: "storeDocuments", permission: "materialRequisition:view", anyPermission: STORE_DOCUMENTS_ANY, aliases: ["ใบเบิก-คืนวัสดุ สโตร์", "ใบเบิกของสโตร์", "ใบรับคืน", "รับเข้าคลัง", "ปรับยอดสินค้า", "store issue", "store receipt"] },
+  { id: "vendorBills", titleTh: "ใบรับวางบิล", titleEn: "Vendor bills", navKey: "vendorBills", permission: "receivingReport:view", aliases: ["ใบรับวางบิล", "รับวางบิล", "วางบิล", "vendor bill", "billing"] },
   { id: "productRequest", titleTh: "คำขอเพิ่มสินค้า", titleEn: "Product Requests", navKey: "productRequest", permission: "productRequest:view", aliases: ["คำขอเพิ่มสินค้า", "ขอเพิ่มสินค้า", "product request", "ขอรหัสสินค้า"] },
   { id: "departments", titleTh: "แผนกและทีม", titleEn: "Departments and Teams", navKey: "departments", permission: "departments:manage", aliases: ["แผนกและทีม", "แผนก", "ทีม", "departments", "teams"] },
 ];
@@ -540,6 +543,7 @@ const FAST_PATH_GATES: Record<string, { permission: Permission; category: Search
   purchaseOrder: { permission: "purchaseOrder:view", category: "purchaseOrders" },
   receivingReport: { permission: "receivingReport:view", category: "receivingReports" },
   storeReceipt: { permission: "materialRequisition:view", category: "storeReceipts" },
+  vendorBill: { permission: "receivingReport:view", category: "vendorBills" },
   costControl: { permission: "costControl:view", category: "costControls" },
   productionOrder: { permission: "productionOrder:view", category: "productionOrders" },
   arDocument: { permission: "ar:view", category: "arDocuments" },
@@ -609,7 +613,7 @@ export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<v
 
   const [
     quotations, scopeOfWorkResults, deliveryOrders, serviceReports, projects,
-    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, storeReceipts, costControls, productionOrders, arDocuments,
+    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, storeReceipts, vendorBills, costControls, productionOrders, arDocuments,
     productRequests, customerResults, productResults, templateResults, userResults, exact,
   ] = await Promise.all([
     runCategory("quotations", wanted, has("quotations:view"), () => searchQuotations(query, ctx, limit)),
@@ -625,6 +629,7 @@ export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<v
     runCategory("purchaseOrders", wanted, has("purchaseOrder:view"), () => searchPurchaseOrders(query, ctx, limit)),
     runCategory("receivingReports", wanted, has("receivingReport:view"), () => searchReceivingReports(query, ctx, limit)),
     runCategory("storeReceipts", wanted, canOpenStoreDocuments(ctx), () => searchStoreReceipts(query, ctx, limit)),
+    runCategory("vendorBills", wanted, has("receivingReport:view"), () => searchVendorBills(query, ctx, limit)),
     runCategory("costControls", wanted, has("costControl:view"), () => searchCostControls(query, ctx, limit)),
     runCategory("productionOrders", wanted, has("productionOrder:view"), () => searchProductionOrders(query, ctx, limit)),
     runCategory("arDocuments", wanted, has("ar:view"), () => searchArDocuments(query, limit)),
@@ -641,7 +646,7 @@ export async function handleSearch(req: ApiRequest, res: ApiResponse): Promise<v
 
   const results: SearchResults = {
     quotations, scopeOfWorks: scopeOfWorkResults, deliveryOrders, serviceReports, projects,
-    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, storeReceipts, costControls, productionOrders, arDocuments,
+    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, receivingReports, storeReceipts, vendorBills, costControls, productionOrders, arDocuments,
     productRequests, customers: customerResults, products: productResults,
     templates: templateResults, users: userResults, pages, exact,
   };

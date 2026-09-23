@@ -2,7 +2,7 @@ import type { AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, serviceReportsCollection, projectsCollection,
   materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection, costControlsCollection,
-  receivingReportsCollection, storeReceiptsCollection,
+  receivingReportsCollection, storeReceiptsCollection, vendorBillsCollection,
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -318,6 +318,29 @@ function storeReceiptRow(d: { _id: string; documentNumber?: string; customerName
 }
 
 /**
+ * ใบรับวางบิลของสโตร์ (2026-09-23) — ค้นเลขที่ใบ ผู้ขาย รหัสผู้ขาย และหมายเหตุ · `party` = ผู้ขาย
+ * การมองเห็นตรงกับหน้ารายการใน vendorBillHandler (`receivingReport:viewAll` เห็นทุกใบ นอกนั้นเห็นใบตัวเอง)
+ * ใบนี้ไม่มีสถานะ — `status` ว่าง
+ */
+export async function searchVendorBills(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await vendorBillsCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "receivingReport:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [{ _id: rx }, { documentNumber: rx }, { vendorName: rx }, { vendorCode: rx }, { remarks: rx }]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map(vendorBillRow);
+}
+
+function vendorBillRow(d: { _id: string; documentNumber?: string; vendorName?: string; vendorCode?: string; billDate?: string; updatedAt?: unknown; createdAt?: unknown }): SearchDocumentResult {
+  return {
+    id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+    party: d.vendorName ?? "", lineage: d.vendorCode ?? "", status: "", date: isoOf(d),
+  };
+}
+
+/**
  * Cost Control (2026-08-28) — เอกสารของแผนก BD · `party` เป็น **ชื่องาน/ลูกค้า** (Job Name) และ
  * `lineage` เป็นเลขที่งานต้นทาง (Job order) ซึ่งเป็นเลข Scope of Work ที่คนใช้เรียกงานกันจริง ๆ
  */
@@ -537,6 +560,15 @@ export async function searchByDocNumber(
         party: d.vendorName ?? "", lineage: d.purchaseOrderNumber || d.jobCode || "",
         status: d.status ?? "", date: isoOf(d),
       })));
+    }
+    case "vendorBill": {
+      const col = await vendorBillsCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "receivingReport:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("vendorBill", docs.map(vendorBillRow));
     }
     case "storeReceipt": {
       const col = await storeReceiptsCollection();
