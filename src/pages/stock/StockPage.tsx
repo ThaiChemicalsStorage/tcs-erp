@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList, FileSpreadsheet } from "lucide-react";
+import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList, FileSpreadsheet, FileText, Sheet } from "lucide-react";
 import { StockImportDialog } from "./StockImportDialog";
 import { type Product, type ProductCategory, updateProduct, fetchProducts } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { StockCountSheetPrintDocument } from "./StockCountSheetPrintDocument";
 import { StockCardPrintDocument } from "./StockCardPrintDocument";
+import { TablePrintDocument } from "../../components/TablePrintDocument";
+import { downloadXlsx, exportFileName } from "../../lib/tableExport";
+import { stockBalanceSheet, stockCardSheet } from "../../lib/stockExport";
+import { printDate } from "../../lib/printFormat";
 import { fetchStockMovements, createStockMovement, stockValueOf, STOCK_MOVEMENT_KIND_LABEL_KEY, type StockMovement, type StockMovementKind } from "../../lib/stock";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
@@ -47,6 +51,9 @@ export function StockPage({
   /** สินค้าที่กำลังจะพิมพ์การ์ดสต๊อก — โหลดประวัติทั้งหมด (ไม่ใช่ 200 แถวล่าสุด) แล้วค่อยสั่งพิมพ์ */
   const [cardProduct, setCardProduct] = useState<Product | null>(null);
   const [cardMovements, setCardMovements] = useState<StockMovement[] | null>(null);
+  /** พิมพ์รายงานยอดคงเหลือ (ปุ่ม PDF — 2026-09-24) — แทนที่ใบนับสต๊อกใน DOM ชั่วคราวระหว่างพิมพ์ */
+  const [listPrinting, setListPrinting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const toast = useToast();
   const { t } = useI18n();
 
@@ -146,6 +153,37 @@ export function StockPage({
       toast.show(err instanceof ApiError ? err.message : t("stock.toast.loadCardFailed"));
     }
   };
+  // ส่งออก (2026-09-24) — "ตามที่เห็นบนจอ" เหมือนใบนับสต๊อก: รวมผลค้นหาที่กรองอยู่
+  const balanceSheet = () => stockBalanceSheet(filtered, categories, search.trim());
+  const exportListXlsx = async () => {
+    setExporting(true);
+    try {
+      await downloadXlsx(exportFileName("สต๊อกสินค้า"), [balanceSheet()]);
+    } catch {
+      toast.show(t("stock.export.failed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+  const exportCardXlsx = async (product: Product) => {
+    setExporting(true);
+    try {
+      const all = await fetchStockMovements({ productId: product.id, limit: 2000 });
+      await downloadXlsx(exportFileName(`การ์ดสต๊อก-${product.code}`), [stockCardSheet(product, [...all].reverse())]);
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("stock.export.failed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+  useEffect(() => {
+    if (!listPrinting) return;
+    const reset = () => setListPrinting(false);
+    window.addEventListener("afterprint", reset);
+    window.print();
+    return () => window.removeEventListener("afterprint", reset);
+  }, [listPrinting]);
+
   useEffect(() => {
     if (!cardProduct || cardMovements === null) return;
     const reset = () => { setCardProduct(null); setCardMovements(null); };
@@ -201,6 +239,21 @@ export function StockPage({
           className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
         >
           <Printer size={13} /> {t("stock.printCountSheet")}
+        </button>
+        <button
+          onClick={() => void exportListXlsx()}
+          disabled={filtered.length === 0 || exporting}
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+        >
+          <Sheet size={13} /> {t("stock.export.excel")}
+        </button>
+        <button
+          onClick={() => setListPrinting(true)}
+          disabled={filtered.length === 0 || cardProduct !== null || listPrinting}
+          title={t("stock.export.pdfHint")}
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+        >
+          <FileText size={13} /> {t("stock.export.pdf")}
         </button>
         {canAdjust && (
           <button
@@ -274,6 +327,9 @@ export function StockPage({
                         <button onClick={() => void printStockCard(p)} disabled={cardProduct !== null} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity disabled:opacity-30" title={t("stock.action.stockCardTitle")} aria-label={t("stock.action.stockCardTitle")}>
                           <ClipboardList size={14} />
                         </button>
+                        <button onClick={() => void exportCardXlsx(p)} disabled={exporting} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity disabled:opacity-30" title={t("stock.action.stockCardExcelTitle")} aria-label={`${t("stock.action.stockCardExcelTitle")} — ${p.name}`}>
+                          <Sheet size={14} />
+                        </button>
                         {canAdjust && (
                           <button
                             onClick={() => setAdjustTarget(p)}
@@ -313,7 +369,9 @@ export function StockPage({
 
       {/* ใบนับสต๊อก — อยู่ใน DOM ตลอด ซ่อนอยู่จนกว่าจะพิมพ์ กด Ctrl+P ก็ได้ใบเดียวกัน
           ยกเว้นตอนกำลังพิมพ์การ์ดสต๊อกของสินค้าตัวหนึ่ง ซึ่งจะเข้ามาแทนที่ชั่วคราว */}
-      {cardProduct && cardMovements !== null ? (
+      {listPrinting ? (
+        <TablePrintDocument sheet={balanceSheet()} companyHeader={companyHeader} docLabel="STOCK" printedAt={printDate(printedAt)} />
+      ) : cardProduct && cardMovements !== null ? (
         <StockCardPrintDocument product={cardProduct} movements={cardMovements} companyHeader={companyHeader} printedAt={printedAt} />
       ) : (
         <StockCountSheetPrintDocument

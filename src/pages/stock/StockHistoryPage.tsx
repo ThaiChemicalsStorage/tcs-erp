@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, History, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, History, Loader2, Search, Sheet, X } from "lucide-react";
 import { Tabs } from "../../components/Tabs";
 import { Combobox } from "../../components/Combobox";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
@@ -8,6 +8,12 @@ import { useI18n, type TranslationKey } from "../../lib/i18n";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import { ALL_DATES, resolveRange, type DateRangeValue } from "../../lib/dateRanges";
 import type { Product } from "../../lib/products";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
+import { downloadXlsx, exportFileName, type ExportSheet } from "../../lib/tableExport";
+import { stockCardSheet, stockHistorySheet } from "../../lib/stockExport";
+import { printDate } from "../../lib/printFormat";
+import { TablePrintDocument } from "../../components/TablePrintDocument";
+import { StockCardPrintDocument } from "./StockCardPrintDocument";
 import {
   fetchStockHistory, stockValueOf, STOCK_MOVEMENT_KIND_LABEL_KEY,
   type StockHistoryRow, type StockHistoryResult, type StockMovementKind, type StockMovementSourceType,
@@ -28,6 +34,14 @@ import {
  */
 
 const PAGE_SIZE = 50;
+/** ส่งออกทั้งชุดที่กรองได้ไม่เกินนี้ (ดึงทีละ 500 ตามเพดานของเซิร์ฟเวอร์) — เกินแล้วบอกให้ย่อช่วงวันที่ */
+const EXPORT_MAX = 5000;
+const EXPORT_BATCH = 500;
+
+/** งานพิมพ์ของหน้านี้ (2026-09-24) — รายงานประวัติ หรือการ์ดสต๊อกของสินค้าที่ติดตามอยู่ */
+type PrintJob = { kind: "list"; sheet: ExportSheet } | { kind: "card"; product: Product; rows: StockHistoryRow[] };
+
+const exportBtnCls = "h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50";
 /** แท็บติดตามรายสินค้าดึงครั้งเดียวไม่เกินนี้ — เกินแล้วบอกผู้ใช้ให้ย่อช่วงวันที่ */
 const TRACE_LIMIT = 500;
 
@@ -98,9 +112,11 @@ function LinkCell({ row }: { row: StockHistoryRow }) {
 }
 
 export function StockHistoryPage({
-  products, initialProductId, onInitialProductConsumed,
+  products, company, initialProductId, onInitialProductConsumed,
 }: {
   products: Product[];
+  /** หัวจดหมายของใบพิมพ์ (ปุ่ม PDF — 2026-09-24) */
+  company: Company;
   /** เปิดมาจากปุ่มประวัติของสินค้าในหน้าสต๊อก — เข้าแท็บติดตามรายสินค้าของตัวนั้นเลย */
   initialProductId?: string | null;
   onInitialProductConsumed?: () => void;
@@ -119,8 +135,27 @@ export function StockHistoryPage({
     if (initialProductId) onInitialProductConsumed?.();
   }, [initialProductId, onInitialProductConsumed]);
 
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null);
+  useEffect(() => {
+    if (!printJob) return;
+    const reset = () => setPrintJob(null);
+    window.addEventListener("afterprint", reset);
+    window.print();
+    return () => window.removeEventListener("afterprint", reset);
+  }, [printJob]);
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
+  const today = new Date().toLocaleDateString("sv-SE");
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
+    <>
+    {printJob?.kind === "list" && <TablePrintDocument sheet={printJob.sheet} companyHeader={companyHeader} docLabel="STOCK" printedAt={printDate(today)} />}
+    {printJob?.kind === "card" && <StockCardPrintDocument product={printJob.product} movements={printJob.rows} companyHeader={companyHeader} printedAt={today} />}
+    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
       <div>
         <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stockHistory.title")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5">{t("stockHistory.subtitle")}</p>
@@ -133,14 +168,17 @@ export function StockHistoryPage({
         ariaLabel={t("stockHistory.title")}
       />
       {tab === "all"
-        ? <AllMovements onTrace={(pid) => { setTraceProductId(pid); setTab("trace"); }} />
-        : <ItemTrace products={products} productId={traceProductId} onProductChange={setTraceProductId} />}
+        ? <AllMovements onTrace={(pid) => { setTraceProductId(pid); setTab("trace"); }} onPrint={setPrintJob} />
+        : <ItemTrace products={products} productId={traceProductId} onProductChange={setTraceProductId} onPrint={setPrintJob} />}
     </div>
+    </>
   );
 }
 
-function AllMovements({ onTrace }: { onTrace: (productId: string) => void }) {
+function AllMovements({ onTrace, onPrint }: { onTrace: (productId: string) => void; onPrint: (job: PrintJob) => void }) {
   const { t } = useI18n();
+  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
+  const [exportError, setExportError] = useState("");
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [kind, setKind] = useState<StockMovementKind | "">("");
@@ -179,6 +217,37 @@ function AllMovements({ onTrace }: { onTrace: (productId: string) => void }) {
   const total = result?.total ?? 0;
   const clear = () => { setQuery(""); setDebounced(""); setKind(""); setSourceType(""); setDateRange(ALL_DATES); setPage(0); };
 
+  /**
+   * ส่งออก "ทั้งชุดที่กรองอยู่" ไม่ใช่แค่หน้าที่เห็น (2026-09-24) — ดึงทีละ 500 แถวตามเพดานของเซิร์ฟเวอร์ จนครบหรือถึง EXPORT_MAX
+   * ตัวกรองเดียวกับตาราง (ค้นหา/ประเภท/ที่มา/ช่วงวันที่)
+   */
+  const exportRows = async (mode: "excel" | "pdf") => {
+    if (total > EXPORT_MAX) { setExportError(t("stock.export.tooMany").replace("{n}", fmt(EXPORT_MAX))); return; }
+    setExportError("");
+    setExporting(mode);
+    try {
+      const all: StockHistoryRow[] = [];
+      for (let skip = 0; skip < Math.max(total, 1); skip += EXPORT_BATCH) {
+        const r = await fetchStockHistory({ q: debounced, kind, sourceType, from, to, skip, limit: EXPORT_BATCH });
+        all.push(...r.movements);
+        if (r.movements.length < EXPORT_BATCH) break;
+      }
+      const note = [
+        debounced && `ค้นหา "${debounced}"`,
+        kind && `ประเภท ${t(STOCK_MOVEMENT_KIND_LABEL_KEY[kind])}`,
+        sourceType && `ที่มา ${t(SOURCE_LABEL_KEY[sourceType])}`,
+        (from || to) && `ช่วง ${from ? printDate(from) : "…"} – ${to ? printDate(to) : "…"}`,
+      ].filter(Boolean).join(" · ");
+      const sheet = stockHistorySheet(all, (r) => t(SOURCE_LABEL_KEY[r.sourceType] ?? "stockHistory.source.manual"), note);
+      if (mode === "excel") await downloadXlsx(exportFileName("ประวัติสต๊อก"), [sheet]);
+      else onPrint({ kind: "list", sheet });
+    } catch {
+      setExportError(t("stock.export.failed"));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3 flex-wrap">
@@ -209,8 +278,17 @@ function AllMovements({ onTrace }: { onTrace: (productId: string) => void }) {
             </button>
           ))}
         </div>
-        <button onClick={clear} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">{t("stockHistory.filter.clear")}</button>
+        <div className="flex items-center gap-2">
+          <button onClick={clear} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 mr-1">{t("stockHistory.filter.clear")}</button>
+          <button onClick={() => void exportRows("excel")} disabled={total === 0 || exporting !== null} className={exportBtnCls}>
+            {exporting === "excel" ? <Loader2 size={13} className="animate-spin" /> : <Sheet size={13} />} {t("stock.export.excel")}
+          </button>
+          <button onClick={() => void exportRows("pdf")} disabled={total === 0 || exporting !== null} title={t("stock.export.pdfHint")} className={exportBtnCls}>
+            {exporting === "pdf" ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />} {t("stock.export.pdf")}
+          </button>
+        </div>
       </div>
+      {exportError && <p className="text-xs text-[#c23f3f]" role="alert">{exportError}</p>}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -311,10 +389,11 @@ function destinationOf(row: StockHistoryRow, noJob: string, directSale: string):
   return { key: "__none", title: noJob, sub: "" };
 }
 
-function ItemTrace({ products, productId, onProductChange }: {
+function ItemTrace({ products, productId, onProductChange, onPrint }: {
   products: Product[];
   productId: string;
   onProductChange: (id: string) => void;
+  onPrint: (job: PrintJob) => void;
 }) {
   const { t } = useI18n();
   const product = products.find((p) => p.id === productId) ?? null;
@@ -401,6 +480,19 @@ function ItemTrace({ products, productId, onProductChange }: {
           />
         </label>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
+        {/* การ์ดสต๊อกของสินค้าที่เลือก ตามช่วงวันที่ที่กรอง (2026-09-24) — คอลัมน์เดียวกับใบพิมพ์การ์ดสต๊อก */}
+        {product && (
+          <div className="flex items-center gap-2">
+            <button disabled={loading || !result} className={exportBtnCls}
+              onClick={() => void downloadXlsx(exportFileName(`การ์ดสต๊อก-${product.code}`), [stockCardSheet(product, rows, from || to ? `ช่วง ${from ? printDate(from) : "…"} – ${to ? printDate(to) : "…"}` : "")])}>
+              <Sheet size={13} /> {t("stock.export.cardExcel")}
+            </button>
+            <button disabled={loading || !result} title={t("stock.export.pdfHint")} className={exportBtnCls}
+              onClick={() => onPrint({ kind: "card", product, rows })}>
+              <FileText size={13} /> {t("stock.export.cardPdf")}
+            </button>
+          </div>
+        )}
       </div>
 
       {!product ? (

@@ -1333,7 +1333,7 @@ export default function App() {
               : effectiveNav === "stock"
               ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} onOpenHistory={navigateToStockHistory} />
               : effectiveNav === "stockHistory"
-              ? <StockHistoryPage products={products} initialProductId={stockHistoryProductId} onInitialProductConsumed={() => setStockHistoryProductId(null)} />
+              ? <StockHistoryPage products={products} company={company} initialProductId={stockHistoryProductId} onInitialProductConsumed={() => setStockHistoryProductId(null)} />
               : effectiveNav === "toolControl"
               ? <ToolControlPage company={company} currentUserId={currentUser.id} canIssue={canAdjustStock} />
               : effectiveNav === "productCategories"
