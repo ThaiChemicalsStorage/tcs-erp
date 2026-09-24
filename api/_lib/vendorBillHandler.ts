@@ -74,7 +74,8 @@ async function rowsFor(entries: ApDoc[], fallbackCreditDays: number | null): Pro
   for (const e of entries) {
     const rr = rrById.get(e.receivingReportId);
     const batches = rr?.batches ?? [];
-    const seq = batches.find((b) => b.id === e.batchId)?.seq;
+    const batch = batches.find((b) => b.id === e.batchId);
+    const seq = batch?.seq;
     const credit = (rr?.purchaseOrderId ? creditByPo.get(rr.purchaseOrderId) : null) ?? fallbackCreditDays;
     const paid = e.status === "Paid" ? e.total : 0;
     out.set(e._id.toString(), {
@@ -83,7 +84,8 @@ async function rowsFor(entries: ApDoc[], fallbackCreditDays: number | null): Pro
       receivingReportNumber: batches.length > 1 && seq ? `${e.receivingReportNumber}/${seq}` : e.receivingReportNumber,
       invoiceNumber: e.invoiceNumber,
       invoiceDate: e.invoiceDate,
-      dueDate: credit !== null && credit !== undefined && e.invoiceDate ? addDaysIso(e.invoiceDate, credit) : "",
+      // รอบที่รับตั้งแต่ 2026-09-24 เก็บวันครบกำหนดของบิลไว้เอง (สโตร์กรอกเครดิตตอนรับของ) — ใช้ตัวนั้นก่อน
+      dueDate: batch?.dueDate || (credit !== null && credit !== undefined && e.invoiceDate ? addDaysIso(e.invoiceDate, credit) : ""),
       amount: e.total,
       paid,
       outstanding: Math.round((e.total - paid) * 100) / 100,

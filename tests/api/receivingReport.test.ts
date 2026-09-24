@@ -368,3 +368,86 @@ describe("ใบรับสินค้าแบบใบเปล่า + ร�
     expect(res.body.receivingReport.receiveCode).toBe("RR");
   });
 });
+
+/**
+ * เงื่อนไขบิล (2026-09-24) — ประเภทราคา ไม่มี/แยก/รวม VAT · ส่วนลดท้ายบิล (หักหนี้และเกลี่ยลงต้นทุนสต๊อก ตามที่เจ้าของเลือก) ·
+ * เครดิต/ครบกำหนด · ผู้ออกบิลที่กรอกเอง (หนี้ตั้งเป็นชื่อนั้น และต้องมีชื่อบริษัท)
+ */
+describe("ใบรับสินค้า: ประเภทราคา · ส่วนลด · เครดิต · ผู้ออกบิล", () => {
+  let id = "";
+  let lineId = "";
+
+  it("สูตรเดิมไม่เปลี่ยนเมื่อไม่ส่งเงื่อนไข และแบบรวม VAT ถอด VAT ออกจากยอด", async () => {
+    const { batchTotals } = await import("../../src/lib/receivingReport");
+    expect(batchTotals([{ qty: 2, unitPrice: 200 }], 7)).toMatchObject({ subtotal: 400, vatAmt: 28, total: 428, priceType: "exclusive" });
+    expect(batchTotals([{ qty: 2, unitPrice: 200 }], null)).toMatchObject({ subtotal: 400, vatAmt: 0, total: 400, priceType: "none" });
+    const inc = batchTotals([{ qty: 1, unitPrice: 107 }], 7, { priceType: "inclusive" });
+    expect(inc.total).toBe(107);
+    expect(inc.subtotal).toBeCloseTo(100, 6);
+    expect(inc.vatAmt).toBeCloseTo(7, 6);
+    const disc = batchTotals([{ qty: 10, unitPrice: 100 }], 7, { priceType: "exclusive", discount: 10, discountMode: "percent" });
+    expect(disc).toMatchObject({ gross: 1000, discountAmt: 100, subtotal: 900, total: 963 });
+    expect(disc.costFactor).toBeCloseTo(0.9, 6);
+  });
+
+  it("ตั้งเงื่อนไขบิลที่หัวใบได้ และใบที่มาจากใบสั่งซื้อก็แก้ได้ (แต่ผู้ขายยังแก้ไม่ได้)", async () => {
+    const created = await api("POST", "/api/receiving-reports", { receiveCode: "RR" });
+    expect(created.status).toBe(201);
+    id = created.body.receivingReport.id;
+    expect(created.body.receivingReport).toMatchObject({ priceType: "exclusive", billerCustom: false });
+    const res = await api("PATCH", `/api/receiving-reports/${id}`, {
+      vendorName: "บริษัท เหล็กดี จำกัด", priceType: "inclusive", orderVatRate: 7,
+      orderDiscount: 70, orderDiscountMode: "amount", creditDays: 30,
+      lines: [{ id: "new", productId, qtyOrdered: 10, unitPriceOrdered: 107 }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    lineId = res.body.receivingReport.lines[0].id;
+    expect(res.body.receivingReport).toMatchObject({ priceType: "inclusive", orderDiscount: 70, creditDays: 30 });
+    expect((await api("PATCH", `/api/receiving-reports/${id}`, { priceType: "vat" })).status).toBe(400);
+    expect((await api("PATCH", `/api/receiving-reports/${rrId}`, { priceType: "none", creditDays: 45 })).status).toBe(200);
+    expect((await api("PATCH", `/api/receiving-reports/${rrId}`, { vendorName: "อื่น" })).status).toBe(400);
+  });
+
+  it("ผู้ออกบิลกรอกเองแต่ไม่มีชื่อบริษัท รับของไม่ได้", async () => {
+    expect((await api("PATCH", `/api/receiving-reports/${id}`, { billerCustom: true, billerName: "" })).status).toBe(200);
+    const recv = await api("POST", `/api/receiving-reports/${id}/receipts`, {
+      invoiceNumber: "CASH-1", vatRate: 7, priceType: "inclusive", lines: [{ lineId, qty: 10, unitPrice: 107 }],
+    });
+    expect(recv.status).toBe(400);
+  });
+
+  it("รับของแบบรวม VAT + ส่วนลด: หนี้ตั้งหลังหักส่วนลด ต้นทุนสต๊อกเป็นราคาก่อน VAT หลังเกลี่ยส่วนลด ผู้ออกบิลเป็นเจ้าหนี้", async () => {
+    expect((await api("PATCH", `/api/receiving-reports/${id}`, { billerName: "ร้านวัสดุเงินสด", billerTaxId: "0105500000077" })).status).toBe(200);
+    const recv = await api("POST", `/api/receiving-reports/${id}/receipts`, {
+      invoiceNumber: "CASH-1", invoiceDate: "2026-09-01", vatRate: 7, priceType: "inclusive",
+      discount: 70, discountMode: "amount", creditDays: 30,
+      lines: [{ lineId, qty: 10, unitPrice: 107 }],
+    });
+    expect(recv.status, JSON.stringify(recv.body)).toBe(200);
+    const batch = recv.body.receivingReport.batches[0];
+    expect(batch).toMatchObject({
+      priceType: "inclusive", grossAmount: 1070, discountAmt: 70, subtotal: 934.58, vatAmt: 65.42, total: 1000,
+      creditDays: 30, dueDate: "2026-10-01",
+    });
+    const db = client.db("tcs_erp");
+    const ap = await db.collection("ap_entries").findOne({ receivingReportId: id });
+    expect(ap).toMatchObject({ vendorName: "ร้านวัสดุเงินสด", vendorTaxId: "0105500000077", subtotal: 934.58, vatAmt: 65.42, total: 1000, vatRate: 7 });
+    const mv = await db.collection("stock_movements").findOne({ sourceId: id });
+    expect(mv?.unitCost).toBeCloseTo(93.46, 2);
+  });
+
+  it("ไม่มี VAT: หนี้ไม่มีภาษี และอัตราเป็นค่าว่าง", async () => {
+    const created = await api("POST", "/api/receiving-reports", { receiveCode: "RR" });
+    const nid = created.body.receivingReport.id;
+    const patched = await api("PATCH", `/api/receiving-reports/${nid}`, {
+      vendorName: "ร้านไม่จด VAT", priceType: "none",
+      lines: [{ id: "new", description: "ค่าแรงเชื่อม", unit: "งาน", qtyOrdered: 1, unitPriceOrdered: 500 }],
+    });
+    const recv = await api("POST", `/api/receiving-reports/${nid}/receipts`, {
+      invoiceNumber: "NV-1", vatRate: 7, priceType: "none", lines: [{ lineId: patched.body.receivingReport.lines[0].id, qty: 1, unitPrice: 500 }],
+    });
+    expect(recv.status, JSON.stringify(recv.body)).toBe(200);
+    const ap = await client.db("tcs_erp").collection("ap_entries").findOne({ receivingReportId: nid });
+    expect(ap).toMatchObject({ subtotal: 500, vatAmt: 0, total: 500, vatRate: null });
+  });
+});

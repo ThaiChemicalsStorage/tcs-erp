@@ -23,6 +23,7 @@ import { sanitizeNullableNumber } from "./projectValidation.js";
 import {
   receivingReportTotals, outstandingQtyOf, isFullyReceived, batchTotals, receivedQtyOf,
   isReceivingReportCode, receivingReportCodeOf, isBlankReceivingReport,
+  isReceivingPriceType, priceTypeOf, billerOf, dueDateOf,
   type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary, type ReceivingReportCode, type ReceivingReportPrintInfo,
 } from "../../src/lib/receivingReport.js";
 import type { ApEntryFields } from "./collections.js";
@@ -193,6 +194,7 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       purchaseOrderId: "", purchaseOrderNumber: "", jobCode: "",
       vendorName: "", vendorTaxId: "", vendorAddress: "",
       orderVatRate: 7, orderDiscount: null, orderDiscountMode: "percent",
+      priceType: "exclusive", creditDays: null, billerCustom: false, billerName: "", billerTaxId: "", billerAddress: "",
       lines: [], batches: [], status: "Open", remarks: "", attachments: [],
       createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
     };
@@ -258,6 +260,9 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     orderVatRate: po.vatRate ?? null,
     orderDiscount: po.discount ?? null,
     orderDiscountMode: po.discountMode ?? "percent",
+    priceType: priceTypeOf({ vatRate: po.vatRate ?? null }),
+    creditDays: po.creditDays ?? null,
+    billerCustom: false, billerName: "", billerTaxId: "", billerAddress: "",
     lines,
     batches: [],
     status: "Open",
@@ -379,15 +384,35 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   }
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
 
+  /**
+   * เงื่อนไขบิล (2026-09-24) — แก้ได้ทุกใบ เพราะเป็นของที่สโตร์กรอกให้ตรงบิลจริงของผู้ขาย ไม่ใช่ snapshot ของใบสั่งซื้อ
+   * รอบที่รับไปแล้วเก็บเงื่อนไขของตัวเองไว้ แก้ตรงนี้ไม่ย้อนไปเปลี่ยนหนี้ที่ตั้งแล้ว
+   * ชื่อผู้ออกบิลที่กรอกเองไม่บังคับตอนบันทึก (บันทึกอัตโนมัติยิงระหว่างพิมพ์) — บังคับตอนรับของ
+   */
+  if ("orderVatRate" in body) update.orderVatRate = sanitizeNullableNumber(body.orderVatRate, "อัตราภาษี (%)", { min: 0, max: 100 });
+  if ("priceType" in body) {
+    if (!isReceivingPriceType(body.priceType)) throw new HttpError(400, "ประเภทราคาไม่ถูกต้อง");
+    update.priceType = body.priceType;
+  }
+  if ("orderDiscount" in body) update.orderDiscount = sanitizeNullableNumber(body.orderDiscount, "ส่วนลด", { min: 0 });
+  if ("orderDiscountMode" in body) update.orderDiscountMode = body.orderDiscountMode === "amount" ? "amount" : "percent";
+  if ((update.orderDiscountMode ?? doc.orderDiscountMode ?? "percent") === "percent" && (update.orderDiscount ?? doc.orderDiscount ?? 0) > 100) {
+    throw new HttpError(400, "ส่วนลดต้องไม่เกิน 100%");
+  }
+  if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)", { min: 0, max: 3650 });
+  if ("billerCustom" in body) update.billerCustom = body.billerCustom === true;
+  if ("billerName" in body) update.billerName = sanitizeShortText(body.billerName, "ผู้ออกบิล");
+  if ("billerTaxId" in body) update.billerTaxId = sanitizeShortText(body.billerTaxId, "เลขประจำตัวผู้เสียภาษีผู้ออกบิล");
+  if ("billerAddress" in body) update.billerAddress = sanitizeLongText(body.billerAddress, "ที่อยู่ผู้ออกบิล");
+
   // หัวใบและรายการแก้ได้เฉพาะใบเปล่า — ใบที่มีใบสั่งซื้อเป็น snapshot ของใบสั่งซื้อ (ดูคอมเมนต์ด้านบน)
-  const blankOnly = ["jobCode", "vendorName", "vendorTaxId", "vendorAddress", "orderVatRate", "lines"] as const;
+  const blankOnly = ["jobCode", "vendorName", "vendorTaxId", "vendorAddress", "lines"] as const;
   if (blankOnly.some((k) => k in body)) {
     if (!isBlankReceivingReport(doc)) throw new HttpError(400, "ใบที่สร้างจากใบสั่งซื้อแก้ผู้ขายหรือรายการไม่ได้ — แก้ที่ใบสั่งซื้อแทน");
     if ("jobCode" in body) update.jobCode = sanitizeShortText(body.jobCode, "รหัสงาน");
     if ("vendorName" in body) update.vendorName = sanitizeShortText(body.vendorName, "ผู้ขาย");
     if ("vendorTaxId" in body) update.vendorTaxId = sanitizeShortText(body.vendorTaxId, "เลขประจำตัวผู้เสียภาษีผู้ขาย");
     if ("vendorAddress" in body) update.vendorAddress = sanitizeLongText(body.vendorAddress, "ที่อยู่ผู้ขาย");
-    if ("orderVatRate" in body) update.orderVatRate = sanitizeNullableNumber(body.orderVatRate, "อัตราภาษี (%)", { min: 0, max: 100 });
     if ("lines" in body) update.lines = await sanitizeBlankLines(body.lines, toClient(doc));
   }
 
@@ -451,7 +476,7 @@ async function printInfoFor(doc: ReceivingReportFields & { _id: string }, printC
   return {
     printCount,
     vendorCode: vendor?.code ?? "",
-    creditDays: po?.creditDays ?? null,
+    creditDays: doc.creditDays ?? po?.creditDays ?? null,
     purchaseOrderDate: po?.orderDate ?? "",
     shippingText: [po?.shippingMethod ?? "", po?.deliveryLocation ?? ""].map((s) => s.trim()).filter(Boolean).join(" "),
     headerRemark: (doc.remarks ?? "").trim() || (po?.remarks ?? "").trim(),
@@ -487,8 +512,20 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
   const receivedDate = validateIsoDateOrEmpty(body.receivedDate, "วันที่รับของ") || nowIso().slice(0, 10);
   const invoiceDate = validateIsoDateOrEmpty(body.invoiceDate, "วันที่ใบกำกับภาษี") || receivedDate;
   const vatRate = sanitizeNullableNumber(body.vatRate, "อัตราภาษี (%)", { min: 0, max: 100 });
+  // เงื่อนไขบิลของรอบนี้ (2026-09-24) — ไม่ส่งมา = สูตรเดิม (VAT แยกเมื่อมีอัตรา ไม่มีส่วนลด)
+  if (body.priceType !== undefined && !isReceivingPriceType(body.priceType)) throw new HttpError(400, "ประเภทราคาไม่ถูกต้อง");
+  const priceType = priceTypeOf({ priceType: isReceivingPriceType(body.priceType) ? body.priceType : undefined, vatRate });
+  const discount = sanitizeNullableNumber(body.discount, "ส่วนลด", { min: 0 });
+  const discountMode = body.discountMode === "amount" ? "amount" : "percent";
+  if (discountMode === "percent" && (discount ?? 0) > 100) throw new HttpError(400, "ส่วนลดต้องไม่เกิน 100%");
+  const creditDays = body.creditDays === undefined
+    ? current.creditDays ?? null
+    : sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)", { min: 0, max: 3650 });
   const receivedBy = sanitizeShortText(body.receivedBy, "ผู้รับของ") || ctx.user.fullName;
   const remark = sanitizeLongText(body.remark, "หมายเหตุ");
+  // ผู้ออกบิลที่กรอกเองต้องมีชื่อบริษัท (คำสั่งเจ้าของ) — หนี้ต้องรู้ว่าเป็นหนี้ใคร
+  if (current.billerCustom && !(current.billerName ?? "").trim()) throw new HttpError(400, "กรุณาระบุชื่อบริษัทของผู้ออกบิลก่อนรับของ");
+  const biller = billerOf(current);
 
   const rawLines = body.lines;
   if (!Array.isArray(rawLines)) throw new HttpError(400, "ข้อมูลรายการรับไม่ถูกต้อง");
@@ -522,7 +559,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     if (found !== productIds.length) throw new HttpError(400, "มีสินค้าในใบนี้ที่ถูกลบไปแล้ว — แก้ไขใบสั่งซื้อหรือรับเป็นรายการพิมพ์เองแทน");
   }
 
-  const totals = batchTotals(batchLines, vatRate);
+  const totals = batchTotals(batchLines, vatRate, { priceType, discount, discountMode });
+  const dueDate = dueDateOf(invoiceDate, creditDays);
   const batchId = newId("rrbatch");
   const now = nowIso();
 
@@ -539,7 +577,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
       sourceId: id,
       sourceLabel: current.documentNumber,
       userId: ctx.user.id,
-      unitCost: bl.unitPrice,
+      // ต้นทุน = ราคาก่อน VAT หลังเกลี่ยส่วนลดท้ายบิล — แบบรวม VAT ถอด VAT ออก (ภาษีซื้อขอคืนได้ ไม่ใช่ต้นทุน)
+      unitCost: totals.costFactor === 1 ? bl.unitPrice : Math.round(bl.unitPrice * totals.costFactor * 10000) / 10000,
     });
     stockMovementIds.push(movement.id);
   }
@@ -553,16 +592,17 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     batchId,
     purchaseOrderNumber: current.purchaseOrderNumber,
     jobCode: current.jobCode,
-    vendorName: current.vendorName,
-    vendorTaxId: current.vendorTaxId,
-    vendorAddress: current.vendorAddress,
+    // ผู้ออกบิลที่สโตร์กรอกเอง (เช่นซื้อเงินสด) = เจ้าหนี้จริงของรอบนี้ (2026-09-24)
+    vendorName: biller.name,
+    vendorTaxId: biller.taxId,
+    vendorAddress: biller.address,
     invoiceNumber,
     invoiceDate,
     description: current.purchaseOrderNumber
       ? `รับสินค้าตามใบสั่งซื้อ ${current.purchaseOrderNumber}`
       : `รับสินค้าตามใบ ${current.documentNumber} (ไม่มีใบสั่งซื้อ)`,
     subtotal: round2(totals.subtotal),
-    vatRate,
+    vatRate: totals.vatRate,
     vatAmt: round2(totals.vatAmt),
     total: round2(totals.total),
     status: "Unpaid",
@@ -578,11 +618,18 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     receivedDate,
     invoiceNumber,
     invoiceDate,
-    vatRate,
+    vatRate: totals.vatRate,
+    priceType,
+    discount,
+    discountMode,
+    grossAmount: round2(totals.gross),
+    discountAmt: round2(totals.discountAmt),
     lines: batchLines,
     subtotal: round2(totals.subtotal),
     vatAmt: round2(totals.vatAmt),
     total: round2(totals.total),
+    creditDays,
+    dueDate,
     receivedBy,
     remark,
     postedAt: now,

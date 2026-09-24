@@ -1,5 +1,5 @@
 import type { CompanyHeaderInfo } from "../../lib/storage";
-import { batchTotals, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
+import { batchTotals, billerOf, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
 import { bahtText } from "../../lib/bahtText";
 import { addDaysIso, printDateShortBE, splitAddressTwoLines } from "../../lib/printFormat";
 
@@ -40,6 +40,9 @@ interface Slip {
   subtotal: number;
   vatAmt: number;
   total: number;
+  /** เครดิต/ครบกำหนดของรอบนี้ (2026-09-24) — ว่าง = ใช้เครดิตของใบสั่งซื้อจาก printInfo */
+  creditDays: number | null;
+  dueDate: string;
   remark: string;
   postedByName: string;
   lines: SlipLine[];
@@ -78,6 +81,7 @@ function slipsOf(doc: ReceivingReport, batchId?: string): Slip[] {
     return batches.map((b) => ({
       key: b.id, seq: b.seq, receivedDate: b.receivedDate, invoiceNumber: b.invoiceNumber, invoiceDate: b.invoiceDate,
       vatRate: b.vatRate, subtotal: b.subtotal, vatAmt: b.vatAmt, total: b.total, remark: b.remark, postedByName: b.postedByName,
+      creditDays: b.creditDays ?? null, dueDate: b.dueDate ?? "",
       lines: b.lines.map((bl) => ({
         key: bl.lineId, text: textOf(bl.lineId), qty: bl.qty, unit: lineById.get(bl.lineId)?.unit ?? "", unitPrice: bl.unitPrice, amount: bl.amount,
       })),
@@ -87,10 +91,10 @@ function slipsOf(doc: ReceivingReport, batchId?: string): Slip[] {
   const lines = doc.lines.map((l) => ({
     key: l.id, text: textOf(l.id), qty: l.qtyOrdered, unit: l.unit, unitPrice: l.unitPriceOrdered, amount: round2(l.qtyOrdered * l.unitPriceOrdered),
   }));
-  const t = batchTotals(lines, doc.orderVatRate);
+  const t = batchTotals(lines, doc.orderVatRate, { priceType: doc.priceType, discount: doc.orderDiscount, discountMode: doc.orderDiscountMode });
   return [{
-    key: "ordered", seq: 0, receivedDate: "", invoiceNumber: "", invoiceDate: "", vatRate: doc.orderVatRate,
-    subtotal: t.subtotal, vatAmt: t.vatAmt, total: t.total, remark: "", postedByName: "", lines,
+    key: "ordered", seq: 0, receivedDate: "", invoiceNumber: "", invoiceDate: "", vatRate: t.vatRate,
+    subtotal: t.subtotal, vatAmt: t.vatAmt, total: t.total, creditDays: doc.creditDays ?? null, dueDate: "", remark: "", postedByName: "", lines,
   }];
 }
 
@@ -121,7 +125,9 @@ export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, ba
     printCount: 0, vendorCode: "", creditDays: null, purchaseOrderDate: "", shippingText: "", headerRemark: "",
     purchaseRequestNumber: "", purchaseRequestDate: "",
   };
-  const [addr1, addr2] = splitAddressTwoLines(doc.vendorAddress);
+  // ผู้ออกบิลที่สโตร์กรอกเอง (2026-09-24) พิมพ์แทนผู้ขาย — เป็นชื่อเดียวกับที่ตั้งหนี้
+  const biller = billerOf(doc);
+  const [addr1, addr2] = splitAddressTwoLines(biller.address);
   const printedAt = new Date();
   const printedAtText = `${printDateShortBE(printedAt.toLocaleDateString("sv-SE"))} ${printedAt.toLocaleTimeString("en-GB", { hour12: false })}`;
   const multi = doc.batches.length > 1;
@@ -138,7 +144,8 @@ export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, ba
       {pages.map(({ slip, lines, last }, pageIdx) => {
         const lastPage = pageIdx === pages.length - 1;
         const billDate = slip.invoiceDate || slip.receivedDate;
-        const dueDate = info.creditDays !== null && billDate ? addDaysIso(billDate, info.creditDays) : "";
+        const creditDays = slip.creditDays ?? info.creditDays;
+        const dueDate = slip.dueDate || (creditDays !== null && billDate ? addDaysIso(billDate, creditDays) : "");
         const footerRemarks = [
           info.purchaseRequestNumber ? `${info.purchaseRequestNumber}:${shortDateNoPad(info.purchaseRequestDate)}` : "",
           ...slip.remark.split(/\r?\n/),
@@ -164,10 +171,10 @@ export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, ba
             <div style={{ position: "relative", width: `${BOX_WIDTH}mm`, height: "46mm", marginTop: "5.5mm", fontSize: BODY_FONT }}>
               {([
                 [0, `ผู้จำหน่าย   ${info.vendorCode}`],
-                [1, doc.vendorName],
+                [1, biller.name],
                 [2, addr1],
                 [3, addr2],
-                [4, `เลขประจำตัวผู้เสียภาษี      ${doc.vendorTaxId}`],
+                [4, `เลขประจำตัวผู้เสียภาษี      ${biller.taxId}`],
                 [5, `เลขที่บิล      ${slip.invoiceNumber}${slip.invoiceDate ? `      ลวท.${printDateShortBE(slip.invoiceDate)}` : ""}`],
                 [6, `หมายเหตุ    ${info.headerRemark}`],
               ] as const).map(([r, text]) => (
@@ -177,7 +184,7 @@ export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, ba
                 [0, "ใบรับสินค้า#", `${doc.documentNumber || doc.id}${multi && slip.seq ? ` (รับครั้งที่ ${slip.seq})` : ""}`],
                 [1, "วันที่", printDateShortBE(slip.receivedDate)],
                 [2, "", doc.jobCode ? `JOB NO. ${doc.jobCode}` : ""],
-                [3, info.creditDays !== null ? `เครดิต   ${info.creditDays} วัน` : "", dueDate ? `ครบกำหนด     ${printDateShortBE(dueDate)}` : ""],
+                [3, creditDays !== null ? `เครดิต   ${creditDays} วัน` : "", dueDate ? `ครบกำหนด     ${printDateShortBE(dueDate)}` : ""],
                 [5, "ใบสั่งซื้อ#", doc.purchaseOrderNumber ? `${doc.purchaseOrderNumber}   ${info.purchaseOrderDate ? `วันที่ ${printDateShortBE(info.purchaseOrderDate)}` : ""}` : ""],
                 [6, "ขนส่งโดย", info.shippingText],
               ] as const).map(([r, label, value]) => (

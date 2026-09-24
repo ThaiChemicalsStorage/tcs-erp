@@ -20,7 +20,7 @@
  */
 
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
-import { resolveDiscountAmount, lineSubtotal, type DiscountMode } from "./quoteMath.js";
+import { resolveDiscountAmount, lineSubtotal, VAT_RATE, type DiscountMode } from "./quoteMath.js";
 import type { DocumentAttachment } from "./documentAttachments.js";
 import type { TranslationKey } from "./i18n.js";
 import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from "./documentAttachments.js";
@@ -56,6 +56,43 @@ export function receivingReportCodeOf(doc: { id: string; receiveCode?: Receiving
  */
 export function isBlankReceivingReport(doc: { purchaseOrderId: string }): boolean {
   return !doc.purchaseOrderId;
+}
+
+/**
+ * ประเภทราคา (คำสั่งเจ้าของ 2026-09-24: *"หน้าใบรับสินค้าอยากให้มี dropdown ประเภทราคา ไม่มี Vat, แยก Vat, รวม Vat"*)
+ * — ชุดเดียวกับโปรแกรมบัญชีเดิม · `none` = ผู้ขายไม่จด VAT · `exclusive` = ราคายังไม่รวม VAT บวกเพิ่มท้ายบิล ·
+ * `inclusive` = ราคาที่กรอกรวม VAT แล้ว ถอด VAT ออกจากยอด (ต้นทุนสต๊อกและฐานภาษีซื้อคือยอดก่อน VAT เสมอ)
+ *
+ * ใบ/รอบเก่าไม่มีฟิลด์นี้ อ่านผ่าน `priceTypeOf()` — ไม่มีอัตรา VAT = `none` มี = `exclusive` ซึ่งเป็นสูตรเดิมทุกประการ
+ */
+export type ReceivingPriceType = "none" | "exclusive" | "inclusive";
+export const RECEIVING_PRICE_TYPES: readonly ReceivingPriceType[] = ["none", "exclusive", "inclusive"];
+export const RECEIVING_PRICE_TYPE_LABEL_KEY: Record<ReceivingPriceType, TranslationKey> = {
+  none: "receivingReport.priceType.none", exclusive: "receivingReport.priceType.exclusive", inclusive: "receivingReport.priceType.inclusive",
+};
+
+export function isReceivingPriceType(v: unknown): v is ReceivingPriceType {
+  return typeof v === "string" && (RECEIVING_PRICE_TYPES as readonly string[]).includes(v);
+}
+
+export function priceTypeOf(doc: { priceType?: ReceivingPriceType; vatRate?: number | null }): ReceivingPriceType {
+  if (doc.priceType) return doc.priceType;
+  return doc.vatRate === null || doc.vatRate === undefined ? "none" : "exclusive";
+}
+
+/**
+ * แยกยอดหลังหักส่วนลดเป็น ฐานก่อน VAT / VAT / ยอดรวม ตามประเภทราคา — สูตรเดียวของทั้งหน้าจอ ใบพิมพ์ และเซิร์ฟเวอร์
+ * `vatRate` ว่างในแบบแยก/รวม VAT ใช้ 7%
+ */
+export function splitVat(amount: number, priceType: ReceivingPriceType, vatRate: number | null | undefined) {
+  if (priceType === "none") return { base: amount, vatRate: null as number | null, vatAmt: 0, total: amount };
+  const rate = vatRate ?? VAT_RATE;
+  if (priceType === "inclusive") {
+    const vatAmt = (amount * rate) / (100 + rate);
+    return { base: amount - vatAmt, vatRate: rate as number | null, vatAmt, total: amount };
+  }
+  const vatAmt = (amount * rate) / 100;
+  return { base: amount, vatRate: rate as number | null, vatAmt, total: amount + vatAmt };
 }
 
 /** หนึ่งบรรทัดที่สั่งซื้อไว้ — snapshot จากใบสั่งซื้อ ไม่เปลี่ยนอีกเลยหลังสร้าง */
@@ -99,10 +136,22 @@ export interface ReceivingBatch {
   invoiceNumber: string;
   invoiceDate: string;
   vatRate: number | null;
+  /** ประเภทราคาของบิลรอบนี้ (2026-09-24) — รอบเก่าไม่มี อ่านผ่าน `priceTypeOf()` */
+  priceType?: ReceivingPriceType;
+  /** ส่วนลดท้ายบิล (2026-09-24) — หักยอดหนี้และเกลี่ยลงต้นทุนสต๊อกตามสัดส่วน · ไม่พิมพ์ลงฟอร์ม (คำสั่งเจ้าของ) */
+  discount?: number | null;
+  discountMode?: DiscountMode;
+  /** ผลรวม จำนวน × ราคา ก่อนหักส่วนลด · รอบเก่าไม่มี (= `subtotal`) */
+  grossAmount?: number;
+  discountAmt?: number;
   lines: ReceivingBatchLine[];
+  /** ฐานก่อน VAT หลังหักส่วนลด — ยอดที่ลงทะเบียนภาษีซื้อ */
   subtotal: number;
   vatAmt: number;
   total: number;
+  /** เครดิต (วัน) และวันครบกำหนดของบิลรอบนี้ (2026-09-24) — ใบรับวางบิลอ่านวันครบกำหนดจากตรงนี้ก่อน */
+  creditDays?: number | null;
+  dueDate?: string;
   /** ชื่อผู้รับของที่พิมพ์บนใบ — ข้อความอิสระ ไม่ใช่ผู้ใช้ในระบบ */
   receivedBy: string;
   remark: string;
@@ -129,6 +178,20 @@ export interface ReceivingReport {
   orderVatRate: number | null;
   orderDiscount?: number | null;
   orderDiscountMode?: DiscountMode;
+  /**
+   * เงื่อนไขบิลที่สโตร์กรอก (2026-09-24) — แก้ได้ทุกใบ รวมใบที่มาจากใบสั่งซื้อ (ตั้งต้นจากใบสั่งซื้อ) และเป็นค่าตั้งต้นของ
+   * หน้าต่างรับของแต่ละรอบ · อัตรา VAT และส่วนลดท้ายบิลใช้ `orderVatRate` / `orderDiscount` ตัวเดิม
+   */
+  priceType?: ReceivingPriceType;
+  creditDays?: number | null;
+  /**
+   * ผู้ออกบิล (2026-09-24) — ปกติคือผู้ขาย · `billerCustom` = สโตร์พิมพ์เอง (เช่นซื้อเงินสดจากร้านที่ไม่มีในทะเบียน)
+   * ต้องมีชื่อบริษัท · หนี้ในทะเบียนเจ้าหนี้ตั้งเป็นชื่อนี้ (`billerOf()`)
+   */
+  billerCustom?: boolean;
+  billerName?: string;
+  billerTaxId?: string;
+  billerAddress?: string;
   lines: ReceivingReportLine[];
   batches: ReceivingBatch[];
   /** Closed = รับครบทุกบรรทัด หรือสโตร์กดปิดใบเพื่อยกเลิกส่วนที่เหลือ */
@@ -206,18 +269,44 @@ export function isFullyReceived(doc: Pick<ReceivingReport, "lines" | "batches">)
   return doc.lines.every((line) => outstandingQtyOf(doc, line) <= 0);
 }
 
+type OrderTermsDoc = Pick<ReceivingReport, "lines" | "orderVatRate" | "orderDiscount" | "orderDiscountMode" | "priceType">;
+
 /**
- * มูลค่าสั่งซื้อทั้งใบ — คิดแบบเดียวกับ `purchaseOrderTotals()` ทุกขั้น (ส่วนลดรายบรรทัด →
- * ส่วนลดท้ายใบ → VAT) เพื่อให้ตัวเลข "ซื้อมาเท่าไหร่" บนใบรับสินค้า ตรงกับใบสั่งซื้อที่พิมพ์ออกไป
+ * มูลค่าสั่งซื้อทั้งใบแบบใบเสนอราคา — คิดแบบเดียวกับ `purchaseOrderTotals()` (ส่วนลดรายบรรทัด → ส่วนลดท้ายใบ → VAT)
+ * บวกประเภทราคา (2026-09-24) · ใบจากใบสั่งซื้อตั้งต้นด้วยเงื่อนไขของใบสั่งซื้อ ตัวเลขจึงตรงกับใบสั่งซื้อที่พิมพ์ออกไป
+ * จนกว่าสโตร์จะแก้เงื่อนไขให้ตรงบิลจริง
  */
-export function orderedValueOf(doc: Pick<ReceivingReport, "lines" | "orderVatRate" | "orderDiscount" | "orderDiscountMode">): number {
-  const subtotal = doc.lines.reduce(
+export function orderTotalsOf(doc: OrderTermsDoc) {
+  const gross = doc.lines.reduce(
     (sum, l) => sum + lineSubtotal({ qty: l.qtyOrdered, unitPrice: l.unitPriceOrdered, discount: l.discount ?? 0, discountMode: l.discountMode }),
     0,
   );
-  const afterDiscount = subtotal - resolveDiscountAmount(subtotal, doc.orderDiscount ?? 0, doc.orderDiscountMode);
-  const vatAmt = doc.orderVatRate !== null && doc.orderVatRate !== undefined ? (afterDiscount * doc.orderVatRate) / 100 : 0;
-  return afterDiscount + vatAmt;
+  const discountAmt = resolveDiscountAmount(gross, doc.orderDiscount ?? 0, doc.orderDiscountMode);
+  const afterDiscount = gross - discountAmt;
+  const priceType = priceTypeOf({ priceType: doc.priceType, vatRate: doc.orderVatRate });
+  const { base, vatRate, vatAmt, total } = splitVat(afterDiscount, priceType, doc.orderVatRate);
+  return { gross, discountAmt, afterDiscount, base, priceType, vatRate, vatAmt, total };
+}
+
+export function orderedValueOf(doc: OrderTermsDoc): number {
+  return orderTotalsOf(doc).total;
+}
+
+/** วันครบกำหนด = วันที่ + เครดิต (วัน) · เครดิตว่างหรือไม่มีวันที่ = ว่าง */
+export function dueDateOf(date: string, creditDays: number | null | undefined): string {
+  if (!date || creditDays === null || creditDays === undefined || !Number.isFinite(creditDays)) return "";
+  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() + creditDays);
+  return d.toISOString().slice(0, 10);
+}
+
+/** ผู้ที่หนี้ของใบนี้ตั้งเป็นชื่อ — ผู้ออกบิลที่กรอกเอง หรือผู้ขาย */
+export function billerOf(doc: Pick<ReceivingReport, "vendorName" | "vendorTaxId" | "vendorAddress" | "billerCustom" | "billerName" | "billerTaxId" | "billerAddress">) {
+  if (doc.billerCustom && (doc.billerName ?? "").trim()) {
+    return { name: (doc.billerName ?? "").trim(), taxId: doc.billerTaxId ?? "", address: doc.billerAddress ?? "" };
+  }
+  return { name: doc.vendorName, taxId: doc.vendorTaxId, address: doc.vendorAddress };
 }
 
 /**
@@ -226,17 +315,33 @@ export function orderedValueOf(doc: Pick<ReceivingReport, "lines" | "orderVatRat
  * "รับแล้ว" คือยอดจริงที่ตั้งหนี้ไป (รวม VAT ของแต่ละรอบ) ไม่ใช่ยอดตามราคาใบสั่งซื้อ — ของจริง
  * ผู้ขายมักส่งมาราคาไม่ตรงใบสั่งซื้อเป๊ะ และตัวเลขที่ต้องกระทบยอดกับบัญชีคือยอดที่ตั้งหนี้
  */
-export function receivingReportTotals(doc: Pick<ReceivingReport, "lines" | "batches" | "orderVatRate" | "orderDiscount" | "orderDiscountMode">) {
+export function receivingReportTotals(doc: Pick<ReceivingReport, "lines" | "batches" | "orderVatRate" | "orderDiscount" | "orderDiscountMode" | "priceType">) {
   const orderedValue = orderedValueOf(doc);
   const receivedValue = doc.batches.reduce((sum, b) => sum + b.total, 0);
   return { orderedValue, receivedValue, outstandingValue: Math.max(0, orderedValue - receivedValue) };
 }
 
-/** ยอดของหนึ่งรอบการรับ — ตัวเดียวกับที่เซิร์ฟเวอร์ใช้ตอนบันทึก ไม่ให้หน้าจอกับหลังบ้านคิดคนละแบบ */
-export function batchTotals(lines: { qty: number; unitPrice: number }[], vatRate: number | null) {
-  const subtotal = lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
-  const vatAmt = vatRate !== null && vatRate !== undefined ? (subtotal * vatRate) / 100 : 0;
-  return { subtotal, vatAmt, total: subtotal + vatAmt };
+export interface BatchTerms {
+  priceType?: ReceivingPriceType;
+  discount?: number | null;
+  discountMode?: DiscountMode;
+}
+
+/**
+ * ยอดของหนึ่งรอบการรับ — ตัวเดียวกับที่เซิร์ฟเวอร์ใช้ตอนบันทึก ไม่ให้หน้าจอกับหลังบ้านคิดคนละแบบ
+ * `subtotal` = ฐานก่อน VAT หลังหักส่วนลด (ยอดที่ลงทะเบียนภาษีซื้อ) · `costFactor` = ฐาน ÷ ยอดก่อนหักส่วนลด ใช้คูณราคา
+ * ต่อหน่วยเป็นต้นทุนสต๊อก (ส่วนลดเกลี่ยตามสัดส่วน และแบบรวม VAT ถอด VAT ออก) · ไม่ส่ง `terms` = สูตรเดิมก่อน 2026-09-24
+ */
+export function batchTotals(lines: { qty: number; unitPrice: number }[], vatRate: number | null, terms: BatchTerms = {}) {
+  const gross = lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
+  const discountAmt = resolveDiscountAmount(gross, terms.discount ?? 0, terms.discountMode);
+  const priceType = priceTypeOf({ priceType: terms.priceType, vatRate });
+  const split = splitVat(gross - discountAmt, priceType, vatRate);
+  return {
+    gross, discountAmt, priceType, vatRate: split.vatRate,
+    subtotal: split.base, vatAmt: split.vatAmt, total: split.total,
+    costFactor: gross > 0 ? split.base / gross : 1,
+  };
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────
@@ -289,7 +394,10 @@ export function blankReceivingReportLine(): ReceivingReportLine {
  * ช่องที่แก้ได้ — สามช่องแรกได้ทุกใบ ที่เหลือ **เฉพาะใบเปล่า** (เซิร์ฟเวอร์ตอบ 400 ถ้าส่งมากับใบที่มีใบสั่งซื้อ
  * เพราะหัวใบและรายการของใบนั้นเป็น snapshot ของใบสั่งซื้อ)
  */
-export type ReceivingReportUpdateFields = Partial<Pick<ReceivingReport, "documentNumber" | "remarks" | "status" | "jobCode" | "vendorName" | "vendorTaxId" | "vendorAddress" | "orderVatRate">> & {
+export type ReceivingReportUpdateFields = Partial<Pick<ReceivingReport,
+  | "documentNumber" | "remarks" | "status" | "jobCode" | "vendorName" | "vendorTaxId" | "vendorAddress"
+  | "orderVatRate" | "orderDiscount" | "orderDiscountMode" | "priceType" | "creditDays"
+  | "billerCustom" | "billerName" | "billerTaxId" | "billerAddress">> & {
   lines?: ReceivingReportLineInput[];
 };
 
@@ -306,6 +414,10 @@ export interface ReceiveBatchInput {
   invoiceNumber: string;
   invoiceDate: string;
   vatRate: number | null;
+  priceType: ReceivingPriceType;
+  discount: number | null;
+  discountMode: DiscountMode;
+  creditDays: number | null;
   receivedBy: string;
   remark: string;
   lines: { lineId: string; qty: number; unitPrice: number }[];

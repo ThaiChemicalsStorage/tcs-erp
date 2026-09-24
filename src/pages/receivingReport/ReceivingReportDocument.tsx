@@ -21,6 +21,7 @@ import {
   logReceivingReportPrinted, uploadReceivingReportAttachment, deleteReceivingReportAttachment,
   receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf,
   isBlankReceivingReport, receivingReportCodeOf, blankReceivingReportLine, RECEIVING_REPORT_CODE_LABEL_KEY,
+  priceTypeOf, orderTotalsOf, dueDateOf, RECEIVING_PRICE_TYPES, RECEIVING_PRICE_TYPE_LABEL_KEY, type ReceivingPriceType,
 } from "../../lib/receivingReport";
 import { ReceiveBatchDialog } from "./ReceiveBatchDialog";
 import { ReceivingReportPrintDocument } from "./ReceivingReportPrintDocument";
@@ -32,11 +33,19 @@ const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rou
  * ใบเปล่า (2026-09-23) ส่งหัวใบและรายการด้วย เพราะใบเปล่าไม่มีใบสั่งซื้อให้ลอก สโตร์กรอกเองทั้งหมด
  */
 function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
-  if (!isBlankReceivingReport(d)) return { documentNumber: d.documentNumber, remarks: d.remarks };
-  return {
+  // เงื่อนไขบิล (2026-09-24) แก้ได้ทุกใบ — ค่าที่ไม่มีในใบเก่าเติมเป็นค่าตั้งต้นให้ตรงกับที่หน้าจอแสดง
+  const terms: ReceivingReportUpdateFields = {
     documentNumber: d.documentNumber, remarks: d.remarks,
-    jobCode: d.jobCode, vendorName: d.vendorName, vendorTaxId: d.vendorTaxId, vendorAddress: d.vendorAddress,
+    priceType: priceTypeOf({ priceType: d.priceType, vatRate: d.orderVatRate }),
     orderVatRate: d.orderVatRate,
+    orderDiscount: d.orderDiscount ?? null, orderDiscountMode: d.orderDiscountMode ?? "percent",
+    creditDays: d.creditDays ?? null,
+    billerCustom: !!d.billerCustom, billerName: d.billerName ?? "", billerTaxId: d.billerTaxId ?? "", billerAddress: d.billerAddress ?? "",
+  };
+  if (!isBlankReceivingReport(d)) return terms;
+  return {
+    ...terms,
+    jobCode: d.jobCode, vendorName: d.vendorName, vendorTaxId: d.vendorTaxId, vendorAddress: d.vendorAddress,
     lines: d.lines.map((l) => ({
       id: l.id, productId: l.productId, productCode: l.productCode, description: l.description, unit: l.unit,
       qtyOrdered: l.qtyOrdered, unitPriceOrdered: l.unitPriceOrdered,
@@ -199,14 +208,20 @@ export function ReceivingReportDocument({
   }
 
   const totals = receivingReportTotals(draft);
+  const orderTotals = orderTotalsOf(draft);
+  const priceType = priceTypeOf({ priceType: draft.priceType, vatRate: draft.orderVatRate });
+  // วันครบกำหนดนับจากวันที่ใบกำกับของรอบล่าสุด ยังไม่ได้รับของ = นับจากวันนี้ (แต่ละรอบเก็บวันครบกำหนดของตัวเองตอนรับ)
+  const dueBase = draft.batches[draft.batches.length - 1]?.invoiceDate || new Date().toISOString().slice(0, 10);
+  const dueDate = dueDateOf(dueBase, draft.creditDays);
   const pendingLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) > 0);
   const doneLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) <= 0);
   const isOpen = draft.status === "Open";
 
 
-  // ใบเปล่า: รายการที่เพิ่งพิมพ์อาจยังไม่ถึงเซิร์ฟเวอร์ (บันทึกอัตโนมัติรอจังหวะอยู่) — บันทึกก่อนเปิดรับของ
+  // รายการ/เงื่อนไขบิลที่เพิ่งพิมพ์อาจยังไม่ถึงเซิร์ฟเวอร์ (บันทึกอัตโนมัติรอจังหวะอยู่) — บันทึกก่อนเปิดรับของ
+  // เซิร์ฟเวอร์อ่านผู้ออกบิลจากใบตอนตั้งหนี้
   const openReceive = async () => {
-    if (blank && canEdit && dirty.isDirtyNow()) {
+    if (canEdit && dirty.isDirtyNow()) {
       const ok = await save();
       if (!ok) return;
     }
@@ -432,10 +447,6 @@ export function ReceivingReportDocument({
                   <Field label={t("receivingReportDoc.vendorTaxId")}>
                     <input className={inputCls} disabled={!canEdit} value={draft.vendorTaxId} onChange={(e) => setDraft({ ...draft, vendorTaxId: e.target.value })} />
                   </Field>
-                  <Field label={t("receivingReportDoc.vatRate")}>
-                    <input type="number" min={0} max={100} className={inputCls} disabled={!canEdit} value={draft.orderVatRate ?? ""}
-                      onChange={(e) => setDraft({ ...draft, orderVatRate: e.target.value === "" ? null : Number(e.target.value) })} />
-                  </Field>
                   <Field label={t("receivingReportDoc.vendorAddress")}>
                     <input className={inputCls} disabled={!canEdit} value={draft.vendorAddress} onChange={(e) => setDraft({ ...draft, vendorAddress: e.target.value })} />
                   </Field>
@@ -451,9 +462,6 @@ export function ReceivingReportDocument({
                   <Field label={t("receivingReportDoc.vendorTaxId")}>
                     <input className={inputCls} disabled value={draft.vendorTaxId || "—"} />
                   </Field>
-                  <Field label={t("receivingReportDoc.vatRate")}>
-                    <input className={inputCls} disabled value={draft.orderVatRate !== null && draft.orderVatRate !== undefined ? `${draft.orderVatRate}%` : "—"} />
-                  </Field>
                 </>
               )}
             </div>
@@ -462,6 +470,71 @@ export function ReceivingReportDocument({
                 onChange={(e) => setDraft({ ...draft, remarks: e.target.value })} />
             </Field>
             <p className="text-xs text-muted-foreground">{blank ? t("receivingReportDoc.blankHeaderHint") : t("receivingReportDoc.headerHint")}</p>
+          </section>
+
+          {/* เงื่อนไขบิล (2026-09-24) — ประเภทราคา · ส่วนลด · เครดิต/ครบกำหนด · ผู้ออกบิล แก้ได้ทุกใบ เป็นค่าตั้งต้นของรอบรับ */}
+          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
+            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReportDoc.termsTitle")}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field label={t("receivingReportDoc.priceType")}>
+                <select className={inputCls} disabled={!canEdit} value={priceType}
+                  onChange={(e) => setDraft({ ...draft, priceType: e.target.value as ReceivingPriceType, orderVatRate: e.target.value === "none" ? draft.orderVatRate : draft.orderVatRate ?? 7 })}>
+                  {RECEIVING_PRICE_TYPES.map((p) => <option key={p} value={p}>{t(RECEIVING_PRICE_TYPE_LABEL_KEY[p])}</option>)}
+                </select>
+              </Field>
+              <Field label={t("receivingReportDoc.receive.vatRate")}>
+                <input type="number" min={0} max={100} className={inputCls} disabled={!canEdit || priceType === "none"}
+                  value={priceType === "none" ? "" : draft.orderVatRate ?? ""}
+                  onChange={(e) => setDraft({ ...draft, orderVatRate: e.target.value === "" ? null : Number(e.target.value) })} />
+              </Field>
+              <div className="block">
+                <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.discount")}</span>
+                <div className="flex gap-2">
+                  <input type="number" min={0} className={inputCls} disabled={!canEdit} value={draft.orderDiscount ?? ""}
+                    aria-label={t("receivingReportDoc.discount")}
+                    onChange={(e) => setDraft({ ...draft, orderDiscount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })} />
+                  <select className={`${inputCls} w-24 shrink-0`} disabled={!canEdit} value={draft.orderDiscountMode ?? "percent"}
+                    aria-label={t("receivingReportDoc.discountMode")}
+                    onChange={(e) => setDraft({ ...draft, orderDiscountMode: e.target.value === "amount" ? "amount" : "percent" })}>
+                    <option value="percent">%</option>
+                    <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
+                  </select>
+                </div>
+              </div>
+              <Field label={t("receivingReportDoc.creditDays")}>
+                <input type="number" min={0} className={inputCls} disabled={!canEdit} value={draft.creditDays ?? ""}
+                  onChange={(e) => setDraft({ ...draft, creditDays: e.target.value === "" ? null : Math.max(0, Math.floor(Number(e.target.value) || 0)) })} />
+              </Field>
+              <Field label={t("receivingReportDoc.dueDate")}>
+                <input className={inputCls} disabled value={dueDate ? formatQuoteDateThai(dueDate) : "—"} />
+              </Field>
+              <Field label={t("receivingReportDoc.biller")}>
+                <select className={inputCls} disabled={!canEdit} value={draft.billerCustom ? "custom" : "vendor"}
+                  onChange={(e) => setDraft({ ...draft, billerCustom: e.target.value === "custom" })}>
+                  <option value="vendor">{t("receivingReportDoc.billerVendor")}</option>
+                  <option value="custom">{t("receivingReportDoc.billerCustom")}</option>
+                </select>
+              </Field>
+              {draft.billerCustom && (
+                <>
+                  <Field label={`${t("receivingReportDoc.billerName")} *`}>
+                    <input className={`${inputCls} ${!(draft.billerName ?? "").trim() ? "border-[#e05252]/60" : ""}`} disabled={!canEdit} value={draft.billerName ?? ""}
+                      placeholder={t("receivingReportDoc.billerNamePlaceholder")}
+                      onChange={(e) => setDraft({ ...draft, billerName: e.target.value })} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vendorTaxId")}>
+                    <input className={inputCls} disabled={!canEdit} value={draft.billerTaxId ?? ""} onChange={(e) => setDraft({ ...draft, billerTaxId: e.target.value })} />
+                  </Field>
+                  <Field label={t("receivingReportDoc.vendorAddress")}>
+                    <input className={inputCls} disabled={!canEdit} value={draft.billerAddress ?? ""} onChange={(e) => setDraft({ ...draft, billerAddress: e.target.value })} />
+                  </Field>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {draft.billerCustom ? t("receivingReportDoc.billerHint") : t("receivingReportDoc.termsHint")}
+              {" "}{t("receivingReportDoc.dueDateBase").replace("{date}", formatQuoteDateThai(dueBase))}
+            </p>
           </section>
 
           {blank && (
@@ -486,7 +559,7 @@ export function ReceivingReportDocument({
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/40">
-                        {[t("receivingReportDoc.col.productCode"), t("receivingReportDoc.col.description"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.qty"), t("receivingReportDoc.col.unitPrice"), t("receivingReportDoc.col.received"), ""].map((h, i) => (
+                        {[t("receivingReportDoc.col.productCode"), t("receivingReportDoc.col.description"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.qty"), t("receivingReportDoc.col.unitPrice"), t("receivingReportDoc.col.amount"), t("receivingReportDoc.col.received"), ""].map((h, i) => (
                           <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -502,6 +575,7 @@ export function ReceivingReportDocument({
                             <td className="px-2 py-1.5 w-24"><input className={cellCls} disabled={!canEdit || fromCatalog} value={l.unit} aria-label={t("receivingReportDoc.col.unit")} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
                             <td className="px-2 py-1.5 w-24"><input type="number" min={received} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.qtyOrdered} aria-label={t("receivingReportDoc.col.qty")} onChange={(e) => setLine(l.id, { qtyOrdered: Number(e.target.value) || 0 })} /></td>
                             <td className="px-2 py-1.5 w-28"><input type="number" min={0} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.unitPriceOrdered} aria-label={t("receivingReportDoc.col.unitPrice")} onChange={(e) => setLine(l.id, { unitPriceOrdered: Number(e.target.value) || 0 })} /></td>
+                            <td className="px-3 py-2 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(l.qtyOrdered * l.unitPriceOrdered)}</td>
                             <td className="px-3 py-2 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(received)}</td>
                             <td className="px-2 py-1.5 w-8">
                               {canEdit && received === 0 && (
@@ -521,6 +595,37 @@ export function ReceivingReportDocument({
               <p className="px-5 py-3 text-xs text-muted-foreground border-t border-border">{t("receivingReportDoc.linesHint")}</p>
             </section>
           )}
+
+          {/* สรุปยอดแบบใบเสนอราคา (2026-09-24) — ไว้เทียบกับบิลของผู้ขายว่าตรงกันไหม ก่อนกดรับของ */}
+          <section className="bg-card border border-border rounded-xl p-5 flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.summaryTitle")}</h2>
+              <p className="text-xs text-muted-foreground mt-1">{t("receivingReportDoc.summaryHint")}</p>
+            </div>
+            <dl className="w-full sm:w-80 space-y-2">
+              {[
+                { label: t("receivingReportDoc.summary.gross"), value: orderTotals.gross },
+                { label: t("receivingReportDoc.summary.discount"), value: -orderTotals.discountAmt, hide: orderTotals.discountAmt === 0 },
+                { label: t("receivingReportDoc.summary.afterDiscount"), value: orderTotals.afterDiscount, hide: orderTotals.discountAmt === 0 },
+                { label: t("receivingReportDoc.summary.base"), value: orderTotals.base, hide: priceType !== "inclusive" },
+                {
+                  label: priceType === "none"
+                    ? t("receivingReportDoc.summary.noVat")
+                    : t("receivingReportDoc.summary.vat").replace("{rate}", String(orderTotals.vatRate ?? 0)),
+                  value: orderTotals.vatAmt,
+                },
+              ].filter((r) => !r.hide).map((r) => (
+                <div key={r.label} className="flex justify-between gap-4 text-sm">
+                  <dt className="text-muted-foreground">{r.label}</dt>
+                  <dd className="font-mono text-foreground">{fmt(r.value)}</dd>
+                </div>
+              ))}
+              <div className="flex justify-between gap-4 text-base font-semibold border-t border-border pt-2">
+                <dt className="text-foreground">{t("receivingReportDoc.summary.total")}</dt>
+                <dd className="font-mono text-[#866d28]">{fmt(orderTotals.total)}</dd>
+              </div>
+            </dl>
+          </section>
 
           <section className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
@@ -564,6 +669,16 @@ export function ReceivingReportDocument({
                       <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.receivedBy")}</p>
                       <p className="text-sm text-foreground">{b.receivedBy || b.postedByName || "—"}</p>
                     </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t("receivingReportDoc.priceType")}</p>
+                      <p className="text-sm text-foreground">{t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(b)])}{b.discountAmt ? ` · ${t("receivingReportDoc.summary.discount")} ${fmt(b.discountAmt)}` : ""}</p>
+                    </div>
+                    {b.dueDate && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDate")}</p>
+                        <p className="text-sm font-mono text-foreground">{formatQuoteDateThai(b.dueDate)}</p>
+                      </div>
+                    )}
                     <div className="ml-auto text-right">
                       <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.total")}</p>
                       <p className="text-sm font-mono font-semibold text-[#c9a84c]">{fmt(b.total)}</p>
