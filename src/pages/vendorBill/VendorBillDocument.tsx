@@ -194,7 +194,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto print:hidden">
+      <div className="doc-form flex-1 overflow-y-auto print:hidden">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap">
           <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("vendorBill.backToList")}

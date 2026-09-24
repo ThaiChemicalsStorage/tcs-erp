@@ -165,3 +165,56 @@ body {
     background: white;
   }
 }
+
+/* ช่องกรอกในหน้าเอกสาร (2026-09-24) — เจ้าของ: *"อยากทำให้ตรงที่กรอกมี box เห็นชัดเจน บางไม่รู้ว่ามันกรอกได้หรือไม่ได้"*
+   เดิมช่องที่กรอกได้กับช่องที่กรอกไม่ได้หน้าตาแทบเหมือนกัน (พื้นฟ้าอ่อนทั้งคู่ ต่างกันแค่ opacity) และช่องในตาราง
+   โปร่งใสจนกว่าจะคลิก (กฎ in-table inline editing เดิมของ DESIGN.md) ผู้ใช้จึงดูไม่ออกว่าช่องไหนพิมพ์ได้
+
+   กฎเดียวสำหรับทุกหน้าเอกสาร (root ของ editor ใส่ class `doc-form`) แทนการไล่แก้ class ช่องกรอกนับร้อยช่องใน 14 ไฟล์:
+   - **กรอกได้** = กล่องพื้นขาว ขอบกรมท่าเข้มพอให้เห็นเป็นกล่อง · โฟกัสขอบทอง
+   - **กรอกไม่ได้** (disabled / readonly) = ไม่มีกล่อง อ่านเป็นข้อความธรรมดา · ความหนาขอบคงไว้ (โปร่งใส) ตัวหนังสือจึงไม่ขยับ
+   - ช่องที่ขึ้นขอบแดงอยู่แล้ว (ยังไม่กรอกช่องบังคับ) คงขอบแดงไว้
+   อยู่ใน @layer utilities และ specificity สูงกว่า utility ชั้นเดียว จึงชนะ bg-transparent / border-0 / bg-secondary /
+   disabled:opacity-* ของแต่ละช่องโดยไม่ต้องแตะ class เดิม · checkbox / radio / file / range / color ไม่เกี่ยว */
+@layer utilities {
+  .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *) {
+    border-width: 1px;
+    border-style: solid;
+  }
+  .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):not(:disabled, [readonly]) {
+    background-color: var(--card);
+  }
+  .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):not(:disabled, [readonly]):not([class*="e05252"]) {
+    border-color: rgba(11, 29, 58, 0.32);
+  }
+  .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):not(:disabled, [readonly]):not([class*="e05252"]):focus {
+    border-color: #c9a84c;
+  }
+  .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):is(:disabled, [readonly]) {
+    background-color: transparent;
+    border-color: transparent;
+    opacity: 1;
+    cursor: default;
+  }
+  /* dropdown ที่เลือกไม่ได้ ไม่ต้องมีลูกศร — ลูกศรคือสัญญาณว่ากดได้ */
+  .doc-form select:disabled {
+    appearance: none;
+  }
+  /* กรอบรวม (ไอคอน + ช่องพิมพ์ในกรอบเดียว เช่นตัวเลือกลูกค้า ช่องค้นหาสินค้า) — ใส่ data-field-box ที่กรอบนอก
+     กรอบนอกได้หน้าตาช่องกรอกได้ และช่องพิมพ์ข้างในถูกยกเว้นจากกฎข้างบน ไม่งั้นจะเป็นกรอบซ้อนสองชั้น */
+  .doc-form [data-field-box] {
+    background-color: var(--card);
+    border-color: rgba(11, 29, 58, 0.32);
+  }
+  .doc-form [data-field-box]:focus-within {
+    border-color: #c9a84c;
+  }
+  /* ช่องวันที่ที่กรอกไม่ได้และยังว่าง — ไม่ต้องโชว์ "mm/dd/yyyy" ซึ่งอ่านเหมือนช่องที่ยังต้องกรอก */
+  .doc-form input[type="date"]:is(:disabled, [readonly])[value=""] {
+    color: transparent;
+  }
+  /* มุมลากขยายของช่องข้อความก็เป็นสัญญาณว่ากรอกได้ — ซ่อนเมื่อกรอกไม่ได้ */
+  .doc-form textarea:is(:disabled, [readonly]) {
+    resize: none;
+  }
+}

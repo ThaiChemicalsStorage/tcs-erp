@@ -262,7 +262,7 @@ export function StoreReceiptDocument({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto print:hidden">
+      <div className="doc-form flex-1 overflow-y-auto print:hidden">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap">
           <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("storeReceipt.backToList")}
@@ -388,11 +388,12 @@ export function StoreReceiptDocument({
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.jobCode")}</span>
-                    <p className="text-sm font-mono text-foreground px-3 py-2 bg-secondary/50 border border-border rounded-lg">{draft.jobCode || "—"}</p>
+                    {/* ค่าจากใบเบิกต้นทาง แก้ที่นี่ไม่ได้ — ข้อความธรรมดาไม่มีกรอบ ตามกฎช่องกรอกของหน้าเอกสาร (2026-09-24) */}
+                    <p className="text-sm font-mono text-foreground px-3 py-2 border border-transparent">{draft.jobCode || "—"}</p>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block mb-1">{t("storeDocs.col.charge")}</span>
-                    <p className="text-sm text-foreground px-3 py-2 bg-secondary/50 border border-border rounded-lg">{[draft.chargeDepartmentName, draft.chargeTeamName].filter(Boolean).join(" / ") || "—"}</p>
+                    <p className="text-sm text-foreground px-3 py-2 border border-transparent">{[draft.chargeDepartmentName, draft.chargeTeamName].filter(Boolean).join(" / ") || "—"}</p>
                   </div>
                 </>
               )}

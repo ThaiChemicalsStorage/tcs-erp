@@ -47,7 +47,8 @@ export function CustomerSelector({
 
   if (selected) {
     return (
-      <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2">
+      // เลือกแล้ว: แก้ได้ = กรอบช่องกรอก (data-field-box) · แก้ไม่ได้ = ข้อความธรรมดา ตามกฎช่องกรอกของหน้าเอกสาร (index.css)
+      <div data-field-box={disabled ? undefined : ""} className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${disabled ? "border-transparent" : "bg-secondary border-border"}`}>
         <Building2 size={14} className="text-[#c9a84c] flex-shrink-0" />
         <span className="text-sm text-foreground font-medium truncate flex-1 min-w-0">{selected.companyName}</span>
         {!disabled && (
@@ -67,7 +68,7 @@ export function CustomerSelector({
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/50 transition-colors">
+      <div data-field-box="" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/50 transition-colors">
         <Search size={14} className="text-muted-foreground flex-shrink-0" />
         <input
           id={inputId}

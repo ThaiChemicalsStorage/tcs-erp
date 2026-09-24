@@ -291,7 +291,7 @@ export function JobOrderDocument({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
+    <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
         <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
@@ -452,8 +452,9 @@ export function JobOrderDocument({
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    {[t("jobOrderDoc.col.description"), t("jobOrderDoc.col.quantity"), t("jobOrderDoc.col.unit"), t("jobOrderDoc.col.remark"), ""].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    {[t("jobOrderDoc.col.description"), t("jobOrderDoc.col.quantity"), t("jobOrderDoc.col.unit"), t("jobOrderDoc.col.remark"), ""].map((h, i) => (
+                      // คอลัมน์รายละเอียดมีปุ่มสลับบรรทัดต่อเนื่อง (13px + ช่องว่าง 6px) นำหน้ากล่อง — ขยับหัวตามให้ตรงขอบกล่อง (2026-09-24)
+                      <th key={h} className={`${i === 0 ? "pl-[31px] pr-3" : "px-3"} py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -479,11 +480,11 @@ export function JobOrderDocument({
                             className={`w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70 ${line.isContinuation ? "ml-3" : ""}`} />
                         </div>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-3 py-1.5">
                         <input type="number" disabled={!editable} value={line.quantity ?? ""} onChange={(e) => updateLine(line.id, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
                           className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-3 py-1.5">
                         <input disabled={!editable} value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })}
                           className="w-20 text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
                       </td>

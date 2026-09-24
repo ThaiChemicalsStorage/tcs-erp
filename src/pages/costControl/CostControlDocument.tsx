@@ -204,7 +204,7 @@ export function CostControlDocument({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto print:hidden">
+      <div className="doc-form flex-1 overflow-y-auto print:hidden">
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
           <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={15} /> {t("costControlDoc.backToList")}
@@ -366,14 +366,17 @@ export function CostControlDocument({
                       {[t("costControlDoc.line.kind"), t("costControlDoc.line.seq"), t("costControlDoc.line.description"), t("costControlDoc.line.model"),
                         t("costControlDoc.line.supplier"), t("costControlDoc.line.qty"), t("costControlDoc.line.unit"),
                         t("costControlDoc.line.unitCost"), t("costControlDoc.line.total"), ""].map((h, i) => (
-                        <th key={i} className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        // หัวคอลัมน์ชิดตามข้อมูลในแถว (เจ้าของแจ้ง 2026-09-24 ว่าหัวไม่ตรงกับช่อง) — ลำดับที่อยู่กลาง ·
+                        // จำนวน / ต้นทุน / ต้นทุนรวม เป็นตัวเลขชิดขวา
+                        <th key={i} className={`px-3 py-2 ${i === 1 ? "text-center" : i === 5 || i === 7 || i === 8 ? "text-right" : "text-left"} text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {draft.lines.map((l) => (
                       <tr key={l.id} className={`border-b border-border/50 ${l.kind === "group" ? "bg-muted/30" : ""}`}>
-                        <td className="px-3 py-1.5 w-28">
+                        {/* w-36 — ที่ w-28 ตัวเลือก "รายละเอียด" ถูกตัดเหลือ "รายละเอีย" */}
+                        <td className="px-3 py-1.5 w-36 min-w-36">
                           {/* แก้ชนิดแถวได้ — ตัวแกะไฟล์เดาจากสีพื้นหลังในชีต ซึ่งไฟล์บางไฟล์อาจไม่ได้ทาสีไว้ */}
                           <select className={inputCls} disabled={!editable} value={l.kind}
                             onChange={(e) => setLine(l.id, { kind: e.target.value as CostControlLineKind })}>

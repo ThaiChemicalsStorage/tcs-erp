@@ -350,7 +350,7 @@ export function ReceivingReportDocument({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto print:hidden">
+      <div className="doc-form flex-1 overflow-y-auto print:hidden">
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
           <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={15} /> {t("receivingReportDoc.backToList")}
@@ -490,16 +490,22 @@ export function ReceivingReportDocument({
               </Field>
               <div className="block">
                 <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.discount")}</span>
+                {/* ช่องตัวเลขกินที่ที่เหลือ หน่วยกว้างคงที่ — เดิมใส่ w-24 ทับ w-full ของ inputCls ใน class เดียวกัน w-full ชนะ
+                    ช่องหน่วยจึงยืดเต็มแถวและบีบช่องตัวเลขจนเหลือนิดเดียว (เจ้าของแจ้ง 2026-09-24) */}
                 <div className="flex gap-2">
-                  <input type="number" min={0} className={inputCls} disabled={!canEdit} value={draft.orderDiscount ?? ""}
-                    aria-label={t("receivingReportDoc.discount")}
-                    onChange={(e) => setDraft({ ...draft, orderDiscount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })} />
-                  <select className={`${inputCls} w-24 shrink-0`} disabled={!canEdit} value={draft.orderDiscountMode ?? "percent"}
-                    aria-label={t("receivingReportDoc.discountMode")}
-                    onChange={(e) => setDraft({ ...draft, orderDiscountMode: e.target.value === "amount" ? "amount" : "percent" })}>
-                    <option value="percent">%</option>
-                    <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
-                  </select>
+                  <div className="flex-1 min-w-0">
+                    <input type="number" min={0} className={inputCls} disabled={!canEdit} value={draft.orderDiscount ?? ""}
+                      aria-label={t("receivingReportDoc.discount")}
+                      onChange={(e) => setDraft({ ...draft, orderDiscount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })} />
+                  </div>
+                  <div className="w-24 shrink-0">
+                    <select className={inputCls} disabled={!canEdit} value={draft.orderDiscountMode ?? "percent"}
+                      aria-label={t("receivingReportDoc.discountMode")}
+                      onChange={(e) => setDraft({ ...draft, orderDiscountMode: e.target.value === "amount" ? "amount" : "percent" })}>
+                      <option value="percent">%</option>
+                      <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <Field label={t("receivingReportDoc.creditDays")}>
@@ -509,31 +515,17 @@ export function ReceivingReportDocument({
               <Field label={t("receivingReportDoc.dueDate")}>
                 <input className={inputCls} disabled value={dueDate ? formatQuoteDateThai(dueDate) : "—"} />
               </Field>
+              {/* ผู้ออกบิลเป็นช่องพิมพ์ช่องเดียว (เจ้าของ 2026-09-24: "ให้ทำเป็นแค่ textbox พอเอาไปกรอกเอง") — ว่าง = ใช้ผู้ขาย
+                  `billerCustom` ตามว่ามีชื่อไหม (billerOf() ยังอ่านธงนี้) · พิมพ์ใหม่ล้างเลขภาษี/ที่อยู่ของผู้ออกบิลเดิมที่ช่องถูกถอดไปแล้ว
+                  ไม่งั้นค่าที่มองไม่เห็นจะยังไปโผล่ในทะเบียนเจ้าหนี้และใบพิมพ์ */}
               <Field label={t("receivingReportDoc.biller")}>
-                <select className={inputCls} disabled={!canEdit} value={draft.billerCustom ? "custom" : "vendor"}
-                  onChange={(e) => setDraft({ ...draft, billerCustom: e.target.value === "custom" })}>
-                  <option value="vendor">{t("receivingReportDoc.billerVendor")}</option>
-                  <option value="custom">{t("receivingReportDoc.billerCustom")}</option>
-                </select>
+                <input className={inputCls} disabled={!canEdit} value={draft.billerCustom ? draft.billerName ?? "" : ""}
+                  placeholder={t("receivingReportDoc.billerPlaceholder")}
+                  onChange={(e) => setDraft({ ...draft, billerCustom: e.target.value.trim() !== "", billerName: e.target.value, billerTaxId: "", billerAddress: "" })} />
               </Field>
-              {draft.billerCustom && (
-                <>
-                  <Field label={`${t("receivingReportDoc.billerName")} *`}>
-                    <input className={`${inputCls} ${!(draft.billerName ?? "").trim() ? "border-[#e05252]/60" : ""}`} disabled={!canEdit} value={draft.billerName ?? ""}
-                      placeholder={t("receivingReportDoc.billerNamePlaceholder")}
-                      onChange={(e) => setDraft({ ...draft, billerName: e.target.value })} />
-                  </Field>
-                  <Field label={t("receivingReportDoc.vendorTaxId")}>
-                    <input className={inputCls} disabled={!canEdit} value={draft.billerTaxId ?? ""} onChange={(e) => setDraft({ ...draft, billerTaxId: e.target.value })} />
-                  </Field>
-                  <Field label={t("receivingReportDoc.vendorAddress")}>
-                    <input className={inputCls} disabled={!canEdit} value={draft.billerAddress ?? ""} onChange={(e) => setDraft({ ...draft, billerAddress: e.target.value })} />
-                  </Field>
-                </>
-              )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {draft.billerCustom ? t("receivingReportDoc.billerHint") : t("receivingReportDoc.termsHint")}
+              {t("receivingReportDoc.termsHint")}
               {" "}{t("receivingReportDoc.dueDateBase").replace("{date}", formatQuoteDateThai(dueBase))}
             </p>
           </section>

@@ -293,7 +293,7 @@ export function PurchaseOrderDocument({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto print:hidden">
+      <div className="doc-form flex-1 overflow-y-auto print:hidden">
         {/* แถบเครื่องมือ */}
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
           <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -494,7 +494,9 @@ export function PurchaseOrderDocument({
                       t("purchaseOrderDoc.col.qty"), t("purchaseOrderDoc.col.unitPrice"), t("purchaseOrderDoc.col.discount"),
                       // สองคอลัมน์ท้ายไม่มีหัว: ปุ่มยกเลิกรายการ กับปุ่มลบรายการ (คนละเรื่องกัน)
                       t("purchaseOrderDoc.col.amount"), "", ""].map((h, i) => (
-                      <th key={i} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      // คอลัมน์ตัวเลข (จำนวน · ราคา/หน่วย · ส่วนลด · จำนวนเงิน = ลำดับ 6–9) ชิดขวาตามตัวเลขในแถว — เดิมหัวชิดซ้าย
+                      // ตัวเลขชิดขวา หัวกับข้อมูลจึงเยื้องกันเกือบเต็มความกว้างคอลัมน์ (เจ้าของแจ้ง 2026-09-24)
+                      <th key={i} className={`px-3 py-2.5 ${i >= 6 && i <= 9 ? "text-right" : "text-left"} text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
                     ))}
                   </tr>
                 </thead>

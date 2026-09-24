@@ -737,7 +737,7 @@ export function ServiceReportEditor({
 
   return (
     <>
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
+    <div className="doc-form flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
       <ConfirmDialog
         open={confirmAction !== null}
         title={confirmAction === "delete" ? t("service.confirm.deleteTitle") : t("service.confirm.cancelTitle")}

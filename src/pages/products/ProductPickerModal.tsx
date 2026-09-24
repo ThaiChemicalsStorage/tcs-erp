@@ -91,7 +91,7 @@ function ProductPickerModalForm({
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
         </div>
         <div className="px-5 py-3 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/40 transition-colors flex-1">
+          <div data-field-box="" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/40 transition-colors flex-1">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input
               autoFocus
