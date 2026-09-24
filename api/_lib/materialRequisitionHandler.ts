@@ -22,7 +22,7 @@ import {
   applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf, postedUnitCostsByProduct,
   type StockMovementOrgTags, type ProductCostBasis,
 } from "./stockHandler.js";
-import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
+import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches, storeSlipSkipsApproval } from "../../src/lib/materialRequisition.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch, StoreIssueSourceCandidate } from "../../src/lib/materialRequisition.js";
 import { isStoreIssueCode, storeIssueCounterKey, type StoreIssueCode } from "../../src/lib/storeCodes.js";
 
@@ -803,7 +803,9 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
-  assertFinalForStock(doc, "จ่ายของ");
+  // ใบจ่ายที่อ้างใบเบิกแผนกไม่มีขั้นอนุมัติ (2026-09-24) — จ่ายได้ตั้งแต่ร่าง และรอบแรกเปลี่ยนใบเป็น Final ข้างล่าง
+  const confirmsOnIssue = doc.status !== "Final" && storeSlipSkipsApproval(doc);
+  if (!confirmsOnIssue) assertFinalForStock(doc, "จ่ายของ");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const issuedDate = validateIsoDateOrEmpty(body.issuedDate, "วันที่จ่ายของ") || nowIso().slice(0, 10);
@@ -847,18 +849,37 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   const totals = productTotalsOf(doc.lines, qtyByLineId);
   await assertProductsHaveStock(totals);
 
+  const materialRequisitions = await materialRequisitionsCollection();
+  if (confirmsOnIssue) {
+    // เปลี่ยนเป็น Final **ก่อน** แตะสต๊อก และเฉพาะเมื่อใบยังเป็นฉบับที่อ่านไว้ (updatedAt เดิม) — การบันทึกอัตโนมัติ
+    // ที่แทรกเข้ามาอาจเปลี่ยนรายการไปแล้ว ถ้าไม่ตรงให้ลองใหม่ · หลังจากนี้ handleUpdate ปฏิเสธการแก้ รายการที่จ่ายจึงนิ่ง
+    const claimed = await materialRequisitions.updateOne(
+      { _id: id, status: doc.status, updatedAt: doc.updatedAt },
+      { $set: { status: "Final", rejectionComment: "", updatedAt: nowIso(), updatedBy: ctx.user.id } },
+    );
+    if (claimed.matchedCount === 0) throw new HttpError(409, "ใบนี้ถูกแก้ไขระหว่างจ่ายของ กรุณาลองอีกครั้ง");
+  }
+
   const org = orgTagsOf(merged);
   const label = merged.documentNumber || id;
   const seq = previous.length > 0 ? Math.max(...previous.map((b) => b.seq)) + 1 : 1;
   const stockMovementIds: string[] = [];
-  for (const [productId, qty] of totals) {
-    const { movement } = await applyStockMovement({
-      productId, kind: "deduct", delta: -qty,
-      reason: `จ่ายของตามใบเบิก ${label} (รอบที่ ${seq})`,
-      sourceType: "material_requisition", sourceId: id, sourceLabel: label,
-      userId: ctx.user.id, org,
-    });
-    stockMovementIds.push(movement.id);
+  try {
+    for (const [productId, qty] of totals) {
+      const { movement } = await applyStockMovement({
+        productId, kind: "deduct", delta: -qty,
+        reason: `จ่ายของตามใบเบิก ${label} (รอบที่ ${seq})`,
+        sourceType: "material_requisition", sourceId: id, sourceLabel: label,
+        userId: ctx.user.id, org,
+      });
+      stockMovementIds.push(movement.id);
+    }
+  } catch (err) {
+    // ของถูกแย่งไประหว่างเช็คกับตัด และยังไม่มีอะไรลงสต๊อก → คืนสถานะเดิม ใบยังแก้/จ่ายใหม่ได้
+    if (confirmsOnIssue && stockMovementIds.length === 0) {
+      await materialRequisitions.updateOne({ _id: id }, { $set: { status: doc.status } });
+    }
+    throw err;
   }
 
   const now = nowIso();
@@ -877,7 +898,6 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   };
   const issues = [...previous, batch];
 
-  const materialRequisitions = await materialRequisitionsCollection();
   await materialRequisitions.updateOne({ _id: id }, {
     $set: {
       issues,
@@ -891,7 +911,7 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   const updated = await loadOrThrow(id);
   await writeAuditEntry(
     ctx, "Material Requisition Issued",
-    `สโตร์จ่ายของตามใบเบิก ${label} รอบที่ ${seq} (${[...totals].map(([p, q]) => `${p}: -${q}`).join(", ")})`,
+    `สโตร์จ่ายของตามใบเบิก ${label} รอบที่ ${seq} (${[...totals].map(([p, q]) => `${p}: -${q}`).join(", ")})${confirmsOnIssue ? " — ยืนยันใบจ่ายโดยไม่ผ่านขั้นอนุมัติ (อ้างใบเบิกที่อนุมัติแล้ว)" : ""}`,
     { scopeOfWorkId: updated.scopeOfWorkId },
   );
   res.status(200).json({
@@ -1343,7 +1363,13 @@ export async function handleMaterialRequisition(req: ApiRequest, res: ApiRespons
   // เป็นร่าง ซึ่งตอนนี้จะได้ 400 (ต้องส่งขออนุมัติก่อน) เก็บชื่อเดิมไว้เพื่อไม่ให้ URL หาย ไม่ใช่เพื่อ
   // รักษาพฤติกรรมเดิม — พฤติกรรมเปลี่ยนโดยตั้งใจ
   if (parts.length === 2 && (parts[1] === "approve" || parts[1] === "finalize")) return handleApprove(req, res, parts[0], approvalConfig);
-  if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0], approvalConfig);
+  if (parts.length === 2 && parts[1] === "submit-approval") {
+    // ใบจ่ายที่อ้างใบเบิกแผนกไม่มีขั้นอนุมัติ (2026-09-24) — จ่ายรอบแรกคือการยืนยันใบ ดู storeSlipSkipsApproval()
+    if (req.method === "POST" && storeSlipSkipsApproval(await loadOrThrow(parts[0]))) {
+      throw new HttpError(400, "ใบจ่ายที่อ้างใบเบิกของแผนกไม่ต้องขออนุมัติ — กดจ่ายของได้เลย");
+    }
+    return handleSubmitApproval(req, res, parts[0], approvalConfig);
+  }
   if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);

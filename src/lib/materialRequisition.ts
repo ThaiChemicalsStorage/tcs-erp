@@ -278,6 +278,14 @@ export function outstandingQtyOf(line: Pick<MaterialRequisitionLine, "plannedQty
 export function requisitionHasOutstanding(doc: Pick<MaterialRequisition, "status" | "lines">): boolean {
   return doc.status === "Final" && doc.lines.some((l) => outstandingQtyOf(l) > 0);
 }
+/**
+ * ใบจ่ายของสโตร์ที่อ้างใบเบิกของแผนก **ไม่มีขั้นอนุมัติ** (2026-09-24 เจ้าของ: *"ไม่ต้องรออนุมัติก็สามารถกดจ่ายได้"*) —
+ * ใบเบิกต้นทางผ่านการอนุมัติมาแล้ว · สโตร์กดจ่ายได้ตั้งแต่ใบเป็นร่าง และการจ่ายรอบแรกเปลี่ยนใบเป็น Final (รายการล็อก)
+ * · ใบจ่ายตรงที่ไม่อ้างใบเบิก และใบรับคืน ยังต้องอนุมัติเหมือนเดิม
+ */
+export function storeSlipSkipsApproval(doc: Pick<MaterialRequisition, "ownerDepartment" | "sourceRequisitionId">): boolean {
+  return doc.ownerDepartment === "store" && !!doc.sourceRequisitionId;
+}
 /** ของที่ทีมยังถืออยู่จากบรรทัดนี้ = จ่ายแล้ว − คืนแล้ว */
 export function netHeldQtyOf(line: Pick<MaterialRequisitionLine, "withdrawal1Qty" | "withdrawal2Qty" | "returnQty">): number {
   return Math.max(0, issuedQtyOf(line) - (line.returnQty ?? 0));

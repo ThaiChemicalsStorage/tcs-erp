@@ -90,6 +90,8 @@ describe("ใบเบิกของสโตร์", () => {
     expect(patched.status, JSON.stringify(patched.body)).toBe(200);
     expect(patched.body.materialRequisition).toMatchObject({ jobCode: "PQ2609-77", storeReference: "PDO-202609-0007" });
     issueLineId = patched.body.materialRequisition.lines[0].id;
+    // ใบจ่ายตรงที่ไม่อ้างใบเบิกแผนกยังต้องอนุมัติก่อนจ่าย (มีแค่ใบที่อ้างใบเบิกที่ข้ามขั้นอนุมัติ — 2026-09-24)
+    expect((await api("POST", `/api/material-requisitions/${issueId}/issues`, { lines: [{ lineId: issueLineId, qty: 1 }] })).status).toBe(400);
     await approve(`/api/material-requisitions/${issueId}`);
     const issued = await api("POST", `/api/material-requisitions/${issueId}/issues`, { lines: [{ lineId: issueLineId, qty: 5 }] });
     expect(issued.status, JSON.stringify(issued.body)).toBe(200);
@@ -266,13 +268,22 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     expect(set.body.materialRequisition.lines[0]).toMatchObject({ productId: boltId, plannedQty: 4, sourceLineId: deptLineId });
   });
 
-  it("สโตร์จ่ายจากใบจ่าย → สต๊อกลด และใบเบิกแผนกเห็นยอดจ่าย (ไม่ตัดสต๊อกซ้ำ)", async () => {
-    await approve(`/api/material-requisitions/${slipId}`);
+  it("ใบจ่ายที่อ้างใบเบิกแผนกไม่มีขั้นอนุมัติ — ส่งขออนุมัติไม่ได้ (2026-09-24)", async () => {
+    const res = await api("POST", `/api/material-requisitions/${slipId}/submit-approval`);
+    expect(res.status).toBe(400);
+    expect((await api("GET", `/api/material-requisitions/${slipId}`)).body.materialRequisition.status).toBe("Draft");
+  });
+
+  it("สโตร์จ่ายจากใบจ่ายที่ยังเป็นร่างได้เลย → สต๊อกลด ใบเป็น Final และใบเบิกแผนกเห็นยอดจ่าย (ไม่ตัดสต๊อกซ้ำ)", async () => {
     const slip = (await api("GET", `/api/material-requisitions/${slipId}`)).body.materialRequisition;
+    expect(slip.status).toBe("Draft");
     const before = (await stock(boltId)).qty;
     const issued = await api("POST", `/api/material-requisitions/${slipId}/issues`, { lines: [{ lineId: slip.lines[0].id, qty: 3 }] });
     expect(issued.status, JSON.stringify(issued.body)).toBe(200);
+    expect(issued.body.materialRequisition.status).toBe("Final");
     slipBatchId = issued.body.materialRequisition.issues[0].id;
+    // จ่ายรอบแรกแล้วรายการล็อก — แก้ใบไม่ได้เหมือนใบที่อนุมัติแล้ว
+    expect((await api("PATCH", `/api/material-requisitions/${slipId}`, { storeReference: "x" })).status).toBe(400);
     expect((await stock(boltId)).qty).toBe(before - 3);
     const dept = (await api("GET", `/api/material-requisitions/${deptId}`)).body.materialRequisition;
     expect(dept.lines[0].withdrawal1Qty).toBe(3);
@@ -289,7 +300,6 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     expect(set.body.materialRequisition.lines[0].plannedQty).toBe(1);
     const line = set.body.materialRequisition.lines[0];
     await api("PATCH", `/api/material-requisitions/${id2}`, { lines: [{ ...line, plannedQty: 5 }] });
-    await approve(`/api/material-requisitions/${id2}`);
     // จ่ายเกินที่แผนกยังค้างได้แล้ว (2026-09-24) — ยอดเกินบันทึกลงใบเบิกแผนกด้วย ค้างเบิกเป็นศูนย์ไม่ติดลบ
     const over = await api("POST", `/api/material-requisitions/${id2}/issues`, { lines: [{ lineId: line.id, qty: 2 }] });
     expect(over.status, JSON.stringify(over.body)).toBe(200);

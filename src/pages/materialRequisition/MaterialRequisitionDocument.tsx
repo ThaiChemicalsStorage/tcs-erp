@@ -9,7 +9,7 @@ import {
   logMaterialRequisitionPrinted, deleteMaterialRequisition,
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
-  rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf,
+  rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf, storeSlipSkipsApproval,
   fetchStoreIssueSources, type StoreIssueSourceCandidate,
 } from "../../lib/materialRequisition";
 import { fetchDepartments, type Department } from "../../lib/departments";
@@ -278,6 +278,13 @@ export function MaterialRequisitionDocument({
     }
     setSavingIssue(true);
     try {
+      // ใบจ่ายที่ไม่ต้องอนุมัติจ่ายได้ตั้งแต่ร่าง — บันทึกหัวใบ/รายการที่ค้างก่อน เซิร์ฟเวอร์จ่ายตามใบที่บันทึกไว้เท่านั้น
+      // (บรรทัดที่เพิ่งเพิ่มยังไม่มีในฐานข้อมูล) · การจ่ายรอบแรกเปลี่ยนใบเป็น Final ฟอร์มจึงแก้ต่อไม่ได้หลังจากนี้
+      if (draft.status === "Draft" && canEdit) {
+        const saved = await updateMaterialRequisition(draft.id, toUpdateFields(draft));
+        autoSave.markSaved(toUpdateFields(saved));
+        draftBackup.clear();
+      }
       const { materialRequisition, stockByProduct: fresh, costByProduct: freshCost } = await postMaterialIssueBatch(draft.id, {
         lines,
         issuedDate: issueDate,
@@ -392,7 +399,9 @@ export function MaterialRequisitionDocument({
    * สโตร์จ่ายของได้เฉพาะใบที่อนุมัติแล้ว และ**เฉพาะใบจ่ายของสโตร์** (2026-09-23 — เจ้าของ: สโตร์จ่ายของ/คืนของในหน้า
    * "ใบเบิก-คืนวัสดุ (สโตร์)" แทน) · ใบเบิกของแผนกเห็นยอดจ่าย/คืนที่สโตร์บันทึกให้ แต่ไม่มีปุ่มจ่าย/คืนในใบตัวเอง
    */
-  const canIssue = canIssueStock && isFinal && isStoreDoc;
+  const canIssue = canIssueStock && isStoreDoc && (isFinal || storeSlipSkipsApproval(doc));
+  /** ใบจ่ายที่อ้างใบเบิกแผนกและยังไม่ได้จ่าย — ไม่มีขั้นอนุมัติ (2026-09-24) จึงซ่อนปุ่มส่งขออนุมัติกับแถบขั้นตอนอนุมัติ */
+  const confirmsOnIssue = !isFinal && storeSlipSkipsApproval(doc);
   const outstandingLines = doc.lines.filter((l) => outstandingQtyOf(l) > 0).length;
   /** รอบการจ่ายที่บันทึกแล้ว — ใบที่จ่ายไปก่อน 2026-09-07 ถูกแปลงยอดเดิมมาเป็นรอบให้อัตโนมัติ */
   const issueBatches = issueBatchesOf(doc);
@@ -618,7 +627,7 @@ export function MaterialRequisitionDocument({
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("materialRequisitionDoc.saveDraft")}
             </button>
           )}
-          <DocumentApprovalActions
+          {!(confirmsOnIssue && isDraftStatus) && <DocumentApprovalActions
             status={doc.status}
             canEdit={canEdit}
             canApprove={canFinalize}
@@ -628,7 +637,7 @@ export function MaterialRequisitionDocument({
             onWithdraw={() => withdrawMaterialRequisitionApproval(doc.id)}
             onUpdated={(updated) => applySaved(updated)}
             showToast={showToast}
-          />
+          />}
           {canDelete && (
             <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
               <Trash2 size={13} /> {t("materialRequisitionDoc.delete")}
@@ -651,15 +660,24 @@ export function MaterialRequisitionDocument({
           />
         )}
 
-        <DocumentStatusStepper
-          status={doc.status}
-          rejectionComment={doc.rejectionComment ?? ""}
-          approverLabel={t("materialRequisitionDoc.approverLabel")}
-          approvedByUserId={doc.approvedByUserId}
-          approvedByName={doc.approvedBy}
-          approvedAt={doc.approvedAt}
-          finalHint={isFinal && outstandingLines > 0 ? t("materialRequisitionDoc.finalHintOutstanding").replace("{n}", String(outstandingLines)) : undefined}
-        />
+        {/* ใบจ่ายที่อ้างใบเบิกแผนกไม่มีขั้นอนุมัติ — แถบขั้นตอนจะโชว์ "รออนุมัติ/อนุมัติแล้ว" ที่ไม่มีผู้อนุมัติ จึงบอกตรง ๆ แทน */}
+        {storeSlipSkipsApproval(doc) && !doc.approvedByUserId ? (
+          confirmsOnIssue && (
+            <div className="flex items-center gap-2 rounded-xl border border-[#2aa36b]/30 bg-[#2aa36b]/5 px-4 py-3 text-sm text-[#207e52]">
+              <PackageCheck size={15} className="shrink-0" /> {t("materialRequisitionDoc.noApprovalNeeded")}
+            </div>
+          )
+        ) : (
+          <DocumentStatusStepper
+            status={doc.status}
+            rejectionComment={doc.rejectionComment ?? ""}
+            approverLabel={t("materialRequisitionDoc.approverLabel")}
+            approvedByUserId={doc.approvedByUserId}
+            approvedByName={doc.approvedBy}
+            approvedAt={doc.approvedAt}
+            finalHint={isFinal && outstandingLines > 0 ? t("materialRequisitionDoc.finalHintOutstanding").replace("{n}", String(outstandingLines)) : undefined}
+          />
+        )}
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
         {/* สรุปสถานะการจ่ายของ — เฉพาะใบที่อนุมัติแล้ว (ใบร่างยังไม่มีอะไรให้จ่าย) */}
         {isFinal && (
