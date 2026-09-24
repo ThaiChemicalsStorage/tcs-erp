@@ -281,7 +281,7 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     expect((await api("DELETE", `/api/material-requisitions/${deptId}/issues/${dept.issues[0].id}`)).status).toBe(400);
   });
 
-  it("ใบจ่ายใบที่สองจากใบเบิกเดียวกัน — เลขต่อท้าย /2 และจ่ายเกินที่แผนกยังค้างไม่ได้", async () => {
+  it("ใบจ่ายใบที่สองจากใบเบิกเดียวกัน — เลขต่อท้าย /2 และจ่ายเกินที่แผนกยังค้างได้", async () => {
     const slip2 = await api("POST", "/api/material-requisitions", { ownerDepartment: "store", issueCode: "PD" });
     const id2 = slip2.body.materialRequisition.id;
     const set = await api("PATCH", `/api/material-requisitions/${id2}`, { sourceRequisitionId: deptId });
@@ -290,8 +290,13 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     const line = set.body.materialRequisition.lines[0];
     await api("PATCH", `/api/material-requisitions/${id2}`, { lines: [{ ...line, plannedQty: 5 }] });
     await approve(`/api/material-requisitions/${id2}`);
+    // จ่ายเกินที่แผนกยังค้างได้แล้ว (2026-09-24) — ยอดเกินบันทึกลงใบเบิกแผนกด้วย ค้างเบิกเป็นศูนย์ไม่ติดลบ
     const over = await api("POST", `/api/material-requisitions/${id2}/issues`, { lines: [{ lineId: line.id, qty: 2 }] });
-    expect(over.status).toBe(400);
+    expect(over.status, JSON.stringify(over.body)).toBe(200);
+    const dept = (await api("GET", `/api/material-requisitions/${deptId}`)).body.materialRequisition;
+    expect(dept.lines[0].withdrawal1Qty + (dept.lines[0].withdrawal2Qty ?? 0)).toBe(5);
+    // ยกเลิกรอบที่เกินไว้ ให้ข้อถัดไปเริ่มจากยอดเดิม
+    expect((await api("DELETE", `/api/material-requisitions/${id2}/issues/${over.body.materialRequisition.issues[0].id}`)).status).toBe(200);
   });
 
   it("ใบคืนอ้างใบเบิกของแผนกได้ เลขที่ตามใบเบิก — รับเข้าคลังแล้วยอดคืนลงใบเบิกแผนก", async () => {

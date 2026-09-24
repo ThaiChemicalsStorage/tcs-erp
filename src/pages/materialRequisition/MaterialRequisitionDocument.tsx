@@ -969,8 +969,10 @@ export function MaterialRequisitionDocument({
                         const stock = stockByProduct[line.productId];
                         const outstanding = outstandingQtyOf(line);
                         const typed = Number(issueQty[line.id] ?? "");
-                        // เตือนตรงช่องที่พิมพ์ ก่อนจะไปโดนเซิร์ฟเวอร์ปฏิเสธ — เกินค้างเบิก หรือของในคลังไม่พอ
-                        const bad = Number.isFinite(typed) && typed > 0 && (typed > outstanding || (stock !== undefined && typed > stock));
+                        // เตือนตรงช่องที่พิมพ์ ก่อนจะไปโดนเซิร์ฟเวอร์ปฏิเสธ — ของในคลังไม่พอ (แดง)
+                        // จ่ายเกินที่ขอได้ตั้งแต่ 2026-09-24 (คำสั่งเจ้าของ) — แค่บอกว่าเกินเท่าไหร่ (ส้ม) ไม่ห้าม
+                        const bad = Number.isFinite(typed) && typed > 0 && stock !== undefined && typed > stock;
+                        const overBy = Number.isFinite(typed) && typed > outstanding ? typed - outstanding : 0;
                         return (
                           <tr key={line.id} className="border-b border-border/50">
                             <td className="px-3 py-2 text-xs text-foreground"><span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
@@ -979,10 +981,15 @@ export function MaterialRequisitionDocument({
                             <td className={`px-3 py-2 text-xs font-mono ${outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
                             <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{stock === undefined ? "—" : stock.toLocaleString()}</td>
                             <td className="px-2 py-1.5">
-                              <input type="number" min={0} max={outstanding} value={issueQty[line.id] ?? ""}
-                                disabled={outstanding <= 0}
+                              <input type="number" min={0} value={issueQty[line.id] ?? ""}
+                                aria-label={`${t("materialRequisitionDoc.col.issueNow")} ${line.productName}`}
                                 onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
-                                className={`w-24 text-xs font-mono text-foreground bg-[#2aa36b]/5 border rounded px-1.5 py-1 outline-none disabled:opacity-40 ${bad ? "border-[#e05252]" : "border-[#2aa36b]/20"}`} />
+                                className={`w-24 text-xs font-mono text-foreground bg-[#2aa36b]/5 border rounded px-1.5 py-1 outline-none disabled:opacity-40 ${bad ? "border-[#e05252]" : overBy > 0 ? "border-[#e08a3c]" : "border-[#2aa36b]/20"}`} />
+                              {overBy > 0 && (
+                                <span className="block text-xs text-[#a75d1a] mt-0.5 whitespace-nowrap">
+                                  {t("materialRequisitionDoc.overIssue").replace("{n}", overBy.toLocaleString()).replace("{unit}", line.unit)}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );

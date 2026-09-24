@@ -792,7 +792,7 @@ function linesWithDerivedWithdrawals(lines: MaterialRequisitionLine[], batches: 
  * สิทธิ์ `stock:adjust` ไม่ใช่ `canEdit()` — คนจ่ายของคือสโตร์ ซึ่งไม่ใช่เจ้าของใบและอาจไม่มีสิทธิ์แก้ใบ
  * เลย ส่วนเจ้าของใบก็ไม่ควรกรอกเลขจ่ายเองได้ (ไม่งั้นตัวเลขสต๊อกจะขึ้นกับคนขอ ไม่ใช่คนจ่าย)
  *
- * ลำดับ: ตรวจทุกบรรทัด (จ่ายรอบนี้ > 0 และไม่เกินค้างเบิก) → เช็คยอดพอสำหรับทุกสินค้า **ก่อน** เขียน
+ * ลำดับ: ตรวจทุกบรรทัด (จ่ายรอบนี้ > 0 — เกินที่ขอได้ตั้งแต่ 2026-09-24) → เช็คยอดพอสำหรับทุกสินค้า **ก่อน** เขียน
  * อะไรเลย (กันเขียนครึ่งเดียว) → ตัดสต๊อกทีละสินค้า → ต่อท้ายรอบและคิดสองช่องบนฟอร์มใหม่
  *
  * ใบเก่าที่จ่ายไปแล้วก่อนมีระบบรอบ ถูกแปลงยอดเดิมเป็นรอบย้อนหลังแล้วเขียนลงฐานข้อมูล**พร้อมกับ**รอบใหม่
@@ -824,31 +824,19 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
     const qty = sanitizeNullableNumber(raw.qty, `จำนวนจ่าย (${line.productName})`) ?? 0;
     if (qty < 0) throw new HttpError(400, `จำนวนจ่าย (${line.productName}) ต้องไม่ติดลบ`);
     if (qty === 0) continue; // บรรทัดที่ไม่ได้จ่ายรอบนี้ — ปล่อยผ่าน ไม่ใช่ข้อผิดพลาด
-    const outstanding = (line.plannedQty ?? 0) - batchIssuedQtyOf(previous, lineId);
-    if (qty > outstanding) {
-      throw new HttpError(400, `จ่าย ${line.productName} ${qty} เกินที่ค้างเบิก ${Math.max(0, outstanding)} ${line.unit}`);
-    }
+    // **จ่ายเกินที่ขอได้** (คำสั่งเจ้าของ 2026-09-24: *"ใบเบิกตอนจ่ายของสามารถจ่ายของเกินได้"*) — ของจริงมาเป็นแพ็ก/ม้วน
+    // ตัดพอดีจำนวนที่ขอไม่ได้ · ด่านที่เหลือคือของในคลังต้องพอ (`assertProductsHaveStock` ข้างล่าง) · ยอดค้างเบิกไม่ติดลบ
     qtyByLineId.set(lineId, qty);
   }
   if (qtyByLineId.size === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่จ่ายอย่างน้อยหนึ่งรายการ");
 
-  // ใบจ่ายของสโตร์ที่อ้างใบเบิกแผนก — จ่ายเกินที่แผนกนั้นยังค้างเบิกไม่ได้ (ตรวจกับยอดล่าสุดของใบเบิก ณ ตอนกด)
+  // ใบจ่ายของสโตร์ที่อ้างใบเบิกแผนก — บรรทัดต้นทางต้องยังอยู่ (จ่ายเกินที่แผนกค้างได้ ตามกติกาเดียวกับข้างบน)
   const source = doc.ownerDepartment === "store" && doc.sourceRequisitionId ? await loadDepartmentRequisition(doc.sourceRequisitionId) : null;
   if (source) {
-    const srcIssues = issueBatchesOf(source);
-    const srcLineById = new Map((source.lines ?? []).map((l) => [l.id, l]));
-    const bySourceLine = new Map<string, number>();
-    for (const [lineId, qty] of qtyByLineId) {
+    const srcLineIds = new Set((source.lines ?? []).map((l) => l.id));
+    for (const lineId of qtyByLineId.keys()) {
       const sid = lineById.get(lineId)?.sourceLineId;
-      if (sid) bySourceLine.set(sid, (bySourceLine.get(sid) ?? 0) + qty);
-    }
-    for (const [sid, qty] of bySourceLine) {
-      const srcLine = srcLineById.get(sid);
-      if (!srcLine) throw new HttpError(400, `ไม่พบรายการในใบเบิก ${source.documentNumber || source._id} แล้ว`);
-      const srcOutstanding = (srcLine.plannedQty ?? 0) - batchIssuedQtyOf(srcIssues, sid);
-      if (qty > srcOutstanding) {
-        throw new HttpError(400, `จ่าย ${srcLine.productName} ${qty} เกินที่ใบเบิก ${source.documentNumber || source._id} ยังค้างเบิก ${Math.max(0, srcOutstanding)} ${srcLine.unit}`);
-      }
+      if (sid && !srcLineIds.has(sid)) throw new HttpError(400, `ไม่พบรายการในใบเบิก ${source.documentNumber || source._id} แล้ว`);
     }
   }
 

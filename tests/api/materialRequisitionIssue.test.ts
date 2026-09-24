@@ -184,14 +184,24 @@ describe("POST /:id/issues — สโตร์จ่ายของทีละ�
     expect((await movementsOf(id)).map((m) => [m.kind, m.delta])).toEqual([["deduct", -4], ["deduct", -3], ["deduct", -2]]);
   });
 
-  it("จ่ายเกินที่ค้างเบิก → 400 และสต๊อกไม่เปลี่ยน", async () => {
+  it("จ่ายเกินที่ขอได้ (คำสั่งเจ้าของ 2026-09-24) — ตัดสต๊อกตามที่จ่ายจริง ค้างเบิกไม่ติดลบ", async () => {
     await setStock(productA, 50);
     const id = await seedRequisition("Final");
     expect((await issue(id, [{ lineId: "l1", qty: 6 }])).status).toBe(200);
     const res = await issue(id, [{ lineId: "l1", qty: 5 }]);
+    expect(res.status).toBe(200);
+    expect(await stockOf(productA), "จ่ายไป 6 + 5").toBe(39);
+    const doc = await docOf(id);
+    expect(doc.issues.map((b) => b.lines[0].qty)).toEqual([6, 5]);
+  });
+
+  it("จ่ายเกินได้ แต่ของในคลังต้องพอ", async () => {
+    await setStock(productA, 12);
+    const id = await seedRequisition("Final");
+    const res = await issue(id, [{ lineId: "l1", qty: 13 }]);
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain("ค้างเบิก");
-    expect(await stockOf(productA), "จ่ายไปแล้ว 6 เท่านั้น").toBe(44);
+    expect(await res.text()).toContain("ไม่พอ");
+    expect(await stockOf(productA)).toBe(12);
   });
 
   it("ของไม่พอ → 400 ก่อนเขียนอะไรเลย แม้อีกบรรทัดจะพอ", async () => {
