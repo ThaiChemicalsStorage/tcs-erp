@@ -1366,7 +1366,8 @@ export async function handleMaterialRequisition(req: ApiRequest, res: ApiRespons
   if (parts.length === 2 && parts[1] === "submit-approval") {
     // ใบจ่ายที่อ้างใบเบิกแผนกไม่มีขั้นอนุมัติ (2026-09-24) — จ่ายรอบแรกคือการยืนยันใบ ดู storeSlipSkipsApproval()
     if (req.method === "POST" && storeSlipSkipsApproval(await loadOrThrow(parts[0]))) {
-      throw new HttpError(400, "ใบจ่ายที่อ้างใบเบิกของแผนกไม่ต้องขออนุมัติ — กดจ่ายของได้เลย");
+      // แท็บที่เปิดค้างไว้ก่อนอัปเดตยังโชว์ปุ่มส่งขออนุมัติและล็อกการ์ดจ่ายของ — บอกให้รีเฟรช ไม่ใช่แค่บอกว่ากดจ่ายได้
+      throw new HttpError(400, "ใบจ่ายที่อ้างใบเบิกของแผนกไม่ต้องขออนุมัติ กดจ่ายของได้เลย — ถ้ายังไม่เห็นช่องจ่ายของ กรุณารีเฟรชหน้าเว็บ (F5)");
     }
     return handleSubmitApproval(req, res, parts[0], approvalConfig);
   }
