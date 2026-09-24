@@ -211,7 +211,8 @@ export function ReceivingReportDocument({
   const orderTotals = orderTotalsOf(draft);
   const priceType = priceTypeOf({ priceType: draft.priceType, vatRate: draft.orderVatRate });
   // วันครบกำหนดนับจากวันที่ใบกำกับของรอบล่าสุด ยังไม่ได้รับของ = นับจากวันนี้ (แต่ละรอบเก็บวันครบกำหนดของตัวเองตอนรับ)
-  const dueBase = draft.batches[draft.batches.length - 1]?.invoiceDate || new Date().toISOString().slice(0, 10);
+  // "วันนี้" ตามเวลาเครื่อง ไม่ใช่ UTC — ก่อน 07:00 น. เวลาไทย toISOString() ยังเป็นเมื่อวาน
+  const dueBase = draft.batches[draft.batches.length - 1]?.invoiceDate || new Date().toLocaleDateString("sv-SE");
   const dueDate = dueDateOf(dueBase, draft.creditDays);
   const pendingLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) > 0);
   const doneLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) <= 0);

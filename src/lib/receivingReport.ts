@@ -21,6 +21,7 @@
 
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import { resolveDiscountAmount, lineSubtotal, VAT_RATE, type DiscountMode } from "./quoteMath.js";
+import { addDaysIso } from "./printFormat.js";
 import type { DocumentAttachment } from "./documentAttachments.js";
 import type { TranslationKey } from "./i18n.js";
 import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from "./documentAttachments.js";
@@ -295,10 +296,7 @@ export function orderedValueOf(doc: OrderTermsDoc): number {
 /** วันครบกำหนด = วันที่ + เครดิต (วัน) · เครดิตว่างหรือไม่มีวันที่ = ว่าง */
 export function dueDateOf(date: string, creditDays: number | null | undefined): string {
   if (!date || creditDays === null || creditDays === undefined || !Number.isFinite(creditDays)) return "";
-  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return "";
-  d.setUTCDate(d.getUTCDate() + creditDays);
-  return d.toISOString().slice(0, 10);
+  return addDaysIso(date, creditDays);
 }
 
 /** ผู้ที่หนี้ของใบนี้ตั้งเป็นชื่อ — ผู้ออกบิลที่กรอกเอง หรือผู้ขาย */

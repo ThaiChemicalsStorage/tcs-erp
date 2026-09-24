@@ -8,6 +8,7 @@ import {
   type PasswordResetRequestFields,
 } from "./collections.js";
 import { notifyUsers } from "./departmentNotify.js";
+import { escapeRegExp } from "./searchShared.js";
 import { nowIso } from "../../src/lib/products.js";
 import type { PasswordResetRequest } from "../../src/lib/passwordResets.js";
 
@@ -27,10 +28,6 @@ const MAX_ATTEMPTS_PER_IP = 5;
 /** ไม่มี 0/O/1/l/I — อ่านออกเสียงบอกกันทางโทรศัพท์ได้ไม่พลาด */
 const TEMP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
 const TEMP_LENGTH = 10;
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function requestIp(req: ApiRequest): string {
   const fwd = req.headers["x-forwarded-for"];
@@ -170,7 +167,8 @@ export async function handlePasswordResets(req: ApiRequest, res: ApiResponse, pa
     const resolved = { resolvedAt: now, resolvedBy: ctx.user.id, resolvedByName: ctx.user.fullName };
 
     if (parts[1] === "dismiss") {
-      await requests.updateOne({ _id: doc._id }, { $set: { status: "dismissed", ...resolved } });
+      const dismissed = await requests.updateOne({ _id: doc._id, status: "pending" }, { $set: { status: "dismissed", ...resolved } });
+      if (dismissed.modifiedCount === 0) throw new HttpError(409, "คำขอนี้ดำเนินการไปแล้ว");
       await writeAudit(ctx, "Password Reset Dismissed", `ปิดคำขอกู้รหัสผ่านของ ${doc.fullName} (${doc.username}) โดยไม่ออกรหัสใหม่`);
       res.status(200).json({ request: toClient({ ...doc, status: "dismissed", ...resolved }) });
       return;
@@ -181,14 +179,22 @@ export async function handlePasswordResets(req: ApiRequest, res: ApiResponse, pa
     if (!user) throw new HttpError(404, "ไม่พบผู้ใช้งานของคำขอนี้แล้ว — ปิดคำขอแทน");
     if (user.status !== "active") throw new HttpError(400, "บัญชีนี้ถูกระงับการใช้งาน — เปิดใช้งานบัญชีก่อนจึงจะออกรหัสใหม่ได้");
 
+    // จองคำขอแบบ atomic ก่อนเปลี่ยนรหัส — Super Admin สองคนกดพร้อมกันต้องได้รหัสชั่วคราวชุดเดียว
+    // ไม่งั้นคนที่สองเขียนทับ แล้วรหัสที่คนแรกแจ้งผู้ใช้ไปใช้เข้าระบบไม่ได้
+    const claimed = await requests.updateOne({ _id: doc._id, status: "pending" }, { $set: { status: "resolved", ...resolved } });
+    if (claimed.modifiedCount === 0) throw new HttpError(409, "คำขอนี้ดำเนินการไปแล้ว");
     const temporaryPassword = generateTemporaryPassword();
-    await users.updateOne({ _id: user._id }, {
-      $set: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true, updatedAt: now },
-    });
+    try {
+      await users.updateOne({ _id: user._id }, {
+        $set: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true, updatedAt: now },
+      });
+    } catch (err) {
+      await requests.updateOne({ _id: doc._id }, { $set: { status: "pending" }, $unset: { resolvedAt: "", resolvedBy: "", resolvedByName: "" } });
+      throw err;
+    }
     // รหัสเดิมอาจรั่ว (เหตุผลหนึ่งที่คนมาขอ) — ตัดทุกเครื่องที่ยังค้างเซสชันอยู่
     const sessions = await sessionsCollection();
     await sessions.updateMany({ userId: user._id, revokedAt: null }, { $set: { revokedAt: now, revokedReason: "password_reset" } });
-    await requests.updateOne({ _id: doc._id }, { $set: { status: "resolved", ...resolved } });
     await writeAudit(ctx, "Password Reset Issued", `ออกรหัสผ่านชั่วคราวให้ ${user.fullName} (${user.username}) — ผู้ใช้ต้องตั้งรหัสใหม่เมื่อเข้าสู่ระบบ`);
     res.status(200).json({ temporaryPassword, request: toClient({ ...doc, status: "resolved", ...resolved }) });
     return;

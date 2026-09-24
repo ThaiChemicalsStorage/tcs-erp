@@ -125,15 +125,19 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
   const col = await vendorBillsCollection();
   const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "receivingReport:viewAll"), "createdBy");
   const docs = await col.find({ isDeleted: false, ...ownership }).sort({ updatedAt: -1 }).limit(1000).toArray();
-  const summaries: VendorBillSummary[] = [];
-  for (const d of docs) {
-    const { rows } = await bundleOf(d);
+  // ดึงหนี้ของทุกใบในคำสั่งเดียว (เดิมเรียก bundleOf ทีละใบ = 3 query ต่อใบ) — ยอดในรายการไม่ใช้วันครบกำหนด
+  // จึงไม่ต้องส่งเครดิตหัวใบของแต่ละใบเข้าไป
+  const ids = [...new Set(docs.flatMap((d) => d.apEntryIds ?? []).filter(isObjectIdLike))];
+  const entries = ids.length > 0 ? await (await apEntriesCollection()).find({ _id: { $in: ids.map(toObjectId) } }).toArray() as ApDoc[] : [];
+  const rowById = await rowsFor(entries, null);
+  const summaries: VendorBillSummary[] = docs.map((d) => {
+    const rows = (d.apEntryIds ?? []).map((id) => rowById.get(id)).filter((r): r is VendorBillRow => !!r);
     const totals = vendorBillTotals(rows);
-    summaries.push({
+    return {
       id: d._id, documentNumber: d.documentNumber || d._id, vendorName: d.vendorName, billDate: d.billDate,
-      paymentDate: d.paymentDate, rowCount: rows.length, total: totals.amount, outstanding: totals.outstanding, updatedAt: d.updatedAt,
-    });
-  }
+      paymentDate: d.paymentDate, rowCount: (d.apEntryIds ?? []).length, total: totals.amount, outstanding: totals.outstanding, updatedAt: d.updatedAt,
+    };
+  });
   res.status(200).json({ vendorBills: summaries });
 }
 

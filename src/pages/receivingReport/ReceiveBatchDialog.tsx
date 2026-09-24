@@ -42,7 +42,15 @@ export function ReceiveBatchDialog({
   const [vatRate, setVatRate] = useState<string>(doc.orderVatRate !== null && doc.orderVatRate !== undefined ? String(doc.orderVatRate) : "7");
   // เงื่อนไขบิล (2026-09-24) ตั้งต้นจากหัวใบ แก้ได้เฉพาะรอบนี้ถ้าบิลจริงต่างไป
   const [priceType, setPriceType] = useState<ReceivingPriceType>(priceTypeOf({ priceType: doc.priceType, vatRate: doc.orderVatRate }));
-  const [discount, setDiscount] = useState<string>(doc.orderDiscount ? String(doc.orderDiscount) : "");
+  // ส่วนลดแบบบาทคือส่วนลดของทั้งบิล — รับหลายรอบต้องตั้งต้นเฉพาะส่วนที่ยังไม่ได้หักในรอบก่อน ๆ
+  // ไม่งั้นทุกรอบหักเต็มจำนวนซ้ำ ยอดหนี้รวมต่ำกว่าบิลจริง (แบบ % หักตามสัดส่วนของรอบอยู่แล้ว ใช้ค่าเดิมได้)
+  const [discount, setDiscount] = useState<string>(() => {
+    if (!doc.orderDiscount) return "";
+    if ((doc.orderDiscountMode ?? "percent") !== "amount") return String(doc.orderDiscount);
+    const used = doc.batches.reduce((sum, b) => sum + (b.discountAmt ?? 0), 0);
+    const remaining = Math.round(Math.max(0, doc.orderDiscount - used) * 100) / 100;
+    return remaining > 0 ? String(remaining) : "";
+  });
   const [discountMode, setDiscountMode] = useState<DiscountMode>(doc.orderDiscountMode ?? "percent");
   const [creditDays, setCreditDays] = useState<string>(doc.creditDays !== null && doc.creditDays !== undefined ? String(doc.creditDays) : "");
   const [receivedBy, setReceivedBy] = useState("");

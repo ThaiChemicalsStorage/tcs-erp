@@ -23,7 +23,7 @@ import {
   type StockMovementOrgTags, type ProductCostBasis,
 } from "./stockHandler.js";
 import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
-import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch } from "../../src/lib/materialRequisition.js";
+import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch, StoreIssueSourceCandidate } from "../../src/lib/materialRequisition.js";
 import { isStoreIssueCode, storeIssueCounterKey, type StoreIssueCode } from "../../src/lib/storeCodes.js";
 
 /**
@@ -948,25 +948,29 @@ async function removeMirrorFromSource(source: MaterialRequisitionFields & { _id:
  * ใบเบิกของแผนกอื่นที่สโตร์อ้างในใบจ่ายได้ (2026-09-23) — อนุมัติแล้วและยังมีของค้างเบิก ทุกแผนก ไม่กรองเจ้าของใบ
  * (สโตร์จ่ายของให้ทุกแผนก แบบเดียวกับหน้าตัดของที่ถูกแทนที่) · เก่าสุดก่อน เหมือนคิวงาน
  */
+const STORE_SOURCES_LIMIT = 500;
 async function handleStoreSources(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "materialRequisition:view");
   const col = await materialRequisitionsCollection();
-  const docs = await col.find({ isDeleted: false, status: "Final", ownerDepartment: { $ne: "store" } } as Filter<MaterialRequisitionFields & { _id: string }>)
-    .sort({ updatedAt: 1 }).limit(500).toArray();
-  const requisitions = docs
-    .map((d) => {
-      const issues = issueBatchesOf(d);
-      const outstandingLineCount = (d.lines ?? []).filter((l) => (l.plannedQty ?? 0) - batchIssuedQtyOf(issues, l.id) > 0).length;
-      return {
-        id: d._id, documentNumber: d.documentNumber || d._id,
-        ownerDepartment: d.ownerDepartment === "production" ? "production" as const : "project" as const,
-        jobCode: d.jobCode ?? "", customerName: d.customerName ?? "",
-        chargeDepartmentName: d.chargeDepartmentName ?? "", chargeTeamName: d.chargeTeamName ?? "",
-        outstandingLineCount, updatedAt: d.updatedAt,
-      };
-    })
-    .filter((r) => r.outstandingLineCount > 0);
+  // ค้างเบิกคิดจากรอบการจ่าย ใส่ใน query ไม่ได้ — ไล่ cursor แล้วเก็บเฉพาะใบที่ยังค้างจนครบเพดาน
+  // (ถ้าตัด .limit() ก่อนกรอง ใบที่จ่ายครบแล้วเก่า ๆ จะกินโควตาจนใบที่เพิ่งอนุมัติไม่ขึ้นเลย)
+  const cursor = col.find({ isDeleted: false, status: "Final", ownerDepartment: { $ne: "store" } } as Filter<MaterialRequisitionFields & { _id: string }>)
+    .sort({ updatedAt: 1 });
+  const requisitions: StoreIssueSourceCandidate[] = [];
+  for await (const d of cursor) {
+    const issues = issueBatchesOf(d);
+    const outstandingLineCount = (d.lines ?? []).filter((l) => (l.plannedQty ?? 0) - batchIssuedQtyOf(issues, l.id) > 0).length;
+    if (outstandingLineCount === 0) continue;
+    requisitions.push({
+      id: d._id, documentNumber: d.documentNumber || d._id,
+      ownerDepartment: d.ownerDepartment === "production" ? "production" : "project",
+      jobCode: d.jobCode ?? "", customerName: d.customerName ?? "",
+      chargeDepartmentName: d.chargeDepartmentName ?? "", chargeTeamName: d.chargeTeamName ?? "",
+      outstandingLineCount, updatedAt: d.updatedAt,
+    });
+    if (requisitions.length >= STORE_SOURCES_LIMIT) break;
+  }
   res.status(200).json({ requisitions });
 }
 

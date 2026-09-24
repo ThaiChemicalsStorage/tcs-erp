@@ -133,6 +133,21 @@ describe("กู้รหัสผ่านผ่าน Super Admin", () => {
     expect((await call("POST", `/api/users/password-resets/${requestId}/dismiss`)).status).toBe(409);
   });
 
+  // รีวิวโค้ด 2026-09-24: เดิมเช็คสถานะแล้วค่อยเขียน — สองคนกดพร้อมกันได้รหัสสองชุด ชุดแรกที่แจ้งผู้ใช้ไปใช้ไม่ได้
+  it("Super Admin สองคนกดออกรหัสพร้อมกัน — ได้รหัสชุดเดียว และรหัสนั้นใช้เข้าได้จริง", async () => {
+    expect((await call("POST", "/api/auth/forgot-password", { identifier: "ann" }, "", "10.3.3.3")).status).toBe(200);
+    const list = await call("GET", "/api/users/password-resets");
+    const annReq = list.body.requests.find((r: { username: string; status: string }) => r.username === "ann" && r.status === "pending");
+    expect(annReq).toBeTruthy();
+    const both = await Promise.all([
+      call("POST", `/api/users/password-resets/${annReq.id}/issue`),
+      call("POST", `/api/users/password-resets/${annReq.id}/issue`),
+    ]);
+    expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
+    const winner = both.find((r) => r.status === 200)!;
+    expect((await login("ann", winner.body.temporaryPassword)).status).toBe(200);
+  });
+
   it("จำกัด 5 ครั้งต่อ IP ต่อ 15 นาที", async () => {
     const ip = "10.7.7.7";
     for (let i = 0; i < 5; i += 1) {

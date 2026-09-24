@@ -1107,7 +1107,7 @@ Three things worth knowing before touching it:
 
 - The new menu **ใบเบิก-คืนวัสดุ (สโตร์)** (`storeDocuments`) needs `materialRequisition:view` **and** one of `stock:adjust` / `materialRequisition:finalize` — the second condition keeps it off the sidebar of everyone who merely reads requisitions. `materialRequisition:finalize` was added 2026-09-23f: approvers now get a notification for store receipts and must be able to open the page it links to. Global Search's `storeReceipts` category, its document-number fast path and the page shortcut apply the same rule (`STORE_DOCUMENTS_ANY` in `searchHandler.ts`).
 - Store requisitions are ordinary `material_requisitions` rows → the existing `materialRequisition:*` checks apply unchanged.
-- Store receipts (`store_receipts`) reuse the same set: view/create/edit/finalize/print/delete = `materialRequisition:*`; **posting to stock = `stock:adjust`**. They appear in the Pending Approvals inbox for `materialRequisition:finalize` holders (kind `storeReceipt`).
+- Store receipts (`store_receipts`) reuse the same set: view/create/edit/finalize/print/delete = `materialRequisition:*` (delete is also per-document since 2026-09-24f: the creator, or a `materialRequisition:finalize` holder — same rule as deleting a requisition); **posting to stock = `stock:adjust`**. They appear in the Pending Approvals inbox for `materialRequisition:finalize` holders (kind `storeReceipt`).
 - Nothing to tick by hand — any role that can already work requisitions and issue stock can use both documents.
 
 ## Password recovery — Super Admin role only (2026-09-24)

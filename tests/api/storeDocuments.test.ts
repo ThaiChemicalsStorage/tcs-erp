@@ -329,3 +329,84 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * แก้จากการรีวิวโค้ดของงานสโตร์ (2026-09-24):
+ *  - รายการใบเบิกต้นทาง (ใบจ่าย/ใบคืน) เคยตัด 500 ใบก่อนกรอง — ใบที่จ่ายครบ/คืนครบแล้วกินโควตาจนใบที่ยังค้างไม่ขึ้น
+ *  - ลบใบรับคืนของคนอื่นได้ด้วยสิทธิ์ลบอย่างเดียว — ต้องเป็นเจ้าของใบหรือผู้อนุมัติ (กติกาเดียวกับใบเบิก)
+ *  - กดรับเข้าคลังซ้ำพร้อมกันลงสต๊อกสองรอบได้ — ต้องจองแบบ atomic
+ */
+describe("รีวิว 2026-09-24: รายการต้นทาง · สิทธิ์ลบ · รับเข้าคลังซ้ำ", () => {
+  const filler = (prefix: string, updatedAt: string) => Array.from({ length: 501 }, (_, i) => ({
+    _id: `${prefix}-${i}`, documentNumber: `${prefix}-${i}`, ownerDepartment: "project", status: "Final", isDeleted: false,
+    lines: [], issues: [], updatedAt, createdAt: updatedAt, createdBy: "",
+  }));
+
+  it("ใบเบิกแผนกที่ยังค้างเบิกขึ้นให้ใบจ่ายเลือกเสมอ แม้มีใบที่ไม่ค้างอะไรแล้วเก่ากว่าเกิน 500 ใบ", async () => {
+    const col = client.db("tcs_erp").collection("material_requisitions");
+    const created = await api("POST", "/api/material-requisitions", {});
+    const id = created.body.materialRequisition.id;
+    await api("PATCH", `/api/material-requisitions/${id}`, { lines: [{ productId: boltId, category: "chemical", plannedQty: 1 }] });
+    await approve(`/api/material-requisitions/${id}`);
+    await col.insertMany(filler("OLDSRC", "2000-01-01T00:00:00.000Z") as never);
+    try {
+      const sources = await api("GET", "/api/material-requisitions/store-sources");
+      expect(sources.status).toBe(200);
+      expect(sources.body.requisitions.map((r: { id: string }) => r.id)).toContain(id);
+    } finally {
+      await col.deleteMany({ _id: { $regex: /^OLDSRC-/ } } as never);
+    }
+  });
+
+  it("ใบเบิกที่ยังมีของค้างคืนขึ้นให้ใบคืนเลือกเสมอ แม้มีใบใหม่กว่าที่ไม่มีอะไรให้คืนเกิน 500 ใบ", async () => {
+    const col = client.db("tcs_erp").collection("material_requisitions");
+    await col.insertMany(filler("NEWSRC", "2999-01-01T00:00:00.000Z") as never);
+    try {
+      const candidates = await api("GET", "/api/store-receipts/source-requisitions?receiptCode=JD");
+      expect(candidates.status).toBe(200);
+      expect(candidates.body.requisitions.map((r: { id: string }) => r.id)).toContain(issueId);
+    } finally {
+      await col.deleteMany({ _id: { $regex: /^NEWSRC-/ } } as never);
+    }
+  });
+
+  it("ลบใบรับคืนของคนอื่นไม่ได้ ถ้าไม่ใช่เจ้าของใบหรือผู้อนุมัติ", async () => {
+    const db = client.db("tcs_erp");
+    await db.collection("roles").insertOne({
+      key: "mr_deleter", name: "ลบใบเบิกได้แต่ไม่อนุมัติ", description: "",
+      permissions: ["materialRequisition:view", "materialRequisition:delete"],
+      isSuperAdmin: false, isSystem: false, createdAt: "", updatedAt: "",
+    } as never);
+    const bcrypt = await import("bcryptjs");
+    await db.collection("users").insertOne({
+      employeeId: "E009", fullName: "Deleter", username: "deleter", email: "deleter@test.local",
+      passwordHash: await bcrypt.default.hash("correct-horse-9", 10),
+      phone: "", department: "", teamId: "", position: "", roleKey: "mr_deleter", status: "active",
+      createdAt: "", updatedAt: "", createdBy: "", updatedBy: "",
+    } as never);
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ identifier: "deleter", password: "correct-horse-9" }),
+    });
+    const deleterCookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
+
+    const created = await api("POST", "/api/store-receipts", { receiptCode: "JU" });
+    const id = created.body.storeReceipt.id;
+    const denied = await fetch(`${baseUrl}/api/store-receipts/${id}`, { method: "DELETE", headers: { cookie: deleterCookie } });
+    expect(denied.status).toBe(403);
+    expect((await api("DELETE", `/api/store-receipts/${id}`)).status).toBe(204);
+  });
+
+  it("กดรับเข้าคลังสองครั้งพร้อมกัน สต๊อกเพิ่มครั้งเดียว", async () => {
+    const created = await api("POST", "/api/store-receipts", { receiptCode: "FG" });
+    const id = created.body.storeReceipt.id;
+    await api("PATCH", `/api/store-receipts/${id}`, { lines: [{ id: "srline_dup_1", productId: boltId, qty: 7, unitCost: 20 }] });
+    await approve(`/api/store-receipts/${id}`);
+    const before = (await stock(boltId)).qty;
+    const [a, b] = await Promise.all([api("POST", `/api/store-receipts/${id}/post`), api("POST", `/api/store-receipts/${id}/post`)]);
+    expect([a.status, b.status].filter((s) => s === 200)).toHaveLength(1);
+    expect((await stock(boltId)).qty).toBe(before + 7);
+    const moves = await client.db("tcs_erp").collection("stock_movements").countDocuments({ sourceId: id });
+    expect(moves).toBe(1);
+  });
+});

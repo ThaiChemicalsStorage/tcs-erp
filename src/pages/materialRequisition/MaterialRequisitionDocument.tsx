@@ -4,7 +4,7 @@ import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields, type MaterialIssueBatch,
-  fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn,
+  fetchMaterialRequisition, updateMaterialRequisition,
   postMaterialIssueBatch, cancelMaterialIssueBatch,
   logMaterialRequisitionPrinted, deleteMaterialRequisition,
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
@@ -72,20 +72,6 @@ function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields
   };
 }
 
-/**
- * ทุกช่องที่ผู้ใช้แก้ได้จริงบนหน้านี้ — รวมช่องคืนของที่ toUpdateFields ตัดทิ้ง
- *
- * ยอดจ่ายไม่อยู่ในนี้ตั้งแต่ 2026-09-07 — การจ่ายเป็นรอบที่กด "บันทึก" ทีเดียวจบ ไม่ใช่ช่องที่ค้าง
- * แก้ไว้บนหน้าจอ จึงไม่มีอะไรให้เตือนว่ายังไม่ได้บันทึก
- */
-function toGuardPayload(m: MaterialRequisition) {
-  return {
-    ...toUpdateFields(m),
-    returns: m.lines.map((l) => [l.id, l.returnQty]),
-    returnedBy: m.returnedBy, returnReceivedBy: m.returnReceivedBy,
-  };
-}
-
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
 const cellInputCls = "w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
 
@@ -138,7 +124,6 @@ export function MaterialRequisitionDocument({
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [, setSavingReturn] = useState(false);
   // ใบเบิกของแผนกอื่นที่ใบจ่ายของสโตร์อ้างได้ (2026-09-23)
   const [storeSources, setStoreSources] = useState<StoreIssueSourceCandidate[]>([]);
   const [savingIssue, setSavingIssue] = useState(false);
@@ -162,7 +147,7 @@ export function MaterialRequisitionDocument({
   const [showPrint, setShowPrint] = useState(false);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
-  const dirty = useDirtyTracker(draft && (canEdit || canIssueStock) ? toGuardPayload(draft) : null);
+  const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,7 +179,6 @@ export function MaterialRequisitionDocument({
     { element: '[data-tour="mrdoc-addline"]', popover: { title: t("tour.mrdoc.addline.title"), description: t("tour.mrdoc.addline.desc"), side: "bottom" } },
     { element: '[data-tour="mrdoc-lines"]', popover: { title: t("tour.mrdoc.lines.title"), description: t("tour.mrdoc.lines.desc"), side: "top" } },
     { element: '[data-tour="mrdoc-issueCard"]', popover: { title: t("tour.mrdoc.issueCard.title"), description: t("tour.mrdoc.issueCard.desc"), side: "top" } },
-    { element: '[data-tour="mrdoc-returnCard"]', popover: { title: t("tour.mrdoc.returnCard.title"), description: t("tour.mrdoc.returnCard.desc"), side: "top" } },
   ];
 
   // ── บันทึกอัตโนมัติ (2026-08-25) — hook ต้องอยู่ก่อน early return ทุกอันด้านล่าง ────────────────
@@ -234,7 +218,7 @@ export function MaterialRequisitionDocument({
     setDraft(updated);
     if (stock) setStockByProduct(stock);
     if (cost) setCostByProduct(cost);
-    dirty.markSaved(toGuardPayload(updated));
+    dirty.markSaved(toUpdateFields(updated));
   };
 
   const save = async (): Promise<boolean> => {
@@ -276,29 +260,6 @@ export function MaterialRequisitionDocument({
       autoSave.markSaved(toUpdateFields(updated));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSave"));
-    }
-  };
-
-  const saveReturn = async (): Promise<boolean> => {
-    if (!draft) return false;
-    setSavingReturn(true);
-    try {
-      const updated = await recordMaterialRequisitionReturn(draft.id, {
-        lines: draft.lines.map((l) => ({ id: l.id, returnQty: l.returnQty })),
-        returnedBy: draft.returnedBy,
-        returnReceivedBy: draft.returnReceivedBy,
-        ...chargeFieldsOf(draft),
-      });
-      // route คืนของส่ง stockByProduct มาด้วย แต่ wrapper ฝั่ง client คืนเฉพาะเอกสาร — โหลดยอดใหม่ผ่าน fetch สั้น ๆ
-      const fresh = await fetchMaterialRequisition(draft.id).catch(() => null);
-      applySaved(updated, fresh?.stockByProduct, fresh?.costByProduct);
-      showToast(t("materialRequisitionDoc.returnSaved"));
-      return true;
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSaveReturn"));
-      return false;
-    } finally {
-      setSavingReturn(false);
     }
   };
 
@@ -353,11 +314,11 @@ export function MaterialRequisitionDocument({
     }
   };
 
-  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องคืนวัสดุยังแก้ได้ และตอนนั้น auto-save ปิดอยู่
-  // ปุ่ม "บันทึก" ในกล่องเลือกตามเฟส: ฉบับร่างใช้ save() หลังอนุมัติใช้ saveReturn()
-  // (การจ่ายของเป็นรอบที่กดบันทึกทีเดียวจบ ไม่มีสถานะค้างให้กู้)
+  // การ์ด "ยังไม่ได้บันทึก" — เฉพาะฉบับร่าง: การ์ดคืนของถูกถอดไปแล้ว (2026-09-23 คืนผ่านใบรับคืนของสโตร์)
+  // หลังอนุมัติจึงไม่มีช่องไหนที่บันทึกค้างไว้ได้ — ช่องในการ์ดจ่ายของเป็นค่าของรอบที่ยังไม่กด ไม่ใช่งานค้าง
+  // (เดิมหลังอนุมัติปุ่มบันทึกยิง /return ซึ่งเซิร์ฟเวอร์ปฏิเสธใบของสโตร์แล้ว ผู้ใช้จึงออกจากหน้าด้วยการบันทึกไม่ได้)
   const { requestLeave } = useUnsavedChangesGuard(
-    draft && (canEdit || canIssueStock)
+    draft && canEdit && draft.status === "Draft"
       ? {
           getRisk: () => assessUnsavedRisk({
             isDirty: dirty.isDirtyNow(),
@@ -366,7 +327,7 @@ export function MaterialRequisitionDocument({
             autoSaveState: autoSave.state,
           }),
           documentLabel: draft.documentNumber || draft.id,
-          save: draft.status === "Draft" ? save : saveReturn,
+          save,
           discard: draftBackup.clear,
         }
       : null,

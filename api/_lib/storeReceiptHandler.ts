@@ -33,6 +33,7 @@ import type {
  */
 
 const MAX_LINES = 200;
+const SOURCE_CANDIDATES_LIMIT = 500;
 
 async function writeAuditEntry(ctx: AuthContext, action: string, details: string): Promise<void> {
   const auditLog = await auditLogCollection();
@@ -326,21 +327,29 @@ async function handleSourceCandidates(req: ApiRequest, res: ApiResponse) {
   // ไม่กรองเจ้าของใบและไม่จำกัดรหัสคู่ (2026-09-23) — สโตร์รับคืนของที่ใครเบิกไปก็ได้ ของกลับเข้าคลังเดียวกัน
   // ดูกติกาใน loadSourceRequisition()
   const col = await materialRequisitionsCollection();
-  const docs = await col.find({ isDeleted: false, status: "Final" }).sort({ updatedAt: -1 }).limit(500).toArray();
-  const requisitions: StoreReceiptSourceCandidate[] = docs
-    .filter((d) => !(d.ownerDepartment === "store" && d.sourceRequisitionId))
-    .filter((d) => (d.lines ?? []).some((l) => issuedQtyOf(l) - (l.returnQty ?? 0) > 0))
-    .map((d) => ({
+  // กรอง "ยังมีของที่คืนได้" ใน query ไม่ได้ — ไล่ cursor แล้วเก็บจนครบเพดาน ไม่ใช่ตัด 500 ใบล่าสุดก่อนกรอง
+  // (ไม่งั้นใบเบิกเก่าที่ยังมีของค้างคืนจะหายจากรายการเมื่อมีใบใหม่กว่าเกิน 500 ใบ)
+  const cursor = col.find({ isDeleted: false, status: "Final" }).sort({ updatedAt: -1 });
+  const requisitions: StoreReceiptSourceCandidate[] = [];
+  for await (const d of cursor) {
+    if (d.ownerDepartment === "store" && d.sourceRequisitionId) continue;
+    if (!(d.lines ?? []).some((l) => issuedQtyOf(l) - (l.returnQty ?? 0) > 0)) continue;
+    requisitions.push({
       id: d._id, documentNumber: d.documentNumber || d._id, jobCode: d.jobCode ?? "", storeReference: d.storeReference ?? "",
       chargeDepartmentName: d.chargeDepartmentName ?? "", chargeTeamName: d.chargeTeamName ?? "", updatedAt: d.updatedAt,
-      ownerDepartment: d.ownerDepartment === "store" ? "store" as const : d.ownerDepartment === "production" ? "production" as const : "project" as const,
-    }));
+      ownerDepartment: d.ownerDepartment === "store" ? "store" : d.ownerDepartment === "production" ? "production" : "project",
+    });
+    if (requisitions.length >= SOURCE_CANDIDATES_LIMIT) break;
+  }
   res.status(200).json({ requisitions });
 }
 
 async function handleDelete(req: ApiRequest, res: ApiResponse, id: string) {
   const ctx = await requirePermission(req, "materialRequisition:delete");
   const doc = await loadOrThrow(id);
+  // ด่านรายเอกสารเดียวกับการลบใบเบิก — เจ้าของใบ หรือผู้อนุมัติ ไม่ใช่ใครก็ได้ที่มีสิทธิ์ลบ
+  const isOwner = !doc.createdBy || doc.createdBy === ctx.user.id;
+  if (!isOwner && !roleHasPermission(ctx.role, "materialRequisition:finalize")) throw new HttpError(403, "Forbidden");
   if (doc.postedAt) throw new HttpError(400, "ใบนี้รับเข้าคลังแล้ว ลบไม่ได้ — ถ้าผิดให้ออกใบปรับยอด (JU) แก้");
   const col = await storeReceiptsCollection();
   await col.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
@@ -372,64 +381,76 @@ async function handlePost(req: ApiRequest, res: ApiResponse, id: string) {
   };
   const base = { sourceType: "store_receipt" as const, sourceId: id, sourceLabel: label, userId: ctx.user.id, org };
   const movementIds: string[] = [];
+  if (info.kind === "adjust" && !doc.reason.trim()) throw new HttpError(400, "กรุณาระบุเหตุผลการปรับยอด");
 
-  if (info.kind === "return") {
-    const mr = await loadSourceRequisition(doc.receiptCode, doc.sourceRequisitionId);
-    const byLine = new Map((mr.lines ?? []).map((l) => [l.id, l]));
-    const addBack = new Map<string, number>();
-    for (const l of lines) {
-      const src = byLine.get(l.sourceLineId ?? "");
-      if (!src) throw new HttpError(400, `${l.productName}: ไม่พบบรรทัดนี้ในใบเบิกต้นทางแล้ว`);
-      const room = issuedQtyOf(src) - (src.returnQty ?? 0) - (addBack.get(src.id) ?? 0);
-      if ((l.qty ?? 0) > room) throw new HttpError(400, `${l.productName}: คืนได้อีกไม่เกิน ${Math.max(0, room)} ${l.unit}`);
-      addBack.set(src.id, (addBack.get(src.id) ?? 0) + (l.qty ?? 0));
-    }
-    const costs = await productCostBasis([...new Set(lines.map((l) => l.productId))]);
-    for (const l of lines) {
-      const { movement } = await applyStockMovement({
-        ...base, productId: l.productId, kind: "return", delta: l.qty!,
-        reason: `รับคืนตามใบ ${label} (คืนจากใบเบิก ${doc.sourceRequisitionNumber})`,
-        rowUnitCost: returnUnitCostOf(costs[l.productId]),
-      });
-      movementIds.push(movement.id);
-    }
-    const mrCol = await materialRequisitionsCollection();
-    await mrCol.updateOne({ _id: mr._id }, {
-      $set: {
-        lines: (mr.lines ?? []).map((l) => (addBack.has(l.id) ? { ...l, returnQty: (l.returnQty ?? 0) + addBack.get(l.id)! } : l)),
-        returnedBy: doc.returnedBy || mr.returnedBy || "", returnReceivedBy: doc.receivedBy || mr.returnReceivedBy || "",
-        returnedAt: nowIso(), updatedAt: nowIso(), updatedBy: ctx.user.id,
-      },
-    });
-  } else if (info.kind === "receive") {
-    for (const l of lines) {
-      const customerGoods = doc.receiptCode === "GC";
-      const { movement } = await applyStockMovement({
-        ...base, productId: l.productId, kind: "receive", delta: l.qty!,
-        reason: `รับเข้าคลังตามใบ ${label}${doc.reference ? ` (อ้างอิง ${doc.reference})` : ""}`,
-        ...(customerGoods ? { rowUnitCost: 0 } : l.unitCost !== null && l.unitCost !== undefined ? { unitCost: l.unitCost } : {}),
-      });
-      movementIds.push(movement.id);
-    }
-  } else {
-    if (!doc.reason.trim()) throw new HttpError(400, "กรุณาระบุเหตุผลการปรับยอด");
-    const products = await productsCollection();
-    for (const l of lines) {
-      const live = await products.findOne({ _id: toObjectId(l.productId) }, { projection: { stockQty: 1 } });
-      const delta = Math.round(((l.qty ?? 0) - (live?.stockQty ?? 0)) * 10000) / 10000;
-      if (delta === 0) continue;
-      const { movement } = await applyStockMovement({
-        ...base, productId: l.productId, kind: "adjust", delta,
-        reason: `ปรับยอดตามใบ ${label} (ตั้งเป็น ${l.qty}) — ${doc.reason}`,
-      });
-      movementIds.push(movement.id);
-    }
-  }
-
+  // จองการรับเข้าแบบ atomic ก่อนแตะสต๊อก — กดซ้ำ/สองแท็บพร้อมกันต้องไม่ลงสต๊อกสองรอบ
+  // (เช็ค `doc.postedAt` ด้านบนอย่างเดียวมีช่องแข่ง) · ล้มกลางทางคืนสถานะให้กดใหม่ได้เหมือนเดิม
   const now = nowIso();
   const col = await storeReceiptsCollection();
+  const claimed = await col.updateOne(
+    { _id: id, status: "Final", postedAt: "" },
+    { $set: { postedAt: now, postedBy: ctx.user.id, postedByName: ctx.user.fullName } },
+  );
+  if (claimed.modifiedCount === 0) throw new HttpError(409, "ใบนี้รับเข้าคลังไปแล้ว");
+  try {
+    if (info.kind === "return") {
+      const mr = await loadSourceRequisition(doc.receiptCode, doc.sourceRequisitionId);
+      const byLine = new Map((mr.lines ?? []).map((l) => [l.id, l]));
+      const addBack = new Map<string, number>();
+      for (const l of lines) {
+        const src = byLine.get(l.sourceLineId ?? "");
+        if (!src) throw new HttpError(400, `${l.productName}: ไม่พบบรรทัดนี้ในใบเบิกต้นทางแล้ว`);
+        const room = issuedQtyOf(src) - (src.returnQty ?? 0) - (addBack.get(src.id) ?? 0);
+        if ((l.qty ?? 0) > room) throw new HttpError(400, `${l.productName}: คืนได้อีกไม่เกิน ${Math.max(0, room)} ${l.unit}`);
+        addBack.set(src.id, (addBack.get(src.id) ?? 0) + (l.qty ?? 0));
+      }
+      const costs = await productCostBasis([...new Set(lines.map((l) => l.productId))]);
+      for (const l of lines) {
+        const { movement } = await applyStockMovement({
+          ...base, productId: l.productId, kind: "return", delta: l.qty!,
+          reason: `รับคืนตามใบ ${label} (คืนจากใบเบิก ${doc.sourceRequisitionNumber})`,
+          rowUnitCost: returnUnitCostOf(costs[l.productId]),
+        });
+        movementIds.push(movement.id);
+      }
+      const mrCol = await materialRequisitionsCollection();
+      await mrCol.updateOne({ _id: mr._id }, {
+        $set: {
+          lines: (mr.lines ?? []).map((l) => (addBack.has(l.id) ? { ...l, returnQty: (l.returnQty ?? 0) + addBack.get(l.id)! } : l)),
+          returnedBy: doc.returnedBy || mr.returnedBy || "", returnReceivedBy: doc.receivedBy || mr.returnReceivedBy || "",
+          returnedAt: nowIso(), updatedAt: nowIso(), updatedBy: ctx.user.id,
+        },
+      });
+    } else if (info.kind === "receive") {
+      for (const l of lines) {
+        const customerGoods = doc.receiptCode === "GC";
+        const { movement } = await applyStockMovement({
+          ...base, productId: l.productId, kind: "receive", delta: l.qty!,
+          reason: `รับเข้าคลังตามใบ ${label}${doc.reference ? ` (อ้างอิง ${doc.reference})` : ""}`,
+          ...(customerGoods ? { rowUnitCost: 0 } : l.unitCost !== null && l.unitCost !== undefined ? { unitCost: l.unitCost } : {}),
+        });
+        movementIds.push(movement.id);
+      }
+    } else {
+      const products = await productsCollection();
+      for (const l of lines) {
+        const live = await products.findOne({ _id: toObjectId(l.productId) }, { projection: { stockQty: 1 } });
+        const delta = Math.round(((l.qty ?? 0) - (live?.stockQty ?? 0)) * 10000) / 10000;
+        if (delta === 0) continue;
+        const { movement } = await applyStockMovement({
+          ...base, productId: l.productId, kind: "adjust", delta,
+          reason: `ปรับยอดตามใบ ${label} (ตั้งเป็น ${l.qty}) — ${doc.reason}`,
+        });
+        movementIds.push(movement.id);
+      }
+    }
+  } catch (err) {
+    await col.updateOne({ _id: id }, { $set: { postedAt: "", postedBy: "", postedByName: "" } });
+    throw err;
+  }
+
   await col.updateOne({ _id: id }, {
-    $set: { postedAt: now, postedBy: ctx.user.id, postedByName: ctx.user.fullName, stockMovementIds: movementIds, updatedAt: now, updatedBy: ctx.user.id },
+    $set: { stockMovementIds: movementIds, updatedAt: now, updatedBy: ctx.user.id },
   });
   await writeAuditEntry(ctx, "Store Receipt Posted", `รับเข้าคลังตามใบ ${label} (${movementIds.length} รายการ)`);
   res.status(200).json(await bundleOf(await loadOrThrow(id)));

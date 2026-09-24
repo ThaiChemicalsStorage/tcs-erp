@@ -408,6 +408,19 @@ describe("ใบรับสินค้า: ประเภทราคา · �
     expect((await api("PATCH", `/api/receiving-reports/${rrId}`, { vendorName: "อื่น" })).status).toBe(400);
   });
 
+  // รีวิวโค้ด 2026-09-24: เดิมเทียบด้วย `??` — ล้างช่องส่วนลด (null) แล้วถอยไปอ่านยอดบาทเดิม 70 จึงโดน "เกิน 100%" ทุกครั้ง
+  it("เปลี่ยนส่วนลดจากบาทเป็น % พร้อมล้างช่องได้ · % ที่เกิน 100 ยังถูกปฏิเสธ", async () => {
+    const created = await api("POST", "/api/receiving-reports", { receiveCode: "RR" });
+    const did = created.body.receivingReport.id;
+    expect((await api("PATCH", `/api/receiving-reports/${did}`, { orderDiscount: 500, orderDiscountMode: "amount" })).status).toBe(200);
+    expect((await api("PATCH", `/api/receiving-reports/${did}`, { orderDiscount: 500, orderDiscountMode: "percent" })).status).toBe(400);
+    const cleared = await api("PATCH", `/api/receiving-reports/${did}`, { orderDiscount: null, orderDiscountMode: "percent" });
+    expect(cleared.status, JSON.stringify(cleared.body)).toBe(200);
+    expect(cleared.body.receivingReport).toMatchObject({ orderDiscount: null, orderDiscountMode: "percent" });
+    expect((await api("PATCH", `/api/receiving-reports/${did}`, { orderDiscount: 150 })).status).toBe(400);
+    expect((await api("DELETE", `/api/receiving-reports/${did}`)).status).toBe(204);
+  });
+
   it("ผู้ออกบิลกรอกเองแต่ไม่มีชื่อบริษัท รับของไม่ได้", async () => {
     expect((await api("PATCH", `/api/receiving-reports/${id}`, { billerCustom: true, billerName: "" })).status).toBe(200);
     const recv = await api("POST", `/api/receiving-reports/${id}/receipts`, {

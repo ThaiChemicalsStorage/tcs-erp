@@ -77,12 +77,18 @@ async function ensureReceivingReportIndexes(col: Collection<ReceivingReportField
       [{ $set: { documentNumber: "$_id" } }],
     );
     await col.createIndex({ documentNumber: 1 }, { unique: true });
+  } catch (err) {
+    console.error("[receivingReport] ensure documentNumber index failed", err);
+  }
+  // แยกจากขั้นบนโดยตั้งใจ — ถ้า index เลขที่ใบล้ม index ตัวเก่ายังต้องถูกถอด ไม่งั้นใบเปล่าใบที่สองชน `purchaseOrderId: ""`
+  // ของใบแรกทุกครั้ง (และธงด้านบนกันไม่ให้ลองใหม่จนกว่าจะรีสตาร์ต)
+  try {
     // ฐานข้อมูลที่ติดตั้งก่อน 2026-09-23 มี index ตัวเก่าชื่อ `purchaseOrderId_1` ซึ่งนับใบเปล่ารวมด้วย — ถอดทิ้ง
     const existing = await col.indexes();
     if (existing.some((ix) => ix.name === "purchaseOrderId_1")) await col.dropIndex("purchaseOrderId_1");
     await col.createIndex(RECEIVING_REPORT_PO_UNIQUE_INDEX.key, RECEIVING_REPORT_PO_UNIQUE_INDEX.options);
   } catch (err) {
-    console.error("[receivingReport] ensure indexes failed", err);
+    console.error("[receivingReport] ensure purchaseOrderId index failed", err);
   }
 }
 
@@ -396,7 +402,11 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   }
   if ("orderDiscount" in body) update.orderDiscount = sanitizeNullableNumber(body.orderDiscount, "ส่วนลด", { min: 0 });
   if ("orderDiscountMode" in body) update.orderDiscountMode = body.orderDiscountMode === "amount" ? "amount" : "percent";
-  if ((update.orderDiscountMode ?? doc.orderDiscountMode ?? "percent") === "percent" && (update.orderDiscount ?? doc.orderDiscount ?? 0) > 100) {
+  // เทียบกับค่าที่ "จะเป็น" หลังบันทึก — ล้างช่องส่วนลด (null) ต้องไม่ถอยไปอ่านค่าเดิมที่เก็บไว้ ไม่งั้นเปลี่ยนจากบาท
+  // เป็น % แล้วล้างช่อง จะโดนปฏิเสธด้วยยอดบาทเดิมทุกครั้งที่บันทึกอัตโนมัติ
+  const nextDiscountMode = "orderDiscountMode" in body ? update.orderDiscountMode : doc.orderDiscountMode ?? "percent";
+  const nextDiscount = "orderDiscount" in body ? update.orderDiscount : doc.orderDiscount;
+  if (nextDiscountMode === "percent" && (nextDiscount ?? 0) > 100) {
     throw new HttpError(400, "ส่วนลดต้องไม่เกิน 100%");
   }
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)", { min: 0, max: 3650 });
