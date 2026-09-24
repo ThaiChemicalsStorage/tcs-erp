@@ -230,6 +230,8 @@ export interface MaterialRequisitionSummary {
   /** รหัสการจ่ายของใบสโตร์ (2026-09-23) */
   issueCode?: StoreIssueCode;
   storeReference?: string;
+  /** ใบเบิกแผนกที่ใบจ่ายของสโตร์อ้าง — แท็บ "ใบเบิกจากแผนก" ใช้บอกว่าใบไหนมีใบจ่ายแล้ว (2026-09-24) */
+  sourceRequisitionId?: string;
   sourceRequisitionNumber?: string;
   /** "ชื่อลูกค้า" — บริบทของงานในหน้าตัดของ ว่างได้ */
   customerName?: string;

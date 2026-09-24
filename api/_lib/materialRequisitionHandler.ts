@@ -381,6 +381,7 @@ function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRe
     ownerDepartment: full.ownerDepartment ?? "project",
     issueCode: full.issueCode,
     storeReference: full.storeReference ?? "",
+    sourceRequisitionId: full.sourceRequisitionId ?? "",
     sourceRequisitionNumber: full.sourceRequisitionNumber ?? "",
     customerName: full.customerName ?? "",
     status: full.status, updatedAt: full.updatedAt,

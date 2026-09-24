@@ -12,13 +12,18 @@ import {
  * *"ตรงใบรับคืนสินค้าทำให้เป็น dropdown ก็ได้"* และเหมือนเมนูในโปรแกรมบัญชีเดิม · รหัสอยู่หน้าเลขที่ใบ
  * จึงต้องเลือกก่อนสร้างและเปลี่ยนภายหลังไม่ได้
  */
-export function StoreCodeDialog(props:
+export function StoreCodeDialog(props: (
   | { mode: "issue"; onCreate: (code: StoreIssueCode) => Promise<void>; onCancel: () => void }
-  | { mode: "receipt"; onCreate: (code: StoreReceiptCode) => Promise<void>; onCancel: () => void }) {
+  | { mode: "receipt"; onCreate: (code: StoreReceiptCode) => Promise<void>; onCancel: () => void }
+) & {
+  /** รหัสที่เลือกไว้ให้ก่อน และบรรทัดบอกว่าสร้างให้ใบไหน — ใช้ตอนทำใบจ่ายจากใบเบิกที่แผนกส่งมา (2026-09-24) */
+  initialCode?: string;
+  context?: string;
+}) {
   const { t } = useI18n();
   const selectId = useId();
   const panelRef = useDialogA11y(props.onCancel);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(props.initialCode ?? "");
   const [busy, setBusy] = useState(false);
 
   const groups = props.mode === "issue"
@@ -55,6 +60,7 @@ export function StoreCodeDialog(props:
           <div className="flex-1">
             <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">{t("storeDocs.pickHint")}</p>
+            {props.context && <p className="text-xs font-medium text-[#866d28] mt-1">{props.context}</p>}
           </div>
           <button onClick={props.onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
         </div>

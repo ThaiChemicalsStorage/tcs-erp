@@ -453,7 +453,7 @@ export default function App() {
   /** สินค้าที่หน้าประวัติสต๊อกควรเปิดแท็บติดตามให้ — มาจากปุ่มประวัติของแถวในหน้าสต๊อก */
   const [stockHistoryProductId, setStockHistoryProductId] = useState<string | null>(null);
   /** เอกสารสโตร์ที่ต้องเปิดให้ — มาจากกล่องรออนุมัติ/ผลค้นหา/คิวตัดของ */
-  const [storeDocumentDeepLink, setStoreDocumentDeepLink] = useState<{ kind: "issue" | "receipt"; id: string } | null>(null);
+  const [storeDocumentDeepLink, setStoreDocumentDeepLink] = useState<{ kind: "issue" | "receipt" | "incoming"; id: string } | null>(null);
   const [userDeepLinkId, setUserDeepLinkId] = useState<string | null>(null);
   const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
@@ -674,7 +674,7 @@ export default function App() {
   // (2026-08-28) ไม่ระบุ = ฝ่ายโครงการ ตรงกับเอกสารเก่าที่ไม่มีฟิลด์นี้ และกับผู้เรียกเดิมทุกจุด
   // "general" มีได้เฉพาะใบขอซื้อ (ใบเบิกของยังมีแค่สองแผนก) แต่ผลค้นหาใช้รูปแบบเดียวกันทุกเอกสาร
   // จึงรับค่าเดียวกันแล้วตกลงหน้าฝ่ายโครงการเป็นค่าเริ่มต้น
-  const navigateToStoreDocument = (kind: "issue" | "receipt", id: string) => guardedNav(() => {
+  const navigateToStoreDocument = (kind: "issue" | "receipt" | "incoming", id: string) => guardedNav(() => {
     setStoreDocumentDeepLink({ kind, id });
     setActiveNav("storeDocuments");
   });
@@ -1184,6 +1184,8 @@ export default function App() {
                 else if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
                 // เอกสารกลุ่มโครงการ/ผลิต (2026-08-27) — ต้องมาก่อน relatedScopeId เพราะแจ้งเตือนพวกนี้
                 // แนบ scope มาด้วยเสมอ (audit ของโมดูลเหล่านี้ผูกกับ scope) ถ้าเช็ค scope ก่อน จะพาไปผิดหน้า
+                // ใบเบิกแผนกอนุมัติแล้ว → สโตร์ (2026-09-24): ไปแท็บ "ใบเบิกจากแผนก" ของหน้าสโตร์ แล้วเน้นใบนั้น ให้ทำใบจ่ายต่อได้เลย
+                else if (n.type === "material_requisition_approved" && n.relatedMaterialRequisitionId && !isStoreIssueDocumentId(n.relatedMaterialRequisitionId)) navigateToStoreDocument("incoming", n.relatedMaterialRequisitionId);
                 else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
                 else if (n.relatedStoreReceiptId) navigateToStoreDocument("receipt", n.relatedStoreReceiptId);
                 else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { PackageMinus, Plus, Search, Undo2, X } from "lucide-react";
+import { Inbox, PackageMinus, Plus, Search, Undo2, X } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { useI18n } from "../../lib/i18n";
 import { ApiError } from "../../lib/apiClient";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
-import { fetchAllMaterialRequisitions, createStoreMaterialRequisition, type MaterialRequisitionSummary } from "../../lib/materialRequisition";
+import {
+  fetchAllMaterialRequisitions, createStoreMaterialRequisition, fetchStoreIssueSources, updateMaterialRequisition,
+  type MaterialRequisitionSummary, type StoreIssueSourceCandidate,
+} from "../../lib/materialRequisition";
 import { fetchStoreReceipts, createStoreReceipt, type StoreReceiptSummary } from "../../lib/storeReceipt";
 import {
   STORE_ISSUE_CODES, STORE_RECEIPT_CODES, storeIssueCodeInfo, storeReceiptCodeInfo,
@@ -20,6 +23,8 @@ import { StoreReceiptDocument } from "./StoreReceiptDocument";
 import { StoreCodeDialog } from "./StoreCodeDialog";
 
 export type StoreDocumentKind = "issue" | "receipt";
+/** deep link ของหน้านี้ — "incoming" = ใบเบิกของแผนกที่เพิ่งอนุมัติ (มาจากแจ้งเตือน) เปิดแท็บ "ใบเบิกจากแผนก" แล้วเน้นแถวนั้น */
+export type StoreDocumentLink = { kind: StoreDocumentKind | "incoming"; id: string };
 
 interface Row {
   kind: StoreDocumentKind;
@@ -61,7 +66,7 @@ export function StoreDocumentsPage({
   canDelete: boolean;
   canIssueStock: boolean;
   canRequestProductCode: boolean;
-  initialDocument?: { kind: StoreDocumentKind; id: string } | null;
+  initialDocument?: StoreDocumentLink | null;
   onInitialDocumentConsumed?: () => void;
 }) {
   const { t } = useI18n();
@@ -72,13 +77,19 @@ export function StoreDocumentsPage({
     facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
-  const [open, setOpen] = useState<{ kind: StoreDocumentKind; id: string } | null>(initialDocument ?? null);
+  const [open, setOpen] = useState<{ kind: StoreDocumentKind; id: string } | null>(
+    initialDocument && initialDocument.kind !== "incoming" ? { kind: initialDocument.kind, id: initialDocument.id } : null,
+  );
   const [issues, setIssues] = useState<MaterialRequisitionSummary[]>([]);
+  // ใบเบิกของแผนกที่อนุมัติแล้วและยังค้างเบิก (2026-09-24) — "ส่งมา" ที่หน้านี้ให้สโตร์ทำใบจ่าย
+  const [incoming, setIncoming] = useState<StoreIssueSourceCandidate[]>([]);
+  const [issueFor, setIssueFor] = useState<StoreIssueSourceCandidate | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(initialDocument?.kind === "incoming" ? initialDocument.id : null);
   const [receipts, setReceipts] = useState<StoreReceiptSummary[]>([]);
   const [loaded, setLoaded] = useState<"loading" | "ok" | "error">("loading");
   const [reload, setReload] = useState(0);
   const [picker, setPicker] = useState<StoreDocumentKind | null>(null);
-  const [tab, setTab] = useState<"all" | StoreDocumentKind>("all");
+  const [tab, setTab] = useState<"all" | "incoming" | StoreDocumentKind>(initialDocument?.kind === "incoming" ? "incoming" : "all");
   const [status, setStatus] = useState<"all" | Row["status"]>("all");
   const [code, setCode] = useState("");
   const [query, setQuery] = useState("");
@@ -87,7 +98,13 @@ export function StoreDocumentsPage({
   const [applied, setApplied] = useState<string | null>(null);
   if (initialDocument && `${initialDocument.kind}:${initialDocument.id}` !== applied) {
     setApplied(`${initialDocument.kind}:${initialDocument.id}`);
-    setOpen(initialDocument);
+    if (initialDocument.kind === "incoming") {
+      setOpen(null);
+      setTab("incoming");
+      setHighlight(initialDocument.id);
+    } else {
+      setOpen({ kind: initialDocument.kind, id: initialDocument.id });
+    }
   }
   useEffect(() => {
     if (initialDocument) onInitialDocumentConsumed?.();
@@ -95,8 +112,9 @@ export function StoreDocumentsPage({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchAllMaterialRequisitions("store"), fetchStoreReceipts()])
-      .then(([i, r]) => { if (!cancelled) { setIssues(i); setReceipts(r); setLoaded("ok"); } })
+    // รายการใบเบิกจากแผนกล้มได้โดยไม่ทำให้ทั้งหน้าพัง — แท็บนั้นแค่ว่าง
+    Promise.all([fetchAllMaterialRequisitions("store"), fetchStoreReceipts(), fetchStoreIssueSources().catch(() => [])])
+      .then(([i, r, inc]) => { if (!cancelled) { setIssues(i); setReceipts(r); setIncoming(inc); setLoaded("ok"); } })
       .catch(() => { if (!cancelled) setLoaded("error"); });
     return () => { cancelled = true; };
   }, [reload]);
@@ -104,12 +122,23 @@ export function StoreDocumentsPage({
   const backToList = useCallback(() => { setOpen(null); setReload((n) => n + 1); }, []);
 
   const createIssue = async (issueCode: StoreIssueCode) => {
+    const source = issueFor;
     try {
       const created = await createStoreMaterialRequisition(issueCode);
       setPicker(null);
+      setIssueFor(null);
+      // ทำใบจ่ายจากใบเบิกที่ส่งมา — ผูกใบเบิกทันที เซิร์ฟเวอร์ดึงหัวใบ รายการที่ค้าง และเลขที่ใบตามใบเบิกให้
+      if (source) {
+        try {
+          await updateMaterialRequisition(created.id, { sourceRequisitionId: source.id });
+        } catch (err) {
+          toast.show(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSave"));
+        }
+      }
       setOpen({ kind: "issue", id: created.id });
     } catch (err) {
       setPicker(null);
+      setIssueFor(null);
       toast.show(err instanceof ApiError ? err.message : t("materialRequisition.loadError"));
     }
   };
@@ -190,6 +219,14 @@ export function StoreDocumentsPage({
 
   const range = resolveRange(dateRange);
   const q = query.trim().toLowerCase();
+  const slipsBySource = new Map<string, MaterialRequisitionSummary[]>();
+  for (const m of issues) {
+    if (!m.sourceRequisitionId) continue;
+    slipsBySource.set(m.sourceRequisitionId, [...(slipsBySource.get(m.sourceRequisitionId) ?? []), m]);
+  }
+  const incomingFiltered = incoming
+    .filter((r) => isWithinRange(r.updatedAt, range))
+    .filter((r) => !q || [r.documentNumber, r.id, r.jobCode, r.customerName, r.chargeDepartmentName, r.chargeTeamName].some((v) => v.toLowerCase().includes(q)));
   const filtered = rows
     .filter((r) => tab === "all" || r.kind === tab)
     .filter((r) => status === "all" || r.status === status)
@@ -222,10 +259,13 @@ export function StoreDocumentsPage({
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit" role="group" aria-label={t("storeDocs.col.type")}>
-          {(["all", "issue", "receipt"] as const).map((k) => (
+          {(["all", "issue", "receipt", "incoming"] as const).map((k) => (
             <button key={k} onClick={() => { setTab(k); setCode(""); }} aria-pressed={tab === k}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${tab === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
-              {t(k === "all" ? "storeDocs.tab.all" : k === "issue" ? "storeDocs.tab.issue" : "storeDocs.tab.receipt")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${tab === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              {t(k === "all" ? "storeDocs.tab.all" : k === "issue" ? "storeDocs.tab.issue" : k === "receipt" ? "storeDocs.tab.receipt" : "storeDocs.tab.incoming")}
+              {k === "incoming" && incoming.length > 0 && (
+                <span className={`min-w-[1.25rem] px-1 rounded-full text-center font-mono ${tab === k ? "bg-[#0b1d3a]/15" : "bg-[#e08a3c]/15 text-[#a75d1a]"}`}>{incoming.length}</span>
+              )}
             </button>
           ))}
         </div>
@@ -237,6 +277,7 @@ export function StoreDocumentsPage({
             className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           {query && <button onClick={() => setQuery("")} aria-label={t("common.cancel")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X size={13} /></button>}
         </label>
+        {tab !== "incoming" && (<>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           {t("storeDocs.codeFilter")}
           <select value={code} onChange={(e) => setCode(e.target.value)}
@@ -253,6 +294,7 @@ export function StoreDocumentsPage({
             </button>
           ))}
         </div>
+        </>)}
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -266,6 +308,64 @@ export function StoreDocumentsPage({
             <p className="text-sm text-muted-foreground">{t("materialRequisition.loadError")}</p>
             <button onClick={() => { setLoaded("loading"); setReload((n) => n + 1); }} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40">{t("materialRequisition.retry")}</button>
           </div>
+        ) : tab === "incoming" ? (
+          incoming.length === 0 ? (
+            <EmptyState icon={Inbox} title={t("storeDocs.incoming.emptyTitle")} description={t("storeDocs.incoming.emptyDescription")} compact />
+          ) : incomingFiltered.length === 0 ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">{t("storeDocs.noMatch")}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <p className="px-4 py-3 text-xs text-muted-foreground border-b border-border">{t("storeDocs.incoming.hint")}</p>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    {[t("storeDocs.incoming.col.number"), t("storeDocs.incoming.col.department"), t("storeDocs.incoming.col.job"), t("storeDocs.col.charge"), t("storeDocs.incoming.col.outstanding"), t("storeDocs.incoming.col.slips"), t("storeDocs.col.updatedAt"), ""].map((h, i) => (
+                      <th key={`${i}-${h}`} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomingFiltered.map((r) => {
+                    const slips = slipsBySource.get(r.id) ?? [];
+                    return (
+                      <tr key={r.id} className={`border-b border-border/50 transition-colors ${highlight === r.id ? "bg-[#c9a84c]/10" : "hover:bg-secondary/30"}`}>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <button onClick={() => setOpen({ kind: "issue", id: r.id })} aria-label={`${t("storeDocs.incoming.view")} ${r.documentNumber}`}
+                            className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 rounded">
+                            {r.documentNumber}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{t(r.ownerDepartment === "production" ? "storeDocs.incoming.dept.production" : "storeDocs.incoming.dept.project")}</td>
+                        <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                          <span className="font-mono">{r.jobCode || "—"}</span>
+                          {r.customerName && <span className="block">{r.customerName}</span>}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{[r.chargeDepartmentName, r.chargeTeamName].filter(Boolean).join(" / ") || "—"}</td>
+                        <td className="px-4 py-3.5 text-xs font-mono text-[#a75d1a] font-semibold whitespace-nowrap">{t("storeDocs.sourceOutstanding").replace("{n}", String(r.outstandingLineCount))}</td>
+                        <td className="px-4 py-3.5 text-xs whitespace-nowrap">
+                          {slips.length === 0 ? <span className="text-muted-foreground">—</span> : slips.map((m) => (
+                            <button key={m.id} onClick={() => setOpen({ kind: "issue", id: m.id })}
+                              className="block font-mono text-[#866d28] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 rounded">
+                              {m.documentNumber || m.id}
+                            </button>
+                          ))}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(r.updatedAt)}</td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                          {canCreate && (
+                            <button onClick={() => { setIssueFor(r); setPicker("issue"); }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+                              <PackageMinus size={13} /> {t("storeDocs.incoming.makeSlip")}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         ) : rows.length === 0 ? (
           <EmptyState icon={PackageMinus} title={t("storeDocs.empty.title")} description={t("storeDocs.empty.description")} compact />
         ) : filtered.length === 0 ? (
@@ -316,7 +416,11 @@ export function StoreDocumentsPage({
         )}
       </div>
 
-      {picker === "issue" && <StoreCodeDialog mode="issue" onCreate={createIssue} onCancel={() => setPicker(null)} />}
+      {picker === "issue" && (
+        <StoreCodeDialog mode="issue" onCreate={createIssue} onCancel={() => { setPicker(null); setIssueFor(null); }}
+          initialCode={issueFor ? (issueFor.ownerDepartment === "production" ? "PD" : "PP") : undefined}
+          context={issueFor ? t("storeDocs.incoming.pickContext").replace("{number}", issueFor.documentNumber) : undefined} />
+      )}
       {picker === "receipt" && <StoreCodeDialog mode="receipt" onCreate={createReceipt} onCancel={() => setPicker(null)} />}
       <Toast message={toast.message} />
     </div>

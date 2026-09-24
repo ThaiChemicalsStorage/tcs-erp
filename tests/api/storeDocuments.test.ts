@@ -317,6 +317,13 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     expect(dept.lines[0].returnQty).toBe(1);
   });
 
+  it("รายการใบของสโตร์บอกใบเบิกแผนกที่ใบจ่ายอ้าง (แท็บใบเบิกจากแผนกใช้จับคู่ — 2026-09-24)", async () => {
+    const list = await api("GET", "/api/material-requisitions?ownerDepartment=store");
+    expect(list.status).toBe(200);
+    const row = list.body.materialRequisitions.find((m: { id: string }) => m.id === slipId);
+    expect(row).toMatchObject({ sourceRequisitionId: deptId });
+  });
+
   it("ยกเลิกรอบจ่ายของใบจ่ายไม่ได้ถ้าแผนกคืนของไปแล้วเกินที่จะเหลือ", async () => {
     const res = await api("DELETE", `/api/material-requisitions/${slipId}/issues/${slipBatchId}`);
     expect(res.status).toBe(400);
