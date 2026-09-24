@@ -44,6 +44,7 @@ ERP/
 │   │   ├── PrintSocialIcons.tsx   # shared branded FacebookIcon/LineAppIcon SVGs for print letterheads — added 2026-08-04, extracted out of DeliveryOrderPrintDocument.tsx so Quotation/Scope of Work's print views could reuse them instead of duplicating
 │   │   ├── TemplatePreview.tsx    # shared Quotation Template preview rendering (compact + full) — added 2026-07-15, used by the wizard and Template Management
 │   │   ├── EmptyState.tsx         # shared {icon,title,description,actionLabel?,onAction?,compact?} empty state — added 2026-07-10
+│   │   ├── ForceChangePasswordDialog.tsx # blocking "set a new password" dialog for `User.mustChangePassword` (after a Super Admin issued a temporary password) — added 2026-09-24
 │   │   ├── TablePrintDocument.tsx # generic A4-landscape printable report table (letterhead + title + repeated header + totals) fed by the same `ExportSheet` as the Excel export — the "PDF" half of every export button, added 2026-09-24 (stock / stock history)
 │   │   ├── PageHeader.tsx         # shared {title,description?,actions?,path?} page header — added 2026-07-10, Dashboard only so far
 │   │   ├── MetricInfoTooltip.tsx  # click-to-toggle info popover for KPI cards — added 2026-07-10
@@ -75,6 +76,7 @@ ERP/
 │   │   ├── dashboard.ts           # fetchDashboardStats(filters) — real KPI/chart/pipeline/forecast/etc. data, added 2026-07-09, majorly expanded 2026-07-10, completed against business spec same day
 │   │   ├── search.ts              # fetchGlobalSearch(query, signal, types?) — GET /api/search, the 17-category SearchResults contract + SearchHit + the per-user recently-opened-documents helpers (localStorage, pointers only), added 2026-07-14, expanded 2026-08-28
 │   │   ├── stock.ts               # StockMovement type + fetchStockMovements()/createStockMovement() — added 2026-08-18, backs the Stock page + Accounting's IV stock-cutting panel, see MODULES/Product.md "Stock"
+│   │   ├── passwordResets.ts      # PasswordResetRequest type + forgot-password / Super Admin issue/dismiss calls — added 2026-09-24, see MODULES/Auth.md
 │   │   ├── tableExport.ts         # ExportSheet + downloadXlsx()/buildTableWorkbook() — generic styled Excel export (exceljs, dynamic import, dashboard styling), browser-only; added 2026-09-24
 │   │   ├── stockExport.ts         # stockBalanceSheet()/stockCardSheet()/stockHistorySheet() — the rows behind the stock pages' Excel + PDF exports (Thai headers, like print documents); added 2026-09-24
 │   │   ├── purchaseOrder.ts       # PurchaseOrder types + CRUD/approval/rewrite/print — added 2026-08-28, the Purchasing module's ใบสั่งซื้อ (PO-{พ.ศ.}-{NNNN}), created from an approved ใบขอซื้อ or blank. Deliberately does NOT use quoteMath.ts — a PO has no VAT/discount/withholding, see MODULES/Purchasing.md

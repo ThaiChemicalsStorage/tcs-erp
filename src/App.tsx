@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History, FileStack,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History, FileStack, KeyRound,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -51,6 +51,8 @@ const ProductsPage = lazy(() => import("./pages/products/ProductsPage").then((m)
 const QuotationPage = lazy(() => import("./pages/quotation/QuotationPage").then((m) => ({ default: m.QuotationPage })));
 const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage").then((m) => ({ default: m.UserManagementPage })));
+const PasswordResetRequestsPage = lazy(() => import("./pages/admin/PasswordResetRequestsPage").then((m) => ({ default: m.PasswordResetRequestsPage })));
+const ForceChangePasswordDialog = lazy(() => import("./components/ForceChangePasswordDialog").then((m) => ({ default: m.ForceChangePasswordDialog })));
 const RoleManagementPage = lazy(() => import("./pages/admin/RoleManagementPage").then((m) => ({ default: m.RoleManagementPage })));
 const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentManagementPage").then((m) => ({ default: m.DepartmentManagementPage })));
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
@@ -157,7 +159,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "stockHistory" | "toolControl" | "receivingReport" | "vendorBills" | "storeDocuments" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "stockHistory" | "toolControl" | "receivingReport" | "vendorBills" | "storeDocuments" | "storeRequestInbox" | "storePurchaseRequest" | "storeIssueInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "passwordResets" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -191,6 +193,8 @@ interface NavItem {
   permission?: Permission;
   /** เห็นเมนูถ้ามีสิทธิ์ใดสิทธิ์หนึ่ง — ดู `NavCandidate` ใน navResolution.ts */
   anyPermission?: Permission[];
+  /** เฉพาะบทบาท Super Admin (`isSuperAdmin`) ไม่ใช่สิทธิ์ที่ติ๊กให้บทบาทอื่นได้ — คำขอกู้รหัสผ่าน (2026-09-24) */
+  superAdminOnly?: boolean;
 }
 
 /**
@@ -303,6 +307,8 @@ const navItems: NavItem[] = [
   { key: "productRequest", icon: PackagePlus, labelKey: "nav.productRequest", permission: "productRequest:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
+  // คำขอกู้รหัสผ่าน (2026-09-24) — เจ้าของสั่ง "จะมีแค่ Super admin ที่สามารถดูรหัสผ่านได้" จึงผูกกับบทบาท ไม่ใช่สิทธิ์
+  { key: "passwordResets", icon: KeyRound, labelKey: "nav.passwordResets", permission: "users:manage", superAdminOnly: true },
   { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
   { key: "departments", icon: Layers, labelKey: "nav.departments", permission: "departments:manage" },
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
@@ -330,7 +336,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
   { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "stockHistory", "toolControl", "receivingReport", "vendorBills", "storeDocuments", "storePurchaseRequest", "storeRequestInbox", "productRequest"] },
-  { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
+  { labelKey: "nav.group.admin", keys: ["users", "passwordResets", "roles", "departments", "auditLog"] },
 ];
 
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
@@ -378,6 +384,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   vendors: "nav.vendors",
   codeRegister: "nav.codeRegister",
   users: "nav.users",
+  passwordResets: "nav.passwordResets",
   roles: "nav.roles",
   departments: "nav.departments",
   auditLog: "nav.auditLog",
@@ -895,7 +902,7 @@ export default function App() {
   const rolesReady = resourceStatus.roles !== "loading";
   const { visibleNavItems, effectiveNav, decided: navDecided } = resolveNav({
     activeNav,
-    navItems,
+    navItems: navItems.filter((n) => !n.superAdminOnly || userIsSuperAdmin(currentUser, roles)),
     currentUser,
     roles,
     rolesReady,
@@ -1187,6 +1194,7 @@ export default function App() {
                 // ใบเบิกแผนกอนุมัติแล้ว → สโตร์ (2026-09-24): ไปแท็บ "ใบเบิกจากแผนก" ของหน้าสโตร์ แล้วเน้นใบนั้น ให้ทำใบจ่ายต่อได้เลย
                 else if (n.type === "material_requisition_approved" && n.relatedMaterialRequisitionId && !isStoreIssueDocumentId(n.relatedMaterialRequisitionId)) navigateToStoreDocument("incoming", n.relatedMaterialRequisitionId);
                 else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
+                else if (n.relatedPasswordResetRequestId) guardedNav(() => setActiveNav("passwordResets"));
                 else if (n.relatedStoreReceiptId) navigateToStoreDocument("receipt", n.relatedStoreReceiptId);
                 else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);
                 else if (n.relatedProductRequestId) navigateToProductRequest(n.relatedProductRequestId);
@@ -1354,6 +1362,8 @@ export default function App() {
               ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} onProductsChanged={refreshCatalog} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
+              : effectiveNav === "passwordResets" && isSuperAdmin
+              ? <PasswordResetRequestsPage />
               : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
               : effectiveNav === "departments" && isSuperAdmin
@@ -1364,6 +1374,13 @@ export default function App() {
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* เข้าด้วยรหัสชั่วคราวจากคำขอกู้รหัสผ่าน (2026-09-24) — ต้องตั้งรหัสใหม่ก่อนใช้งานต่อ */}
+      {currentUser.mustChangePassword && (
+        <Suspense fallback={null}>
+          <ForceChangePasswordDialog user={currentUser} onChanged={updateCurrentUser} onSignOut={() => void handleLogout()} />
+        </Suspense>
+      )}
 
       {showTourPrompt && (
         <div className="fixed bottom-6 right-6 z-50 w-80 bg-card border border-border rounded-xl shadow-2xl p-4 print:hidden">

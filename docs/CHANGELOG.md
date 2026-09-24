@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-09-24e (absolute latest) — กู้รหัสผ่านผ่าน Super Admin + หน้า "คำขอกู้รหัสผ่าน"
+
+รายการงานสโตร์จากเจ้าของ 2026-09-24 ข้อ 6: *"ทำระบบกู้คืนรหัสผ่านถ้าผู้ใช้กดกู้รหัสผ่านให้ส่งรหัสผ่านไปให้ Super Admin จะมีแค่ Super admin
+ที่สามารถดูรหัสผ่านได้"* · ถามก่อน (รหัสเก็บแบบ bcrypt ดึงรหัสเดิมไม่ได้) เจ้าของเลือก **ส่งคำขอ → Super Admin ออกรหัสชั่วคราว** และสั่งเพิ่ม
+*"ทำหน้าเพิ่มขึ้นมาด้วยนะเผื่อมีคนขอ"*
+
+- **หน้าเข้าสู่ระบบ**: ลิงก์ "ลืมรหัสผ่าน?" → กรอกชื่อผู้ใช้/อีเมล + ข้อความถึงผู้ดูแล → `POST /api/auth/forgot-password` (ไม่ต้องล็อกอิน) ·
+  **ตอบเหมือนกันทุกกรณี** ไม่บอกว่าชื่อนั้นมีจริงไหม · จำกัด 5 ครั้ง/IP/15 นาที (`password_reset_attempts` TTL แยกจาก `login_attempts`
+  ไม่ให้นับรวมเพดานล็อกอิน) · ขอซ้ำระหว่างค้าง = อัปเดตแถวเดิม (`requestCount`) · คำขอใหม่แจ้งเตือน Super Admin ทุกคน (`password_reset_requested`)
+- **หน้าใหม่ "คำขอกู้รหัสผ่าน"** (เมนูกลุ่มผู้ดูแลระบบ `passwordResets` · `NavItem.superAdminOnly` ใหม่ — ผูกกับบทบาท `isSuperAdmin` ไม่ใช่สิทธิ์ที่ติ๊กได้)
+  คำขอค้าง + ประวัติ · **ออกรหัสผ่านชั่วคราว** (สุ่ม 10 ตัว ไม่มี 0/O/1/l/I) → แสดงให้ Super Admin **ครั้งเดียว** พร้อมปุ่มคัดลอก · ระบบเก็บแค่ hash ·
+  เซสชันเดิมของผู้ใช้ถูกตัด (`revokedReason: "password_reset"`) · ปิดคำขอได้โดยไม่ออกรหัส · ทั้งสองอย่างลง audit log (ไม่มีตัวรหัส)
+- **บังคับตั้งรหัสใหม่**: `User.mustChangePassword` → `ForceChangePasswordDialog` ปิดไม่ได้ (ตั้งรหัสใหม่ หรือออกจากระบบ) ·
+  ล้างเองเมื่อผู้ใช้เปลี่ยนรหัสของตัวเองผ่าน `PATCH /api/users/:id`
+- API ใหม่: `GET /api/users/password-resets` · `POST /api/users/password-resets/:id/issue` · `POST …/:id/dismiss` (Super Admin เท่านั้น 403 อื่น ๆ
+  รวม Administrator) · ไฟล์ใหม่ `api/_lib/passwordResetHandler.ts`, `src/lib/passwordResets.ts`, `src/pages/admin/PasswordResetRequestsPage.tsx`,
+  `src/components/ForceChangePasswordDialog.tsx` · คอลเลกชันใหม่ `password_reset_requests`, `password_reset_attempts`
+- ข้อจำกัด: Super Admin ที่ลืมรหัสเองต้องมี Super Admin อีกคนออกให้ (คนขอไม่ได้รับแจ้งเตือนของตัวเอง) · สถานะบังคับเปลี่ยนรหัสบังคับที่หน้าจอ
+  ไม่ได้ปิด API อื่นระหว่างนั้น (รหัสชั่วคราวส่งถึงเจ้าตัวโดย Super Admin อยู่แล้ว)
+- เทสต์ใหม่ `tests/api/passwordReset.test.ts` (6) · เอกสาร: `MODULES/Auth.md`, `API.md`, `DATABASE.md`, `RBAC.md`, `FOLDER_MAP.md`, What's New
+
+---
+
 ## 2026-09-24d (absolute latest) — สต๊อก: ส่งออก Excel / PDF (หน้าสต๊อก · ประวัติสต๊อก · การ์ดสต๊อก)
 
 รายการงานสโตร์จากเจ้าของ 2026-09-24 ข้อ 7: *"หน้า stock สินค้าสามารถนำออกเป็น exel ได้หรือ pdf ได้ ละก็ตรงประวัติปรับ stock และการ์ด stock

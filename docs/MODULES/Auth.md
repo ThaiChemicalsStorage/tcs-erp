@@ -106,6 +106,28 @@ sign-in page with the reason.
 ⚠️ **Cookies issued before 2026-08-31 have no `sid` and are refused**, so everyone signs in once
 more after the deploy. Honouring them would have left the restriction bypassable for seven days.
 
+## Password recovery via Super Admin (2026-09-24)
+
+Owner: *"ถ้าผู้ใช้กดกู้รหัสผ่านให้ส่งรหัสผ่านไปให้ Super Admin จะมีแค่ Super admin ที่สามารถดูรหัสผ่านได้"* + a page for the requests.
+Passwords are bcrypt hashes, so nobody can *see* an existing password — the owner chose (asked) the "request → Super Admin issues a
+temporary password" flow.
+
+1. **Sign-in page → "ลืมรหัสผ่าน?"** — identifier (+ optional message) → `POST /api/auth/forgot-password`. Always `200 { ok: true }`
+   whether or not the account exists or is active (no username enumeration). 5 requests / IP / 15 min (`password_reset_attempts`, TTL,
+   deliberately separate from `login_attempts` so it cannot eat into the login lockout budget). A repeat while one is pending bumps
+   `requestCount`/`lastRequestedAt` on the same row and does not re-notify.
+2. **Every active Super Admin is notified** (`password_reset_requested`, deep link → the new page). The requester is excluded from
+   recipients, so a lone Super Admin who forgets their own password needs a second Super Admin (or server access).
+3. **"คำขอกู้รหัสผ่าน" page** (admin group, `superAdminOnly` nav flag — tied to the role's `isSuperAdmin`, not a tickable permission; the
+   API checks the same). "ออกรหัสผ่านชั่วคราว" generates a 10-char password (no 0/O/1/l/I), stores only its hash, sets
+   `mustChangePassword: true`, revokes all of that user's sessions (`revokedReason: "password_reset"`), marks the request resolved, and
+   returns the password **once** — shown in a dialog with a copy button, never stored or logged. "ปิดคำขอ" dismisses without changing anything.
+4. **Forced change**: a user with `mustChangePassword` gets `ForceChangePasswordDialog` over the app (no close button — set a new password
+   or sign out). Changing one's own password via `PATCH /api/users/:id` clears the flag. The flag is enforced by the UI only; the API is not
+   locked down meanwhile (the temporary password only ever reaches the account owner through the Super Admin).
+
+Tests: `tests/api/passwordReset.test.ts`.
+
 ## Known Issues
 
 None currently open. The pre-migration client-side checksum/`localStorage`-session limitations were closed by the 2026-07-09 backend migration (real bcrypt hashing, httpOnly JWT cookie), login rate limiting landed 2026-07-29, and database-backed session revocation landed 2026-08-31 (see "One account, one device" above), which closed the long-standing "no true mid-expiry session revocation" gap in [RBAC.md](../RBAC.md).

@@ -7,6 +7,7 @@ import { findRole, roleHasPermission } from "../../src/lib/roles.js";
 import type { Role } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { validateImageDataUrl } from "../_lib/uploadValidation.js";
+import { handlePasswordResets } from "../_lib/passwordResetHandler.js";
 
 async function activeSuperAdminCount(users: Collection<UserFields>, roleList: Role[]): Promise<number> {
   const superAdminKeys = roleList.filter((r) => r.isSuperAdmin).map((r) => r.key);
@@ -140,6 +141,8 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
         throw new HttpError(403, "Forbidden");
       }
       update.passwordHash = await hashPassword(body.password);
+      // ตั้งรหัสใหม่เองหลังเข้าด้วยรหัสชั่วคราวของ Super Admin (2026-09-24) = พ้นสถานะบังคับเปลี่ยนรหัส
+      if (isSelf) update.mustChangePassword = false;
     }
 
     if (canManage) {
@@ -213,6 +216,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   await withErrorHandling(req, res, async () => {
     const parts = getPathSegments(req, "/api/users");
 
+    // ต้องมาก่อน /:id — ไม่งั้น "password-resets" ถูกอ่านเป็น id ผู้ใช้
+    if (parts[0] === "password-resets") return handlePasswordResets(req, res, parts.slice(1));
     if (parts.length === 0) return handleList(req, res);
     if (parts.length === 1) return handleOne(req, res, parts[0]);
     throw new HttpError(404, "Not found");

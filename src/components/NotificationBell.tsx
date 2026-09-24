@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, BellRing, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon, Mail, Wrench, PackagePlus, Warehouse, ShoppingCart, Store } from "lucide-react";
+import { Bell, BellRing, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon, Mail, Wrench, PackagePlus, Warehouse, ShoppingCart, Store, KeyRound } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
 import { useI18n, type TranslationKey } from "../lib/i18n";
 
@@ -44,6 +44,7 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   product_request_approved: <CheckCircle2 size={14} />,
   product_request_rejected: <XCircle size={14} />,
   stock_low: <AlertTriangle size={14} />,
+  password_reset_requested: <KeyRound size={14} />,
 };
 
 // แปลงเวลาเป็นข้อความ "เมื่อกี้ / ผ่านมากี่นาที/ชั่วโมง/วัน"

@@ -2,6 +2,7 @@ import { ObjectId, type WithId } from "mongodb";
 import { getDb } from "./mongodb.js";
 import { HttpError } from "./http.js";
 import type { User } from "../../src/lib/users.js";
+import type { PasswordResetRequest } from "../../src/lib/passwordResets.js";
 import type { Role } from "../../src/lib/roles.js";
 import type { Company } from "../../src/lib/storage.js";
 import type { Product, ProductCategory } from "../../src/lib/products.js";
@@ -189,6 +190,26 @@ export async function loginAttemptsCollection() {
   return db.collection<LoginAttemptFields>("login_attempts");
 }
 
+/** คำขอกู้รหัสผ่าน (2026-09-24) — ดู `src/lib/passwordResets.ts` · `userId` เป็น ObjectId string ของผู้ใช้ */
+export type PasswordResetRequestFields = Omit<PasswordResetRequest, "id">;
+export async function passwordResetRequestsCollection() {
+  const db = await getDb();
+  return db.collection<PasswordResetRequestFields>("password_reset_requests");
+}
+
+/**
+ * จำนวนครั้งที่ขอกู้รหัสผ่านต่อ IP (2026-09-24) — หน้าที่เดียวกับ `login_attempts` แต่แยกคอลเลกชัน เพื่อไม่ให้การขอกู้รหัส
+ * ไปนับรวมกับเพดานล็อกอินผิดของ IP เดียวกัน · `createdAt` เป็น `Date` เพราะ TTL index อ่านได้แค่ Date
+ */
+export interface PasswordResetAttemptFields {
+  ip: string;
+  createdAt: Date;
+}
+export async function passwordResetAttemptsCollection() {
+  const db = await getDb();
+  return db.collection<PasswordResetAttemptFields>("password_reset_attempts");
+}
+
 /** Delivery Order (added 2026-07-23) — see `src/lib/deliveryOrder.ts` for the full domain-shape doc
  * comment and docs/MODULES/DeliveryOrder.md for the PDF-to-field mapping. No uniqueness constraint
  * on `scopeOfWorkId` (a Scope of Work can in principle have more than one, same non-enforced
@@ -284,7 +305,7 @@ export interface SessionFields {
   userAgent: string;
   revokedAt: string | null;
   /** ทำไมถึงถูกยกเลิก — "superseded" = มีการเข้าสู่ระบบจากเครื่องอื่น, "logout" = กดออกเอง */
-  revokedReason?: "superseded" | "logout";
+  revokedReason?: "superseded" | "logout" | "password_reset";
 }
 export async function sessionsCollection() {
   const db = await getDb();

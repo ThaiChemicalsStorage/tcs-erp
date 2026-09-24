@@ -19,6 +19,11 @@ export interface User {
   status: UserStatus;
   profilePictureDataUrl: string;
   signatureDataUrl: string;
+  /**
+   * เข้าด้วยรหัสผ่านชั่วคราวที่ Super Admin ออกให้ (กู้รหัสผ่าน 2026-09-24) — ต้องตั้งรหัสใหม่ก่อนใช้งาน
+   * หน้าจอขึ้นกล่องบังคับเปลี่ยน · ล้างเองเมื่อผู้ใช้เปลี่ยนรหัสของตัวเอง
+   */
+  mustChangePassword?: boolean;
   createdAt: string;
   updatedAt: string;
 }

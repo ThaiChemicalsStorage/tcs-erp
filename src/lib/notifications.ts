@@ -52,7 +52,9 @@ export type NotificationType =
   | "product_request_rejected"
   // ── สต๊อกใกล้หมด (2026-09-02) — เจ้าของสั่ง "เวลาของใกล้หมดให้แจ้งเตือน"
   //    ยิงจาก applyStockMovement() ทางเดียว จึงครอบคลุมทั้งการตัดของอัตโนมัติและการปรับสต๊อกด้วยมือ
-  | "stock_low";
+  | "stock_low"
+  /** ผู้ใช้กด "ลืมรหัสผ่าน" (2026-09-24) — ส่งถึง Super Admin ทุกคน กดแล้วไปหน้าคำขอกู้รหัสผ่าน */
+  | "password_reset_requested";
 
 export interface Notification {
   id: string;
@@ -83,6 +85,8 @@ export interface Notification {
   relatedCostControlId?: string;
   /** ใบรับคืน/รับเข้าคลังของสโตร์ (2026-09-23) — เปิดในหน้า "ใบเบิก-คืนวัสดุ (สโตร์)" */
   relatedStoreReceiptId?: string;
+  /** คำขอกู้รหัสผ่าน (2026-09-24) — เปิดหน้า "คำขอกู้รหัสผ่าน" ของ Super Admin */
+  relatedPasswordResetRequestId?: string;
   createdAt: string;
   read: boolean;
 }

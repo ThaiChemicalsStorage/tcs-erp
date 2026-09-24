@@ -1109,3 +1109,11 @@ Three things worth knowing before touching it:
 - Store requisitions are ordinary `material_requisitions` rows → the existing `materialRequisition:*` checks apply unchanged.
 - Store receipts (`store_receipts`) reuse the same set: view/create/edit/finalize/print/delete = `materialRequisition:*`; **posting to stock = `stock:adjust`**. They appear in the Pending Approvals inbox for `materialRequisition:finalize` holders (kind `storeReceipt`).
 - Nothing to tick by hand — any role that can already work requisitions and issue stock can use both documents.
+
+## Password recovery — Super Admin role only (2026-09-24)
+
+The owner's rule is *"จะมีแค่ Super admin ที่สามารถดูรหัสผ่านได้"*, so the three `/api/users/password-resets` routes and the
+"คำขอกู้รหัสผ่าน" menu are gated on the role's **`isSuperAdmin`**, not on a permission — Administrator (which has `users:manage`) gets 403
+and no menu. The menu uses a new `NavItem.superAdminOnly` flag (filtered before `resolveNav()`), the page render re-checks
+`isSuperAdmin`, and the server checks it on every call. `POST /api/auth/forgot-password` is public by design (rate limited, answers the
+same for every identifier). See MODULES/Auth.md.

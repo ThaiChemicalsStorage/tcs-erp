@@ -4,6 +4,7 @@ import { usersCollection, loginAttemptsCollection, ensureIndexes, toPublicUser }
 import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext, startSession, endSession, signedOutReason } from "../_lib/auth.js";
 import { seedDefaultRolesIfEmpty, bootstrapRbac } from "../_lib/rbacSeed.js";
 import { seedSystemDataIfEmpty } from "../_lib/systemSeed.js";
+import { handleForgotPassword } from "../_lib/passwordResetHandler.js";
 import { defaultRoles } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 
@@ -175,6 +176,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (path === "setup") return handleSetup(req, res);
     if (path === "login") return handleLogin(req, res);
     if (path === "logout") return handleLogout(req, res);
+    // กู้รหัสผ่านผ่าน Super Admin (2026-09-24) — ไม่ต้องล็อกอิน ดู passwordResetHandler.ts
+    if (path === "forgot-password") return handleForgotPassword(req, res);
     throw new HttpError(404, "Not found");
   });
 }
