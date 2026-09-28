@@ -157,4 +157,31 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  /* Tailwind v4 ตั้ง cursor ของปุ่มเป็น default — คืนรูปมือให้ทุกอย่างที่กดได้
+     อยู่ใน base layer เพื่อให้ utility อย่าง cursor-not-allowed / cursor-default ยังชนะได้ */
+  :is(
+      a[href],
+      button,
+      summary,
+      select,
+      label[for],
+      input:is([type="checkbox"], [type="radio"], [type="file"], [type="color"], [type="range"], [type="button"], [type="submit"], [type="reset"]),
+      [role="button"],
+      [role="link"],
+      [role="tab"],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="option"],
+      [role="switch"],
+      [role="checkbox"],
+      [role="radio"],
+      [role="combobox"]:not(input)
+    ):not(:disabled, [aria-disabled="true"], [data-disabled]) {
+    cursor: pointer;
+  }
+  input[type="file"]::file-selector-button {
+    cursor: pointer;
+  }
 }

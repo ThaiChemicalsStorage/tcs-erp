@@ -39,6 +39,10 @@ Beyond the tokens, many components also use raw hex literals directly (`#c9a84c`
 
 `lucide-react` exclusively. Sizes used throughout: `size={17}` sidebar nav icons, `size={13}`–`15` inline action icons, `size={10}`–`12` tiny badge/status icons.
 
+### Pointer cursor (added 2026-09-28)
+
+Tailwind v4's preflight sets `cursor: default` on buttons, so until now most clickable things showed the arrow. One rule in `src/styles/theme.css` (`@layer base`) gives `cursor: pointer` to everything clickable that isn't disabled: `a[href]`, `button`, `summary`, `select`, `label[for]`, checkbox/radio/file/color/range/button-type inputs, and `role=button|link|tab|menuitem*|option|switch|checkbox|radio|combobox`. It skips `:disabled`, `aria-disabled="true"` and `[data-disabled]`. Because it sits in the base layer, a `cursor-*` utility on the element still wins (disabled buttons keep their `cursor-not-allowed`). **A new clickable element that isn't a `<button>` or link needs `role="button"` (and `tabIndex={0}`), as the list-page rows already do.** That's needed for accessibility anyway, and it also gets the hand cursor. Do not add `cursor-pointer` class by class. Modal backdrops (`onClick` on the overlay `div`) deliberately keep the arrow.
+
 ## Component Patterns
 
 ### Sidebar
