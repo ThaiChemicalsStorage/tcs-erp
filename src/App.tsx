@@ -431,16 +431,14 @@ export default function App() {
   const mobileNavPanelRef = useRef<HTMLElement>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const [activeNav, setActiveNav] = useState<NavKey>(() => navFromHash() ?? "dashboard");
-  // Bumped on every sidebar click (including re-clicking the already-active item) so the page
-  // remounts and drops back to its list view — activeNav alone doesn't change when re-clicking
-  // the same nav item, so the ErrorBoundary/page key below needs this to force a reset.
-  const [navBump, setNavBump] = useState(0);
-  // ทุกทางที่พาผู้ใช้ออกจากหน้าปัจจุบันต้องผ่านตัวนี้ — รวมถึงการกดเมนูเดิมซ้ำ เพราะ navBump สั่ง remount
-  // ทำให้หน้าเอกสารที่เปิดค้างอยู่ถูกถอดทิ้งเหมือนกัน ถ้าไม่มีอะไรค้าง proceed() จะถูกเรียกทันทีใน tick เดิม
+  // 2026-09-28: กดเมนูที่เปิดอยู่แล้วซ้ำ = ไม่ทำอะไร (เจ้าของ: "กดซ้ำได้แล้วเว็บรีโหลดข้อมูลรัวๆ")
+  // เดิมมีตัวนับ navBump สั่ง remount หน้าทุกครั้งที่กดซ้ำ เพื่อเด้งจากหน้าเอกสารกลับไปหน้ารายการ
+  // แต่ผลคือโหลดข้อมูลใหม่ทั้งหน้าทุกคลิก · ออกจากเอกสารใช้ปุ่มย้อนกลับของหน้าเอกสารเองแทน
+  // ทุกทางที่พาผู้ใช้ออกจากหน้าปัจจุบันต้องผ่านตัวนี้ ถ้าไม่มีอะไรค้าง proceed() จะถูกเรียกทันทีใน tick เดิม
   //
-  // Every path that takes the user off the current page routes through this, including re-clicking
-  // the already-active nav item: `navBump` remounts the page and destroys an open editor just the
-  // same. With nothing at risk it calls `proceed()` synchronously, exactly as before.
+  // Re-clicking the already-active nav item is a no-op (it used to bump a remount counter, which
+  // refetched the whole page on every click). Every path that takes the user off the current page
+  // routes through this guard. With nothing at risk it calls `proceed()` synchronously.
   const navGuard = useNavigationGuardHost();
   const guardedNav = navGuard.requestLeave;
 
@@ -1114,12 +1112,12 @@ export default function App() {
                 {items.map(({ key, icon: Icon, labelKey }) => (
                   <button
                     key={key}
-                    onClick={() => guardedNav(() => { setActiveNav(key); setNavBump((n) => n + 1); closeMobileNav(); })}
+                    onClick={() => { if (activeNav === key) { closeMobileNav(); return; } guardedNav(() => { setActiveNav(key); closeMobileNav(); }); }}
                     title={navExpanded ? undefined : t(labelKey)}
                     aria-label={navExpanded ? undefined : t(labelKey)}
                     aria-current={activeNav === key ? "page" : undefined}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 relative min-w-0
-                      ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
+                      ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25 cursor-default" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
                     <Icon size={17} className="flex-shrink-0" />
                     {navExpanded && <span className="text-sm truncate min-w-0">{t(labelKey)}</span>}
                   </button>
@@ -1130,12 +1128,12 @@ export default function App() {
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
           <button
-            onClick={() => guardedNav(() => { setActiveNav("settings"); setNavBump((n) => n + 1); closeMobileNav(); })}
+            onClick={() => { if (activeNav === "settings") { closeMobileNav(); return; } guardedNav(() => { setActiveNav("settings"); closeMobileNav(); }); }}
             title={navExpanded ? undefined : t("nav.settings")}
             aria-label={navExpanded ? undefined : t("nav.settings")}
             aria-current={activeNav === "settings" ? "page" : undefined}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 border min-w-0 ${
-              activeNav === "settings" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
+              activeNav === "settings" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25 cursor-default" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
             }`}>
             <Settings size={17} className="flex-shrink-0" />
             {navExpanded && <span className="text-sm truncate min-w-0">{t("nav.settings")}</span>}
@@ -1259,7 +1257,7 @@ export default function App() {
         </header>
 
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden outline-none print:overflow-visible print:block">
-          <ErrorBoundary key={`${effectiveNav}-${navBump}`}>
+          <ErrorBoundary key={effectiveNav}>
           <Suspense fallback={<PageLoading />}>
             {/* ยังไม่รู้สิทธิ์ = ยังไม่ควรวาดหน้าไหนทั้งนั้น ไม่งั้นหน้านั้นจะถูกวาดด้วย roles ว่าง แล้วปุ่ม/
                 เมนูที่ต้องมีสิทธิ์จะกะพริบโผล่ทีหลัง — รอไม่กี่ร้อยมิลลิวินาทีตรงนี้ตรงไปตรงมากว่า

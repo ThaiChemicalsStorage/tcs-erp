@@ -171,9 +171,10 @@ colours the *confirm* button, so it cannot express "safe primary, destructive se
 is a `setActiveNav(...)` in `App.tsx`, so each one is wrapped in `guardedNav(() => { ... })`.
 Wrapping the `navigateTo*` family is what covers global search, the notification bell and
 cross-document links inside editors without touching those components at all. Re-clicking the
-**already-active** nav item is guarded too — `navBump` turns it into a full page remount that
-destroys an open editor just the same. A missed call site fails **open** (navigates without asking),
-never closed.
+**already-active** nav item is a no-op since 2026-09-28 (it used to bump a `navBump` remount counter,
+which refetched the whole page on every click, and the owner asked for it to stop). The active item
+gets `cursor-default` so it doesn't look clickable. Leave an open document with its own back
+button. A missed call site fails **open** (navigates without asking), never closed.
 
 **Known gap, shared with every other dialog here:** `useDialogA11y` does not restore focus to the
 trigger on close. Tracked in TODO.md; don't fix it in one dialog only.

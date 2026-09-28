@@ -7,9 +7,9 @@ export type { UnsavedChangesGuard } from "../lib/unsavedChanges";
  * ดักทุกทางออกจากหน้าเอกสารที่ยังมีงานค้าง (เพิ่ม 2026-08-25)
  *
  * The app has no router: every navigation is a `setActiveNav(...)` call in `App.tsx`, and an open
- * editor is unmounted the instant one happens — including re-clicking the *already active* sidebar
- * item, because `navBump` remounts the page through the ErrorBoundary key. So the block has to sit
- * where the navigation is initiated, not where the route changes.
+ * editor is unmounted the instant one happens. (Re-clicking the *already active* sidebar item used
+ * to remount the page too, via a `navBump` key; since 2026-09-28 it is a no-op.) So the block has to
+ * sit where the navigation is initiated, not where the route changes.
  *
  * Every initiator calls `requestLeave(proceed)`. When nothing is at risk, `proceed()` runs
  * synchronously in the same tick it always did — this must stay a no-op on the common path.
