@@ -652,10 +652,12 @@ async function collectAttention({ ctx, has, today }: BlockContext): Promise<Atte
         and({ isDeleted: false, status: "Final", neededByDate: { $gt: "", $lt: today } }, own) as never,
         { projection: { documentNumber: 1, vendorName: 1, neededByDate: 1 } },
       ).sort({ neededByDate: 1 }).toArray();
+      // ใบรับสินค้าหนึ่งใบถือได้หลายใบสั่งซื้อ (2026-09-29) — ใบที่เพิ่มเข้าไปก็ถือว่ารับจบพร้อมใบนั้น
+      const lateIds = late.map((p) => p._id.toString());
       const closed = new Set((await (await receivingReportsCollection()).find(
-        { isDeleted: false, status: "Closed", purchaseOrderId: { $in: late.map((p) => p._id.toString()) } } as never,
-        { projection: { purchaseOrderId: 1 } },
-      ).toArray()).map((r) => r.purchaseOrderId));
+        { isDeleted: false, status: "Closed", $or: [{ purchaseOrderId: { $in: lateIds } }, { "extraPurchaseOrders.id": { $in: lateIds } }] } as never,
+        { projection: { purchaseOrderId: 1, extraPurchaseOrders: 1 } },
+      ).toArray()).flatMap((r) => [r.purchaseOrderId, ...(r.extraPurchaseOrders ?? []).map((x) => x.id)]));
       return late.filter((p) => !closed.has(p._id.toString())).slice(0, per).map((p): AttentionItem => ({
         dept: "purchasing", kind: "poOverdue", id: p._id.toString(), docNumber: p.documentNumber || p._id.toString(), party: p.vendorName ?? "", date: p.neededByDate,
       }));

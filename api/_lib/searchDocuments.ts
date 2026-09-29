@@ -272,7 +272,7 @@ export async function searchReceivingReports(query: string, ctx: AuthContext, li
   const docs = await col.find(
     docFilter(ownership, [
       { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
-      { purchaseOrderNumber: rx }, { "batches.invoiceNumber": rx }, { "lines.description": rx }, { "lines.productCode": rx },
+      { purchaseOrderNumber: rx }, { "extraPurchaseOrders.number": rx }, { "batches.invoiceNumber": rx }, { "lines.description": rx }, { "lines.productCode": rx },
     ]) as never,
     { sort: SORT_RECENT, limit },
   ).toArray();

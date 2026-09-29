@@ -22,7 +22,9 @@ import {
   receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf,
   isBlankReceivingReport, receivingReportCodeOf, blankReceivingReportLine, RECEIVING_REPORT_CODE_LABEL_KEY,
   priceTypeOf, orderTotalsOf, dueDateOf, RECEIVING_PRICE_TYPES, RECEIVING_PRICE_TYPE_LABEL_KEY, type ReceivingPriceType,
+  addPurchaseOrderToReceivingReport, removePurchaseOrderFromReceivingReport,
 } from "../../lib/receivingReport";
+import { AddPurchaseOrderDialog } from "./AddPurchaseOrderDialog";
 import { ReceiveBatchDialog } from "./ReceiveBatchDialog";
 import { ReceivingReportPrintDocument } from "./ReceivingReportPrintDocument";
 
@@ -105,6 +107,9 @@ export function ReceivingReportDocument({
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [productPickerOpen, setProductPickerOpen] = useState(false);
+  /** ใบเดียวรับหลาย PO (2026-09-29) — หน้าต่างเลือกใบสั่งซื้อ และใบที่กำลังจะเอาออก (ยืนยันก่อน) */
+  const [addPoOpen, setAddPoOpen] = useState(false);
+  const [confirmRemovePo, setConfirmRemovePo] = useState<{ id: string; number: string } | null>(null);
   const blank = !!draft && isBlankReceivingReport(draft);
 
   // ใบเปล่าต้องใช้แคตตาล็อกกับทะเบียนผู้ขาย — โหลดเฉพาะใบเปล่าที่แก้ได้ ใบที่มาจากใบสั่งซื้อไม่ต้องใช้
@@ -217,6 +222,9 @@ export function ReceivingReportDocument({
   const pendingLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) > 0);
   const doneLines = draft.lines.filter((l) => outstandingQtyOf(draft, l) <= 0);
   const isOpen = draft.status === "Open";
+  const extraPos = draft.extraPurchaseOrders ?? [];
+  /** เอาใบสั่งซื้อที่เพิ่มออกได้เฉพาะเมื่อยังไม่รับของรายการไหนของใบนั้น (เซิร์ฟเวอร์ตรวจซ้ำ) */
+  const poHasReceipts = (poId: string) => draft.lines.some((l) => l.purchaseOrderId === poId && receivedQtyOf(draft, l.id) > 0);
 
 
   // รายการ/เงื่อนไขบิลที่เพิ่งพิมพ์อาจยังไม่ถึงเซิร์ฟเวอร์ (บันทึกอัตโนมัติรอจังหวะอยู่) — บันทึกก่อนเปิดรับของ
@@ -282,6 +290,34 @@ export function ReceivingReportDocument({
     }
   };
 
+  // เพิ่ม/เอาใบสั่งซื้อออกตอบใบทั้งใบกลับมา (รายการเปลี่ยน) — บันทึกเลขที่/หมายเหตุ/เงื่อนไขบิลที่ค้างก่อน ไม่งั้นที่พิมพ์ไว้หาย
+  const addPurchaseOrder = async (purchaseOrderId: string) => {
+    if (canEdit && dirty.isDirtyNow() && !(await save())) return;
+    setBusy(true);
+    try {
+      applyServerDoc(await addPurchaseOrderToReceivingReport(draft.id, purchaseOrderId));
+      setAddPoOpen(false);
+      showToast(t("receivingReportDoc.addPo.addedToast"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("receivingReportDoc.errorSave"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removePurchaseOrder = async (purchaseOrderId: string) => {
+    if (canEdit && dirty.isDirtyNow() && !(await save())) return;
+    setBusy(true);
+    try {
+      applyServerDoc(await removePurchaseOrderFromReceivingReport(draft.id, purchaseOrderId));
+      showToast(t("receivingReportDoc.addPo.removedToast"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("receivingReportDoc.errorSave"));
+    } finally {
+      setBusy(false);
+      setConfirmRemovePo(null);
+    }
+  };
+
   const toggleStatus = async () => {
     setBusy(true);
     try {
@@ -315,6 +351,11 @@ export function ReceivingReportDocument({
         <td className="px-3 py-2.5 text-sm text-foreground">
           <span className="font-mono text-xs text-muted-foreground mr-2">{line.productCode || "—"}</span>
           {line.description}
+          {extraPos.length > 0 && (
+            <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-mono bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20 whitespace-nowrap">
+              {line.purchaseOrderNumber || draft.purchaseOrderNumber}
+            </span>
+          )}
           {line.subDetails.length > 0 && (
             <span className="block text-xs text-muted-foreground mt-0.5">{line.subDetails.join(" · ")}</span>
           )}
@@ -422,9 +463,37 @@ export function ReceivingReportDocument({
                 <input className={inputCls} disabled={!canEdit} value={draft.documentNumber}
                   onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })} />
               </Field>
-              <Field label={t("receivingReportDoc.purchaseOrder")}>
-                <input className={inputCls} disabled value={draft.purchaseOrderNumber || "—"} />
-              </Field>
+              {blank ? (
+                <Field label={t("receivingReportDoc.purchaseOrder")}>
+                  <input className={inputCls} disabled value="—" />
+                </Field>
+              ) : (
+                // ใบเดียวรับหลาย PO (2026-09-29) — ใบหลัก + ใบที่เพิ่ม (กด × เอาออกได้ถ้ายังไม่รับของของใบนั้น) + ปุ่มเพิ่ม
+                <div className="block">
+                  <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.purchaseOrder")}</span>
+                  <div className="flex flex-wrap items-center gap-1.5 min-h-[38px]">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono bg-secondary border border-border text-foreground">{draft.purchaseOrderNumber}</span>
+                    {extraPos.map((p) => (
+                      <span key={p.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono bg-secondary border border-border text-foreground">
+                        {p.number}
+                        {canEdit && !poHasReceipts(p.id) && (
+                          <button onClick={() => setConfirmRemovePo(p)} disabled={busy}
+                            aria-label={t("receivingReportDoc.addPo.remove").replace("{po}", p.number)} title={t("receivingReportDoc.addPo.remove").replace("{po}", p.number)}
+                            className="text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-60">
+                            <X size={12} />
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                    {canEdit && isOpen && (
+                      <button onClick={() => setAddPoOpen(true)} disabled={busy}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs border border-dashed border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                        <Plus size={12} /> {t("receivingReportDoc.addPo.button")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
               {blank ? (
                 <>
                   <Field label={t("receivingReportDoc.jobCode")}>
@@ -725,6 +794,20 @@ export function ReceivingReportDocument({
         showStock
         onSelect={addProductLine}
         onClose={() => setProductPickerOpen(false)}
+      />
+      {addPoOpen && (
+        <AddPurchaseOrderDialog receivingReportId={draft.id} vendorName={draft.vendorName} busy={busy}
+          onPick={(poId) => void addPurchaseOrder(poId)} onCancel={() => setAddPoOpen(false)} />
+      )}
+      <ConfirmDialog
+        open={confirmRemovePo !== null}
+        title={t("receivingReportDoc.addPo.removeTitle")}
+        message={t("receivingReportDoc.addPo.removeMessage").replace("{po}", confirmRemovePo?.number ?? "")}
+        confirmLabel={t("receivingReportDoc.addPo.removeConfirm")}
+        danger
+        busy={busy}
+        onConfirm={() => { if (confirmRemovePo) void removePurchaseOrder(confirmRemovePo.id); }}
+        onCancel={() => setConfirmRemovePo(null)}
       />
       {receiveOpen && (
         <ReceiveBatchDialog doc={draft} busy={busy} onCancel={() => setReceiveOpen(false)} onSubmit={(b) => void runReceive(b)} />

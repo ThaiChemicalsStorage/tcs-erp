@@ -635,7 +635,8 @@ async function handleRevertApproval(req: ApiRequest, res: ApiResponse, id: strin
   if (doc.status !== "Final") throw new HttpError(400, "ย้อนได้เฉพาะใบสั่งซื้อที่อนุมัติแล้วเท่านั้น");
 
   const receivingReports = await receivingReportsCollection();
-  const rr = await receivingReports.findOne({ purchaseOrderId: id, isDeleted: false });
+  // รวมใบรับสินค้าที่เพิ่มใบสั่งซื้อนี้เข้าไปทีหลังด้วย (2026-09-29 — ใบเดียวรับหลาย PO)
+  const rr = await receivingReports.findOne({ isDeleted: false, $or: [{ purchaseOrderId: id }, { "extraPurchaseOrders.id": id }] });
   if (rr) {
     // `details` ถูก spread ขึ้นระดับบนสุดของ body (ดู sendJson ใน http.ts) — หน้าจอจึงอ่าน
     // `receivingReportId` ได้ตรง ๆ แบบเดียวกับ 409 ของ receivingReportHandler ตอนกันสร้างซ้ำ

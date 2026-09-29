@@ -233,7 +233,7 @@ ReceivingBatch       // one round of receiving = one vendor invoice
     stockMovementIds, apEntryId }
 ```
 
-**One PO = one RR** is enforced by a unique partial index on `purchaseOrderId` where
+**One PO = one RR** (since 2026-09-29 a report may also hold *added* POs — a PO is still held by one report only; see "ใบเดียวรับหลาย PO" below) is enforced by a unique partial index on `purchaseOrderId` where
 `isDeleted: false`, not merely by a code check — two tabs pressing "create" at once would otherwise
 produce two documents. A duplicate create returns **409 with the existing document's id**, and the
 UI opens that document instead of dead-ending.
@@ -274,6 +274,19 @@ closed document can be reopened only while something is still outstanding.
 `PATCH` accepts exactly three fields: `documentNumber`, `remarks`, `status`. Lines and batches are
 never client-writable — they are snapshots and posted accounting facts respectively.
 
+
+### ใบเดียวรับหลาย PO — ปุ่ม "เพิ่ม PO" (2026-09-29)
+
+เจ้าของ: *"ใบรับสินค้าสามารถเพิ่ม PO ได้"* — ถามก่อน: หมายถึง **ผู้ขายส่งของของหลาย PO มาพร้อมกัน (บิลเดียว)** ไม่ใช่ใบเปล่ามาเลือก PO ทีหลัง
+- ช่องใบสั่งซื้อบนหัวใบเป็นชิป: ใบหลัก + ใบที่เพิ่ม (× เอาออกได้ถ้ายังไม่รับของของใบนั้น) + ปุ่ม **เพิ่ม PO** (ใบเปิดอยู่ + มีสิทธิ์แก้) →
+  `AddPurchaseOrderDialog` แสดงใบสั่งซื้อที่อนุมัติแล้วของผู้ขายเดียวกันที่ยังไม่มีใบรับ → กดแถว = เพิ่ม
+- รายการของใบที่เพิ่มต่อท้ายใบนี้ (มีป้ายเลข PO ต่อบรรทัดเมื่อใบถือหลาย PO) รับของรวมในรอบเดียวกันได้ · หนี้ของรอบอ้างเลข PO ของรายการที่รับจริง
+- กติกา "1 PO อยู่ได้ในใบรับใบเดียว" ขยายไปถึงใบที่เพิ่ม: สร้างใบรับจาก PO ที่ถูกเพิ่มไว้ = 409 พาไปใบนั้น · ปุ่มรับสินค้าบนใบสั่งซื้อก็พาไปใบนั้น ·
+  ย้อนอนุมัติ PO ไม่ได้ · แดชบอร์ด PO เลยกำหนดนับว่ารับจบเมื่อใบรับที่ถืออยู่ปิด · ค้นหา/ประวัติสต๊อกค้นเลข PO ที่เพิ่มได้
+- ⚠️ ไม่มี index กันข้ามเอกสารสำหรับใบที่เพิ่ม — route ตรวจก่อนเขียน แล้วนับซ้ำหลังเขียน ถ้าชนถอนของตัวเองออก (สองฝั่งอาจถอนทั้งคู่ กดใหม่ได้)
+- ⚠️ เงื่อนไขหัวใบ (VAT/ส่วนลดท้ายบิล/เครดิต) ยังเป็นของใบหลัก — PO ที่เพิ่มถ้ามีส่วนลดท้ายบิลของตัวเอง ไม่ถูกดึงมา · แก้ในหน้าต่างรับของแต่ละรอบ
+- ⚠️ ใบเปล่าเพิ่ม PO ไม่ได้ (400) · ใบที่ปิดแล้วต้องเปิดก่อน — ใบที่รับครบจนปิดเองเปิดกลับไม่ได้ จึงเพิ่ม PO เข้าไม่ได้ ให้สร้างใบใหม่จาก PO นั้น
+- เทสต์: บล็อก "ใบรับสินค้า: เพิ่มใบสั่งซื้อ (ใบเดียวรับหลาย PO)" ใน `tests/api/receivingReport.test.ts` (+6)
 ## 6. Payables — `ap_entries`
 
 One row per receipt round, written **only** by the RR receipt route. There is deliberately no

@@ -1,5 +1,5 @@
 import type { CompanyHeaderInfo } from "../../lib/storage";
-import { batchTotals, billerOf, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
+import { batchTotals, billerOf, purchaseOrderNumbersOf, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
 import { bahtText } from "../../lib/bahtText";
 import { addDaysIso, printDateShortBE, splitAddressTwoLines } from "../../lib/printFormat";
 
@@ -185,7 +185,7 @@ export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, ba
                 [1, "วันที่", printDateShortBE(slip.receivedDate)],
                 [2, "", doc.jobCode ? `JOB NO. ${doc.jobCode}` : ""],
                 [3, creditDays !== null ? `เครดิต   ${creditDays} วัน` : "", dueDate ? `ครบกำหนด     ${printDateShortBE(dueDate)}` : ""],
-                [5, "ใบสั่งซื้อ#", doc.purchaseOrderNumber ? `${doc.purchaseOrderNumber}   ${info.purchaseOrderDate ? `วันที่ ${printDateShortBE(info.purchaseOrderDate)}` : ""}` : ""],
+                [5, "ใบสั่งซื้อ#", doc.purchaseOrderNumber ? `${purchaseOrderNumbersOf(doc).join(", ")}   ${info.purchaseOrderDate ? `วันที่ ${printDateShortBE(info.purchaseOrderDate)}` : ""}` : ""],
                 [6, "ขนส่งโดย", info.shippingText],
               ] as const).map(([r, label, value]) => (
                 <div key={r}>

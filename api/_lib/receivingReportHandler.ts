@@ -7,7 +7,7 @@ import {
   receivingReportsCollection, purchaseOrdersCollection, productsCollection, apEntriesCollection,
   purchaseRequestsCollection, vendorsCollection,
   countersCollection, auditLogCollection,
-  toObjectId, withStringId, type ReceivingReportFields, type CounterFields,
+  toObjectId, withStringId, type ReceivingReportFields, type CounterFields, type PurchaseOrderFields,
 } from "./collections.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import { applyStockMovement } from "./stockHandler.js";
@@ -23,8 +23,9 @@ import { sanitizeNullableNumber } from "./projectValidation.js";
 import {
   receivingReportTotals, outstandingQtyOf, isFullyReceived, batchTotals, receivedQtyOf,
   isReceivingReportCode, receivingReportCodeOf, isBlankReceivingReport,
-  isReceivingPriceType, priceTypeOf, billerOf, dueDateOf,
+  isReceivingPriceType, priceTypeOf, billerOf, dueDateOf, linePurchaseOrderNumber, purchaseOrderNumbersOf,
   type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary, type ReceivingReportCode, type ReceivingReportPrintInfo,
+  type ReceivingPurchaseOrderCandidate,
 } from "../../src/lib/receivingReport.js";
 import type { ApEntryFields } from "./collections.js";
 
@@ -113,6 +114,7 @@ function toClient(doc: ReceivingReportFields & { _id: string }) {
     ...doc,
     documentNumber: doc.documentNumber || doc._id,
     receiveCode: receivingReportCodeOf({ id: doc._id, receiveCode: doc.receiveCode }),
+    extraPurchaseOrders: doc.extraPurchaseOrders ?? [],
     lines: doc.lines ?? [],
     batches: doc.batches ?? [],
     attachments: doc.attachments ?? [],
@@ -127,7 +129,8 @@ function toSummary(doc: ReceivingReportFields & { _id: string }): ReceivingRepor
     receiveCode: full.receiveCode,
     documentNumber: full.documentNumber,
     purchaseOrderId: full.purchaseOrderId,
-    purchaseOrderNumber: full.purchaseOrderNumber,
+    // ใบที่รับหลายใบสั่งซื้อ (2026-09-29) แสดงทุกเลขในคอลัมน์เดียว
+    purchaseOrderNumber: purchaseOrderNumbersOf(full).join(", "),
     vendorName: full.vendorName,
     jobCode: full.jobCode,
     status: full.status,
@@ -163,7 +166,7 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
 
   const receivingReports = await receivingReportsCollection();
   const docs = await receivingReports
-    .find({ isDeleted: false, ...(purchaseOrderId ? { purchaseOrderId } : {}), ...ownership })
+    .find({ isDeleted: false, ...(purchaseOrderId ? claimsPurchaseOrder(purchaseOrderId) : {}), ...ownership })
     .sort({ updatedAt: -1 })
     .toArray();
   res.status(200).json({ receivingReports: docs.map(toSummary) });
@@ -218,7 +221,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งซื้อต้นทาง");
   if (po.status !== "Final") throw new HttpError(400, "ใบสั่งซื้อต้องได้รับอนุมัติก่อนจึงจะรับสินค้าได้");
 
-  const existing = await receivingReports.findOne({ purchaseOrderId, isDeleted: false });
+  // ใบสั่งซื้อที่ถูกเพิ่มเข้าใบรับสินค้าอื่นแล้ว (2026-09-29) ก็นับว่ามีใบรับแล้ว — พาไปเปิดใบนั้น
+  const existing = await receivingReports.findOne({ isDeleted: false, ...claimsPurchaseOrder(purchaseOrderId) });
   if (existing) {
     throw new HttpError(409, `ใบสั่งซื้อนี้มีใบรับสินค้าอยู่แล้ว (${existing.documentNumber || existing._id})`, {
       details: { receivingReportId: existing._id },
@@ -236,19 +240,7 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   if (linesToReceive.length === 0 && (po.lines ?? []).length > 0) {
     throw new HttpError(400, "ทุกรายการในใบสั่งซื้อนี้ถูกยกเลิกแล้ว ไม่มีรายการที่ต้องรับของ");
   }
-  const lines: ReceivingReportLine[] = linesToReceive.map((l) => ({
-    id: newId("rrline"),
-    poLineId: l.id,
-    productId: l.productId || null,
-    productCode: l.productCode ?? "",
-    description: l.description ?? "",
-    subDetails: l.subDetails ?? [],
-    unit: l.unit ?? "",
-    qtyOrdered: l.qty ?? 0,
-    unitPriceOrdered: l.unitPrice ?? 0,
-    discount: l.discount ?? null,
-    discountMode: l.discountMode ?? "percent",
-  }));
+  const lines = snapshotPurchaseOrderLines(linesToReceive);
 
   const counters = await countersCollection();
   const id = await nextReceivingReportId(counters, receiveCode);
@@ -295,6 +287,156 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
   }
   await writeAuditEntry(ctx, "Receiving Report Created", `สร้างใบรับสินค้า ${id} จากใบสั่งซื้อ ${doc.purchaseOrderNumber}`);
   res.status(201).json({ receivingReport: toClient(doc) });
+}
+
+/** ใบรับสินค้าที่ถือใบสั่งซื้อนี้อยู่ — เป็นใบหลัก หรือเป็นใบที่เพิ่มเข้ามา (2026-09-29) */
+function claimsPurchaseOrder(purchaseOrderId: string) {
+  return { $or: [{ purchaseOrderId }, { "extraPurchaseOrders.id": purchaseOrderId }] };
+}
+
+/** บรรทัดของใบสั่งซื้อ → บรรทัดใบรับสินค้า (snapshot) — ใช้ทั้งตอนสร้างใบและตอนเพิ่มใบสั่งซื้อ */
+function snapshotPurchaseOrderLines(
+  poLines: PurchaseOrderFields["lines"],
+  source?: { purchaseOrderId: string; purchaseOrderNumber: string },
+): ReceivingReportLine[] {
+  return (poLines ?? []).map((l) => ({
+    id: newId("rrline"),
+    poLineId: l.id,
+    productId: l.productId || null,
+    productCode: l.productCode ?? "",
+    description: l.description ?? "",
+    subDetails: l.subDetails ?? [],
+    unit: l.unit ?? "",
+    qtyOrdered: l.qty ?? 0,
+    unitPriceOrdered: l.unitPrice ?? 0,
+    discount: l.discount ?? null,
+    discountMode: l.discountMode ?? "percent",
+    ...(source ?? {}),
+  }));
+}
+
+/**
+ * **ใบเดียวรับหลายใบสั่งซื้อ** (2026-09-29 เจ้าของ: *"ใบรับสินค้าสามารถเพิ่ม PO ได้"* — ถามแล้ว: ผู้ขายส่งของของหลาย PO มาพร้อมกัน
+ * บิลเดียว) · ใบสั่งซื้อที่เพิ่มต้อง: อนุมัติแล้ว · ผู้ขายเดียวกับใบสั่งซื้อหลัก (เทียบ `vendorId` ถ้ามีทั้งคู่ ไม่งั้นชื่อ) · มีรายการที่ไม่ถูกยกเลิก ·
+ * ยังไม่อยู่ในใบรับสินค้าใบไหน · ใบนี้ต้องมาจากใบสั่งซื้อ (ใบเปล่าแก้รายการเองได้อยู่แล้ว) และยังเปิดอยู่
+ *
+ * รายการของใบที่เพิ่มต่อท้าย `lines` พร้อม `purchaseOrderId/Number` ของตัวเอง — รับของ/ยกเลิกรอบ/หนี้ ใช้ทางเดิมทั้งหมด
+ * เงื่อนไขหัวใบ (VAT ส่วนลดท้ายบิล เครดิต) ยังเป็นของใบหลัก — แต่ละรอบรับแก้เงื่อนไขบิลเองได้อยู่แล้ว
+ */
+async function loadPrimaryPurchaseOrderFor(doc: ReceivingReportFields & { _id: string }) {
+  if (isBlankReceivingReport(doc)) throw new HttpError(400, "ใบเปล่าเพิ่มใบสั่งซื้อไม่ได้ — ใช้กับใบรับสินค้าที่สร้างจากใบสั่งซื้อ");
+  const po = await (await purchaseOrdersCollection()).findOne({ _id: doc.purchaseOrderId });
+  if (!po) throw new HttpError(400, "ไม่พบใบสั่งซื้อหลักของใบนี้");
+  return po;
+}
+
+function sameVendor(a: PurchaseOrderFields, b: PurchaseOrderFields): boolean {
+  if (a.vendorId && b.vendorId) return a.vendorId === b.vendorId;
+  return (a.vendorName ?? "").trim() === (b.vendorName ?? "").trim();
+}
+
+async function handlePurchaseOrderCandidates(req: ApiRequest, res: ApiResponse, id: string) {
+  const ctx = await requirePermission(req, "receivingReport:view");
+  if (!roleHasPermission(ctx.role, "purchaseOrder:view")) throw new HttpError(403, "Forbidden");
+  const doc = await loadOrThrow(id);
+  const primary = await loadPrimaryPurchaseOrderFor(doc);
+  const vendorClause = primary.vendorId ? { vendorId: primary.vendorId } : { vendorName: primary.vendorName };
+  const pos = await (await purchaseOrdersCollection())
+    .find({ isDeleted: false, status: "Final", ...vendorClause } as never)
+    .sort({ orderDate: -1 })
+    .limit(500)
+    .toArray();
+  const claimed = new Set<string>();
+  for (const rr of await (await receivingReportsCollection()).find(
+    { isDeleted: false, $or: [{ purchaseOrderId: { $in: pos.map((p) => p._id) } }, { "extraPurchaseOrders.id": { $in: pos.map((p) => p._id) } }] },
+    { projection: { purchaseOrderId: 1, extraPurchaseOrders: 1 } },
+  ).toArray()) {
+    claimed.add(rr.purchaseOrderId);
+    for (const x of rr.extraPurchaseOrders ?? []) claimed.add(x.id);
+  }
+  const purchaseOrders: ReceivingPurchaseOrderCandidate[] = pos
+    .filter((p) => !claimed.has(p._id) && (p.lines ?? []).some((l) => !l.cancelled))
+    .map((p) => ({
+      id: p._id, documentNumber: p.documentNumber || p._id, orderDate: p.orderDate ?? "", jobCode: p.jobCode ?? "",
+      lineCount: (p.lines ?? []).filter((l) => !l.cancelled).length,
+    }));
+  res.status(200).json({ purchaseOrders });
+}
+
+async function handleAddPurchaseOrder(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (!roleHasPermission(ctx.role, "purchaseOrder:view")) throw new HttpError(403, "Forbidden");
+  if (doc.status === "Closed") throw new HttpError(400, "ใบนี้ปิดแล้ว — เปิดใบก่อนจึงจะเพิ่มใบสั่งซื้อได้");
+  const primary = await loadPrimaryPurchaseOrderFor(doc);
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const purchaseOrderId = sanitizeShortText(body.purchaseOrderId, "ใบสั่งซื้อ", true);
+  const po = await (await purchaseOrdersCollection()).findOne({ _id: purchaseOrderId });
+  if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งซื้อ");
+  const poNumber = po.documentNumber || po._id;
+  if (po.status !== "Final") throw new HttpError(400, `ใบสั่งซื้อ ${poNumber} ยังไม่ได้รับอนุมัติ`);
+  if (!sameVendor(primary, po)) throw new HttpError(400, `ใบสั่งซื้อ ${poNumber} เป็นของผู้ขายอื่น (${po.vendorName}) — ใบรับสินค้าหนึ่งใบรับได้เฉพาะผู้ขายเดียวกัน`);
+  const active = (po.lines ?? []).filter((l) => !l.cancelled);
+  if (active.length === 0) throw new HttpError(400, `ใบสั่งซื้อ ${poNumber} ไม่มีรายการที่ต้องรับของ`);
+  if ((doc.lines ?? []).length + active.length > MAX_BLANK_LINES) throw new HttpError(400, `จำนวนรายการในใบรับสินค้าต้องไม่เกิน ${MAX_BLANK_LINES} รายการ`);
+
+  const receivingReports = await receivingReportsCollection();
+  const holder = await receivingReports.findOne({ isDeleted: false, ...claimsPurchaseOrder(purchaseOrderId) });
+  if (holder) {
+    throw new HttpError(409, `ใบสั่งซื้อ ${poNumber} อยู่ในใบรับสินค้า ${holder.documentNumber || holder._id} แล้ว`, {
+      details: { receivingReportId: holder._id },
+    });
+  }
+
+  const added = snapshotPurchaseOrderLines(active, { purchaseOrderId, purchaseOrderNumber: poNumber });
+  // ต่อท้ายแบบมีเงื่อนไข — ใบต้องยังเปิดและยังไม่มีใบสั่งซื้อนี้ (กดซ้ำสองแท็บในใบเดียวกันได้ผลครั้งเดียว)
+  const result = await receivingReports.updateOne(
+    { _id: id, isDeleted: false, status: "Open", "extraPurchaseOrders.id": { $ne: purchaseOrderId } },
+    {
+      $push: { extraPurchaseOrders: { id: purchaseOrderId, number: poNumber }, lines: { $each: added } },
+      $set: { updatedAt: nowIso(), updatedBy: ctx.user.id },
+    } as never,
+  );
+  if (result.matchedCount === 0) throw new HttpError(409, "ใบนี้ถูกแก้ไขระหว่างเพิ่มใบสั่งซื้อ กรุณาลองอีกครั้ง");
+  // สองใบรับสินค้าเพิ่มใบสั่งซื้อเดียวกันพร้อมกัน (หรือแข่งกับการสร้างใบจากใบสั่งซื้อนั้น) — ไม่มี index กันข้ามเอกสาร
+  // จึงตรวจซ้ำหลังเขียน ถ้ามีใบอื่นถืออยู่ด้วย ถอนของเราออก (ทั้งคู่อาจถอน ผู้ใช้กดใหม่ได้ ดีกว่าได้สองใบ)
+  const holders = await receivingReports.countDocuments({ isDeleted: false, ...claimsPurchaseOrder(purchaseOrderId) });
+  if (holders > 1) {
+    await pullPurchaseOrder(id, purchaseOrderId, ctx.user.id);
+    throw new HttpError(409, `ใบสั่งซื้อ ${poNumber} ถูกเพิ่มเข้าใบรับสินค้าอื่นพร้อมกัน กรุณาตรวจสอบแล้วลองอีกครั้ง`);
+  }
+  await writeAuditEntry(ctx, "Receiving Report PO Added", `เพิ่มใบสั่งซื้อ ${poNumber} เข้าใบรับสินค้า ${doc.documentNumber || id} (${added.length} รายการ)`);
+  res.status(200).json({ receivingReport: toClient(await loadOrThrow(id)) });
+}
+
+async function pullPurchaseOrder(id: string, purchaseOrderId: string, userId: string): Promise<void> {
+  await (await receivingReportsCollection()).updateOne({ _id: id }, {
+    $pull: { extraPurchaseOrders: { id: purchaseOrderId }, lines: { purchaseOrderId } },
+    $set: { updatedAt: nowIso(), updatedBy: userId },
+  } as never);
+}
+
+/** เอาใบสั่งซื้อที่เพิ่มไว้ออก — ได้เฉพาะเมื่อยังไม่ได้รับของรายการไหนของใบนั้นเลย (รอบที่ลงบัญชีแล้วอ้าง `lineId` อยู่) */
+async function handleRemovePurchaseOrder(req: ApiRequest, res: ApiResponse, id: string, purchaseOrderId: string) {
+  if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+  const extra = (doc.extraPurchaseOrders ?? []).find((p) => p.id === purchaseOrderId);
+  if (!extra) {
+    throw new HttpError(400, purchaseOrderId === doc.purchaseOrderId
+      ? "ใบสั่งซื้อหลักของใบนี้เอาออกไม่ได้"
+      : "ใบสั่งซื้อนี้ไม่ได้อยู่ในใบรับสินค้านี้");
+  }
+  const current = toClient(doc);
+  const received = current.lines.filter((l) => l.purchaseOrderId === purchaseOrderId && receivedQtyOf(current, l.id) > 0);
+  if (received.length > 0) throw new HttpError(400, `รับของของใบสั่งซื้อ ${extra.number} ไปแล้ว — ยกเลิกรอบที่รับก่อนจึงจะเอาออกได้`);
+  await pullPurchaseOrder(id, purchaseOrderId, ctx.user.id);
+  await writeAuditEntry(ctx, "Receiving Report PO Removed", `เอาใบสั่งซื้อ ${extra.number} ออกจากใบรับสินค้า ${doc.documentNumber || id}`);
+  res.status(200).json({ receivingReport: toClient(await loadOrThrow(id)) });
 }
 
 async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
@@ -570,6 +712,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
   }
 
   const totals = batchTotals(batchLines, vatRate, { priceType, discount, discountMode });
+  // ใบที่รับหลายใบสั่งซื้อ (2026-09-29): หนี้รอบนี้อ้างเฉพาะใบสั่งซื้อของรายการที่รับจริงในรอบนี้
+  const batchPoNumbers = [...new Set(batchLines.map((bl) => linePurchaseOrderNumber(current, lineById.get(bl.lineId)!)).filter(Boolean))];
   const dueDate = dueDateOf(invoiceDate, creditDays);
   const batchId = newId("rrbatch");
   const now = nowIso();
@@ -600,7 +744,7 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     receivingReportId: id,
     receivingReportNumber: current.documentNumber,
     batchId,
-    purchaseOrderNumber: current.purchaseOrderNumber,
+    purchaseOrderNumber: batchPoNumbers.join(", "),
     jobCode: current.jobCode,
     // ผู้ออกบิลที่สโตร์กรอกเอง (เช่นซื้อเงินสด) = เจ้าหนี้จริงของรอบนี้ (2026-09-24)
     vendorName: biller.name,
@@ -608,8 +752,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     vendorAddress: biller.address,
     invoiceNumber,
     invoiceDate,
-    description: current.purchaseOrderNumber
-      ? `รับสินค้าตามใบสั่งซื้อ ${current.purchaseOrderNumber}`
+    description: batchPoNumbers.length > 0
+      ? `รับสินค้าตามใบสั่งซื้อ ${batchPoNumbers.join(", ")}`
       : `รับสินค้าตามใบ ${current.documentNumber} (ไม่มีใบสั่งซื้อ)`,
     subtotal: round2(totals.subtotal),
     vatRate: totals.vatRate,
@@ -758,10 +902,15 @@ export async function handleReceivingReport(req: ApiRequest, res: ApiResponse): 
     if (parts[1] === "receipts") return handlePostBatch(req, res, parts[0]);
     if (parts[1] === "print") return handlePrint(req, res, parts[0]);
     if (parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0], attachmentConfig);
+    if (parts[1] === "purchase-orders") {
+      if (req.method === "GET") return handlePurchaseOrderCandidates(req, res, parts[0]);
+      return handleAddPurchaseOrder(req, res, parts[0]);
+    }
   }
   if (parts.length === 3) {
     if (parts[1] === "receipts") return handleDeleteBatch(req, res, parts[0], parts[2]);
     if (parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2], attachmentConfig);
+    if (parts[1] === "purchase-orders") return handleRemovePurchaseOrder(req, res, parts[0], parts[2]);
   }
   throw new HttpError(404, "Not found");
 }

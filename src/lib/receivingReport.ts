@@ -59,6 +59,16 @@ export function isBlankReceivingReport(doc: { purchaseOrderId: string }): boolea
   return !doc.purchaseOrderId;
 }
 
+/** เลขใบสั่งซื้อของบรรทัด — บรรทัดจากใบที่เพิ่มเข้ามามีของตัวเอง ที่เหลือเป็นของใบหลัก (ใบเปล่า = "") */
+export function linePurchaseOrderNumber(doc: Pick<ReceivingReport, "purchaseOrderNumber">, line: Pick<ReceivingReportLine, "purchaseOrderNumber">): string {
+  return line.purchaseOrderNumber || doc.purchaseOrderNumber;
+}
+
+/** เลขใบสั่งซื้อทั้งหมดของใบ (ใบหลักก่อน) — ใช้บนหัวใบ ใบพิมพ์ และคำอธิบายหนี้ */
+export function purchaseOrderNumbersOf(doc: Pick<ReceivingReport, "purchaseOrderNumber" | "extraPurchaseOrders">): string[] {
+  return [doc.purchaseOrderNumber, ...(doc.extraPurchaseOrders ?? []).map((p) => p.number)].filter(Boolean);
+}
+
 /**
  * ประเภทราคา (คำสั่งเจ้าของ 2026-09-24: *"หน้าใบรับสินค้าอยากให้มี dropdown ประเภทราคา ไม่มี Vat, แยก Vat, รวม Vat"*)
  * — ชุดเดียวกับโปรแกรมบัญชีเดิม · `none` = ผู้ขายไม่จด VAT · `exclusive` = ราคายังไม่รวม VAT บวกเพิ่มท้ายบิล ·
@@ -111,6 +121,12 @@ export interface ReceivingReportLine {
   unitPriceOrdered: number;
   discount?: number | null;
   discountMode?: DiscountMode;
+  /**
+   * ใบสั่งซื้อของบรรทัดนี้ **เมื่อมาจากใบสั่งซื้อที่เพิ่มเข้ามาทีหลัง** (2026-09-29 — ใบเดียวรับหลาย PO) · ไม่มี = ใบสั่งซื้อหลักของใบ
+   * (`ReceivingReport.purchaseOrderId`) หรือใบเปล่า · อ่านผ่าน `linePurchaseOrderNumber()`
+   */
+  purchaseOrderId?: string;
+  purchaseOrderNumber?: string;
 }
 
 /** หนึ่งบรรทัดในหนึ่งรอบการรับ */
@@ -171,6 +187,12 @@ export interface ReceivingReport {
   documentNumber: string;
   purchaseOrderId: string;
   purchaseOrderNumber: string;
+  /**
+   * **ใบสั่งซื้อที่เพิ่มเข้ามาในใบนี้** (2026-09-29 เจ้าของ: *"ใบรับสินค้าสามารถเพิ่ม PO ได้"* → ใบเดียวรับหลาย PO) — ผู้ขายเดียวกับใบหลัก
+   * รายการค้างรับของแต่ละใบต่อท้าย `lines` (บรรทัดมี `purchaseOrderId` ของตัวเอง) · ใบสั่งซื้อหนึ่งใบอยู่ได้ในใบรับสินค้าใบเดียว
+   * (เป็นใบหลักหรือใบที่เพิ่มก็ตาม) · ใบเก่าไม่มีฟิลด์ = ไม่มีใบเพิ่ม
+   */
+  extraPurchaseOrders?: { id: string; number: string }[];
   jobCode: string;
   vendorName: string;
   vendorTaxId: string;
@@ -434,6 +456,40 @@ export async function postReceivingBatch(id: string, batch: ReceiveBatchInput): 
 export async function deleteReceivingBatch(id: string, batchId: string): Promise<ReceivingReport> {
   const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>(
     `/receiving-reports/${encodeURIComponent(id)}/receipts/${encodeURIComponent(batchId)}`,
+    { method: "DELETE" },
+  );
+  return receivingReport;
+}
+
+/** ใบสั่งซื้อที่เพิ่มเข้าใบรับสินค้านี้ได้ — อนุมัติแล้ว ผู้ขายเดียวกับใบหลัก และยังไม่อยู่ในใบรับสินค้าใบไหน (2026-09-29) */
+export interface ReceivingPurchaseOrderCandidate {
+  id: string;
+  documentNumber: string;
+  orderDate: string;
+  jobCode: string;
+  lineCount: number;
+}
+
+export async function fetchPurchaseOrderCandidates(id: string): Promise<ReceivingPurchaseOrderCandidate[]> {
+  const { purchaseOrders } = await apiFetch<{ purchaseOrders: ReceivingPurchaseOrderCandidate[] }>(
+    `/receiving-reports/${encodeURIComponent(id)}/purchase-orders`,
+  );
+  return purchaseOrders;
+}
+
+/** เพิ่มใบสั่งซื้อเข้าใบรับสินค้า — รายการ (ที่ไม่ถูกยกเลิก) ของใบนั้นต่อท้ายใบนี้ */
+export async function addPurchaseOrderToReceivingReport(id: string, purchaseOrderId: string): Promise<ReceivingReport> {
+  const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>(
+    `/receiving-reports/${encodeURIComponent(id)}/purchase-orders`,
+    { method: "POST", body: JSON.stringify({ purchaseOrderId }) },
+  );
+  return receivingReport;
+}
+
+/** เอาใบสั่งซื้อที่เพิ่มไว้ออก — ได้เฉพาะเมื่อยังไม่ได้รับของรายการไหนของใบนั้นเลย */
+export async function removePurchaseOrderFromReceivingReport(id: string, purchaseOrderId: string): Promise<ReceivingReport> {
+  const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>(
+    `/receiving-reports/${encodeURIComponent(id)}/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
     { method: "DELETE" },
   );
   return receivingReport;

@@ -464,3 +464,108 @@ describe("ใบรับสินค้า: ประเภทราคา · �
     expect(ap).toMatchObject({ subtotal: 500, vatAmt: 0, total: 500, vatRate: null });
   });
 });
+
+/**
+ * ใบเดียวรับหลาย PO (2026-09-29 เจ้าของ: *"ใบรับสินค้าสามารถเพิ่ม PO ได้"*) — `POST/DELETE /:id/purchase-orders`
+ * ผู้ขายเดียวกัน · ใบสั่งซื้อหนึ่งใบอยู่ได้ในใบรับสินค้าใบเดียว · หนี้ของรอบอ้างใบสั่งซื้อของรายการที่รับจริง
+ */
+describe("ใบรับสินค้า: เพิ่มใบสั่งซื้อ (ใบเดียวรับหลาย PO)", () => {
+  let vendorId = "";
+  let otherVendorId = "";
+  let rrMain = "";
+  let poA = "";
+  let poB = "";
+  let poOther = "";
+
+  async function approvedVendor(name: string, code: string): Promise<string> {
+    const v = await api("POST", "/api/vendors", { name, code, taxId: `01055${code.replace(/\D/g, "").padStart(8, "0")}` });
+    expect(v.status, JSON.stringify(v.body)).toBe(201);
+    expect((await api("POST", `/api/vendors/${v.body.vendor.id}/submit-approval`)).status).toBe(200);
+    expect((await api("POST", `/api/vendors/${v.body.vendor.id}/approve`)).status).toBe(200);
+    return v.body.vendor.id;
+  }
+  async function approvedPo(vId: string, vName: string, qty: number): Promise<string> {
+    const id = (await api("POST", "/api/purchase-orders", {})).body.purchaseOrder.id;
+    const p = await api("PATCH", `/api/purchase-orders/${id}`, { vendorId: vId, vendorName: vName, vatRate: 7, lines: [{ productId, qty, unitPrice: 50 }] });
+    expect(p.status, JSON.stringify(p.body)).toBe(200);
+    expect((await api("POST", `/api/purchase-orders/${id}/submit-approval`)).status).toBe(200);
+    expect((await api("POST", `/api/purchase-orders/${id}/approve`)).status).toBe(200);
+    return id;
+  }
+
+  beforeAll(async () => {
+    vendorId = await approvedVendor("บริษัท หลายใบ จำกัด", "W-0301");
+    otherVendorId = await approvedVendor("บริษัท อื่น จำกัด", "W-0302");
+    const main = await approvedPo(vendorId, "บริษัท หลายใบ จำกัด", 2);
+    poA = await approvedPo(vendorId, "บริษัท หลายใบ จำกัด", 3);
+    poB = await approvedPo(vendorId, "บริษัท หลายใบ จำกัด", 4);
+    poOther = await approvedPo(otherVendorId, "บริษัท อื่น จำกัด", 1);
+    const rr = await api("POST", "/api/receiving-reports", { purchaseOrderId: main });
+    expect(rr.status, JSON.stringify(rr.body)).toBe(201);
+    rrMain = rr.body.receivingReport.id;
+  });
+
+  it("รายการใบสั่งซื้อที่เพิ่มได้ = ผู้ขายเดียวกัน อนุมัติแล้ว ยังไม่มีใบรับ (ไม่รวมใบหลักและของผู้ขายอื่น)", async () => {
+    const res = await api("GET", `/api/receiving-reports/${rrMain}/purchase-orders`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const ids = res.body.purchaseOrders.map((p: { id: string }) => p.id).sort();
+    expect(ids).toEqual([poA, poB].sort());
+  });
+
+  it("เพิ่มใบสั่งซื้อ → รายการต่อท้ายพร้อมเลข PO ของตัวเอง · ผู้ขายอื่น 400 · เพิ่มซ้ำ 409", async () => {
+    const res = await api("POST", `/api/receiving-reports/${rrMain}/purchase-orders`, { purchaseOrderId: poA });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const doc = res.body.receivingReport;
+    expect(doc.extraPurchaseOrders).toHaveLength(1);
+    expect(doc.extraPurchaseOrders[0].id).toBe(poA);
+    expect(doc.lines).toHaveLength(2);
+    expect(doc.lines[1]).toMatchObject({ purchaseOrderId: poA, qtyOrdered: 3, productId });
+    expect((await api("POST", `/api/receiving-reports/${rrMain}/purchase-orders`, { purchaseOrderId: poOther })).status).toBe(400);
+    const again = await api("POST", `/api/receiving-reports/${rrMain}/purchase-orders`, { purchaseOrderId: poA });
+    expect(again.status).toBe(409);
+  });
+
+  it("ใบสั่งซื้อที่ถูกเพิ่มแล้ว: สร้างใบรับจากมันได้ 409 พาไปใบเดิม · ค้นด้วย ?purchaseOrderId เจอใบนี้ · ย้อนอนุมัติ PO ไม่ได้", async () => {
+    const create = await api("POST", "/api/receiving-reports", { purchaseOrderId: poA });
+    expect(create.status).toBe(409);
+    expect(create.body.receivingReportId).toBe(rrMain);
+    const list = await api("GET", `/api/receiving-reports?purchaseOrderId=${poA}`);
+    expect(list.body.receivingReports.map((r: { id: string }) => r.id)).toEqual([rrMain]);
+    expect((await api("POST", `/api/purchase-orders/${poA}/revert-approval`, {})).status).toBe(400);
+  });
+
+  it("รับของรวมสองใบสั่งซื้อในรอบเดียว — หนี้อ้างทั้งสองเลข · ใบปิดเมื่อรับครบทุกใบ", async () => {
+    const doc = (await api("GET", `/api/receiving-reports/${rrMain}`)).body.receivingReport;
+    const res = await api("POST", `/api/receiving-reports/${rrMain}/receipts`, {
+      invoiceNumber: "INV-MULTI-1", vatRate: 7,
+      lines: doc.lines.map((l: { id: string; qtyOrdered: number }) => ({ lineId: l.id, qty: l.qtyOrdered, unitPrice: 50 })),
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.receivingReport.status).toBe("Closed");
+    const ap = await client.db("tcs_erp").collection("ap_entries").findOne({ invoiceNumber: "INV-MULTI-1" });
+    const numbers = (ap?.purchaseOrderNumber as string).split(", ");
+    expect(numbers).toHaveLength(2);
+    expect(ap?.description).toContain(numbers[1]);
+  });
+
+  it("เอาใบสั่งซื้อที่รับของแล้วออกไม่ได้ · ใบหลักเอาออกไม่ได้ · ยังไม่รับเอาออกได้แล้วใบสั่งซื้อกลับไปเปิดใบรับเองได้", async () => {
+    expect((await api("DELETE", `/api/receiving-reports/${rrMain}/purchase-orders/${poA}`)).status).toBe(400);
+    const doc = (await api("GET", `/api/receiving-reports/${rrMain}`)).body.receivingReport;
+    expect((await api("DELETE", `/api/receiving-reports/${rrMain}/purchase-orders/${doc.purchaseOrderId}`)).status).toBe(400);
+
+    // ใบรับอีกใบของผู้ขายเดียวกัน: เพิ่ม poB แล้วเอาออก
+    const main2 = await approvedPo(vendorId, "บริษัท หลายใบ จำกัด", 1);
+    const rr2 = (await api("POST", "/api/receiving-reports", { purchaseOrderId: main2 })).body.receivingReport.id;
+    expect((await api("POST", `/api/receiving-reports/${rr2}/purchase-orders`, { purchaseOrderId: poB })).status).toBe(200);
+    const removed = await api("DELETE", `/api/receiving-reports/${rr2}/purchase-orders/${poB}`);
+    expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+    expect(removed.body.receivingReport.extraPurchaseOrders).toEqual([]);
+    expect(removed.body.receivingReport.lines).toHaveLength(1);
+    expect((await api("POST", "/api/receiving-reports", { purchaseOrderId: poB })).status).toBe(201);
+  });
+
+  it("ใบเปล่าเพิ่มใบสั่งซื้อไม่ได้", async () => {
+    const blank = (await api("POST", "/api/receiving-reports", { receiveCode: "RR" })).body.receivingReport.id;
+    expect((await api("POST", `/api/receiving-reports/${blank}/purchase-orders`, { purchaseOrderId: poOther })).status).toBe(400);
+  });
+});

@@ -60,7 +60,7 @@ async function sourceIdsMatching(rx: RegExp): Promise<string[]> {
       { projection: { _id: 1 } },
     ).limit(MAX_SOURCE_MATCHES).toArray()),
     receivingReportsCollection().then((c) => c.find(
-      { $or: [{ purchaseOrderNumber: rx }, { vendorName: rx }, { jobCode: rx }, { documentNumber: rx }] },
+      { $or: [{ purchaseOrderNumber: rx }, { "extraPurchaseOrders.number": rx }, { vendorName: rx }, { jobCode: rx }, { documentNumber: rx }] },
       { projection: { _id: 1 } },
     ).limit(MAX_SOURCE_MATCHES).toArray()),
     purchaseRequestsCollection().then((c) => c.find({ jobCode: rx }, { projection: { _id: 1 } }).limit(MAX_SOURCE_MATCHES).toArray()),
@@ -104,7 +104,8 @@ async function enrich(rows: (StockMovementFields & { _id: ObjectId })[]): Promis
   }
   for (const r of rrs) {
     links.set(String(r._id), {
-      purchaseOrderNumber: r.purchaseOrderNumber || undefined,
+      // ใบที่รับหลายใบสั่งซื้อ (2026-09-29) แสดงทุกเลข
+      purchaseOrderNumber: [r.purchaseOrderNumber, ...(r.extraPurchaseOrders ?? []).map((x) => x.number)].filter(Boolean).join(", ") || undefined,
       vendorName: r.vendorName || undefined,
       jobCode: r.jobCode || undefined,
       code: r.receiveCode ?? String(r._id).split("-")[0],
