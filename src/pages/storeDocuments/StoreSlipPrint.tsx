@@ -23,6 +23,11 @@ export interface StoreSlipRow {
   qty: number;
   unit: string;
   unitCost: number;
+  /**
+   * บรรทัดชิ้นส่วนของสินค้าชุดที่อยู่บรรทัดก่อนหน้า (2026-09-29 — เจ้าของเลือกโชว์ทั้งชุดและชิ้นส่วน) · ไม่มีลำดับที่ ไม่มีราคา
+   * ไม่นับในยอดรวม (มูลค่าอยู่ที่บรรทัดชุดแล้ว)
+   */
+  child?: boolean;
 }
 
 export interface StoreSlipProps {
@@ -65,7 +70,11 @@ export function StoreSlipPrint({ variant, companyName, title, jobCode, documentN
   const pages: StoreSlipRow[][] = [];
   for (let i = 0; i < rows.length; i += STORE_SLIP_ROWS_PER_PAGE) pages.push(rows.slice(i, i + STORE_SLIP_ROWS_PER_PAGE));
   if (pages.length === 0) pages.push([]);
-  const total = rows.reduce((sum, r) => sum + round2(r.qty * r.unitCost), 0);
+  const total = rows.reduce((sum, r) => sum + (r.child ? 0 : round2(r.qty * r.unitCost)), 0);
+  // ลำดับที่นับเฉพาะบรรทัดหลัก — บรรทัดชิ้นส่วนของชุดไม่มีลำดับ
+  const seqByKey = new Map<string, number>();
+  let seq = 0;
+  for (const r of rows) if (!r.child) seqByKey.set(r.key, ++seq);
   const colLeft = (i: number) => COLS.slice(0, i).reduce((a, b) => a + b, 0);
 
   // เส้นตั้งของคอลัมน์ วาดเป็นเส้นเต็มความสูงกล่อง ไม่ใช่เส้นขอบเซลล์ — ฟอร์มเดิมลากยาวถึงก้นตารางแม้บรรทัดว่าง
@@ -134,14 +143,14 @@ export function StoreSlipPrint({ variant, companyName, title, jobCode, documentN
                   });
                   return (
                     <div key={r.key}>
-                      <div style={cell(0, { textAlign: "center" })}>{pageIdx * STORE_SLIP_ROWS_PER_PAGE + i + 1}</div>
-                      <div style={cell(1, { paddingLeft: "3mm" })}>{`${r.code} ${r.name}`}</div>
+                      <div style={cell(0, { textAlign: "center" })}>{r.child ? "" : seqByKey.get(r.key)}</div>
+                      <div style={cell(1, { paddingLeft: r.child ? "8mm" : "3mm" })}>{r.child ? `- ${r.name}` : `${r.code} ${r.name}`}</div>
                       <div style={cell(2, { display: "flex" })}>
                         <span style={{ width: "30.5mm", textAlign: "right", flexShrink: 0 }}>{money(r.qty)}</span>
                         <span style={{ marginLeft: "1.6mm", overflow: "hidden" }}>{r.unit}</span>
                       </div>
-                      <div style={cell(3, { textAlign: "right", paddingRight: "3mm" })}>{money(r.unitCost)}</div>
-                      <div style={cell(4, { textAlign: "right", paddingRight: "3.2mm" })}>{money(round2(r.qty * r.unitCost))}</div>
+                      <div style={cell(3, { textAlign: "right", paddingRight: "3mm" })}>{r.child ? "" : money(r.unitCost)}</div>
+                      <div style={cell(4, { textAlign: "right", paddingRight: "3.2mm" })}>{r.child ? "" : money(round2(r.qty * r.unitCost))}</div>
                     </div>
                   );
                 })}

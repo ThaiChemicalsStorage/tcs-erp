@@ -15,7 +15,7 @@ import type { DocumentAttachment } from "../../src/lib/documentAttachments.js";
 import { loadPendingProjectItemsOrThrow, loadProjectOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, notifyUser, PURCHASING_DEPARTMENT_NAMES, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
-import { applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf } from "./stockHandler.js";
+import { applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf, stockQtyByProduct } from "./stockHandler.js";
 import { purchasedPrLineIds } from "./purchaseOrderHandler.js";
 import { orderedPrLineIdOf } from "../../src/lib/purchaseOrder.js";
 import { nowIso, newId } from "../../src/lib/products.js";
@@ -375,11 +375,8 @@ async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
  * บรรทัดที่พิมพ์เอง (ไม่มี `productId`) ไม่มียอดคงเหลือให้ดู — สโตร์ต้องตั้งรหัสสินค้าก่อนถึงจะจ่ายได้
  */
 async function stockByProductFor(lines: PurchaseRequestLine[]): Promise<Record<string, number>> {
-  const ids = [...new Set(lines.map((l) => l.productId).filter((pid) => pid && /^[0-9a-fA-F]{24}$/.test(pid)))];
-  if (ids.length === 0) return {};
-  const products = await productsCollection();
-  const docs = await products.find({ _id: { $in: ids.map((pid) => toObjectId(pid)) } }, { projection: { stockQty: 1 } }).toArray();
-  return Object.fromEntries(docs.map((p) => [p._id.toString(), p.stockQty ?? 0]));
+  // สินค้าชุด = จำนวนชุดที่เบิกได้จากชิ้นส่วน (2026-09-29)
+  return stockQtyByProduct(lines.map((l) => l.productId ?? "").filter((pid) => pid && /^[0-9a-fA-F]{24}$/.test(pid)));
 }
 
 /** ด่านร่วมของทุก route ฝั่งสโตร์ — ต้องเป็นใบที่อนุมัติแล้วเท่านั้น */
@@ -838,13 +835,13 @@ async function handleStoreIssue(req: ApiRequest, res: ApiResponse, id: string) {
   const seq = previous.length > 0 ? Math.max(...previous.map((b) => b.seq)) + 1 : 1;
   const stockMovementIds: string[] = [];
   for (const [productId, qty] of totals) {
-    const { movement } = await applyStockMovement({
+    const { movements } = await applyStockMovement({
       productId, kind: "deduct", delta: -qty,
       reason: `จ่ายของตามใบขอซื้อ ${id} (รอบที่ ${seq})`,
       sourceType: "purchase_request", sourceId: id, sourceLabel: id,
       userId: ctx.user.id,
     });
-    stockMovementIds.push(movement.id);
+    stockMovementIds.push(...movements.map((m) => m.id)); // สินค้าชุด (2026-09-29) = หนึ่งแถวต่อชิ้นส่วน
   }
 
   const now = nowIso();

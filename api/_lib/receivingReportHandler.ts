@@ -10,7 +10,7 @@ import {
   toObjectId, withStringId, type ReceivingReportFields, type CounterFields, type PurchaseOrderFields,
 } from "./collections.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
-import { applyStockMovement } from "./stockHandler.js";
+import { applyStockMovement, assertNoKits } from "./stockHandler.js";
 import { vendorBillHoldingEntry } from "./vendorBillHandler.js";
 import {
   handleAttachmentUpload, handleAttachmentDelete, handleAttachmentDownload, type AttachmentConfig,
@@ -744,6 +744,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     const products = await productsCollection();
     const found = await products.countDocuments({ _id: { $in: productIds.map((pid) => toObjectId(pid)) } });
     if (found !== productIds.length) throw new HttpError(400, "มีสินค้าในใบนี้ที่ถูกลบไปแล้ว — แก้ไขใบสั่งซื้อหรือรับเป็นรายการพิมพ์เองแทน");
+    // สินค้าชุด (2026-09-29) ไม่มีสต๊อกของตัวเอง — เจ้าของเลือก "รับเข้าแบบแยกชิ้น"
+    await assertNoKits(productIds, "รับเข้า");
   }
 
   const totals = batchTotals(batchLines, vatRate, { priceType, discount, discountMode });

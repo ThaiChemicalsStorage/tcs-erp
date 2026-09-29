@@ -67,6 +67,15 @@ export interface Product {
    * (`POST /api/tool-holdings/tools/:id/stock`) ยังลงบัญชีเดินสะพัดทุกครั้ง · `isTool` เป็น true เสมอ
    */
   commonTool?: boolean;
+  /**
+   * **สูตรชุด** (2026-09-29 เจ้าของ: ชุดน๊อต M6x30 = สกรู 1 + แหวน 2 + หัวน็อต 1 — *"ถ้าเบิกน็อตชุดไปแล้วจะตัดพวกนี้ออกไป"*) —
+   * มีรายการ = สินค้าชุด: **ไม่มีสต๊อกของตัวเอง** · เบิก/จ่าย/คืนชุดที่ไหนก็ตาม `applyStockMovement()` ตัดหรือคืนชิ้นส่วนตามสูตรแทน ·
+   * รับเข้า/ปรับยอดเป็นชุดไม่ได้ (รับเข้าเป็นชิ้นส่วน) · `stockQty` ที่ API ส่งออกของสินค้าชุด = **จำนวนชุดที่เบิกได้** คิดจากชิ้นส่วน
+   * (`kitAvailableQty()`) ไม่ใช่ค่าในฐานข้อมูล (ซึ่งเป็น 0 เสมอ) · ชื่อ/รหัส/หน่วยของชิ้นส่วนเป็น snapshot ตอนบันทึกสูตร ·
+   * **สูตรล็อกเมื่อชุดถูกเบิกแล้ว** (เจ้าของเลือก — คืนของใช้สูตรปัจจุบัน ถ้าแก้สูตรทีหลัง ของที่คืนจะไม่ตรงกับที่จ่ายไป) ·
+   * ตั้งสูตรได้เมื่อสต๊อกของตัวชุดเป็น 0 · ชิ้นส่วนเป็นชุดซ้อนไม่ได้ · สินค้าชุดเป็นเครื่องมือไม่ได้
+   */
+  kitComponents?: KitComponent[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -95,6 +104,56 @@ export interface ProductFields {
   specifications?: string;
   /** "เครื่องมือ — ต้องคืน" ดู `Product.isTool` */
   isTool?: boolean;
+  /** สูตรชุด (2026-09-29) — เซิร์ฟเวอร์เติมรหัส/ชื่อ/หน่วยจากทะเบียนเอง · ว่าง = ไม่ใช่ชุด · ดู `Product.kitComponents` */
+  kitComponents?: { productId: string; qty: number }[];
+}
+
+/** หนึ่งชิ้นส่วนในสูตรชุด — `qty` ต่อหนึ่งชุด */
+export interface KitComponent {
+  productId: string;
+  code: string;
+  name: string;
+  unit: string;
+  qty: number;
+}
+
+export function isKitProduct(p: { kitComponents?: KitComponent[] } | null | undefined): boolean {
+  return (p?.kitComponents?.length ?? 0) > 0;
+}
+
+/** จำนวนชุดที่เบิกได้จากสต๊อกชิ้นส่วน — ชิ้นส่วนที่ขาดที่สุดเป็นตัวกำหนด (ไม่มีชิ้นส่วน = 0) */
+export function kitAvailableQty(components: KitComponent[], stockById: ReadonlyMap<string, number> | Record<string, number>): number {
+  if (components.length === 0) return 0;
+  const stockOf = (id: string) => (stockById instanceof Map ? stockById.get(id) : (stockById as Record<string, number>)[id]) ?? 0;
+  return Math.max(0, Math.floor(Math.min(...components.map((c) => (c.qty > 0 ? stockOf(c.productId) / c.qty : 0))) + 1e-9));
+}
+
+/** ข้อความแตกชิ้นส่วน "สกรู M6x30 ×10 · แหวน M6 ×20" ของชุดจำนวน `kitQty` — ใช้ทั้งหน้าจอและใบพิมพ์ */
+export function kitBreakdownText(components: KitComponent[], kitQty: number): string {
+  return components.map((c) => `${c.name || c.code} ×${(Math.round(c.qty * kitQty * 10000) / 10000).toLocaleString()}${c.unit ? ` ${c.unit}` : ""}`).join(" · ");
+}
+
+/** สินค้าชุดทั้งหมดกับสูตร — เปิดให้ทุกคนที่ล็อกอิน (เอกสารทุกใบต้องแตกชิ้นส่วนให้ดูได้ แม้ผู้ใช้ไม่มีสิทธิ์ดูคลังสินค้า) */
+export interface KitRecipe {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  components: KitComponent[];
+}
+
+let kitCache: Promise<Map<string, KitRecipe>> | null = null;
+/** โหลดครั้งเดียวต่อหน้าเว็บ — `resetKitRecipeCache()` หลังบันทึกสูตร */
+export function fetchKitRecipes(): Promise<Map<string, KitRecipe>> {
+  if (!kitCache) {
+    kitCache = apiFetch<{ kits: KitRecipe[] }>("/products/kits")
+      .then(({ kits }) => new Map(kits.map((k) => [k.id, k])))
+      .catch((err) => { kitCache = null; throw err; });
+  }
+  return kitCache;
+}
+export function resetKitRecipeCache(): void {
+  kitCache = null;
 }
 
 // ดึงรายการสินค้าทั้งหมดจากเซิร์ฟเวอร์

@@ -159,6 +159,8 @@ export async function handleStockHistory(req: ApiRequest, res: ApiResponse): Pro
     clauses.push({
       $or: [
         { productCode: rx }, { productName: rx }, { sourceLabel: rx }, { reason: rx },
+        // ค้นชื่อ/รหัสสินค้าชุดเจอแถวชิ้นส่วนที่ถูกตัดแทนชุดนั้น (2026-09-29)
+        { kitProductCode: rx }, { kitProductName: rx },
         { departmentName: rx }, { teamName: rx },
         ...(sourceIds.length ? [{ sourceId: { $in: sourceIds } }] : []),
       ],

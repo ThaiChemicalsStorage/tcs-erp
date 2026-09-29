@@ -26,6 +26,7 @@ import {
 import { PurchaseOrderPrintDocument } from "./PurchaseOrderPrintDocument";
 import { createReceivingReport, fetchReceivingReportsByPurchaseOrder, type ReceivingReportCode } from "../../lib/receivingReport";
 import { ReceiveCodeDialog } from "../receivingReport/ReceivingReportCreateDialog";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 const cellCls = "px-2 py-1.5 text-sm bg-transparent border border-transparent rounded focus:bg-secondary focus:border-[#c9a84c]/50 outline-none w-full transition-colors disabled:opacity-60";
@@ -78,6 +79,8 @@ export function PurchaseOrderDocument({
   showToast: (message: string) => void;
 }) {
   const { t } = useI18n();
+  // สินค้าชุด (2026-09-29) รับเข้าเป็นชุดไม่ได้ — เตือนตั้งแต่บรรทัด ให้สั่งซื้อ/รับเข้าเป็นชิ้นส่วน
+  const kits = useKitRecipes();
   /**
    * รายชื่อผู้อนุมัติที่เลือกได้ (2026-09-21) — เอาผู้ใช้ที่ยัง active ทั้งหมด **ไม่กรองด้วยสิทธิ์**
    * ฝั่งหน้าจอ เพราะหน้านี้ไม่มีตารางบทบาทอยู่ในมือ และเจ้าของเลือกไว้แล้วว่าการเลือกคนไม่ใช่การ
@@ -509,6 +512,7 @@ export function PurchaseOrderDocument({
                       <td className="px-1 py-1"><input className={cellCls} disabled={!editable} value={l.productCode} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
                       <td className="px-1 py-1">
                         <input className={`${cellCls} ${l.cancelled ? "line-through" : ""}`} disabled={!editable} value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} />
+                        {kits.has(l.productId ?? "") && <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>}
                         {/* ช่องเหตุผลโผล่เฉพาะตอนติ๊กยกเลิก — เซิร์ฟเวอร์ตอบ 400 ถ้าเว้นว่าง */}
                         {l.cancelled && (
                           <input

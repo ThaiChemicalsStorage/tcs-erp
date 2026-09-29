@@ -917,6 +917,12 @@ export interface StockMovementFields {
   teamName?: string;
   workTypeCode?: string;
   workTypeName?: string;
+  /** ตัด/คืนแทนสินค้าชุด (2026-09-29) — ดู `StockMovement.kitProductId` ใน src/lib/stock.ts */
+  kitProductId?: string;
+  kitProductCode?: string;
+  kitProductName?: string;
+  kitQty?: number;
+  kitGroupId?: string;
   createdAt: string;
   createdBy: string;
 }

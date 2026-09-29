@@ -811,7 +811,7 @@ async function handleStockDeduction(req: ApiRequest, res: ApiResponse, id: strin
 
   const movements: (StockMovementFields & { id: string })[] = [];
   for (const line of lines) {
-    const { movement } = await applyStockMovement({
+    const { movements: written } = await applyStockMovement({
       productId: line.productId,
       kind: "deduct",
       delta: -line.qty,
@@ -821,7 +821,7 @@ async function handleStockDeduction(req: ApiRequest, res: ApiResponse, id: strin
       sourceLabel: doc.docNo,
       userId: ctx.user.id,
     });
-    movements.push(movement);
+    movements.push(...written); // สินค้าชุด (2026-09-29) เขียนหลายแถว — หนึ่งแถวต่อชิ้นส่วน
   }
 
   if (!doc.stockDeducted) {

@@ -39,6 +39,8 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { KitBreakdown } from "../../components/KitBreakdown";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
@@ -103,6 +105,8 @@ export function PurchaseRequestDocument({
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
+  // สินค้าชุด (2026-09-29) — แตกชิ้นส่วนใต้ชื่อชุด (จ่ายจากคลังตัดที่ชิ้นส่วน)
+  const kits = useKitRecipes();
   const [doc, setDoc] = useState<PurchaseRequest | null>(null);
   const [draft, setDraft] = useState<PurchaseRequest | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -869,7 +873,10 @@ export function PurchaseRequestDocument({
                         <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{line.productCode}</td>
                         <td className="px-3 py-2 min-w-[200px]">
                           {isCatalogLine ? (
-                            <span className="text-xs text-foreground">{line.description}</span>
+                            <span className="text-xs text-foreground">
+                              {line.description}
+                              <KitBreakdown productId={line.productId} qty={line.qtyRequested} kits={kits} />
+                            </span>
                           ) : (
                             <input disabled={!editable} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
                               placeholder={t("purchaseRequestDoc.freeDescriptionPlaceholder")}
@@ -1029,6 +1036,7 @@ export function PurchaseRequestDocument({
                       <tr key={line.id} className="border-b border-border/50">
                         <td className="px-3 py-2 text-xs text-foreground">
                           {line.description}
+                          <KitBreakdown productId={line.productId} qty={Number(issueQty[line.id] ?? "") || null} kits={kits} />
                           {!line.productId && (
                             <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 whitespace-nowrap">
                               {t("purchaseRequestDoc.store.noProductCode")}

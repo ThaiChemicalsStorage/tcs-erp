@@ -329,6 +329,12 @@ function AllMovements({ onTrace, onPrint }: { onTrace: (productId: string) => vo
                     <td className="px-3 py-3 text-xs max-w-[220px]">
                       <button onClick={() => onTrace(m.productId)} className="text-left text-foreground font-medium hover:text-[#866d28] hover:underline">{m.productName}</button>
                       <span className="block font-mono text-muted-foreground">{m.productCode}</span>
+                      {/* ตัด/คืนแทนสินค้าชุด (2026-09-29) — เจ้าของเลือกโชว์ทั้งชุดและชิ้นส่วน */}
+                      {m.kitProductId && (
+                        <span className="block mt-0.5 text-[#866d28]">
+                          {t("kit.fromKit").replace("{kit}", m.kitProductName || m.kitProductCode || "").replace("{n}", (m.kitQty ?? 0).toLocaleString())}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3"><KindPill kind={m.kind} /></td>
                     <td className={`px-3 py-3 text-xs font-mono text-right whitespace-nowrap font-semibold ${m.delta >= 0 ? "text-[#207e52]" : "text-[#c23f3f]"}`}>{signed(m.delta)}</td>

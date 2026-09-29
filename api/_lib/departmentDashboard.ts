@@ -1,3 +1,4 @@
+import { kitAvailableQty } from "../../src/lib/products.js";
 import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
@@ -304,10 +305,13 @@ async function inventoryBlock({ ctx, has, from, to, today, months, withDetail }:
 
   if (canStock) {
     tasks.push((async () => {
-      const products = await (await productsCollection()).find(
+      const raw = await (await productsCollection()).find(
         { archived: { $ne: true } } as never,
-        { projection: { code: 1, name: 1, unit: 1, stockQty: 1, avgCost: 1, reorderPoint: 1, categoryId: 1 } },
+        { projection: { code: 1, name: 1, unit: 1, stockQty: 1, avgCost: 1, reorderPoint: 1, categoryId: 1, kitComponents: 1 } },
       ).toArray();
+      // สินค้าชุด (2026-09-29) ไม่มีสต๊อกของตัวเอง — ยอดคือจำนวนชุดที่เบิกได้จากชิ้นส่วน (มูลค่ายังเป็น 0 เพราะ avgCost ของชุดเป็น 0 ไม่นับซ้ำ)
+      const stockById = new Map(raw.map((p) => [p._id.toString(), p.stockQty ?? 0]));
+      const products = raw.map((p) => ((p.kitComponents?.length ?? 0) > 0 ? { ...p, stockQty: kitAvailableQty(p.kitComponents!, stockById) } : p));
       const valueOf = (p: (typeof products)[number]) => stockValueOf({ stockQty: p.stockQty ?? 0, avgCost: p.avgCost });
       summary.stockValue = round2(products.reduce((sum, p) => sum + valueOf(p), 0));
       // จุดเตือน 0 หรือไม่มีค่า = ปิดการเตือนของสินค้าตัวนั้น — กติกาเดียวกับหน้าสต๊อก (StockPage.tsx)

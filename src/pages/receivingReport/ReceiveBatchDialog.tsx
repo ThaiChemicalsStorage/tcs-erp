@@ -9,6 +9,7 @@ import {
   outstandingQtyOf, batchTotals, priceTypeOf, dueDateOf, billerOf, RECEIVING_PRICE_TYPES, RECEIVING_PRICE_TYPE_LABEL_KEY,
   batchLineDiscountAmt, defaultBatchLineDiscount,
 } from "../../lib/receivingReport";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors";
 const cellCls = "w-24 px-2 py-1.5 text-sm text-right bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 transition-colors";
@@ -31,6 +32,8 @@ export function ReceiveBatchDialog({
   onSubmit: (batch: ReceiveBatchInput) => void;
 }) {
   const { t } = useI18n();
+  // สินค้าชุด (2026-09-29) รับเข้าเป็นชุดไม่ได้ — เตือนตั้งแต่บรรทัด ให้สั่งซื้อ/รับเข้าเป็นชิ้นส่วน
+  const kits = useKitRecipes();
   const today = new Date().toISOString().slice(0, 10);
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
@@ -209,6 +212,7 @@ export function ReceiveBatchDialog({
                       <td className="px-3 py-2 text-sm text-foreground">
                         <span className="font-mono text-xs text-muted-foreground mr-2">{line.productCode || "—"}</span>
                         {line.description}
+                        {kits.has(line.productId ?? "") && <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{line.unit || "—"}</td>
                       <td className="px-3 py-2 text-xs font-mono text-right text-muted-foreground">{fmt(outstanding)}</td>

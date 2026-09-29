@@ -1,7 +1,8 @@
 import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
-import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
-import { productsCollection, categoriesCollection, auditLogCollection, toObjectId, withStringId, type ProductFields } from "../_lib/collections.js";
+import { requirePermission, requireOneOfPermissions, requireUser } from "../_lib/auth.js";
+import { productsCollection, categoriesCollection, auditLogCollection, stockMovementsCollection, toObjectId, withStringId, type ProductFields } from "../_lib/collections.js";
+import { kitAvailableQty, type KitComponent } from "../../src/lib/products.js";
 import { PRODUCT_IMPORT_MAX_ROWS } from "../../src/lib/productImport.js";
 import { nowIso } from "../../src/lib/products.js";
 import { handleStock, backfillProductStockDefaults } from "../_lib/stockHandler.js";
@@ -18,7 +19,7 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
     await backfillProductStockDefaults();
     const products = await productsCollection();
     const docs = await products.find({}).sort({ code: 1 }).toArray();
-    res.status(200).json({ products: docs.map(withStringId) });
+    res.status(200).json({ products: withKitAvailability(docs).map(withStringId) });
     return;
   }
 
@@ -48,6 +49,9 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
       reorderPoint: 0,
       avgCost: 0,
       isTool: body.isTool === true,
+      ...(Array.isArray(body.kitComponents) && body.kitComponents.length > 0
+        ? { kitComponents: await sanitizeKitComponents(body.kitComponents, null, body.isTool === true) }
+        : {}),
       createdAt: now,
       updatedAt: now,
       createdBy: ctx.user.id,
@@ -177,6 +181,79 @@ async function handleImport(req: ApiRequest, res: ApiResponse) {
   res.status(200).json({ created, skipped, categoriesCreated });
 }
 
+/**
+ * **สินค้าชุด** (2026-09-29) — ดู `Product.kitComponents` ใน src/lib/products.ts
+ *
+ * ยอด `stockQty` ที่ส่งออกของสินค้าชุด = จำนวนชุดที่เบิกได้จากชิ้นส่วน (ในฐานข้อมูลเป็น 0 เสมอ ไม่เคยถูกเขียน) —
+ * ทุกหน้าที่อ่านยอดจากรายการสินค้า (หน้าสต๊อก ตัวเลือกสินค้า ช่อง "คงเหลือ") จึงเห็นตัวเลขที่เบิกได้จริงโดยไม่ต้องรู้จักชุด ·
+ * `avgCost` ของชุดยังเป็น 0 มูลค่าคลังจึงไม่ถูกนับซ้ำกับชิ้นส่วน
+ */
+function withKitAvailability<T extends ProductFields & { _id: unknown }>(docs: T[]): T[] {
+  const stockById = new Map(docs.map((p) => [String(p._id), p.stockQty ?? 0]));
+  return docs.map((p) => ((p.kitComponents?.length ?? 0) > 0 ? { ...p, stockQty: kitAvailableQty(p.kitComponents!, stockById) } : p));
+}
+
+function sameRecipe(raw: unknown, current: KitComponent[]): boolean {
+  if (!Array.isArray(raw) || raw.length !== current.length) return false;
+  return (raw as Record<string, unknown>[]).every((r, i) => r?.productId === current[i].productId && Number(r?.qty) === current[i].qty);
+}
+
+const MAX_KIT_COMPONENTS = 20;
+
+/**
+ * กติกาสูตรชุด — เจ้าของเลือก 2026-09-29: **ล็อกเมื่อชุดถูกเบิกแล้ว** (คืนของใช้สูตรปัจจุบัน ถ้าแก้ทีหลังของที่คืนจะไม่ตรงกับที่จ่ายไป
+ * ให้สร้างรหัสชุดใหม่แทน) และ **ตั้งสูตรได้เมื่อสต๊อกของตัวชุดเป็น 0** (ชุดไม่มีสต๊อกของตัวเอง ยอดเดิมจะค้างเป็นของที่ไม่มีวันถูกตัด)
+ * · ชิ้นส่วนต้องมีจริง ไม่ใช่ตัวเอง ไม่ใช่ชุด (ไม่ซ้อน) ไม่ซ้ำ จำนวน > 0 · ตัวชุดต้องไม่เป็นชิ้นส่วนของชุดอื่น · ชุดเป็นเครื่องมือไม่ได้
+ * · ส่งรายการว่าง = เลิกเป็นชุด (ติดกติกาล็อกเหมือนกัน) · ชื่อ/รหัส/หน่วยของชิ้นส่วนอ่านจากทะเบียน ไม่เชื่อค่าจากหน้าจอ
+ */
+async function sanitizeKitComponents(raw: unknown, target: (ProductFields & { _id: unknown }) | null, isTool: boolean): Promise<KitComponent[]> {
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลสูตรชุดไม่ถูกต้อง");
+  if (raw.length > MAX_KIT_COMPONENTS) throw new HttpError(400, `ชิ้นส่วนในชุดต้องไม่เกิน ${MAX_KIT_COMPONENTS} รายการ`);
+  const selfId = target ? String(target._id) : "";
+  if (target) {
+    const issued = await (await stockMovementsCollection()).findOne({ kitProductId: selfId }, { projection: { _id: 1 } });
+    if (issued) throw new HttpError(400, "ชุดนี้ถูกเบิกไปแล้ว แก้สูตรไม่ได้ — ถ้าต้องเปลี่ยนชิ้นส่วน ให้สร้างรหัสชุดใหม่");
+  }
+  if (raw.length === 0) return [];
+  if (isTool) throw new HttpError(400, "สินค้าชุดเป็นเครื่องมือไม่ได้ — เครื่องมือนับยอดถือครองต่อตัวสินค้า ส่วนชุดตัดสต๊อกที่ชิ้นส่วน");
+  if (target && (target.stockQty ?? 0) !== 0) {
+    throw new HttpError(400, `สินค้านี้มีสต๊อก ${target.stockQty} อยู่ — ปรับยอดเป็น 0 ก่อน แล้วรับเข้าเป็นชิ้นส่วนแทน (ชุดไม่มีสต๊อกของตัวเอง)`);
+  }
+  const products = await productsCollection();
+  if (target && await products.findOne({ "kitComponents.productId": selfId } as never, { projection: { _id: 1 } })) {
+    throw new HttpError(400, "สินค้านี้เป็นชิ้นส่วนของชุดอื่นอยู่ — ชุดซ้อนชุดไม่ได้");
+  }
+  const rows = raw as Record<string, unknown>[];
+  const ids = rows.map((r, idx) => {
+    const id = typeof r?.productId === "string" ? r.productId : "";
+    if (!/^[0-9a-f]{24}$/i.test(id)) throw new HttpError(400, `ชิ้นส่วนลำดับที่ ${idx + 1}: กรุณาเลือกสินค้า`);
+    return id;
+  });
+  if (new Set(ids).size !== ids.length) throw new HttpError(400, "มีชิ้นส่วนซ้ำในสูตร — รวมเป็นบรรทัดเดียวแล้วใส่จำนวน");
+  if (selfId && ids.includes(selfId)) throw new HttpError(400, "ใส่ตัวเองเป็นชิ้นส่วนไม่ได้");
+  const found = new Map((await products.find({ _id: { $in: ids.map((id) => toObjectId(id)) } }).toArray()).map((p) => [String(p._id), p]));
+  return rows.map((r, idx) => {
+    const p = found.get(ids[idx]);
+    if (!p) throw new HttpError(400, `ชิ้นส่วนลำดับที่ ${idx + 1}: ไม่พบสินค้า`);
+    if ((p.kitComponents?.length ?? 0) > 0) throw new HttpError(400, `${p.code} เป็นสินค้าชุด — ชุดซ้อนชุดไม่ได้`);
+    const qty = typeof r.qty === "number" ? r.qty : Number(r.qty);
+    if (!Number.isFinite(qty) || qty <= 0) throw new HttpError(400, `${p.code}: จำนวนต่อชุดต้องมากกว่า 0`);
+    return { productId: ids[idx], code: p.code, name: p.name, unit: p.unit ?? "", qty };
+  });
+}
+
+/** สูตรของสินค้าชุดทั้งหมด — ทุกคนที่ล็อกอิน (เอกสารทุกใบแตกชิ้นส่วนให้ดู) · ไม่มีราคา/ต้นทุน */
+async function handleKits(req: ApiRequest, res: ApiResponse) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  await requireUser(req);
+  const docs = await (await productsCollection())
+    .find({ "kitComponents.0": { $exists: true } } as never, { projection: { code: 1, name: 1, unit: 1, kitComponents: 1 } })
+    .toArray();
+  res.status(200).json({
+    kits: docs.map((p) => ({ id: String(p._id), code: p.code, name: p.name, unit: p.unit ?? "", components: p.kitComponents ?? [] })),
+  });
+}
+
 async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const objectId = toObjectId(id);
   const products = await productsCollection();
@@ -207,6 +284,12 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
     // "เครื่องมือ — ต้องคืน" (2026-09-03) — ธง ไม่ใช่ตัวเลข จึงไม่ต้องตรวจอะไรนอกจากชนิด
     // `avgCost` ไม่รับจาก client เลย เหมือน `stockQty` — เปลี่ยนได้ทาง applyStockMovement() เท่านั้น
     if (typeof body.isTool === "boolean") update.isTool = body.isTool;
+    // สูตรชุด (2026-09-29) — ส่งมาเฉพาะตอนเปลี่ยน (หน้าจอเทียบกับค่าเดิมก่อนส่ง) ดูกติกาที่ sanitizeKitComponents()
+    if ("kitComponents" in body && !sameRecipe(body.kitComponents, target.kitComponents ?? [])) {
+      update.kitComponents = await sanitizeKitComponents(body.kitComponents, target, (update.isTool ?? target.isTool) === true);
+    } else if (update.isTool === true && (target.kitComponents?.length ?? 0) > 0) {
+      throw new HttpError(400, "สินค้าชุดเป็นเครื่องมือไม่ได้ — เครื่องมือนับยอดถือครองต่อตัวสินค้า ส่วนชุดตัดสต๊อกที่ชิ้นส่วน");
+    }
 
     if (Object.keys(update).length > 0) {
       update.updatedAt = nowIso();
@@ -215,12 +298,18 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
     }
     const updated = await products.findOne({ _id: objectId });
     if (!updated) throw new HttpError(404, "ไม่พบสินค้า");
-    res.status(200).json({ product: withStringId(updated) });
+    const [withAvail] = (updated.kitComponents?.length ?? 0) > 0
+      ? withKitAvailability([updated, ...(await products.find({ _id: { $in: updated.kitComponents!.map((c) => toObjectId(c.productId)) } }).toArray())])
+      : [updated];
+    res.status(200).json({ product: withStringId(withAvail) });
     return;
   }
 
   if (req.method === "DELETE") {
     await requirePermission(req, "products:delete");
+    // ชิ้นส่วนของสินค้าชุด (2026-09-29) — ลบแล้วเบิกชุดนั้นไม่ได้อีก (ตัดชิ้นส่วนที่ไม่มีอยู่จริง)
+    const usedIn = await products.findOne({ "kitComponents.productId": id } as never, { projection: { code: 1 } });
+    if (usedIn) throw new HttpError(400, `สินค้านี้เป็นชิ้นส่วนของชุด ${usedIn.code} — เอาออกจากสูตรชุดก่อนจึงจะลบได้`);
     await products.deleteOne({ _id: objectId });
     res.status(204).end();
     return;
@@ -241,6 +330,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const parts = getPathSegments(req, "/api/products");
     if (parts.length === 0) return handleList(req, res);
     if (parts.length === 1 && parts[0] === "import") return handleImport(req, res);
+    if (parts.length === 1 && parts[0] === "kits") return handleKits(req, res);
     if (parts.length === 1) return handleOne(req, res, parts[0]);
     throw new HttpError(404, "Not found");
   });

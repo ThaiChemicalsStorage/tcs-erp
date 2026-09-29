@@ -1,6 +1,8 @@
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { issuedQtyOf, type MaterialRequisition } from "../../lib/materialRequisition";
 import { StoreSlipPrint } from "./StoreSlipPrint";
+import { withKitChildRows } from "./storeSlipRows";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { STORE_ISSUE_PRINT_TITLE } from "./storeSlipTitles";
 
 /**
@@ -17,19 +19,21 @@ export function StoreIssuePrintDocument({ materialRequisition: m, unitCostByProd
   unitCostByProduct: Record<string, number>;
   companyHeader: CompanyHeaderInfo;
 }) {
+  const kits = useKitRecipes();
   const issues = m.issues ?? [];
   const anyIssued = m.lines.some((l) => issuedQtyOf(l) > 0);
-  const rows = m.lines
+  const rows = withKitChildRows(m.lines
     .filter((l) => l.productId || l.productName)
     .map((l) => ({
       key: l.id,
+      productId: l.productId,
       code: l.productCode,
       name: l.productName,
       qty: anyIssued ? issuedQtyOf(l) : (l.plannedQty ?? 0),
       unit: l.unit,
       unitCost: unitCostByProduct[l.productId] ?? 0,
     }))
-    .filter((r) => r.qty > 0);
+    .filter((r) => r.qty > 0), kits);
   // วันที่ของใบจ่าย = วันที่สโตร์จ่ายรอบล่าสุด · ยังไม่จ่าย = วันที่จัดทำ
   const lastIssue = issues.length > 0 ? issues[issues.length - 1].issuedDate : "";
   const remark = [...new Set([m.jobCode, m.customerName, m.productName, m.storeReference ?? ""].map((s) => (s ?? "").trim()).filter(Boolean))].join(" ");

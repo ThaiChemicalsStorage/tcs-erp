@@ -24,6 +24,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
+import { KitBreakdown } from "../../components/KitBreakdown";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { createProductRequest } from "../../lib/productRequest";
 import {
   type MaterialRequisitionTemplate, fetchMaterialRequisitionTemplates, templateLinesToRequisitionLines,
@@ -110,6 +112,8 @@ export function MaterialRequisitionDocument({
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
+  // สินค้าชุด (2026-09-29) — แตกชิ้นส่วนใต้ชื่อชุดทุกตาราง (เจ้าของเลือกโชว์ทั้งชุดและชิ้นส่วน)
+  const kits = useKitRecipes();
   const [doc, setDoc] = useState<MaterialRequisition | null>(null);
   const [draft, setDraft] = useState<MaterialRequisition | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -848,6 +852,7 @@ export function MaterialRequisitionDocument({
                             <AlertTriangle size={10} /> {t("materialRequisitionDoc.shortBy").replace("{n}", shortBy.toLocaleString())}
                           </span>
                         )}
+                        <KitBreakdown productId={line.productId} qty={line.plannedQty} kits={kits} />
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{line.unit}</td>
                       <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${shortBy > 0 ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{stock === undefined ? "—" : stock.toLocaleString()}</td>
@@ -971,7 +976,10 @@ export function MaterialRequisitionDocument({
                         const overBy = Number.isFinite(typed) && typed > outstanding ? typed - outstanding : 0;
                         return (
                           <tr key={line.id} className="border-b border-border/50">
-                            <td className="px-3 py-2 text-xs text-foreground"><span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
+                            <td className="px-3 py-2 text-xs text-foreground">
+                              <span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}
+                              <KitBreakdown productId={line.productId} qty={typed > 0 ? typed : null} kits={kits} />
+                            </td>
                             <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{(line.plannedQty ?? 0).toLocaleString()} {line.unit}</td>
                             <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{issuedQtyOf(line).toLocaleString()}</td>
                             <td className={`px-3 py-2 text-xs font-mono ${outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
@@ -1002,6 +1010,7 @@ export function MaterialRequisitionDocument({
                               <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20 whitespace-nowrap">
                                 {t("materialRequisitionDoc.extraLineBadge")}
                               </span>
+                              <KitBreakdown productId={line.productId} qty={typed > 0 ? typed : null} kits={kits} />
                             </td>
                             <td className="px-3 py-2 text-xs font-mono text-muted-foreground">—</td>
                             <td className="px-3 py-2 text-xs font-mono text-muted-foreground">—</td>
@@ -1076,6 +1085,7 @@ export function MaterialRequisitionDocument({
                             <span className="font-mono mr-2">{line?.productCode ?? "—"}</span>
                             {line?.productName ?? t("materialRequisitionDoc.batchDeletedLine")}
                             <span className="font-mono text-foreground ml-2">{bl.qty.toLocaleString()} {line?.unit ?? ""}</span>
+                            <KitBreakdown productId={line?.productId} qty={bl.qty} kits={kits} />
                           </li>
                         );
                       })}

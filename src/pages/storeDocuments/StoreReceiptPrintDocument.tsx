@@ -2,6 +2,8 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { StoreReceipt } from "../../lib/storeReceipt";
 import { storeReceiptCodeInfo } from "../../lib/storeCodes";
 import { StoreSlipPrint } from "./StoreSlipPrint";
+import { withKitChildRows } from "./storeSlipRows";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { STORE_RECEIPT_PRINT_TITLE } from "./storeSlipTitles";
 
 /**
@@ -17,10 +19,12 @@ export function StoreReceiptPrintDocument({ doc, unitCostByProduct, companyHeade
   companyHeader: CompanyHeaderInfo;
 }) {
   const kind = storeReceiptCodeInfo(doc.receiptCode).kind;
-  const rows = doc.lines
+  const kits = useKitRecipes();
+  const rows = withKitChildRows(doc.lines
     .filter((l) => l.productId && l.qty !== null && (kind === "adjust" || (l.qty ?? 0) > 0))
     .map((l) => ({
       key: l.id,
+      productId: l.productId,
       code: l.productCode,
       name: l.productName,
       qty: l.qty ?? 0,
@@ -28,7 +32,7 @@ export function StoreReceiptPrintDocument({ doc, unitCostByProduct, companyHeade
       unitCost: doc.receiptCode === "GC" ? 0
         : kind === "receive" && l.unitCost !== null ? l.unitCost
           : unitCostByProduct[l.productId] ?? 0,
-    }));
+    })), kits);
   const remark = [...new Set([doc.jobCode, doc.customerName, doc.reference, doc.reason].map((s) => (s ?? "").trim()).filter(Boolean))].join(" ");
 
   return (

@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { ChevronRight, Save, X } from "lucide-react";
-import type { Product, ProductCategory } from "../../lib/products";
+import { useMemo, useState } from "react";
+import { ChevronRight, Layers, Plus, Save, X } from "lucide-react";
+import { type Product, type ProductCategory, isKitProduct } from "../../lib/products";
 import { useI18n } from "../../lib/i18n";
+import { Combobox } from "../../components/Combobox";
 
 export interface ProductDraft {
   code: string;
@@ -13,7 +14,19 @@ export interface ProductDraft {
   specifications: string;
   /** "เครื่องมือ — ต้องคืน" ดู Product.isTool (2026-09-03) */
   isTool: boolean;
+  /** สูตรชุด (2026-09-29) — ว่าง = ไม่ใช่ชุด · ดู Product.kitComponents */
+  kitComponents: { productId: string; qty: number }[];
 }
+
+/** แถวสูตรชุดบนฟอร์ม — `text` คือสิ่งที่พิมพ์ในช่องค้นหา (Combobox เป็นข้อความอิสระ) `productId` ตั้งเมื่อเลือกจากรายการ */
+interface KitRow {
+  key: string;
+  productId: string;
+  text: string;
+  qty: string;
+}
+let kitRowSeq = 0;
+const kitRowKey = () => `kr${++kitRowSeq}`;
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
@@ -25,6 +38,7 @@ export function ProductForm({
   initial,
   categories,
   existingCodes,
+  allProducts,
   onSave,
   onCancel,
 }: {
@@ -32,6 +46,8 @@ export function ProductForm({
   initial?: Product;
   categories: ProductCategory[];
   existingCodes: string[];
+  /** ตัวเลือกชิ้นส่วนของสูตรชุด (2026-09-29) */
+  allProducts: Product[];
   onSave: (draft: ProductDraft) => Promise<string | null>;
   onCancel: () => void;
 }) {
@@ -46,6 +62,18 @@ export function ProductForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [specifications, setSpecifications] = useState(initial?.specifications ?? "");
   const [isTool, setIsTool] = useState(initial?.isTool === true);
+  // สูตรชุด (2026-09-29) — เปิดส่วนนี้เมื่อเป็นชุดอยู่แล้วหรือกด "ตั้งเป็นสินค้าชุด"
+  const [kitRows, setKitRows] = useState<KitRow[]>(() => (initial?.kitComponents ?? []).map((c) => ({
+    key: kitRowKey(), productId: c.productId, text: `${c.code} ${c.name}`, qty: String(c.qty),
+  })));
+  const isKit = kitRows.length > 0;
+  // ชิ้นส่วนที่เลือกได้: ไม่ใช่ตัวเอง ไม่ใช่ชุด ไม่ถูกเก็บถาวร
+  const componentOptions = useMemo(() => allProducts
+    .filter((p) => p.id !== initial?.id && !isKitProduct(p) && !p.archived)
+    .map((p) => ({ id: p.id, option: { value: `${p.code} ${p.name}`, hint: p.unit ? `${t("products.kit.stockHint")} ${p.stockQty.toLocaleString()} ${p.unit}` : undefined } })),
+  [allProducts, initial?.id, t]);
+  const idByOptionValue = useMemo(() => new Map(componentOptions.map((o) => [o.option.value, o.id])), [componentOptions]);
+  const setKitRow = (key: string, patch: Partial<KitRow>) => setKitRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -59,6 +87,10 @@ export function ProductForm({
     if (!categoryId) e.categoryId = t("products.form.errorCategory");
     if (!unit.trim()) e.unit = t("products.form.errorUnit");
     if (defaultPrice < 0) e.defaultPrice = t("products.form.errorPrice");
+    if (kitRows.some((r) => !r.productId)) e.kit = t("products.kit.errorPick");
+    else if (kitRows.some((r) => !(Number(r.qty) > 0))) e.kit = t("products.kit.errorQty");
+    else if (new Set(kitRows.map((r) => r.productId)).size !== kitRows.length) e.kit = t("products.kit.errorDuplicate");
+    else if (isKit && isTool) e.kit = t("products.kit.errorTool");
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -78,8 +110,9 @@ export function ProductForm({
         description: description.trim(),
         specifications: specifications.trim(),
         isTool,
+        kitComponents: kitRows.map((r) => ({ productId: r.productId, qty: Number(r.qty) })),
       });
-      if (error) setErrors({ code: error });
+      if (error) setErrors({ [/ชุด|ชิ้นส่วน|สูตร/.test(error) ? "kit" : "code"]: error });
     } finally {
       setSaving(false);
     }
@@ -162,6 +195,62 @@ export function ProductForm({
               <span className="block text-xs text-muted-foreground mt-0.5">{t("products.form.isToolHint")}</span>
             </span>
           </label>
+
+          {/* สูตรชุด (2026-09-29) — เบิกชุดแล้วตัดชิ้นส่วนตามสูตร ชุดไม่มีสต๊อกของตัวเอง */}
+          <div className="rounded-lg border border-border px-3 py-3 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <Layers size={15} className="mt-0.5 text-[#866d28] shrink-0" />
+                <div>
+                  <p className="text-sm text-foreground">{t("products.kit.title")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{t("products.kit.hint")}</p>
+                </div>
+              </div>
+              {!isKit && (
+                <button type="button" onClick={() => setKitRows([{ key: kitRowKey(), productId: "", text: "", qty: "1" }])}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <Layers size={13} /> {t("products.kit.makeKit")}
+                </button>
+              )}
+            </div>
+            {isKit && (
+              <>
+                <div className="space-y-2">
+                  {kitRows.map((r) => (
+                    <div key={r.key} className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <Combobox
+                          value={r.text}
+                          onChange={(next) => setKitRow(r.key, { text: next, productId: idByOptionValue.get(next) ?? "" })}
+                          onPick={(opt) => setKitRow(r.key, { text: opt.value, productId: idByOptionValue.get(opt.value) ?? "" })}
+                          options={componentOptions.map((o) => o.option)}
+                          placeholder={t("products.kit.pickPlaceholder")}
+                          ariaLabel={t("products.kit.component")}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div className="w-24 shrink-0">
+                        <input type="number" min={0} step="any" className={`${inputCls} text-right font-mono`} value={r.qty}
+                          aria-label={t("products.kit.qtyPerKit")} title={t("products.kit.qtyPerKit")}
+                          onChange={(e) => setKitRow(r.key, { qty: e.target.value })} />
+                      </div>
+                      <button type="button" onClick={() => setKitRows((rows) => rows.filter((x) => x.key !== r.key))}
+                        aria-label={t("products.kit.removeComponent")} title={t("products.kit.removeComponent")}
+                        className="shrink-0 text-muted-foreground opacity-60 hover:opacity-100 hover:text-[#e05252] transition-opacity">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={() => setKitRows((rows) => [...rows, { key: kitRowKey(), productId: "", text: "", qty: "1" }])}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-dashed border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <Plus size={13} /> {t("products.kit.addComponent")}
+                </button>
+                <p className="text-xs text-muted-foreground leading-relaxed">{t("products.kit.rules")}</p>
+              </>
+            )}
+            {errors.kit && <p className="text-xs text-[#e05252]" role="alert">{errors.kit}</p>}
+          </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed pt-1 border-t border-border">
             {t("products.form.editHint")}

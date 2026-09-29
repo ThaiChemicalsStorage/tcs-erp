@@ -5,7 +5,7 @@
 > feature set. This is the department that physically receives goods, issues them to teams, takes
 > them back, and counts what is left.
 
-Related: [Product.md](./Product.md) (Stock ledger, costing, team tools), [Purchasing.md](./Purchasing.md)
+Related: [Product.md](./Product.md) (Stock ledger, costing, team tools, **สินค้าชุด/kit 2026-09-29**), [Purchasing.md](./Purchasing.md)
 (the PO this receives against), [Accounting.md](./Accounting.md) (the payable this posts),
 [Project.md](./Project.md) (the requisition Store issues against).
 

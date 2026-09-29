@@ -4,6 +4,8 @@ import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printDateOrBlank, printText, printTextOrBlank, printNumber } from "../../lib/printFormat";
 import { PrintPageFrame } from "../../components/PrintPageFrame";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
+import { kitBreakdownText } from "../../lib/products";
 
 /**
  * Print layout for FM-ST-04 Rev.02 — the form's own column layout
@@ -25,6 +27,8 @@ import { PrintPageFrame } from "../../components/PrintPageFrame";
  * Fixed Thai, no i18n — see docs/CLAUDE.md's print policy.
  */
 export function MaterialRequisitionPrintDocument({ materialRequisition: m, companyHeader }: { materialRequisition: MaterialRequisition; companyHeader: CompanyHeaderInfo }) {
+  // สินค้าชุด (2026-09-29) — พิมพ์ชิ้นส่วนใต้ชื่อชุด ตามจำนวนที่ขอเบิก
+  const kits = useKitRecipes();
   /**
    * ช่องเซ็นที่ระบบรู้ตัวคนจริง ๆ มีสองช่อง — ผู้จัดทำคือคนสร้างเอกสาร ผู้อนุมัติคือคนที่กดปุ่มอนุมัติ
    * อีกสี่ช่อง (สโตร์/ต้นทุน/ผู้คืน/ผู้รับคืน) เป็นการเซ็นรับของหน้างาน ไม่มี user id ผูกไว้ จึงเว้นเส้น
@@ -119,7 +123,12 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
             <tr key={line.id}>
               <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
               <td className="border border-black px-1.5 py-1">{printText(line.productCode)}</td>
-              <td className="border border-black px-1.5 py-1">{printText(line.productName)}</td>
+              <td className="border border-black px-1.5 py-1">
+                {printText(line.productName)}
+                {kits.has(line.productId) && (
+                  <span className="block text-[9px]">ชุด: {kitBreakdownText(kits.get(line.productId)!.components, line.plannedQty && line.plannedQty > 0 ? line.plannedQty : 1)}{line.plannedQty && line.plannedQty > 0 ? "" : " (ต่อชุด)"}</span>
+                )}
+              </td>
               <td className="border border-black px-1.5 py-1 text-center">{printText(line.unit)}</td>
               <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.plannedQty)}</td>
               <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.withdrawal1Qty)}</td>

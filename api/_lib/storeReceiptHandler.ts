@@ -8,7 +8,7 @@ import {
   toObjectId, withStringId, type StoreReceiptFields, type MaterialRequisitionFields,
 } from "./collections.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
-import { applyStockMovement, productCostBasis, returnUnitCostOf, postedUnitCostsByProduct, type StockMovementOrgTags } from "./stockHandler.js";
+import { applyStockMovement, productCostBasis, returnUnitCostOf, postedUnitCostsByProduct, type StockMovementOrgTags, assertNoKits, stockQtyByProduct } from "./stockHandler.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -103,11 +103,8 @@ function sourceLinesOf(mr: MaterialRequisitionFields): StoreReceiptSourceLine[] 
 }
 
 async function stockByProductFor(lines: StoreReceiptLine[]): Promise<Record<string, number>> {
-  const ids = [...new Set(lines.map((l) => l.productId).filter((id) => id && isObjectIdLike(id)))];
-  if (ids.length === 0) return {};
-  const products = await productsCollection();
-  const docs = await products.find({ _id: { $in: ids.map((id) => toObjectId(id)) } }, { projection: { stockQty: 1 } }).toArray();
-  return Object.fromEntries(docs.map((p) => [p._id.toString(), p.stockQty ?? 0]));
+  // สินค้าชุด = จำนวนชุดที่เบิกได้จากชิ้นส่วน (2026-09-29)
+  return stockQtyByProduct(lines.map((l) => l.productId).filter((id) => id && isObjectIdLike(id)));
 }
 
 async function bundleOf(doc: StoreReceiptFields & { _id: string }) {
@@ -382,6 +379,8 @@ async function handlePost(req: ApiRequest, res: ApiResponse, id: string) {
   const base = { sourceType: "store_receipt" as const, sourceId: id, sourceLabel: label, userId: ctx.user.id, org };
   const movementIds: string[] = [];
   if (info.kind === "adjust" && !doc.reason.trim()) throw new HttpError(400, "กรุณาระบุเหตุผลการปรับยอด");
+  // สินค้าชุด (2026-09-29) รับเข้า/ตรวจนับเป็นชุดไม่ได้ — ตรวจก่อนจองใบ ไม่ใช่เจอกลางทางหลังลงบรรทัดแรกไปแล้ว · คืนของเป็นชุดได้ (คืนชิ้นส่วน)
+  if (info.kind !== "return") await assertNoKits(lines.map((l) => l.productId), info.kind === "adjust" ? "ปรับยอด" : "รับเข้า");
 
   // จองการรับเข้าแบบ atomic ก่อนแตะสต๊อก — กดซ้ำ/สองแท็บพร้อมกันต้องไม่ลงสต๊อกสองรอบ
   // (เช็ค `doc.postedAt` ด้านบนอย่างเดียวมีช่องแข่ง) · ล้มกลางทางคืนสถานะให้กดใหม่ได้เหมือนเดิม
@@ -406,12 +405,12 @@ async function handlePost(req: ApiRequest, res: ApiResponse, id: string) {
       }
       const costs = await productCostBasis([...new Set(lines.map((l) => l.productId))]);
       for (const l of lines) {
-        const { movement } = await applyStockMovement({
+        const { movements } = await applyStockMovement({
           ...base, productId: l.productId, kind: "return", delta: l.qty!,
           reason: `รับคืนตามใบ ${label} (คืนจากใบเบิก ${doc.sourceRequisitionNumber})`,
           rowUnitCost: returnUnitCostOf(costs[l.productId]),
         });
-        movementIds.push(movement.id);
+        movementIds.push(...movements.map((m) => m.id));
       }
       const mrCol = await materialRequisitionsCollection();
       await mrCol.updateOne({ _id: mr._id }, {
@@ -424,12 +423,12 @@ async function handlePost(req: ApiRequest, res: ApiResponse, id: string) {
     } else if (info.kind === "receive") {
       for (const l of lines) {
         const customerGoods = doc.receiptCode === "GC";
-        const { movement } = await applyStockMovement({
+        const { movements } = await applyStockMovement({
           ...base, productId: l.productId, kind: "receive", delta: l.qty!,
           reason: `รับเข้าคลังตามใบ ${label}${doc.reference ? ` (อ้างอิง ${doc.reference})` : ""}`,
           ...(customerGoods ? { rowUnitCost: 0 } : l.unitCost !== null && l.unitCost !== undefined ? { unitCost: l.unitCost } : {}),
         });
-        movementIds.push(movement.id);
+        movementIds.push(...movements.map((m) => m.id));
       }
     } else {
       const products = await productsCollection();
@@ -437,11 +436,11 @@ async function handlePost(req: ApiRequest, res: ApiResponse, id: string) {
         const live = await products.findOne({ _id: toObjectId(l.productId) }, { projection: { stockQty: 1 } });
         const delta = Math.round(((l.qty ?? 0) - (live?.stockQty ?? 0)) * 10000) / 10000;
         if (delta === 0) continue;
-        const { movement } = await applyStockMovement({
+        const { movements } = await applyStockMovement({
           ...base, productId: l.productId, kind: "adjust", delta,
           reason: `ปรับยอดตามใบ ${label} (ตั้งเป็น ${l.qty}) — ${doc.reason}`,
         });
-        movementIds.push(movement.id);
+        movementIds.push(...movements.map((m) => m.id));
       }
     }
   } catch (err) {

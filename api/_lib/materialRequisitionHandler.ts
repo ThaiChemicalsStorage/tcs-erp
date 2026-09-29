@@ -20,7 +20,7 @@ import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
 import {
   applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf, postedUnitCostsByProduct,
-  type StockMovementOrgTags, type ProductCostBasis,
+  type StockMovementOrgTags, type ProductCostBasis, stockQtyByProduct,
 } from "./stockHandler.js";
 import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches, storeSlipSkipsApproval } from "../../src/lib/materialRequisition.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch, StoreIssueSourceCandidate } from "../../src/lib/materialRequisition.js";
@@ -632,11 +632,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
  * โดยไม่ต้องดึงสินค้าทั้งคลังมาหาเอง
  */
 async function stockByProductFor(lines: MaterialRequisitionLine[]): Promise<Record<string, number>> {
-  const ids = [...new Set(lines.map((l) => l.productId).filter((id) => id && isObjectIdLike(id)))];
-  if (ids.length === 0) return {};
-  const products = await productsCollection();
-  const docs = await products.find({ _id: { $in: ids.map((id) => toObjectId(id)) } }, { projection: { stockQty: 1 } }).toArray();
-  return Object.fromEntries(docs.map((p) => [p._id.toString(), p.stockQty ?? 0]));
+  // สินค้าชุด = จำนวนชุดที่เบิกได้จากชิ้นส่วน (2026-09-29)
+  return stockQtyByProduct(lines.map((l) => l.productId).filter((id) => id && isObjectIdLike(id)));
 }
 
 /**
@@ -894,13 +891,13 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   const stockMovementIds: string[] = [];
   try {
     for (const [productId, qty] of totals) {
-      const { movement } = await applyStockMovement({
+      const { movements } = await applyStockMovement({
         productId, kind: "deduct", delta: -qty,
         reason: `จ่ายของตามใบเบิก ${label} (รอบที่ ${seq})`,
         sourceType: "material_requisition", sourceId: id, sourceLabel: label,
         userId: ctx.user.id, org,
       });
-      stockMovementIds.push(movement.id);
+      stockMovementIds.push(...movements.map((m) => m.id)); // สินค้าชุด (2026-09-29) = หนึ่งแถวต่อชิ้นส่วน
     }
   } catch (err) {
     // ของถูกแย่งไประหว่างเช็คกับตัด และยังไม่มีอะไรลงสต๊อก → คืนสถานะเดิม ใบยังแก้/จ่ายใหม่ได้

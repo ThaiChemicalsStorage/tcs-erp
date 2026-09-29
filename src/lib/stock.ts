@@ -40,6 +40,15 @@ export interface StockMovement {
   teamName?: string;
   workTypeCode?: string;
   workTypeName?: string;
+  /**
+   * แถวนี้ถูกตัด/คืน**แทนสินค้าชุด** (2026-09-29) — ชุดที่เบิก จำนวนชุด และกลุ่ม (ชิ้นส่วนทุกแถวของชุดเดียวกันในครั้งเดียวกัน
+   * ใช้ `kitGroupId` เดียวกัน) · หน้าประวัติสต๊อกโชว์ "จากชุด …" · ต้นทุนของชุด = ผลรวมมูลค่าแถวในกลุ่ม ÷ `kitQty`
+   */
+  kitProductId?: string;
+  kitProductCode?: string;
+  kitProductName?: string;
+  kitQty?: number;
+  kitGroupId?: string;
   createdAt: string;
   createdBy: string;
 }

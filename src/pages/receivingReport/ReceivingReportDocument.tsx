@@ -28,6 +28,7 @@ import {
 import { AddPurchaseOrderDialog } from "./AddPurchaseOrderDialog";
 import { ReceiveBatchDialog } from "./ReceiveBatchDialog";
 import { ReceivingReportPrintDocument } from "./ReceivingReportPrintDocument";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 
@@ -92,6 +93,8 @@ export function ReceivingReportDocument({
   showToast: (message: string) => void;
 }) {
   const { t } = useI18n();
+  // สินค้าชุด (2026-09-29) รับเข้าเป็นชุดไม่ได้ — เตือนตั้งแต่บรรทัด ให้สั่งซื้อ/รับเข้าเป็นชิ้นส่วน
+  const kits = useKitRecipes();
   const [doc, setDoc] = useState<ReceivingReport | null>(null);
   const [draft, setDraft] = useState<ReceivingReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -391,6 +394,7 @@ export function ReceivingReportDocument({
           {line.subDetails.length > 0 && (
             <span className="block text-xs text-muted-foreground mt-0.5">{line.subDetails.join(" · ")}</span>
           )}
+          {kits.has(line.productId ?? "") && <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>}
         </td>
         <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{line.unit || "—"}</td>
         <td className="px-3 py-2.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(line.qtyOrdered)}</td>

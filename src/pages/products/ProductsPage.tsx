@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { createProduct, updateProduct, deleteProduct, fetchProducts, fetchCategories } from "../../lib/products";
+import { createProduct, updateProduct, deleteProduct, fetchProducts, fetchCategories, resetKitRecipeCache } from "../../lib/products";
 import { ProductList } from "./ProductList";
 import { ProductForm, type ProductDraft } from "./ProductForm";
 import { CategoriesManager } from "./CategoriesManager";
@@ -66,7 +66,8 @@ export function ProductsPage({
   // Creates a new product, updates the list, and returns to the list view on success.
   const handleCreate = async (draft: ProductDraft): Promise<string | null> => {
     try {
-      const created = await createProduct(draft);
+      const created = await createProduct(draft.kitComponents.length > 0 ? draft : { ...draft, kitComponents: undefined });
+      if (draft.kitComponents.length > 0) resetKitRecipeCache();
       onProductsChange([...products, created]);
       setView("list");
       return null;
@@ -81,6 +82,7 @@ export function ProductsPage({
     if (!editingId) return null;
     try {
       const updated = await updateProduct(editingId, draft);
+      resetKitRecipeCache(); // สูตรชุดอาจเปลี่ยน — เอกสารที่เปิดต่อจากนี้โหลดสูตรใหม่
       onProductsChange(products.map((p) => (p.id === editingId ? updated : p)));
       setView("list");
       setEditingId(null);
@@ -131,6 +133,7 @@ export function ProductsPage({
         mode="create"
         categories={categories}
         existingCodes={products.map((p) => p.code)}
+        allProducts={products}
         onSave={handleCreate}
         onCancel={() => setView("list")}
       />
@@ -144,6 +147,7 @@ export function ProductsPage({
         initial={editingProduct}
         categories={categories}
         existingCodes={products.filter((p) => p.id !== editingId).map((p) => p.code)}
+        allProducts={products}
         onSave={handleUpdate}
         onCancel={() => { setView("list"); setEditingId(null); }}
       />

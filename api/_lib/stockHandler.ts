@@ -5,7 +5,7 @@ import {
   productsCollection, stockMovementsCollection, toObjectId, withStringId,
   type StockMovementFields, type StockMovementKind, type StockMovementSourceType,
 } from "./collections.js";
-import { nowIso } from "../../src/lib/products.js";
+import { nowIso, newId, kitAvailableQty, type KitComponent } from "../../src/lib/products.js";
 import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { handleStockHistory } from "./stockHistory.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
@@ -58,13 +58,81 @@ export async function backfillProductStockDefaults(): Promise<void> {
 export async function assertProductsHaveStock(qtyByProductId: Map<string, number>): Promise<void> {
   await backfillProductStockDefaults();
   const products = await productsCollection();
-  for (const [productId, qty] of qtyByProductId) {
+  // สินค้าชุด (2026-09-29) — เช็คที่ชิ้นส่วน รวมกับบรรทัดที่เบิกชิ้นส่วนตัวเดียวกันตรง ๆ เป็นยอดก้อนเดียว
+  const { totals, kitOf } = await explodeKitQuantities(qtyByProductId);
+  for (const [productId, qty] of totals) {
     const product = await products.findOne({ _id: toObjectId(productId) });
     if (!product) throw new HttpError(404, "ไม่พบสินค้า");
     if ((product.stockQty ?? 0) < qty) {
-      throw new HttpError(400, `สต๊อก ${product.code} ไม่พอ (ต้องการ ${qty} คงเหลือ ${product.stockQty ?? 0} หน่วย)`);
+      const kits = kitOf.get(productId);
+      throw new HttpError(400, `สต๊อก ${product.code} ไม่พอ (ต้องการ ${qty} คงเหลือ ${product.stockQty ?? 0} หน่วย)${kits ? ` — ชิ้นส่วนของชุด ${[...kits].join(", ")}` : ""}`);
     }
   }
+}
+
+/**
+ * **สินค้าชุด** (2026-09-29) — ดู `Product.kitComponents` ใน src/lib/products.ts · แตกยอดต่อสินค้าที่มีชุดปนอยู่เป็นยอดต่อชิ้นส่วน
+ * (ชิ้นส่วนเดียวกันจากหลายชุด/บรรทัดตรงรวมเป็นก้อนเดียว) · `kitOf` = ชิ้นส่วนนี้มาจากชุดไหน (ไว้บอกในข้อความ error)
+ */
+export async function explodeKitQuantities(qtyByProductId: Map<string, number>): Promise<{ totals: Map<string, number>; kitOf: Map<string, Set<string>> }> {
+  const kits = await kitRecipesOf([...qtyByProductId.keys()]);
+  const totals = new Map<string, number>();
+  const kitOf = new Map<string, Set<string>>();
+  for (const [productId, qty] of qtyByProductId) {
+    const kit = kits.get(productId);
+    if (!kit) { totals.set(productId, (totals.get(productId) ?? 0) + qty); continue; }
+    for (const c of kit.components) {
+      totals.set(c.productId, round4((totals.get(c.productId) ?? 0) + qty * c.qty));
+      if (!kitOf.has(c.productId)) kitOf.set(c.productId, new Set());
+      kitOf.get(c.productId)!.add(kit.code);
+    }
+  }
+  return { totals, kitOf };
+}
+
+/** สูตรของสินค้าที่เป็นชุดในรายการ (สินค้าที่ไม่ใช่ชุดไม่อยู่ใน map) */
+export async function kitRecipesOf(productIds: string[]): Promise<Map<string, { code: string; name: string; components: KitComponent[] }>> {
+  const ids = [...new Set(productIds.filter((id) => /^[0-9a-f]{24}$/i.test(id)))];
+  if (ids.length === 0) return new Map();
+  const docs = await (await productsCollection())
+    .find({ _id: { $in: ids.map((id) => toObjectId(id)) }, "kitComponents.0": { $exists: true } } as never, { projection: { code: 1, name: 1, kitComponents: 1 } })
+    .toArray();
+  return new Map(docs.map((p) => [p._id.toString(), { code: p.code, name: p.name, components: p.kitComponents ?? [] }]));
+}
+
+/**
+ * ด่านของทางรับเข้า/ปรับยอด (ใบรับสินค้า รับเข้าคลัง ตรวจนับ นำเข้าจาก Excel) — เรียก**ก่อน**เขียนแถวแรก ไม่งั้นบรรทัดก่อนหน้า
+ * ถูกลงสต๊อกไปแล้วค่อยมาเจอชุดกลางทาง · `applyStockMovement()` ปฏิเสธเองอีกชั้นอยู่แล้ว
+ */
+export async function assertNoKits(productIds: string[], action: string): Promise<void> {
+  const kits = await kitRecipesOf(productIds);
+  if (kits.size > 0) {
+    const names = [...kits.values()].map((k) => `${k.code} ${k.name}`.trim()).join(", ");
+    throw new HttpError(400, `${names} เป็นสินค้าชุด — ${action}เป็นชุดไม่ได้ ให้${action}เป็นชิ้นส่วนแทน`);
+  }
+}
+
+/**
+ * ยอดคงเหลือต่อสินค้าสำหรับโชว์คู่เอกสาร (ช่อง "คงเหลือ"/"ของไม่พอ") — สินค้าชุดได้ **จำนวนชุดที่เบิกได้** จากชิ้นส่วน (2026-09-29)
+ * ไม่ใช่ 0 ในฐานข้อมูล · ใช้ร่วมกันโดยใบเบิก ใบขอซื้อ และใบรับคืน
+ */
+export async function stockQtyByProduct(productIds: string[]): Promise<Record<string, number>> {
+  const ids = [...new Set(productIds.filter((id) => /^[0-9a-f]{24}$/i.test(id)))];
+  if (ids.length === 0) return {};
+  const products = await productsCollection();
+  const docs = await products.find({ _id: { $in: ids.map((id) => toObjectId(id)) } }, { projection: { stockQty: 1, kitComponents: 1 } }).toArray();
+  const componentIds = [...new Set(docs.flatMap((p) => (p.kitComponents ?? []).map((c) => c.productId)))];
+  const componentStock = new Map((componentIds.length > 0
+    ? await products.find({ _id: { $in: componentIds.map((id) => toObjectId(id)) } }, { projection: { stockQty: 1 } }).toArray()
+    : []).map((p) => [p._id.toString(), p.stockQty ?? 0]));
+  return Object.fromEntries(docs.map((p) => [
+    p._id.toString(),
+    (p.kitComponents?.length ?? 0) > 0 ? kitAvailableQty(p.kitComponents!, componentStock) : p.stockQty ?? 0,
+  ]));
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
 }
 
 /** ต้นทุนต่อหน่วยของสินค้าหนึ่งตัว ณ ปัจจุบัน — ถัวเฉลี่ย (มูลค่าคลัง) และราคาซื้อล่าสุด (ใช้ตอนคืนของ) */
@@ -109,16 +177,24 @@ export async function postedUnitCostsByProduct(movementIds: string[]): Promise<R
   if (ids.length === 0) return {};
   const movements = await stockMovementsCollection();
   const rows = await movements.find({ _id: { $in: ids.map((id) => toObjectId(id)) } } as never,
-    { projection: { productId: 1, delta: 1, amount: 1, unitCost: 1 } }).toArray();
+    { projection: { productId: 1, delta: 1, amount: 1, unitCost: 1, kitProductId: 1, kitQty: 1, kitGroupId: 1 } }).toArray();
   const sums = new Map<string, { qty: number; amount: number }>();
-  for (const m of rows as unknown as { productId: string; delta: number; amount?: number; unitCost?: number }[]) {
+  // สินค้าชุด (2026-09-29): ต้นทุนของชุด = มูลค่าชิ้นส่วนทั้งกลุ่ม ÷ จำนวนชุด (นับจำนวนชุดครั้งเดียวต่อกลุ่ม)
+  const kitGroupsSeen = new Set<string>();
+  for (const m of rows as unknown as { productId: string; delta: number; amount?: number; unitCost?: number; kitProductId?: string; kitQty?: number; kitGroupId?: string }[]) {
     const qty = Math.abs(m.delta ?? 0);
     if (qty === 0) continue;
     const amount = typeof m.amount === "number" ? m.amount : qty * (m.unitCost ?? 0);
     const s = sums.get(m.productId) ?? { qty: 0, amount: 0 };
     sums.set(m.productId, { qty: s.qty + qty, amount: s.amount + amount });
+    if (m.kitProductId) {
+      const k = sums.get(m.kitProductId) ?? { qty: 0, amount: 0 };
+      const firstOfGroup = !!m.kitGroupId && !kitGroupsSeen.has(m.kitGroupId);
+      if (m.kitGroupId) kitGroupsSeen.add(m.kitGroupId);
+      sums.set(m.kitProductId, { qty: k.qty + (firstOfGroup ? m.kitQty ?? 0 : 0), amount: k.amount + amount });
+    }
   }
-  return Object.fromEntries([...sums].map(([productId, s]) => [productId, round2(s.amount / s.qty)]));
+  return Object.fromEntries([...sums].filter(([, s]) => s.qty > 0).map(([productId, s]) => [productId, round2(s.amount / s.qty)]));
 }
 
 /** แผนก/ทีม/ประเภทงานที่ประทับลง movement — ดู StockMovementFields */
@@ -135,7 +211,49 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export async function applyStockMovement(params: {
+type StockMovementParams = Parameters<typeof applySingleStockMovement>[0];
+
+/**
+ * **ทางเดียวที่ `Product.stockQty` เปลี่ยนได้** — สินค้าปกติเขียนหนึ่งแถว · **สินค้าชุด (2026-09-29)** แตกเป็นหนึ่งแถวต่อชิ้นส่วน
+ * (จำนวน × จำนวนต่อชุด) ประทับ `kit*` ลงทุกแถว — ผู้เรียกทุกที่ (ใบเบิก ใบจ่าย ยกเลิกรอบ ใบรับคืน ใบขอซื้อ ใบกำกับภาษี ปรับด้วยมือ)
+ * จึงได้การตัดชิ้นส่วนไปพร้อมกันโดยไม่ต้องรู้จักชุด · ชุดรับเข้า/ปรับยอดไม่ได้ (400) — ของเข้าคลังเป็นชิ้นส่วนเสมอ ·
+ * คืนของเป็นชุด: ต้นทุนแถวคิดต่อชิ้นส่วนเอง (ราคาที่ผู้เรียกส่งมาเป็นของตัวชุดซึ่งไม่มีต้นทุน)
+ *
+ * `movements` = ทุกแถวที่เขียน (ผู้เรียกที่เก็บ id ไว้ย้อนกลับต้องเก็บทั้งหมด) · `movement` = แถวแรก (ของเดิม) ·
+ * ไม่ใช่ transaction ข้ามชิ้นส่วน — ผู้เรียกเช็คยอดทั้งชุดก่อนด้วย `assertProductsHaveStock()` ซึ่งแตกชุดให้แล้ว
+ */
+export async function applyStockMovement(params: StockMovementParams): Promise<{
+  movement: StockMovementFields & { id: string };
+  movements: (StockMovementFields & { id: string })[];
+  balanceAfter: number;
+}> {
+  const kit = (await kitRecipesOf([params.productId])).get(params.productId);
+  if (!kit) {
+    const one = await applySingleStockMovement(params);
+    return { ...one, movements: [one.movement] };
+  }
+  if (params.kind === "receive" || params.kind === "adjust") {
+    throw new HttpError(400, `${kit.code} ${kit.name} เป็นสินค้าชุด — รับเข้า/ปรับยอดเป็นชุดไม่ได้ ให้ทำที่ชิ้นส่วนแทน`);
+  }
+  if (!Number.isFinite(params.delta) || params.delta === 0) throw new HttpError(400, "จำนวนต้องไม่เป็นศูนย์");
+  const kitQty = Math.abs(params.delta);
+  const kitGroupId = newId("kit");
+  const returnCosts = params.kind === "return" ? await productCostBasis(kit.components.map((c) => c.productId)) : {};
+  const movements: (StockMovementFields & { id: string })[] = [];
+  for (const c of kit.components) {
+    const { movement } = await applySingleStockMovement({
+      ...params,
+      productId: c.productId,
+      delta: round4(params.delta * c.qty),
+      unitCost: undefined,
+      rowUnitCost: params.kind === "return" ? returnUnitCostOf(returnCosts[c.productId]) : undefined,
+    }, { kitProductId: params.productId, kitProductCode: kit.code, kitProductName: kit.name, kitQty, kitGroupId });
+    movements.push(movement);
+  }
+  return { movement: movements[0], movements, balanceAfter: 0 };
+}
+
+async function applySingleStockMovement(params: {
   productId: string;
   kind: StockMovementKind;
   delta: number;
@@ -156,7 +274,7 @@ export async function applyStockMovement(params: {
    */
   rowUnitCost?: number;
   org?: StockMovementOrgTags;
-}): Promise<{ movement: StockMovementFields & { id: string }; balanceAfter: number }> {
+}, kitTags?: Pick<StockMovementFields, "kitProductId" | "kitProductCode" | "kitProductName" | "kitQty" | "kitGroupId">): Promise<{ movement: StockMovementFields & { id: string }; balanceAfter: number }> {
   if (!Number.isFinite(params.delta) || params.delta === 0) throw new HttpError(400, "จำนวนต้องไม่เป็นศูนย์");
   const costIn = params.delta > 0 && typeof params.unitCost === "number" && Number.isFinite(params.unitCost) && params.unitCost >= 0
     ? params.unitCost
@@ -227,6 +345,7 @@ export async function applyStockMovement(params: {
     ...(params.org?.teamName ? { teamName: params.org.teamName } : {}),
     ...(params.org?.workTypeCode ? { workTypeCode: params.org.workTypeCode } : {}),
     ...(params.org?.workTypeName ? { workTypeName: params.org.workTypeName } : {}),
+    ...(kitTags ?? {}),
     createdAt: now,
     createdBy: params.userId,
   };
@@ -359,8 +478,10 @@ async function handleStockImport(req: ApiRequest, res: ApiResponse) {
 
   await backfillProductStockDefaults();
   const products = await productsCollection();
-  const all = await products.find({ archived: { $ne: true } }, { projection: { code: 1 } }).toArray();
+  const all = await products.find({ archived: { $ne: true } }, { projection: { code: 1, kitComponents: 1 } }).toArray();
   const idByCode = new Map(all.map((p) => [String(p.code ?? "").trim().toLowerCase(), p._id]));
+  // สินค้าชุดไม่มีสต๊อกของตัวเอง (2026-09-29) — นำเข้ายอดให้ชิ้นส่วนแทน
+  const kitCodes = new Set(all.filter((p) => (p.kitComponents?.length ?? 0) > 0).map((p) => String(p.code ?? "").trim().toLowerCase()));
 
   const problems: string[] = [];
   const seen = new Set<string>();
@@ -374,6 +495,7 @@ async function handleStockImport(req: ApiRequest, res: ApiResponse) {
     else if (qty === null) problems.push(`${code}: ยอดคงเหลือต้องเป็นตัวเลขไม่ติดลบ`);
     else if (seen.has(key)) problems.push(`${code}: รหัสซ้ำในไฟล์`);
     else if (!idByCode.has(key)) problems.push(`${code}: ไม่พบรหัสนี้ในทะเบียนสินค้า`);
+    else if (kitCodes.has(key)) problems.push(`${code}: เป็นสินค้าชุด — นำเข้ายอดให้ชิ้นส่วนแทน`);
     else rows.push({ productId: idByCode.get(key)!, code, qty, unitCost });
     seen.add(key);
   });

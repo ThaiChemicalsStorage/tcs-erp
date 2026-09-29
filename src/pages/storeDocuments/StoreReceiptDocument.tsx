@@ -25,6 +25,8 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { StoreReceiptPrintDocument } from "./StoreReceiptPrintDocument";
 import { RequisitionSourcePicker } from "./RequisitionSourcePicker";
+import { KitBreakdown } from "../../components/KitBreakdown";
+import { useKitRecipes } from "../../hooks/useKitRecipes";
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
 const cellInputCls = "w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
@@ -66,6 +68,8 @@ export function StoreReceiptDocument({
   showToast: (message: string) => void;
 }) {
   const { t } = useI18n();
+  // สินค้าชุด (2026-09-29) — คืนชุด = คืนชิ้นส่วน · รับเข้า/ปรับยอดเป็นชุดไม่ได้ (เซิร์ฟเวอร์ปฏิเสธ) จึงเตือนตั้งแต่บรรทัด
+  const kits = useKitRecipes();
   const [doc, setDoc] = useState<StoreReceipt | null>(null);
   const [draft, setDraft] = useState<StoreReceipt | null>(null);
   const [stockByProduct, setStockByProduct] = useState<Record<string, number>>({});
@@ -474,7 +478,13 @@ export function StoreReceiptDocument({
                       return (
                         <tr key={l.id} className="border-b border-border/50">
                           <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{l.productCode}</td>
-                          <td className="px-3 py-2 text-xs text-foreground">{l.productName}</td>
+                          <td className="px-3 py-2 text-xs text-foreground">
+                            {l.productName}
+                            <KitBreakdown productId={l.productId} qty={l.qty} kits={kits} />
+                            {kind !== "return" && kits.has(l.productId) && (
+                              <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{l.unit}</td>
                           {kind === "return" ? (
                             <>

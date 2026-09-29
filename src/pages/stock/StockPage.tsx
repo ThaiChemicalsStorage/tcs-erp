@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList, FileSpreadsheet, FileText, Sheet } from "lucide-react";
 import { StockImportDialog } from "./StockImportDialog";
-import { type Product, type ProductCategory, updateProduct, fetchProducts } from "../../lib/products";
+import { type Product, type ProductCategory, updateProduct, fetchProducts, isKitProduct, kitBreakdownText } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { StockCountSheetPrintDocument } from "./StockCountSheetPrintDocument";
 import { StockCardPrintDocument } from "./StockCardPrintDocument";
@@ -89,7 +89,8 @@ export function StockPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const totalUnits = activeProducts.reduce((sum, p) => sum + p.stockQty, 0);
+  // สินค้าชุด (2026-09-29) — ยอดของชุดคือจำนวนชุดที่เบิกได้จากชิ้นส่วน ไม่ใช่ของอีกชิ้นในคลัง จึงไม่รวมในจำนวนหน่วยทั้งหมด
+  const totalUnits = activeProducts.reduce((sum, p) => sum + (isKitProduct(p) ? 0 : p.stockQty), 0);
   const totalValue = activeProducts.reduce((sum, p) => sum + stockValueOf(p), 0);
   const zeroStockCount = activeProducts.filter((p) => p.stockQty <= 0).length;
   /** ของใกล้หมด = ตั้งจุดเตือนไว้แล้ว และยอดคงเหลือถึงหรือต่ำกว่าจุดนั้น (จุดเตือน 0 = ปิดการเตือน) */
@@ -289,11 +290,17 @@ export function StockPage({
                     <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[280px] truncate" title={p.name}>
                       {p.name}
                       {p.isTool && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">{t("stock.toolBadge")}</span>}
+                      {isKitProduct(p) && (
+                        <span className="block text-xs text-muted-foreground font-normal truncate mt-0.5" title={kitBreakdownText(p.kitComponents!, 1)}>
+                          <span className="inline-flex items-center px-1.5 rounded bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/25 mr-1.5">{t("kit.badge")}</span>
+                          {t("kit.perKit")} {kitBreakdownText(p.kitComponents!, 1)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{categoryName(p.categoryId)}</td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{p.unit || "—"}</td>
                     <td className={`px-4 py-3.5 text-sm font-mono font-semibold whitespace-nowrap ${p.stockQty <= 0 ? "text-[#c23f3f]" : isLowStock(p) ? "text-[#a75d1a]" : "text-foreground"}`}>
-                      <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1.5" title={isKitProduct(p) ? t("kit.availableHint") : undefined}>
                         {p.stockQty.toLocaleString("th-TH")}
                         {isLowStock(p) && p.stockQty > 0 && <AlertTriangle size={12} aria-label={t("stock.lowStockBadge")} />}
                       </span>
@@ -320,6 +327,9 @@ export function StockPage({
                       )}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
+                      {isKitProduct(p) ? (
+                        <p className="text-xs text-muted-foreground text-right whitespace-normal max-w-[180px] ml-auto">{t("kit.noOwnStock")}</p>
+                      ) : (
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => onOpenHistory(p.id)} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity" title={t("stock.action.viewHistoryTitle")} aria-label={t("stock.action.viewHistoryTitle")}>
                           <History size={14} />
@@ -339,6 +349,7 @@ export function StockPage({
                           </button>
                         )}
                       </div>
+                      )}
                     </td>
                   </tr>
                 ))}
