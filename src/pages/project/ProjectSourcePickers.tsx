@@ -37,8 +37,13 @@ function SkeletonRows() {
  * `POST /api/projects` allows several projects per scope — but creating a second one by accident is
  * far more likely to be a mistake than intent, so the UI steers away from it while staying honest).
  */
-export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false, requireFinalScope = true, pickItems = false }: {
+export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false, requireFinalScope = true, pickItems = false, purpose = "project" }: {
   onClose: () => void;
+  /**
+   * ใช้เปิดอะไร — ข้อความหัวกล่อง/คำอธิบาย/ปุ่มย้อนกลับเปลี่ยนตามนี้ (2026-09-29: ใบสั่งผลิตเคยขึ้น "เลือกงานที่จะสร้างโครงการ"
+   * เพราะใช้ข้อความของโครงการทั้งกล่อง)
+   */
+  purpose?: "project" | "productionOrder";
   /** `itemIds` มีค่าเฉพาะเมื่อเปิด `pickItems` — ไม่งั้นเป็น undefined แปลว่า "เอาทุกรายการ" */
   onSelect: (scopeOfWorkId: string, itemIds?: string[]) => void;
   /**
@@ -60,6 +65,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
   requireFinalScope?: boolean;
 }) {
   const { t } = useI18n();
+  const forProduction = purpose === "productionOrder";
   const [scopes, setScopes] = useState<ScopeOfWorkListItem[]>([]);
   const [existingByScope, setExistingByScope] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -104,7 +110,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
     <div className={dialogShell}>
       <div className={dialogPanel}>
         <div className="flex items-center justify-between">
-          <h2 className={dialogHeading} style={headingFont}>{t("project.picker.scope.title")}</h2>
+          <h2 className={dialogHeading} style={headingFont}>{t(forProduction ? "productionOrder.picker.scope.title" : "project.picker.scope.title")}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("project.picker.close")}>
             <X size={18} />
           </button>
@@ -113,7 +119,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
           <>
             <button onClick={() => { setPickedScope(null); setScopeItems(null); setScopeItemsError(false); setCheckedItems(new Set()); }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit">
-              <ChevronLeft size={14} /> {t("project.picker.back")}
+              <ChevronLeft size={14} /> {t(forProduction ? "productionOrder.picker.back" : "project.picker.back")}
             </button>
             <p className="text-xs text-muted-foreground">
               {t("project.picker.item.description")} — <span className="font-mono text-foreground">{pickedScope.scopeNumber}</span>
@@ -122,7 +128,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
               {scopeItemsError ? <p className="text-sm text-muted-foreground text-center py-6">{t("project.picker.loadError")}</p>
                 : scopeItems === null ? <SkeletonRows />
                 : scopeItems.length === 0 ? (
-                  <EmptyState icon={FileText} title={t("project.picker.item.emptyTitle")} description={t("project.picker.item.emptyDescription")} compact />
+                  <EmptyState icon={FileText} title={t("project.picker.item.emptyTitle")} description={t(forProduction ? "productionOrder.picker.item.emptyDescription" : "project.picker.item.emptyDescription")} compact />
                 ) : (
                   <div className="space-y-1.5">
                     {scopeItems.map((item) => (
@@ -168,7 +174,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
           </>
         ) : (
         <>
-        <p className="text-xs text-muted-foreground">{t("project.picker.scope.description")}</p>
+        <p className="text-xs text-muted-foreground">{t(forProduction ? "productionOrder.picker.scope.description" : "project.picker.scope.description")}</p>
 
         <div className={searchBox}>
           <Search size={14} className="text-muted-foreground flex-shrink-0" />

@@ -138,6 +138,7 @@ export function ProductionOrderPage({
           allowMultiplePerScope
           requireFinalScope={false}
           pickItems
+          purpose="productionOrder"
         />
       )}
       <Toast message={toast.message} />

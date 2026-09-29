@@ -420,8 +420,8 @@ export function TemplateManagementPage({
 
       <ConfirmDialog
         open={archiveTarget !== null}
-        title={archiveTarget?.isDeleted ? t("customers.unarchiveConfirmTitle") : t("customers.archiveConfirmTitle")}
-        message={archiveTarget?.isDeleted ? t("customers.unarchiveConfirmMessage") : t("customers.archiveConfirmMessage")}
+        title={archiveTarget?.isDeleted ? t("templates.unarchiveConfirmTitle") : t("templates.archiveConfirmTitle")}
+        message={archiveTarget?.isDeleted ? t("templates.unarchiveConfirmMessage") : t("templates.archiveConfirmMessage")}
         confirmLabel={archiveTarget?.isDeleted ? t("common.unarchive") : t("common.archive")}
         danger={!archiveTarget?.isDeleted}
         onCancel={() => setArchiveTarget(null)}
