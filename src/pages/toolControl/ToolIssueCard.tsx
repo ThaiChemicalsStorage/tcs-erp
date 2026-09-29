@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Hammer, Loader2, PackageMinus, Search, Undo2 } from "lucide-react";
+import { Hammer, Loader2, PackageMinus, Plus, Search, Undo2 } from "lucide-react";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { fetchProducts, type Product } from "../../lib/products";
@@ -7,6 +7,7 @@ import type { Department } from "../../lib/departments";
 import type { Team } from "../../lib/teams";
 import type { CodeEntry } from "../../lib/codeRegister";
 import { fetchToolHoldings, issueTools, type ToolHoldingRow } from "../../lib/toolHoldings";
+import { AddCommonToolDialog, CommonToolStockDialog } from "./CommonToolDialogs";
 
 const selectCls = "h-9 w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors";
 const qtyCls = "w-24 px-2 py-1.5 text-sm text-right bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 transition-colors";
@@ -48,6 +49,9 @@ export function ToolIssueCard({
   /** เพิ่มค่าหลังบันทึกสำเร็จ เพื่อดึงยอดคงเหลือและยอดถือครองใหม่ — ไม่งั้นช่อง "คงเหลือ" ในตาราง
    *  ยังโชว์ยอดก่อนจ่าย ซึ่งอ่านแล้วเหมือนกดไม่ติด (เจอตอนไล่กดทดสอบ 2026-09-03b) */
   const [reloadToken, setReloadToken] = useState(0);
+  /** เครื่องมือกองกลาง (2026-09-29) — เพิ่มจากหน้านี้ได้เลย · กดรหัส/ชื่อของตัวที่เพิ่มจากหน้านี้เพื่ออัปเดตยอดสต๊อก */
+  const [addingTool, setAddingTool] = useState(false);
+  const [stockTool, setStockTool] = useState<Product | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,10 +154,16 @@ export function ToolIssueCard({
         </label>
       </div>
 
-      <div className="relative h-9 w-72">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("toolControl.issue.searchPlaceholder")}
-          className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative h-9 w-72 max-w-full">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("toolControl.issue.searchPlaceholder")}
+            className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+        </div>
+        <button onClick={() => setAddingTool(true)}
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <Plus size={13} /> {t("toolControl.commonTool.add")}
+        </button>
       </div>
 
       <div className="border border-border rounded-lg overflow-x-auto max-h-[22rem] overflow-y-auto">
@@ -176,7 +186,22 @@ export function ToolIssueCard({
               const typed = Number(qty[p.id] ?? "");
               return (
                 <tr key={p.id} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-2 text-sm text-foreground"><span className="font-mono text-xs text-[#c9a84c] mr-2">{p.code}</span>{p.name}</td>
+                  <td className="px-3 py-2 text-sm text-foreground">
+                    {p.commonTool ? (
+                      // เครื่องมือกองกลาง: กดรหัสหรือชื่อ = อัปเดตยอดสต๊อก (ทั้งปุ่มเป็นเป้าเดียว)
+                      <button onClick={() => setStockTool(p)} title={t("toolControl.commonTool.stockTitle")}
+                        className="text-left hover:underline decoration-[#c9a84c]/60 underline-offset-2">
+                        <span className="font-mono text-xs text-[#c9a84c] mr-2">{p.code}</span>{p.name}
+                      </button>
+                    ) : (
+                      <><span className="font-mono text-xs text-[#c9a84c] mr-2">{p.code}</span>{p.name}</>
+                    )}
+                    {p.commonTool && (
+                      <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20 whitespace-nowrap">
+                        {t("toolControl.commonTool.badge")}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{p.unit || "—"}</td>
                   <td className={`px-3 py-2 text-xs font-mono text-right ${cap <= 0 ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{cap.toLocaleString("th-TH")}</td>
                   <td className="px-3 py-2 text-right">
@@ -208,6 +233,28 @@ export function ToolIssueCard({
         </button>
         <span className="text-xs text-muted-foreground">{t("toolControl.issue.selected").replace("{n}", String(lines.length))}</span>
       </div>
+
+      {addingTool && (
+        <AddCommonToolDialog
+          onCancel={() => setAddingTool(false)}
+          onSaved={(product) => {
+            setAddingTool(false);
+            showToast(t("toolControl.commonTool.addedToast").replace("{code}", product.code));
+            setReloadToken((n) => n + 1);
+          }}
+        />
+      )}
+      {stockTool && (
+        <CommonToolStockDialog
+          product={stockTool}
+          onCancel={() => setStockTool(null)}
+          onSaved={(product) => {
+            setStockTool(null);
+            showToast(t("toolControl.commonTool.stockToast").replace("{code}", product.code).replace("{n}", (product.stockQty ?? 0).toLocaleString("th-TH")));
+            setReloadToken((n) => n + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

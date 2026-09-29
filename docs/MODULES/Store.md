@@ -202,6 +202,21 @@ that team currently holds, because "returning" something never issued would grow
 nothing. The tab only appears for `stock:adjust` holders — the same permission that lets Store
 issue against a requisition.
 
+**เครื่องมือกองกลาง (added 2026-09-29)** — owner: *"หน้าเครื่องมือประจำทีมตรงรายการเครื่องมือสามารถเพิ่มเครื่องมือขึ้นมาเองตรงนั้นเลยได้
+โดยไม่ต้องผ่านสต๊อก มันจะเป็นเครื่องมือกองกลาง ตรงเครื่องมือที่เพิ่มมาจากหน้านี้อยากให้ทำแบบกดรหัสหรือกดที่ชื่อก็ได้เพื่ออัปเดตจำนวนสต๊อก"*.
+Asked first: they **do** show on the Stock page / product catalog; the code is typed or left blank for `CT-0001`.
+
+- The จ่าย / รับคืน tab has **เพิ่มเครื่องมือกองกลาง** next to the search box (`CommonToolDialogs.tsx`): code (optional), name, unit,
+  quantity in stock. It is a real product (`isTool` + `commonTool`, category `เครื่องมือกองกลาง`) — issuing, returning, holdings and the
+  report need no change, and there is still one ledger.
+- On rows with `commonTool`, the **code and name are one button** that opens *อัปเดตจำนวนสต๊อก*: type the counted quantity, the dialog
+  shows the difference, the server writes it as an `adjust` movement. Catalog products stay plain text (they are adjusted on the Stock page).
+- Stock changes are `sourceType: "manual"`, never `"tool_issue"` — holdings are computed from `tool_issue`/`material_requisition`
+  rows, so using that source would make a stock count look like a team taking tools.
+- ⚠️ "Set balance" computes the delta from the value read just before writing; a tool issue landing between that read and the write
+  leaves the balance off by that issue. Same trade-off as the Excel stock import.
+- Tests: `tests/api/toolHoldings.test.ts` block "เครื่องมือกองกลาง" (+4).
+
 ## 5. Receiving Report (RR)
 
 The centrepiece. `receiving_reports`, keyed `_id = RR-YYYYMM-NNNN`.

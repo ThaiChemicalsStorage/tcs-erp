@@ -195,6 +195,7 @@ Added with the Store department's module set — see [Store.md](./Store.md) for 
 - **Stock value is `stockQty × avgCost`, computed on read** and never stored.
 - Movements now also carry `unitCost`, `amount`, `balanceValueAfter` and the department/team/work-type
   a requisition charged them to.
+- **`Product.commonTool`** (2026-09-29) — a tool created from the team-tools page (เครื่องมือกองกลาง), always `isTool`; see Store.md §4.
 - **`Product.isTool`** marks an item that must come back. `GET /api/tool-holdings` aggregates the
   ledger per (department, team, product) — `held = issued − returned` — with no collection of its own,
   and is gated on the existing `stock:view` rather than a new permission.

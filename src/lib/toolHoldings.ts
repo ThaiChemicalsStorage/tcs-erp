@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiClient.js";
 import type { StockMovementKind } from "./stock.js";
+import type { Product } from "./products.js";
 
 /**
  * เครื่องมือประจำทีม (2026-09-03) — ไม่มีคอลเล็กชันของตัวเอง ทุกตัวเลขมาจากบัญชีเดินสะพัดของสต๊อก
@@ -88,4 +89,21 @@ export async function issueTools(input: ToolIssueInput): Promise<{ slipNumber: s
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/**
+ * เครื่องมือกองกลาง (2026-09-29) — เพิ่มจากหน้าเครื่องมือประจำทีมได้เลย ไม่ผ่านคลังสินค้า · รหัสเว้นว่าง = ระบบออก `CT-0001`
+ * · `qty` = ยอดเริ่มต้น (ลงบัญชีสต๊อกเป็นการปรับยอด) ดู `Product.commonTool`
+ */
+export async function createCommonTool(input: { code?: string; name: string; unit?: string; qty?: number }): Promise<Product> {
+  const { product } = await apiFetch<{ product: Product }>("/tool-holdings/tools", { method: "POST", body: JSON.stringify(input) });
+  return product;
+}
+
+/** ตั้งยอดคงเหลือของเครื่องมือกองกลาง — `qty` คือยอดที่ควรเป็น (ไม่ใช่ยอดที่จะบวก) ระบบลงส่วนต่างให้ */
+export async function setCommonToolStock(productId: string, qty: number, note?: string): Promise<Product> {
+  const { product } = await apiFetch<{ product: Product }>(`/tool-holdings/tools/${encodeURIComponent(productId)}/stock`, {
+    method: "POST", body: JSON.stringify({ qty, note }),
+  });
+  return product;
 }

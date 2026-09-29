@@ -2,7 +2,7 @@ import type { ApiRequest, ApiResponse } from "./httpTypes.js";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
 import {
-  productsCollection, stockMovementsCollection, departmentsCollection, teamsCollection,
+  productsCollection, categoriesCollection, stockMovementsCollection, departmentsCollection, teamsCollection,
   codeEntriesCollection, countersCollection, auditLogCollection,
   toObjectId, withStringId, type StockMovementFields,
 } from "./collections.js";
@@ -271,6 +271,124 @@ async function handleIssue(req: ApiRequest, res: ApiResponse): Promise<void> {
   res.status(200).json({ slipNumber, lineCount: qtyByProduct.size });
 }
 
+/**
+ * **เครื่องมือกองกลาง** (2026-09-29) — เจ้าของ: *"ตรงรายการเครื่องมือสามารถเพิ่มเครื่องมือขึ้นมาเองตรงนั้นเลยได้โดยไม่ต้องผ่านสต๊อก
+ * มันจะเป็นเครื่องมือกองกลาง … กดรหัสหรือกดที่ชื่อก็ได้เพื่ออัปเดตจำนวนสต๊อก"* · เจ้าของเลือก: ขึ้นในหน้าสต๊อก/คลังสินค้าด้วย ·
+ * รหัสพิมพ์เองได้ เว้นว่าง = ระบบออก `CT-0001`
+ *
+ * ยังเป็นสินค้าในคอลเล็กชันเดิม (`isTool` + `commonTool`) ไม่ใช่ทะเบียนแยก — จ่าย/คืน/ยอดถือครองจึงใช้ทางเดิมทั้งหมด ·
+ * ยอดสต๊อกเปลี่ยนผ่าน `applyStockMovement()` เสมอ (kind `adjust`, sourceType `manual` — **ไม่ใช่** `tool_issue`
+ * เพราะยอดถือครองของทีมนับจาก `tool_issue` ถ้าใช้ตัวนั้นการตั้งยอดจะกลายเป็นการจ่าย/คืนให้ทีม) · สิทธิ์ `stock:adjust`
+ * เท่าการจ่าย/รับคืนในหน้าเดียวกัน ไม่ต้องมี `products:create`
+ */
+const COMMON_TOOL_CATEGORY = "เครื่องมือกองกลาง";
+
+async function commonToolCategoryId(userId: string): Promise<string> {
+  const categories = await categoriesCollection();
+  const found = await categories.findOne({ name: COMMON_TOOL_CATEGORY });
+  if (found) return found._id.toString();
+  const now = nowIso();
+  const inserted = await categories.insertOne({
+    name: COMMON_TOOL_CATEGORY, archived: false, createdAt: now, updatedAt: now, createdBy: userId, updatedBy: userId,
+  });
+  return inserted.insertedId.toString();
+}
+
+/** รหัสถัดไป `CT-0001` — ข้ามเลขที่มีคนพิมพ์ใช้ไปแล้ว (รหัสสินค้าต้องไม่ซ้ำ) */
+async function nextCommonToolCode(): Promise<string> {
+  const counters = await countersCollection();
+  const products = await productsCollection();
+  for (let i = 0; i < 1000; i++) {
+    const result = await counters.findOneAndUpdate({ _id: "common_tool" }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
+    const code = `CT-${String(result?.seq ?? 1).padStart(4, "0")}`;
+    if (!(await products.findOne({ code }))) return code;
+  }
+  throw new HttpError(500, "ออกรหัสเครื่องมือไม่สำเร็จ");
+}
+
+function sanitizeStockQty(v: unknown): number {
+  const qty = sanitizeNullableNumber(v, "จำนวนสต๊อก") ?? 0;
+  if (qty < 0) throw new HttpError(400, "จำนวนสต๊อกต้องไม่ติดลบ");
+  return qty;
+}
+
+/** `POST /api/tool-holdings/tools` — `{ code?, name, unit?, qty? }` → สร้างเครื่องมือกองกลาง (+ ตั้งยอดเริ่มต้น) */
+async function handleCreateCommonTool(req: ApiRequest, res: ApiResponse): Promise<void> {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "stock:adjust");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const name = sanitizeShortText(body.name, "ชื่อเครื่องมือ", true);
+  const unit = sanitizeShortText(body.unit, "หน่วย");
+  const qty = sanitizeStockQty(body.qty);
+  const products = await productsCollection();
+  let code = sanitizeShortText(body.code, "รหัสเครื่องมือ");
+  if (code) {
+    if (await products.findOne({ code })) throw new HttpError(409, `รหัส ${code} มีอยู่แล้ว`);
+  } else {
+    code = await nextCommonToolCode();
+  }
+
+  const now = nowIso();
+  let insertedId;
+  try {
+    ({ insertedId } = await products.insertOne({
+      code, name, categoryId: await commonToolCategoryId(ctx.user.id), unit,
+      defaultPrice: 0, description: "", specifications: "", archived: false,
+      stockQty: 0, reorderPoint: 0, avgCost: 0, isTool: true, commonTool: true,
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+    }));
+  } catch (err) {
+    if (err && typeof err === "object" && (err as { code?: number }).code === 11000) throw new HttpError(409, `รหัส ${code} มีอยู่แล้ว`);
+    throw err;
+  }
+  const productId = insertedId.toString();
+  if (qty > 0) {
+    await applyStockMovement({
+      productId, kind: "adjust", delta: qty, reason: "ตั้งยอดเครื่องมือกองกลาง (เพิ่มจากหน้าเครื่องมือประจำทีม)",
+      sourceType: "manual", userId: ctx.user.id,
+    });
+  }
+  await writeCommonToolAudit(ctx, "Common Tool Created", `เพิ่มเครื่องมือกองกลาง ${code} ${name} ยอดเริ่มต้น ${qty} ${unit}`.trim());
+  const doc = await products.findOne({ _id: insertedId });
+  res.status(201).json({ product: withStringId(doc!) });
+}
+
+/**
+ * `POST /api/tool-holdings/tools/:id/stock` — `{ qty, note? }` **qty = ยอดคงเหลือที่ควรเป็น** (นับได้เท่าไหร่กรอกเท่านั้น)
+ * ระบบลงส่วนต่างเป็นแถว `adjust` · เฉพาะเครื่องมือกองกลาง — สินค้าอื่นยังปรับยอดที่หน้าสต๊อกตามเดิม
+ */
+async function handleSetCommonToolStock(req: ApiRequest, res: ApiResponse, productId: string): Promise<void> {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "stock:adjust");
+  if (!isObjectIdLike(productId)) throw new HttpError(400, "รหัสเครื่องมือไม่ถูกต้อง");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const qty = sanitizeStockQty(body.qty);
+  const note = sanitizeLongText(body.note, "หมายเหตุ");
+  const products = await productsCollection();
+  const product = await products.findOne({ _id: toObjectId(productId) });
+  if (!product) throw new HttpError(404, "ไม่พบเครื่องมือ");
+  if (!product.commonTool) throw new HttpError(400, "อัปเดตยอดที่หน้านี้ได้เฉพาะเครื่องมือกองกลาง — สินค้าอื่นปรับยอดที่หน้าสต๊อก");
+  const before = product.stockQty ?? 0;
+  const delta = qty - before;
+  if (delta !== 0) {
+    await applyStockMovement({
+      productId, kind: "adjust", delta,
+      reason: note || `อัปเดตยอดเครื่องมือกองกลาง ${before} → ${qty}`,
+      sourceType: "manual", userId: ctx.user.id,
+    });
+    await writeCommonToolAudit(ctx, "Common Tool Stock Updated", `อัปเดตยอด ${product.code} ${product.name}: ${before} → ${qty} ${product.unit ?? ""}`.trim());
+  }
+  const doc = await products.findOne({ _id: toObjectId(productId) });
+  res.status(200).json({ product: withStringId(doc!) });
+}
+
+async function writeCommonToolAudit(ctx: AuthContext, action: string, details: string): Promise<void> {
+  await (await auditLogCollection()).insertOne({
+    userId: ctx.user.id, userName: ctx.user.fullName, roleName: ctx.role?.name ?? ctx.user.roleKey,
+    module: "เครื่องมือประจำทีม", action, details, createdAt: nowIso(),
+  });
+}
+
 /** ยอดที่ทีมหนึ่งถืออยู่ตอนนี้ ต่อสินค้า — ใช้กันการคืนเกินที่ถือ */
 async function heldByTeam(teamId: string, productIds: string[]): Promise<Map<string, number>> {
   const movements = await stockMovementsCollection();
@@ -298,6 +416,8 @@ export async function handleToolHoldings(req: ApiRequest, res: ApiResponse): Pro
   const parts = getPathSegments(req, "/api/tool-holdings");
   // จ่าย/รับคืนเป็นการเขียนสต๊อกจริง จึงต้องมี stock:adjust ไม่ใช่ stock:view ของหน้าดูอย่างเดียว
   if (parts.length === 1 && parts[0] === "issue") return handleIssue(req, res);
+  if (parts.length === 1 && parts[0] === "tools") return handleCreateCommonTool(req, res);
+  if (parts.length === 3 && parts[0] === "tools" && parts[2] === "stock") return handleSetCommonToolStock(req, res, parts[1]);
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "stock:view");
   if (parts.length !== 0) throw new HttpError(404, "Not found");

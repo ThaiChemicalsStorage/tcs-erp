@@ -61,6 +61,12 @@ export interface Product {
    * วัสดุสิ้นเปลืองไม่ติ๊ก เพราะเบิกไปแล้วใช้หมด ไม่ใช่ของที่ทีม "ถือ"
    */
   isTool?: boolean;
+  /**
+   * **เครื่องมือกองกลาง** (2026-09-29) — สร้างจากหน้าเครื่องมือประจำทีมโดยตรง ไม่ผ่านคลังสินค้า/ใบรับสินค้า
+   * (`POST /api/tool-holdings/tools`) · อยู่หมวด "เครื่องมือกองกลาง" เป็นสินค้าปกติในหน้าสต๊อก · ยอดสต๊อกตั้งจากหน้าเครื่องมือได้
+   * (`POST /api/tool-holdings/tools/:id/stock`) ยังลงบัญชีเดินสะพัดทุกครั้ง · `isTool` เป็น true เสมอ
+   */
+  commonTool?: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;

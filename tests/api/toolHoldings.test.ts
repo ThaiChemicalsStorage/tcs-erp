@@ -185,3 +185,65 @@ describe("POST /api/tool-holdings/issue", () => {
     expect(rows.every((r) => r.sourceLabel.startsWith("TL-"))).toBe(true);
   });
 });
+
+/**
+ * เครื่องมือกองกลาง (2026-09-29) — เพิ่มจากหน้าเครื่องมือประจำทีมได้เลย (ไม่ผ่านคลังสินค้า) และตั้งยอดสต๊อกจากหน้าเดียวกัน
+ * ยอดลงบัญชีเดินสะพัดเป็นการปรับยอด (`manual`/`adjust`) — **ไม่ถูกนับเป็นยอดที่ทีมถือ**
+ */
+describe("เครื่องมือกองกลาง", () => {
+  async function post(path: string, body: unknown): Promise<{ status: number; body: any }> {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST", headers: { cookie: adminCookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : undefined };
+  }
+  let commonId = "";
+
+  it("เพิ่มโดยไม่ใส่รหัส → ได้ CT-0001 เป็นเครื่องมือ หมวดเครื่องมือกองกลาง ยอดเริ่มต้นลงบัญชีสต๊อก", async () => {
+    const res = await post("/api/tool-holdings/tools", { name: "บันไดอลูมิเนียม", unit: "อัน", qty: 4 });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.product).toMatchObject({ code: "CT-0001", name: "บันไดอลูมิเนียม", unit: "อัน", isTool: true, commonTool: true, stockQty: 4 });
+    commonId = res.body.product.id;
+    const db = client.db("tcs_erp");
+    const cat = await db.collection("categories").findOne({ name: "เครื่องมือกองกลาง" });
+    expect(res.body.product.categoryId).toBe(cat?._id.toString());
+    const moves = await db.collection("stock_movements").find({ productId: commonId }).toArray();
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ kind: "adjust", delta: 4, sourceType: "manual" });
+    // ไม่ใช่การจ่ายให้ทีม — ไม่โผล่ในยอดถือครอง
+    const { holdings } = (await (await api("/api/tool-holdings")).json()) as { holdings: { productId: string }[] };
+    expect(holdings.some((h) => h.productId === commonId)).toBe(false);
+  });
+
+  it("พิมพ์รหัสเองได้ · รหัสซ้ำ → 409 · ไม่มีชื่อ → 400 · เพิ่มครั้งถัดไปไม่ใส่รหัสได้ CT-0002 (หมวดเดิม)", async () => {
+    const own = await post("/api/tool-holdings/tools", { code: "LAD-02", name: "บันไดเหล็ก", unit: "อัน" });
+    expect(own.status).toBe(201);
+    expect(own.body.product).toMatchObject({ code: "LAD-02", stockQty: 0 });
+    expect((await post("/api/tool-holdings/tools", { code: "LAD-02", name: "ซ้ำ" })).status).toBe(409);
+    expect((await post("/api/tool-holdings/tools", { name: "" })).status).toBe(400);
+    const next = await post("/api/tool-holdings/tools", { name: "ค้อน" });
+    expect(next.body.product.code).toBe("CT-0002");
+    expect(await client.db("tcs_erp").collection("categories").countDocuments({ name: "เครื่องมือกองกลาง" })).toBe(1);
+  });
+
+  it("อัปเดตยอด = ตั้งยอดคงเหลือใหม่ ลงส่วนต่างในบัญชีสต๊อก", async () => {
+    const down = await post(`/api/tool-holdings/tools/${commonId}/stock`, { qty: 1, note: "ชำรุด 3" });
+    expect(down.status, JSON.stringify(down.body)).toBe(200);
+    expect(down.body.product.stockQty).toBe(1);
+    const up = await post(`/api/tool-holdings/tools/${commonId}/stock`, { qty: 6 });
+    expect(up.body.product.stockQty).toBe(6);
+    const moves = await client.db("tcs_erp").collection("stock_movements").find({ productId: commonId }).sort({ createdAt: 1 }).toArray();
+    expect(moves.map((m) => m.delta)).toEqual([4, -3, 5]);
+    expect(moves[1].reason).toBe("ชำรุด 3");
+    // ยอดเท่าเดิม = ไม่เขียนอะไร
+    await post(`/api/tool-holdings/tools/${commonId}/stock`, { qty: 6 });
+    expect(await client.db("tcs_erp").collection("stock_movements").countDocuments({ productId: commonId })).toBe(3);
+  });
+
+  it("อัปเดตยอดจากหน้านี้ได้เฉพาะเครื่องมือกองกลาง · ยอดติดลบไม่ได้", async () => {
+    expect((await post(`/api/tool-holdings/tools/${toolId}/stock`, { qty: 9 })).status).toBe(400);
+    expect((await post(`/api/tool-holdings/tools/${commonId}/stock`, { qty: -1 })).status).toBe(400);
+  });
+});
