@@ -831,10 +831,38 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
     // ตัดพอดีจำนวนที่ขอไม่ได้ · ด่านที่เหลือคือของในคลังต้องพอ (`assertProductsHaveStock` ข้างล่าง) · ยอดค้างเบิกไม่ติดลบ
     qtyByLineId.set(lineId, qty);
   }
-  if (qtyByLineId.size === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่จ่ายอย่างน้อยหนึ่งรายการ");
 
   // ใบจ่ายของสโตร์ที่อ้างใบเบิกแผนก — บรรทัดต้นทางต้องยังอยู่ (จ่ายเกินที่แผนกค้างได้ ตามกติกาเดียวกับข้างบน)
   const source = doc.ownerDepartment === "store" && doc.sourceRequisitionId ? await loadDepartmentRequisition(doc.sourceRequisitionId) : null;
+
+  /**
+   * **สโตร์เพิ่มรายการเองตอนจ่าย** (2026-09-29 เจ้าของ: *"สโตร์สามารถเพิ่มรายการเบิกเพิ่มเองได้"*) — `newLines: [{ productId,
+   * category?, qty }]` ต่อท้ายบรรทัดใหม่แล้วจ่ายในรอบเดียวกัน ได้ทุกรอบ แม้ใบเป็น Final แล้ว (รายการเดิมยังล็อก) · เฉพาะใบจ่ายของสโตร์
+   * · จำนวนที่ขอของบรรทัดใหม่ = จำนวนที่จ่ายรอบนี้ · ใบที่อ้างใบเบิกแผนก: บรรทัดใหม่ถูกเพิ่มลงใบแผนกด้วย (ผูก `sourceLineId`)
+   * ไม่งั้นของที่เพิ่มจะคืนไม่ได้ เพราะใบรับคืนของใบแบบนี้เลือกได้แค่ใบแผนก
+   */
+  const rawNewLines = body.newLines === undefined ? [] : body.newLines;
+  if (!Array.isArray(rawNewLines)) throw new HttpError(400, "ข้อมูลรายการที่เพิ่มไม่ถูกต้อง");
+  if (rawNewLines.length > 0 && doc.ownerDepartment !== "store") throw new HttpError(400, "เพิ่มรายการตอนจ่ายได้เฉพาะใบจ่ายของสโตร์");
+  if (doc.lines.length + rawNewLines.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
+  const newRows = (rawNewLines as Record<string, unknown>[]).map((r, idx) => {
+    const qty = sanitizeNullableNumber(r?.qty, `จำนวนจ่ายของรายการที่เพิ่มลำดับที่ ${idx + 1}`) ?? 0;
+    if (!(qty > 0)) throw new HttpError(400, `รายการที่เพิ่มลำดับที่ ${idx + 1}: กรุณากรอกจำนวนที่จ่าย`);
+    return { productId: r?.productId, category: typeof r?.category === "string" ? r.category : "other", plannedQty: qty, actualUsedQty: null };
+  });
+  const addedLines = await sanitizeLines(newRows, []);
+  const addedSourceLines: MaterialRequisitionLine[] = [];
+  for (const line of addedLines) {
+    if (source) {
+      const srcLine: MaterialRequisitionLine = { ...line, id: newId("mrline") };
+      addedSourceLines.push(srcLine);
+      line.sourceLineId = srcLine.id;
+    }
+    qtyByLineId.set(line.id, line.plannedQty ?? 0);
+  }
+  const slipLines = [...doc.lines, ...addedLines];
+  if (qtyByLineId.size === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่จ่ายอย่างน้อยหนึ่งรายการ");
+
   if (source) {
     const srcLineIds = new Set((source.lines ?? []).map((l) => l.id));
     for (const lineId of qtyByLineId.keys()) {
@@ -846,7 +874,7 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   const charge = await resolveChargeFromBody(body);
   const merged: MaterialRequisitionFields = { ...doc, ...charge };
   // เช็คก่อนเขียน: ทุกสินค้าต้องมีพอ — applyStockMovement() ยังมีด่าน $gte ของตัวเองปิดช่องแข่ง
-  const totals = productTotalsOf(doc.lines, qtyByLineId);
+  const totals = productTotalsOf(slipLines, qtyByLineId);
   await assertProductsHaveStock(totals);
 
   const materialRequisitions = await materialRequisitionsCollection();
@@ -901,17 +929,19 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   await materialRequisitions.updateOne({ _id: id }, {
     $set: {
       issues,
-      lines: linesWithDerivedWithdrawals(doc.lines, issues),
+      lines: linesWithDerivedWithdrawals(slipLines, issues),
       ...charge,
       storeDeptBy: issuedBy, storeDeptAt: issuedDate,
       updatedAt: now, updatedBy: ctx.user.id,
     },
   });
-  if (source) await mirrorIssueToSource(source, doc, batch);
+  if (source) {
+    await mirrorIssueToSource({ ...source, lines: [...(source.lines ?? []), ...addedSourceLines] }, { ...doc, lines: slipLines }, batch);
+  }
   const updated = await loadOrThrow(id);
   await writeAuditEntry(
     ctx, "Material Requisition Issued",
-    `สโตร์จ่ายของตามใบเบิก ${label} รอบที่ ${seq} (${[...totals].map(([p, q]) => `${p}: -${q}`).join(", ")})${confirmsOnIssue ? " — ยืนยันใบจ่ายโดยไม่ผ่านขั้นอนุมัติ (อ้างใบเบิกที่อนุมัติแล้ว)" : ""}`,
+    `สโตร์จ่ายของตามใบเบิก ${label} รอบที่ ${seq} (${[...totals].map(([p, q]) => `${p}: -${q}`).join(", ")})${addedLines.length > 0 ? ` — สโตร์เพิ่มรายการ ${addedLines.map((l) => l.productCode).join(", ")}` : ""}${confirmsOnIssue ? " — ยืนยันใบจ่ายโดยไม่ผ่านขั้นอนุมัติ (อ้างใบเบิกที่อนุมัติแล้ว)" : ""}`,
     { scopeOfWorkId: updated.scopeOfWorkId },
   );
   res.status(200).json({
@@ -924,7 +954,8 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
 /**
  * บันทึกรอบการจ่ายของใบจ่ายสโตร์ลงใบเบิกของแผนกต้นทางด้วย (2026-09-23) — ยอด "จ่ายแล้ว/ค้างเบิก" ของแผนกนั้นจึงถูกต้อง
  * โดยแผนกไม่ต้องเปิดใบจ่ายของสโตร์ · **ไม่ตัดสต๊อกซ้ำ** (`stockMovementIds` ว่าง — ตัดที่ใบจ่ายแล้ว) · id รอบเดียวกับที่ใบจ่าย
- * ใช้ย้อนกลับตอนยกเลิก · บรรทัดที่ไม่ได้ผูกบรรทัดต้นทาง (สโตร์เพิ่มเอง) ไม่ถูกบันทึกลงใบแผนก
+ * ใช้ย้อนกลับตอนยกเลิก · บรรทัดที่ไม่ได้ผูกบรรทัดต้นทาง (สโตร์เพิ่มในใบร่าง) ไม่ถูกบันทึกลงใบแผนก · บรรทัดที่สโตร์เพิ่ม**ตอนจ่าย**
+ * (`newLines`) มากับ `source.lines` ที่ต่อท้ายไว้แล้ว จึงถูกเขียนลงใบแผนกพร้อมรอบนี้
  */
 async function mirrorIssueToSource(source: MaterialRequisitionFields & { _id: string }, slip: MaterialRequisitionFields & { _id: string }, batch: MaterialIssueBatch): Promise<void> {
   const slipLines = new Map(slip.lines.map((l) => [l.id, l]));

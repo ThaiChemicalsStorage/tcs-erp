@@ -131,6 +131,13 @@ export function MaterialRequisitionDocument({
   const [issueQty, setIssueQty] = useState<Record<string, string>>({});
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [issueRemark, setIssueRemark] = useState("");
+  /**
+   * รายการที่สโตร์เพิ่มเองในการ์ดจ่ายของ (2026-09-29) — ยังไม่อยู่ในใบจนกว่าจะกดบันทึกรอบ (เซิร์ฟเวอร์ต่อท้ายให้ตอนจ่าย)
+   * จึงเพิ่มได้แม้ใบเป็น Final แล้ว · จำนวนจ่ายใช้ `issueQty` ตาม id ชั่วคราวของบรรทัด
+   */
+  const [extraIssueLines, setExtraIssueLines] = useState<MaterialRequisitionLine[]>([]);
+  /** ตัวเลือกสินค้าเปิดจากไหน — "draft" = ตารางรายการของใบร่าง · "issue" = การ์ดจ่ายของ */
+  const [pickerTarget, setPickerTarget] = useState<"draft" | "issue">("draft");
   const [confirmCancelBatch, setConfirmCancelBatch] = useState<MaterialIssueBatch | null>(null);
   const [cancellingBatch, setCancellingBatch] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -272,7 +279,13 @@ export function MaterialRequisitionDocument({
     const lines = draft.lines
       .map((l) => ({ lineId: l.id, qty: Number(issueQty[l.id] ?? "") }))
       .filter((l) => Number.isFinite(l.qty) && l.qty > 0);
-    if (lines.length === 0) {
+    // รายการที่เพิ่มเองต้องมีจำนวนจ่าย — ไม่งั้นบรรทัดจะหายเงียบ ๆ หลังบันทึก (ยังไม่เคยอยู่ในใบ)
+    if (extraIssueLines.some((l) => !(Number(issueQty[l.id] ?? "") > 0))) {
+      showToast(t("materialRequisitionDoc.extraLineNeedsQty"));
+      return false;
+    }
+    const newLines = extraIssueLines.map((l) => ({ productId: l.productId, category: l.category, qty: Number(issueQty[l.id]) }));
+    if (lines.length === 0 && newLines.length === 0) {
       showToast(t("materialRequisitionDoc.issueEmpty"));
       return false;
     }
@@ -287,6 +300,7 @@ export function MaterialRequisitionDocument({
       }
       const { materialRequisition, stockByProduct: fresh, costByProduct: freshCost } = await postMaterialIssueBatch(draft.id, {
         lines,
+        ...(newLines.length > 0 ? { newLines } : {}),
         issuedDate: issueDate,
         issuedBy: draft.storeDeptBy,
         remark: issueRemark,
@@ -294,6 +308,7 @@ export function MaterialRequisitionDocument({
       });
       applySaved(materialRequisition, fresh, freshCost);
       setIssueQty({});
+      setExtraIssueLines([]);
       setIssueRemark("");
       showToast(t("materialRequisitionDoc.issueSaved"));
       return true;
@@ -457,7 +472,8 @@ export function MaterialRequisitionDocument({
    * เพิ่งตั้งรหัสให้จึงไม่ขึ้นจนกว่าจะออกจากเอกสารแล้วเข้ามาใหม่ (เจ้าของรายงาน 2026-09-09)
    * best-effort: ดึงไม่สำเร็จก็ยังใช้รายการที่โหลดไว้เลือกได้ตามปกติ
    */
-  const openProductPicker = () => {
+  const openProductPicker = (target: "draft" | "issue" = "draft") => {
+    setPickerTarget(target);
     setPickerOpen(true);
     Promise.all([fetchProducts(), fetchCategories()])
       .then(([p, c]) => { setProducts(p); setCategories(c); })
@@ -483,7 +499,8 @@ export function MaterialRequisitionDocument({
 
   const addProduct = (product: Product) => {
     const categoryName = categories.find((c) => c.id === product.categoryId)?.name ?? "";
-    setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
+    if (pickerTarget === "issue") setExtraIssueLines((prev) => [...prev, blankMaterialRequisitionLine(product, categoryName)]);
+    else setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
     // สินค้าที่เพิ่งเพิ่มยังไม่มียอดคงเหลือใน map ที่ server ส่งมา — ใช้ค่าจากรายการสินค้าที่โหลดไว้ไปก่อน
     setStockByProduct((prev) => (product.id in prev ? prev : { ...prev, [product.id]: product.stockQty }));
   };
@@ -973,13 +990,52 @@ export function MaterialRequisitionDocument({
                           </tr>
                         );
                       })}
+                      {/* รายการที่สโตร์เพิ่มเองรอบนี้ — ยังไม่อยู่ในใบ ขอ = จ่าย เซิร์ฟเวอร์ต่อท้ายให้ตอนบันทึกรอบ */}
+                      {extraIssueLines.map((line) => {
+                        const stock = stockByProduct[line.productId];
+                        const typed = Number(issueQty[line.id] ?? "");
+                        const bad = Number.isFinite(typed) && typed > 0 && stock !== undefined && typed > stock;
+                        return (
+                          <tr key={line.id} className="border-b border-border/50 bg-[#2aa36b]/5">
+                            <td className="px-3 py-2 text-xs text-foreground">
+                              <span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}
+                              <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20 whitespace-nowrap">
+                                {t("materialRequisitionDoc.extraLineBadge")}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{stock === undefined ? "—" : stock.toLocaleString()}</td>
+                            <td className="px-2 py-1.5">
+                              <div className="flex items-center gap-2">
+                                <input type="number" min={0} value={issueQty[line.id] ?? ""}
+                                  aria-label={`${t("materialRequisitionDoc.col.issueNow")} ${line.productName}`}
+                                  onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                                  className={`w-24 text-xs font-mono text-foreground bg-[#2aa36b]/5 border rounded px-1.5 py-1 outline-none ${bad ? "border-[#e05252]" : "border-[#2aa36b]/20"}`} />
+                                <span className="text-xs text-muted-foreground">{line.unit}</span>
+                                <button onClick={() => setExtraIssueLines((prev) => prev.filter((l) => l.id !== line.id))}
+                                  title={t("materialRequisitionDoc.removeLine")} aria-label={`${t("materialRequisitionDoc.removeLine")} ${line.productName}`}
+                                  className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                <button onClick={saveIssue} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#2aa36b]/40 text-[#207e52] rounded-lg font-medium hover:bg-[#2aa36b]/10 transition-colors disabled:opacity-60">
-                  {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                  {t("materialRequisitionDoc.saveIssueRound").replace("{n}", String(nextIssueSeq))}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={saveIssue} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#2aa36b]/40 text-[#207e52] rounded-lg font-medium hover:bg-[#2aa36b]/10 transition-colors disabled:opacity-60">
+                    {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                    {t("materialRequisitionDoc.saveIssueRound").replace("{n}", String(nextIssueSeq))}
+                  </button>
+                  <button onClick={() => openProductPicker("issue")} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                    <Plus size={13} /> {t("materialRequisitionDoc.addIssueLine")}
+                  </button>
+                </div>
               </>
             )}
           </div>

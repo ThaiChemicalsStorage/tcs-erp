@@ -469,6 +469,8 @@ export async function postMaterialIssueBatch(
   id: string,
   batch: {
     lines: { lineId: string; qty: number }[];
+    /** รายการที่สโตร์เพิ่มเองในรอบนี้ (2026-09-29) — ใบจ่ายของสโตร์เท่านั้น เซิร์ฟเวอร์ต่อท้ายเป็นบรรทัดใหม่ (ขอ = จ่าย) */
+    newLines?: { productId: string; category: MaterialRequisitionCategory; qty: number }[];
     issuedDate?: string;
     issuedBy?: string;
     remark?: string;

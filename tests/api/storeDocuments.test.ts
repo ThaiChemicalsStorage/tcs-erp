@@ -420,3 +420,60 @@ describe("รีวิว 2026-09-24: รายการต้นทาง · �
     expect(moves).toBe(1);
   });
 });
+
+/**
+ * สโตร์เพิ่มรายการเองตอนจ่าย (2026-09-29 เจ้าของ: *"สโตร์สามารถเพิ่มรายการเบิกเพิ่มเองได้"*) — `newLines` ของ `POST /issues`
+ * ต่อท้ายบรรทัดใหม่แล้วจ่ายรอบเดียวกัน ได้แม้ใบจ่ายเป็น Final แล้ว · ใบที่อ้างใบเบิกแผนก บรรทัดใหม่ลงใบแผนกด้วย (คืนของได้)
+ */
+describe("สโตร์เพิ่มรายการเองตอนจ่าย", () => {
+  let deptId = "";
+  let slipId = "";
+
+  it("ใบจ่ายที่อ้างใบเบิกแผนกและจ่ายไปแล้ว (Final) เพิ่มรายการใหม่ได้ — สต๊อกลด และบรรทัดใหม่ลงใบเบิกแผนกด้วย", async () => {
+    deptId = (await api("POST", "/api/material-requisitions", {})).body.materialRequisition.id;
+    await api("PATCH", `/api/material-requisitions/${deptId}`, { lines: [{ productId: boltId, category: "hardware", plannedQty: 2 }] });
+    await approve(`/api/material-requisitions/${deptId}`);
+    slipId = (await api("POST", "/api/material-requisitions", { ownerDepartment: "store", issueCode: "PD" })).body.materialRequisition.id;
+    const set = await api("PATCH", `/api/material-requisitions/${slipId}`, { sourceRequisitionId: deptId });
+    const first = await api("POST", `/api/material-requisitions/${slipId}/issues`, { lines: [{ lineId: set.body.materialRequisition.lines[0].id, qty: 2 }] });
+    expect(first.body.materialRequisition.status).toBe("Final");
+
+    const before = (await stock(resinId)).qty;
+    const added = await api("POST", `/api/material-requisitions/${slipId}/issues`, { lines: [], newLines: [{ productId: resinId, category: "chemical", qty: 3 }] });
+    expect(added.status, JSON.stringify(added.body)).toBe(200);
+    expect((await stock(resinId)).qty).toBe(before - 3);
+    // รอบที่ 2 ของใบ → ช่อง "เบิกครั้งที่ 2" (withdrawal2Qty)
+    const slip = added.body.materialRequisition;
+    expect(slip.lines).toHaveLength(2);
+    expect(slip.lines[1]).toMatchObject({ productId: resinId, productCode: "RS-01", plannedQty: 3, withdrawal2Qty: 3 });
+    expect(slip.issues[1].lines).toEqual([{ lineId: slip.lines[1].id, qty: 3 }]);
+
+    const dept = (await api("GET", `/api/material-requisitions/${deptId}`)).body.materialRequisition;
+    expect(dept.lines).toHaveLength(2);
+    expect(dept.lines[1]).toMatchObject({ id: slip.lines[1].sourceLineId, productId: resinId, plannedQty: 3, withdrawal2Qty: 3 });
+  });
+
+  it("ของที่สโตร์เพิ่มคืนได้ผ่านใบคืนที่อ้างใบเบิกแผนก", async () => {
+    const rid = (await api("POST", "/api/store-receipts", { receiptCode: "JD" })).body.storeReceipt.id;
+    const set = await api("PATCH", `/api/store-receipts/${rid}`, { sourceRequisitionId: deptId });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+    expect(set.body.storeReceipt.lines.map((l: { productId: string }) => l.productId)).toContain(resinId);
+  });
+
+  it("ใบจ่ายตรงที่อนุมัติแล้วเพิ่มรายการตอนจ่ายได้ (ไม่ผูกใบแผนก)", async () => {
+    const id = (await api("POST", "/api/material-requisitions", { ownerDepartment: "store", issueCode: "PD" })).body.materialRequisition.id;
+    await api("PATCH", `/api/material-requisitions/${id}`, { lines: [{ productId: boltId, category: "hardware", plannedQty: 1 }] });
+    await approve(`/api/material-requisitions/${id}`);
+    const res = await api("POST", `/api/material-requisitions/${id}/issues`, { lines: [], newLines: [{ productId: resinId, qty: 1 }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.materialRequisition.lines[1]).toMatchObject({ productId: resinId, plannedQty: 1, category: "other" });
+    expect(res.body.materialRequisition.lines[1].sourceLineId).toBeUndefined();
+  });
+
+  it("รายการที่เพิ่มต้องมีจำนวน > 0 และใบเบิกของแผนกเพิ่มรายการตอนจ่ายไม่ได้", async () => {
+    const before = (await stock(resinId)).qty;
+    expect((await api("POST", `/api/material-requisitions/${slipId}/issues`, { lines: [], newLines: [{ productId: resinId, qty: 0 }] })).status).toBe(400);
+    expect((await api("POST", `/api/material-requisitions/${deptId}/issues`, { lines: [], newLines: [{ productId: resinId, qty: 1 }] })).status).toBe(400);
+    expect((await stock(resinId)).qty).toBe(before);
+  });
+});
