@@ -7,10 +7,13 @@ import type { DiscountMode } from "../../lib/quoteMath";
 import {
   type ReceivingReport, type ReceiveBatchInput, type ReceivingPriceType,
   outstandingQtyOf, batchTotals, priceTypeOf, dueDateOf, billerOf, RECEIVING_PRICE_TYPES, RECEIVING_PRICE_TYPE_LABEL_KEY,
+  batchLineDiscountAmt, defaultBatchLineDiscount,
 } from "../../lib/receivingReport";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors";
 const cellCls = "w-24 px-2 py-1.5 text-sm text-right bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 transition-colors";
+/** ช่องที่ความกว้างมาจากตัวห่อ — ไม่มี w-* ของตัวเอง (inputCls มี w-full ซึ่งชนะ w-20 แล้วช่องล้นทับช่องข้าง ๆ) */
+const boxCls = "w-full px-2 py-1.5 text-sm bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 transition-colors";
 
 /**
  * กล่อง "บันทึกรับของ" — หนึ่งรอบการรับ ตามที่เจ้าของสั่ง: *"มีช่องให้กรอกแบบราคาต่อหน่วยเท่าไหร่
@@ -55,11 +58,17 @@ export function ReceiveBatchDialog({
   const [creditDays, setCreditDays] = useState<string>(doc.creditDays !== null && doc.creditDays !== undefined ? String(doc.creditDays) : "");
   const [receivedBy, setReceivedBy] = useState("");
   const [remark, setRemark] = useState("");
-  const [rows, setRows] = useState<Record<string, { qty: string; unitPrice: string }>>(() =>
-    Object.fromEntries(pending.map((l) => [l.id, {
-      qty: String(outstandingQtyOf(doc, l)),
-      unitPrice: String(l.unitPriceOrdered ?? 0),
-    }])),
+  // ส่วนลดรายบรรทัด (2026-09-29) ตั้งต้นจากบรรทัดของใบ (แบบบาท = ส่วนที่ยังไม่ได้หักในรอบก่อน)
+  const [rows, setRows] = useState<Record<string, { qty: string; unitPrice: string; discount: string; discountMode: DiscountMode }>>(() =>
+    Object.fromEntries(pending.map((l) => {
+      const d = defaultBatchLineDiscount(doc, l);
+      return [l.id, {
+        qty: String(outstandingQtyOf(doc, l)),
+        unitPrice: String(l.unitPriceOrdered ?? 0),
+        discount: d.discount === null ? "" : String(d.discount),
+        discountMode: d.discountMode,
+      }];
+    })),
   );
   const [error, setError] = useState("");
 
@@ -81,7 +90,14 @@ export function ReceiveBatchDialog({
   const dueDate = dueDateOf(invoiceDate, credit);
   const biller = billerOf(doc);
   const activeLines = pending
-    .map((l) => ({ lineId: l.id, qty: num(rows[l.id]?.qty ?? ""), unitPrice: Math.max(0, Number(rows[l.id]?.unitPrice ?? 0) || 0) }))
+    .map((l) => {
+      const row = rows[l.id];
+      const qty = num(row?.qty ?? "");
+      const unitPrice = Math.max(0, Number(row?.unitPrice ?? 0) || 0);
+      const discount = !row || row.discount.trim() === "" ? null : Math.max(0, Number(row.discount) || 0);
+      const discountMode = row?.discountMode ?? "percent";
+      return { lineId: l.id, qty, unitPrice, discount, discountMode, discountAmt: batchLineDiscountAmt(qty, unitPrice, discount, discountMode) };
+    })
     .filter((r) => r.qty > 0);
   const totals = batchTotals(activeLines, vat, { priceType, discount: discountNum, discountMode });
 
@@ -92,11 +108,13 @@ export function ReceiveBatchDialog({
     if (over) { setError(t("receivingReportDoc.receive.errorOverReceive").replace("{item}", over.productCode || over.description)); return; }
     setError("");
     if (discountMode === "percent" && (discountNum ?? 0) > 100) { setError(t("receivingReportDoc.receive.errorDiscount")); return; }
+    if (activeLines.some((l) => l.discountMode === "percent" && (l.discount ?? 0) > 100)) { setError(t("receivingReportDoc.receive.errorDiscount")); return; }
     if (doc.billerCustom && !(doc.billerName ?? "").trim()) { setError(t("receivingReportDoc.receive.errorBiller")); return; }
     onSubmit({
       receivedDate, invoiceNumber: invoiceNumber.trim(), invoiceDate,
       vatRate: vat, priceType, discount: discountNum, discountMode, creditDays: credit,
-      receivedBy: receivedBy.trim(), remark: remark.trim(), lines: activeLines,
+      receivedBy: receivedBy.trim(), remark: remark.trim(),
+      lines: activeLines.map(({ lineId, qty, unitPrice, discount, discountMode }) => ({ lineId, qty, unitPrice, discount, discountMode })),
     });
   };
 
@@ -146,13 +164,19 @@ export function ReceiveBatchDialog({
             </label>
             <div className="block">
               <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.discount")}</span>
+              {/* ความกว้างอยู่ที่ตัวห่อ (บั๊ก 2026-09-29: inputCls มี w-full ซึ่งชนะ w-20 ช่อง %/บาทจึงกว้างเต็มคอลัมน์แล้วล้นทับ "ผู้ออกบิล")
+                  — แก้แบบเดียวกับช่องส่วนลดหน้าใบรับสินค้าเมื่อ 2026-09-24 */}
               <div className="flex gap-2">
-                <input type="number" min={0} className={inputCls} value={discount} aria-label={t("receivingReportDoc.discount")} onChange={(e) => setDiscount(e.target.value)} />
-                <select className={`${inputCls} w-20 shrink-0`} value={discountMode} aria-label={t("receivingReportDoc.discountMode")}
-                  onChange={(e) => setDiscountMode(e.target.value === "amount" ? "amount" : "percent")}>
-                  <option value="percent">%</option>
-                  <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
-                </select>
+                <div className="flex-1 min-w-0">
+                  <input type="number" min={0} className={inputCls} value={discount} aria-label={t("receivingReportDoc.discount")} onChange={(e) => setDiscount(e.target.value)} />
+                </div>
+                <div className="w-20 shrink-0">
+                  <select className={inputCls} value={discountMode} aria-label={t("receivingReportDoc.discountMode")}
+                    onChange={(e) => setDiscountMode(e.target.value === "amount" ? "amount" : "percent")}>
+                    <option value="percent">%</option>
+                    <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div className="block">
@@ -167,7 +191,7 @@ export function ReceiveBatchDialog({
                 <tr className="border-b border-border bg-muted/40">
                   {[
                     t("receivingReportDoc.col.item"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.outstanding"),
-                    t("receivingReportDoc.receive.qty"), t("receivingReportDoc.receive.unitPrice"), t("receivingReportDoc.receive.amount"),
+                    t("receivingReportDoc.receive.qty"), t("receivingReportDoc.receive.unitPrice"), t("receivingReportDoc.col.discount"), t("receivingReportDoc.receive.amount"),
                   ].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -175,9 +199,10 @@ export function ReceiveBatchDialog({
               </thead>
               <tbody>
                 {pending.map((line) => {
-                  const row = rows[line.id] ?? { qty: "", unitPrice: "" };
+                  const row = rows[line.id] ?? { qty: "", unitPrice: "", discount: "", discountMode: "percent" as DiscountMode };
                   const qty = num(row.qty);
                   const price = Math.max(0, Number(row.unitPrice) || 0);
+                  const lineDiscountAmt = batchLineDiscountAmt(qty, price, row.discount.trim() === "" ? null : Math.max(0, Number(row.discount) || 0), row.discountMode);
                   const outstanding = outstandingQtyOf(doc, line);
                   return (
                     <tr key={line.id} className="border-b border-border/50 last:border-0">
@@ -203,7 +228,23 @@ export function ReceiveBatchDialog({
                           onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, unitPrice: e.target.value } }))}
                         />
                       </td>
-                      <td className="px-3 py-2 text-sm font-mono text-right text-foreground">{fmt(qty * price)}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1">
+                          <div className="w-20 shrink-0">
+                            <input type="number" min={0} className={`${boxCls} text-right`} value={row.discount}
+                              aria-label={`${t("receivingReportDoc.col.discount")} ${line.description}`}
+                              onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, discount: e.target.value } }))} />
+                          </div>
+                          <div className="w-16 shrink-0">
+                            <select className={boxCls} value={row.discountMode} aria-label={`${t("receivingReportDoc.discountMode")} ${line.description}`}
+                              onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, discountMode: e.target.value === "amount" ? "amount" : "percent" } }))}>
+                              <option value="percent">%</option>
+                              <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-sm font-mono text-right text-foreground">{fmt(qty * price - lineDiscountAmt)}</td>
                     </tr>
                   );
                 })}

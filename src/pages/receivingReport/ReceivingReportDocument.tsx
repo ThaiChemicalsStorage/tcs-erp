@@ -13,6 +13,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ApiError } from "../../lib/apiClient";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { lineSubtotal } from "../../lib/quoteMath";
 import { useI18n } from "../../lib/i18n";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
@@ -43,6 +44,8 @@ function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
     orderDiscount: d.orderDiscount ?? null, orderDiscountMode: d.orderDiscountMode ?? "percent",
     creditDays: d.creditDays ?? null,
     billerCustom: !!d.billerCustom, billerName: d.billerName ?? "", billerTaxId: d.billerTaxId ?? "", billerAddress: d.billerAddress ?? "",
+    // ส่วนลดรายบรรทัด (2026-09-29) แก้ได้ทุกใบ — ใบเปล่าเซิร์ฟเวอร์ใช้กับรายการหลังประกอบ `lines` แล้ว
+    lineDiscounts: d.lines.map((l) => ({ lineId: l.id, discount: l.discount ?? null, discountMode: l.discountMode ?? "percent" })),
   };
   if (!isBlankReceivingReport(d)) return terms;
   return {
@@ -343,6 +346,35 @@ export function ReceivingReportDocument({
     }
   };
 
+  /**
+   * ช่องส่วนลดรายบรรทัด (2026-09-29) — ตัวเลข + %/บาท · แก้ได้ทุกใบ ตั้งต้นจากใบสั่งซื้อ เป็นค่าตั้งต้นของหน้าต่างรับของ
+   * ความกว้างอยู่ที่ตัวห่อ ไม่ใส่ w-full ลงช่องเอง (บทเรียนช่องส่วนลดท้ายบิล 2026-09-24/29: w-full ชนะ w-20 แล้วช่องล้นทับกัน)
+   */
+  const discountCell = (line: ReceivingReportLine) => {
+    const mode = line.discountMode ?? "percent";
+    if (!canEdit) {
+      return <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{line.discount ? (mode === "amount" ? fmt(line.discount) : `${line.discount}%`) : "—"}</span>;
+    }
+    return (
+      <div className="flex items-center gap-1">
+        <div className="w-20 shrink-0">
+          <input type="number" min={0} value={line.discount ?? ""}
+            aria-label={`${t("receivingReportDoc.col.discount")} ${line.description}`}
+            onChange={(e) => setLine(line.id, { discount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })}
+            className="w-full px-2 py-1 text-xs text-right font-mono bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 text-foreground" />
+        </div>
+        <div className="w-16 shrink-0">
+          <select value={mode} aria-label={`${t("receivingReportDoc.discountMode")} ${line.description}`}
+            onChange={(e) => setLine(line.id, { discountMode: e.target.value === "amount" ? "amount" : "percent" })}
+            className="w-full px-1 py-1 text-xs bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 text-foreground">
+            <option value="percent">%</option>
+            <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
+          </select>
+        </div>
+      </div>
+    );
+  };
+
   const lineRow = (line: ReceivingReportLine, done: boolean) => {
     const received = receivedQtyOf(draft, line.id);
     const outstanding = outstandingQtyOf(draft, line);
@@ -365,6 +397,7 @@ export function ReceivingReportDocument({
         <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(received)}</td>
         <td className={`px-3 py-2.5 text-xs font-mono text-right whitespace-nowrap ${done ? "text-muted-foreground" : "text-[#a75d1a] font-semibold"}`}>{fmt(outstanding)}</td>
         <td className="px-3 py-2.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(line.unitPriceOrdered)}</td>
+        <td className="px-3 py-1.5">{discountCell(line)}</td>
         <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(receivedAmountOf(draft, line.id))}</td>
       </tr>
     );
@@ -378,7 +411,7 @@ export function ReceivingReportDocument({
             {[
               t("receivingReportDoc.col.item"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.ordered"),
               t("receivingReportDoc.col.received"), t("receivingReportDoc.col.outstanding"),
-              t("receivingReportDoc.col.poPrice"), t("receivingReportDoc.col.receivedAmount"),
+              t("receivingReportDoc.col.poPrice"), t("receivingReportDoc.col.discount"), t("receivingReportDoc.col.receivedAmount"),
             ].map((h) => (
               <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
             ))}
@@ -621,7 +654,7 @@ export function ReceivingReportDocument({
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/40">
-                        {[t("receivingReportDoc.col.productCode"), t("receivingReportDoc.col.description"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.qty"), t("receivingReportDoc.col.unitPrice"), t("receivingReportDoc.col.amount"), t("receivingReportDoc.col.received"), ""].map((h, i) => (
+                        {[t("receivingReportDoc.col.productCode"), t("receivingReportDoc.col.description"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.qty"), t("receivingReportDoc.col.unitPrice"), t("receivingReportDoc.col.discount"), t("receivingReportDoc.col.amount"), t("receivingReportDoc.col.received"), ""].map((h, i) => (
                           <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -637,7 +670,8 @@ export function ReceivingReportDocument({
                             <td className="px-2 py-1.5 w-24"><input className={cellCls} disabled={!canEdit || fromCatalog} value={l.unit} aria-label={t("receivingReportDoc.col.unit")} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
                             <td className="px-2 py-1.5 w-24"><input type="number" min={received} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.qtyOrdered} aria-label={t("receivingReportDoc.col.qty")} onChange={(e) => setLine(l.id, { qtyOrdered: Number(e.target.value) || 0 })} /></td>
                             <td className="px-2 py-1.5 w-28"><input type="number" min={0} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.unitPriceOrdered} aria-label={t("receivingReportDoc.col.unitPrice")} onChange={(e) => setLine(l.id, { unitPriceOrdered: Number(e.target.value) || 0 })} /></td>
-                            <td className="px-3 py-2 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(l.qtyOrdered * l.unitPriceOrdered)}</td>
+                            <td className="px-2 py-1.5">{discountCell(l)}</td>
+                            <td className="px-3 py-2 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(lineSubtotal({ qty: l.qtyOrdered, unitPrice: l.unitPriceOrdered, discount: l.discount ?? 0, discountMode: l.discountMode }))}</td>
                             <td className="px-3 py-2 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(received)}</td>
                             <td className="px-2 py-1.5 w-8">
                               {canEdit && received === 0 && (

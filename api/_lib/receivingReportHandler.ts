@@ -23,7 +23,7 @@ import { sanitizeNullableNumber } from "./projectValidation.js";
 import {
   receivingReportTotals, outstandingQtyOf, isFullyReceived, batchTotals, receivedQtyOf,
   isReceivingReportCode, receivingReportCodeOf, isBlankReceivingReport,
-  isReceivingPriceType, priceTypeOf, billerOf, dueDateOf, linePurchaseOrderNumber, purchaseOrderNumbersOf,
+  isReceivingPriceType, priceTypeOf, billerOf, dueDateOf, linePurchaseOrderNumber, purchaseOrderNumbersOf, batchLineDiscountAmt,
   type ReceivingReportLine, type ReceivingBatch, type ReceivingReportSummary, type ReceivingReportCode, type ReceivingReportPrintInfo,
   type ReceivingPurchaseOrderCandidate,
 } from "../../src/lib/receivingReport.js";
@@ -439,6 +439,29 @@ async function handleRemovePurchaseOrder(req: ApiRequest, res: ApiResponse, id: 
   res.status(200).json({ receivingReport: toClient(await loadOrThrow(id)) });
 }
 
+/** ต้นทุนต่อหน่วยที่ลงสต๊อก — ราคาสุทธิของบรรทัด (หลังส่วนลดรายบรรทัด) × ตัวคูณส่วนลดท้ายบิล/VAT ของรอบ */
+function unitCostOf(bl: ReceivingBatch["lines"][number], costFactor: number): number {
+  const netUnit = bl.discountAmt ? (bl.qty * bl.unitPrice - bl.discountAmt) / bl.qty : bl.unitPrice;
+  return costFactor === 1 && !bl.discountAmt ? bl.unitPrice : Math.round(netUnit * costFactor * 10000) / 10000;
+}
+
+/**
+ * ส่วนลดรายบรรทัดจากหน้าใบรับสินค้า (2026-09-29) — `[{ lineId, discount, discountMode }]` ใช้กับบรรทัดชุดที่จะบันทึก
+ * (หลังประกอบรายการของใบเปล่าแล้ว) · แก้ได้ทุกใบ เป็นค่าตั้งต้นของหน้าต่างรับของ ไม่ย้อนเปลี่ยนรอบที่รับไปแล้ว
+ */
+function applyLineDiscounts(raw: unknown, lines: ReceivingReportLine[]): ReceivingReportLine[] {
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลส่วนลดรายการไม่ถูกต้อง");
+  const byId = new Map<string, { discount: number | null; discountMode: "percent" | "amount" }>();
+  for (const [idx, r] of (raw as Record<string, unknown>[]).entries()) {
+    const lineId = typeof r?.lineId === "string" ? r.lineId : "";
+    const discount = sanitizeNullableNumber(r?.discount, `ส่วนลดรายการลำดับที่ ${idx + 1}`, { min: 0 });
+    const discountMode = r?.discountMode === "amount" ? "amount" : "percent";
+    if (discountMode === "percent" && (discount ?? 0) > 100) throw new HttpError(400, `ส่วนลดรายการลำดับที่ ${idx + 1} ต้องไม่เกิน 100%`);
+    byId.set(lineId, { discount, discountMode });
+  }
+  return lines.map((l) => (byId.has(l.id) ? { ...l, ...byId.get(l.id)! } : l));
+}
+
 async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "receivingReport:view");
@@ -495,6 +518,8 @@ async function sanitizeBlankLines(raw: unknown, current: ReceivingReportFields &
       description, subDetails: [],
       unit: product ? product.unit : sanitizeShortText(r.unit, `หน่วยลำดับที่ ${n}`),
       qtyOrdered, unitPriceOrdered,
+      // ส่วนลดรายบรรทัดมาทาง `lineDiscounts` (2026-09-29) — ประกอบรายการใหม่ต้องไม่ล้างค่าเดิมทิ้ง
+      discount: prior?.discount ?? null, discountMode: prior?.discountMode ?? "percent",
     };
   });
 
@@ -567,6 +592,8 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
     if ("vendorAddress" in body) update.vendorAddress = sanitizeLongText(body.vendorAddress, "ที่อยู่ผู้ขาย");
     if ("lines" in body) update.lines = await sanitizeBlankLines(body.lines, toClient(doc));
   }
+
+  if ("lineDiscounts" in body) update.lines = applyLineDiscounts(body.lineDiscounts, update.lines ?? doc.lines ?? []);
 
   if ("status" in body) {
     const next = body.status === "Closed" ? "Closed" : "Open";
@@ -684,7 +711,7 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
   if (rawLines.length > MAX_BATCH_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_BATCH_LINES} รายการ`);
 
   const lineById = new Map(current.lines.map((l) => [l.id, l]));
-  const batchLines: { lineId: string; qty: number; unitPrice: number; amount: number }[] = [];
+  const batchLines: ReceivingBatch["lines"] = [];
   const seen = new Set<string>();
   for (const [idx, raw] of (rawLines as Record<string, unknown>[]).entries()) {
     const lineId = typeof raw.lineId === "string" ? raw.lineId : "";
@@ -699,7 +726,15 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
     if (qty > outstanding) {
       throw new HttpError(400, `${line.productCode || line.description}: รับได้อีกไม่เกิน ${outstanding} ${line.unit} (ส่งมา ${qty})`);
     }
-    batchLines.push({ lineId, qty, unitPrice, amount: round2(qty * unitPrice) });
+    // ส่วนลดรายบรรทัด (2026-09-29) — หักก่อนส่วนลดท้ายบิล · จำนวนเงินของบรรทัด = ยอดหลังหัก (ตัวที่ตั้งหนี้และเป็นต้นทุน)
+    const lineDiscount = sanitizeNullableNumber(raw.discount, `ส่วนลดรายการลำดับที่ ${idx + 1}`, { min: 0 });
+    const lineDiscountMode = raw.discountMode === "amount" ? "amount" : "percent";
+    if (lineDiscountMode === "percent" && (lineDiscount ?? 0) > 100) throw new HttpError(400, `${line.productCode || line.description}: ส่วนลดต้องไม่เกิน 100%`);
+    const discountAmt = round2(batchLineDiscountAmt(qty, unitPrice, lineDiscount, lineDiscountMode));
+    batchLines.push({
+      lineId, qty, unitPrice, amount: round2(qty * unitPrice - discountAmt),
+      ...(discountAmt > 0 ? { discount: lineDiscount, discountMode: lineDiscountMode, discountAmt } : {}),
+    });
   }
   if (batchLines.length === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่รับอย่างน้อยหนึ่งรายการ");
 
@@ -731,8 +766,8 @@ async function handlePostBatch(req: ApiRequest, res: ApiResponse, id: string) {
       sourceId: id,
       sourceLabel: current.documentNumber,
       userId: ctx.user.id,
-      // ต้นทุน = ราคาก่อน VAT หลังเกลี่ยส่วนลดท้ายบิล — แบบรวม VAT ถอด VAT ออก (ภาษีซื้อขอคืนได้ ไม่ใช่ต้นทุน)
-      unitCost: totals.costFactor === 1 ? bl.unitPrice : Math.round(bl.unitPrice * totals.costFactor * 10000) / 10000,
+      // ต้นทุน = ราคาหลังส่วนลดรายบรรทัด ก่อน VAT หลังเกลี่ยส่วนลดท้ายบิล — แบบรวม VAT ถอด VAT ออก (ภาษีซื้อขอคืนได้ ไม่ใช่ต้นทุน)
+      unitCost: unitCostOf(bl, totals.costFactor),
     });
     stockMovementIds.push(movement.id);
   }

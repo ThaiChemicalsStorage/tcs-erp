@@ -1,5 +1,5 @@
 import type { CompanyHeaderInfo } from "../../lib/storage";
-import { batchTotals, billerOf, purchaseOrderNumbersOf, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
+import { batchTotals, batchLineDiscountAmt, billerOf, purchaseOrderNumbersOf, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
 import { bahtText } from "../../lib/bahtText";
 import { addDaysIso, printDateShortBE, splitAddressTwoLines } from "../../lib/printFormat";
 
@@ -88,9 +88,11 @@ function slipsOf(doc: ReceivingReport, batchId?: string): Slip[] {
     }));
   }
   // ยังไม่ได้รับของ — พิมพ์รายการที่สั่งไว้ไปตรวจรับ
-  const lines = doc.lines.map((l) => ({
-    key: l.id, text: textOf(l.id), qty: l.qtyOrdered, unit: l.unit, unitPrice: l.unitPriceOrdered, amount: round2(l.qtyOrdered * l.unitPriceOrdered),
-  }));
+  // จำนวนเงินรายบรรทัดหลังส่วนลดรายบรรทัด (2026-09-29) — ตรงกับที่รอบรับเก็บไว้
+  const lines = doc.lines.map((l) => {
+    const discountAmt = batchLineDiscountAmt(l.qtyOrdered, l.unitPriceOrdered, l.discount, l.discountMode);
+    return { key: l.id, text: textOf(l.id), qty: l.qtyOrdered, unit: l.unit, unitPrice: l.unitPriceOrdered, discountAmt, amount: round2(l.qtyOrdered * l.unitPriceOrdered - discountAmt) };
+  });
   const t = batchTotals(lines, doc.orderVatRate, { priceType: doc.priceType, discount: doc.orderDiscount, discountMode: doc.orderDiscountMode });
   return [{
     key: "ordered", seq: 0, receivedDate: "", invoiceNumber: "", invoiceDate: "", vatRate: t.vatRate,

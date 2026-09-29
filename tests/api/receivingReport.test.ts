@@ -569,3 +569,69 @@ describe("ใบรับสินค้า: เพิ่มใบสั่ง�
     expect((await api("POST", `/api/receiving-reports/${blank}/purchase-orders`, { purchaseOrderId: poOther })).status).toBe(400);
   });
 });
+
+/**
+ * ส่วนลดรายบรรทัด (2026-09-29 เจ้าของ: *"ในสินค้าแต่ละรายการอยากให้เพิ่มช่องกรอกส่วนลดแต่ละรายการมาด้วย"*) —
+ * แก้ที่หน้าใบ (`lineDiscounts`) · หักในรอบรับ ก่อนส่วนลดท้ายบิล → จำนวนเงินบรรทัด ยอดหนี้ และต้นทุนสต๊อกเป็นยอดหลังหัก
+ */
+describe("ใบรับสินค้า: ส่วนลดรายบรรทัด", () => {
+  let rrId2 = "";
+  let lineId = "";
+
+  beforeAll(async () => {
+    const v = await api("POST", "/api/vendors", { name: "บริษัท ส่วนลด จำกัด", code: "W-0401", taxId: "0105500000401" });
+    const vId = v.body.vendor.id;
+    await api("POST", `/api/vendors/${vId}/submit-approval`);
+    await api("POST", `/api/vendors/${vId}/approve`);
+    const po = (await api("POST", "/api/purchase-orders", {})).body.purchaseOrder.id;
+    await api("PATCH", `/api/purchase-orders/${po}`, { vendorId: vId, vendorName: "บริษัท ส่วนลด จำกัด", vatRate: 7, lines: [{ productId, qty: 10, unitPrice: 100 }] });
+    await api("POST", `/api/purchase-orders/${po}/submit-approval`);
+    await api("POST", `/api/purchase-orders/${po}/approve`);
+    const rr = await api("POST", "/api/receiving-reports", { purchaseOrderId: po });
+    expect(rr.status, JSON.stringify(rr.body)).toBe(201);
+    rrId2 = rr.body.receivingReport.id;
+    lineId = rr.body.receivingReport.lines[0].id;
+  });
+
+  it("แก้ส่วนลดรายบรรทัดที่หน้าใบได้ แม้เป็นใบจากใบสั่งซื้อ · % เกิน 100 → 400", async () => {
+    const res = await api("PATCH", `/api/receiving-reports/${rrId2}`, { lineDiscounts: [{ lineId, discount: 10, discountMode: "percent" }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.receivingReport.lines[0]).toMatchObject({ discount: 10, discountMode: "percent" });
+    expect((await api("PATCH", `/api/receiving-reports/${rrId2}`, { lineDiscounts: [{ lineId, discount: 150, discountMode: "percent" }] })).status).toBe(400);
+  });
+
+  it("รับของพร้อมส่วนลดรายบรรทัด 10% — จำนวนเงินบรรทัด หนี้ และต้นทุนสต๊อกเป็นยอดหลังหัก", async () => {
+    const before = await productStock();
+    const res = await api("POST", `/api/receiving-reports/${rrId2}/receipts`, {
+      invoiceNumber: "INV-LD-1", vatRate: 7, priceType: "exclusive",
+      lines: [{ lineId, qty: 4, unitPrice: 100, discount: 10, discountMode: "percent" }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const bl = res.body.receivingReport.batches[0].lines[0];
+    expect(bl).toMatchObject({ qty: 4, unitPrice: 100, discount: 10, discountMode: "percent", discountAmt: 40, amount: 360 });
+    expect(res.body.receivingReport.batches[0]).toMatchObject({ subtotal: 360, vatAmt: 25.2, total: 385.2 });
+    const ap = await client.db("tcs_erp").collection("ap_entries").findOne({ invoiceNumber: "INV-LD-1" });
+    expect(ap).toMatchObject({ subtotal: 360, total: 385.2 });
+    const move = await client.db("tcs_erp").collection("stock_movements").find({ sourceId: rrId2 }).toArray();
+    expect(move[0]).toMatchObject({ delta: 4, unitCost: 90 });
+    expect((await productStock()).stockQty).toBe(before.stockQty + 4);
+  });
+
+  it("ส่วนลดแบบบาท: รอบถัดไปตั้งต้นเฉพาะส่วนที่ยังไม่ได้หัก", async () => {
+    const { defaultBatchLineDiscount } = await import("../../src/lib/receivingReport");
+    const line = { id: "L1", discount: 100, discountMode: "amount" as const };
+    const batches = [{ lines: [{ lineId: "L1", qty: 1, unitPrice: 500, amount: 460, discountAmt: 40 }] }] as never;
+    expect(defaultBatchLineDiscount({ batches }, line)).toEqual({ discount: 60, discountMode: "amount" });
+    expect(defaultBatchLineDiscount({ batches: [] }, { id: "L1", discount: 5, discountMode: "percent" })).toEqual({ discount: 5, discountMode: "percent" });
+  });
+
+  it("ใบเปล่า: บันทึกรายการใหม่พร้อมส่วนลดในคำขอเดียว และบันทึกรายการซ้ำไม่ล้างส่วนลด", async () => {
+    const id = (await api("POST", "/api/receiving-reports", { receiveCode: "RR" })).body.receivingReport.id;
+    const line = { id: "rrline_disc_0001", productId: null, productCode: "X", description: "ของพิมพ์เอง", unit: "ชิ้น", qtyOrdered: 2, unitPriceOrdered: 50 };
+    const res = await api("PATCH", `/api/receiving-reports/${id}`, { lines: [line], lineDiscounts: [{ lineId: line.id, discount: 20, discountMode: "amount" }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.receivingReport.lines[0]).toMatchObject({ discount: 20, discountMode: "amount" });
+    const again = await api("PATCH", `/api/receiving-reports/${id}`, { lines: [line] });
+    expect(again.body.receivingReport.lines[0]).toMatchObject({ discount: 20, discountMode: "amount" });
+  });
+});

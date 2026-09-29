@@ -119,6 +119,10 @@ export interface ReceivingReportLine {
   unit: string;
   qtyOrdered: number;
   unitPriceOrdered: number;
+  /**
+   * ส่วนลดรายบรรทัด — ตั้งต้นจากใบสั่งซื้อ **แก้ได้ในหน้าใบรับสินค้าทุกใบ** (2026-09-29 เจ้าของ: *"ในสินค้าแต่ละรายการอยากให้เพิ่มช่องกรอก
+   * ส่วนลดแต่ละรายการ"*) · เป็นค่าตั้งต้นของช่องส่วนลดในหน้าต่างรับของ (แบบบาท = ส่วนที่ยังไม่ได้หักในรอบก่อน ๆ ดู `defaultBatchLineDiscount()`)
+   */
   discount?: number | null;
   discountMode?: DiscountMode;
   /**
@@ -134,7 +138,15 @@ export interface ReceivingBatchLine {
   lineId: string;
   qty: number;
   unitPrice: number;
-  /** qty × unitPrice — เก็บไว้เพราะเป็นตัวเลขที่ถูกตั้งหนี้ไปแล้ว ต้องไม่เปลี่ยนตามสูตรที่แก้ทีหลัง */
+  /** ส่วนลดของบรรทัดนี้ในรอบนี้ (2026-09-29) — รอบเก่าไม่มี = ไม่มีส่วนลด */
+  discount?: number | null;
+  discountMode?: DiscountMode;
+  /** ส่วนลดเป็นบาทของบรรทัดนี้ในรอบนี้ — ใช้คิดส่วนลดแบบบาทที่เหลือของรอบถัดไป */
+  discountAmt?: number;
+  /**
+   * qty × unitPrice − ส่วนลดรายบรรทัด (ก่อนส่วนลดท้ายบิล) — เก็บไว้เพราะเป็นตัวเลขที่ถูกตั้งหนี้ไปแล้ว ต้องไม่เปลี่ยนตามสูตรที่แก้ทีหลัง
+   * (ก่อน 2026-09-29 ไม่มีส่วนลดรายบรรทัด ค่านี้จึงเท่ากับ qty × unitPrice)
+   */
   amount: number;
 }
 
@@ -347,13 +359,32 @@ export interface BatchTerms {
   discountMode?: DiscountMode;
 }
 
+/** ส่วนลดเป็นบาทของหนึ่งบรรทัดในหนึ่งรอบ — สูตรเดียวกับส่วนลดรายบรรทัดของใบเสนอราคา/ใบสั่งซื้อ (ไม่เกินมูลค่าบรรทัด) */
+export function batchLineDiscountAmt(qty: number, unitPrice: number, discount: number | null | undefined, mode: DiscountMode | undefined): number {
+  return resolveDiscountAmount(qty * unitPrice, discount ?? 0, mode);
+}
+
+/**
+ * ค่าตั้งต้นของช่องส่วนลดรายบรรทัดในหน้าต่างรับของ — แบบ % ใช้ค่าของบรรทัดตรง ๆ (หักตามสัดส่วนของที่รับอยู่แล้ว) ·
+ * แบบบาทคือส่วนลดของทั้งบรรทัด รับหลายรอบจึงตั้งต้นเฉพาะส่วนที่ยังไม่ได้หัก (หลักเดียวกับส่วนลดท้ายบิล)
+ */
+export function defaultBatchLineDiscount(doc: Pick<ReceivingReport, "batches">, line: Pick<ReceivingReportLine, "id" | "discount" | "discountMode">): { discount: number | null; discountMode: DiscountMode } {
+  const mode = line.discountMode ?? "percent";
+  if (!line.discount) return { discount: null, discountMode: mode };
+  if (mode !== "amount") return { discount: line.discount, discountMode: mode };
+  const used = doc.batches.reduce((sum, b) => sum + b.lines.reduce((s, bl) => (bl.lineId === line.id ? s + (bl.discountAmt ?? 0) : s), 0), 0);
+  const remaining = Math.round(Math.max(0, line.discount - used) * 100) / 100;
+  return { discount: remaining > 0 ? remaining : null, discountMode: mode };
+}
+
 /**
  * ยอดของหนึ่งรอบการรับ — ตัวเดียวกับที่เซิร์ฟเวอร์ใช้ตอนบันทึก ไม่ให้หน้าจอกับหลังบ้านคิดคนละแบบ
- * `subtotal` = ฐานก่อน VAT หลังหักส่วนลด (ยอดที่ลงทะเบียนภาษีซื้อ) · `costFactor` = ฐาน ÷ ยอดก่อนหักส่วนลด ใช้คูณราคา
- * ต่อหน่วยเป็นต้นทุนสต๊อก (ส่วนลดเกลี่ยตามสัดส่วน และแบบรวม VAT ถอด VAT ออก) · ไม่ส่ง `terms` = สูตรเดิมก่อน 2026-09-24
+ * `gross` = Σ (จำนวน × ราคา − ส่วนลดรายบรรทัด `discountAmt`) · `subtotal` = ฐานก่อน VAT หลังหักส่วนลดท้ายบิล (ยอดที่ลงทะเบียนภาษีซื้อ) ·
+ * `costFactor` = ฐาน ÷ gross ใช้คูณ**ราคาต่อหน่วยหลังส่วนลดรายบรรทัด**เป็นต้นทุนสต๊อก (ส่วนลดท้ายบิลเกลี่ยตามสัดส่วน และแบบรวม VAT
+ * ถอด VAT ออก) · ไม่ส่ง `terms`/`discountAmt` = สูตรเดิม
  */
-export function batchTotals(lines: { qty: number; unitPrice: number }[], vatRate: number | null, terms: BatchTerms = {}) {
-  const gross = lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0);
+export function batchTotals(lines: { qty: number; unitPrice: number; discountAmt?: number }[], vatRate: number | null, terms: BatchTerms = {}) {
+  const gross = lines.reduce((sum, l) => sum + l.qty * l.unitPrice - (l.discountAmt ?? 0), 0);
   const discountAmt = resolveDiscountAmount(gross, terms.discount ?? 0, terms.discountMode);
   const priceType = priceTypeOf({ priceType: terms.priceType, vatRate });
   const split = splitVat(gross - discountAmt, priceType, vatRate);
@@ -419,6 +450,8 @@ export type ReceivingReportUpdateFields = Partial<Pick<ReceivingReport,
   | "orderVatRate" | "orderDiscount" | "orderDiscountMode" | "priceType" | "creditDays"
   | "billerCustom" | "billerName" | "billerTaxId" | "billerAddress">> & {
   lines?: ReceivingReportLineInput[];
+  /** ส่วนลดรายบรรทัด (2026-09-29) — แก้ได้ทุกใบ รวมใบที่มาจากใบสั่งซื้อ · ใช้กับบรรทัดหลังประกอบ `lines` แล้ว (บรรทัดใหม่ของใบเปล่าได้ด้วย) */
+  lineDiscounts?: { lineId: string; discount: number | null; discountMode: DiscountMode }[];
 };
 
 export async function updateReceivingReport(id: string, fields: ReceivingReportUpdateFields, options?: WriteOptions): Promise<ReceivingReport> {
@@ -440,7 +473,7 @@ export interface ReceiveBatchInput {
   creditDays: number | null;
   receivedBy: string;
   remark: string;
-  lines: { lineId: string; qty: number; unitPrice: number }[];
+  lines: { lineId: string; qty: number; unitPrice: number; discount?: number | null; discountMode?: DiscountMode }[];
 }
 
 /** บันทึกรับของหนึ่งรอบ — เพิ่มสต๊อก + ตั้งหนี้ ในคำสั่งเดียว */
