@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, Printer } from "lucide-react";
-import { EmptyState } from "../../components/EmptyState";
+import { Printer } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchApEntries, type ApEntry } from "../../lib/apEntries";
+import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
+import { btn, surface } from "../../components/ui/styles";
+import { MonthField, TotalsStrip } from "./accountingUi";
+import { currentMonthLocal, money, thaiMonthLabel } from "./accountingFormat";
+import { REPORT } from "./reportTable";
 
 /**
  * ทะเบียนภาษีซื้อ (2026-09-03) — เจ้าของสั่งไว้ท้ายรายการงานสโตร์ว่าการรับของต้อง *"ได้ทะเบียน
@@ -15,20 +19,10 @@ import { fetchApEntries, type ApEntry } from "../../lib/apEntries";
  *
  * ทุกแถวมาจากการรับของในใบรับสินค้า — บัญชีไม่ได้คีย์เอง ตัวเลขจึงกระทบยอดกับสต๊อกได้เสมอ
  * เดือนที่กรองคือเดือนของ **ใบกำกับภาษี** ไม่ใช่วันที่บันทึก (ดู `monthRange()` ใน apHandler.ts)
+ *
+ * ดีไซน์ใหม่ 2026-09-30: บนจอรวมชื่อผู้ขายกับเลขประจำตัวผู้เสียภาษีไว้ในช่องเดียว (สองบรรทัด) แต่บนกระดาษ
+ * ยังพิมพ์เป็นสองคอลัมน์แยกเหมือนเดิม (คอลัมน์เลขผู้เสียภาษี `hidden print:table-cell`)
  */
-const THAI_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-
-function currentMonthLocal(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function thaiMonthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  if (!y || !m) return month;
-  return `${THAI_MONTHS[m - 1]} ${y + 543}`;
-}
-
 export function PurchaseTaxRegisterPage() {
   const { t } = useI18n();
   const [month, setMonth] = useState(currentMonthLocal);
@@ -51,35 +45,24 @@ export function PurchaseTaxRegisterPage() {
   const loadError = current?.error === true;
   const entries = current?.entries ?? [];
 
-  const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
   const subtotal = entries.reduce((s, e) => s + e.subtotal, 0);
   const vatAmt = entries.reduce((s, e) => s + e.vatAmt, 0);
   const total = entries.reduce((s, e) => s + e.total, 0);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:overflow-visible print:p-0">
-      <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("purchaseTaxRegister.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("purchaseTaxRegister.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            {t("accounting.monthly.monthLabel")}
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => { if (e.target.value) setMonth(e.target.value); }}
-              className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-          </label>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
-          >
-            <Printer size={13} /> {t("accounting.monthly.printBtn")}
-          </button>
-        </div>
+    <div className={REPORT.page}>
+      <div className="print:hidden">
+        <ListPageHeader
+          module={t("nav.group.accounting")}
+          title={t("purchaseTaxRegister.title")}
+          description={t("purchaseTaxRegister.subtitle")}
+          actions={<>
+            <MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} />
+            <button type="button" onClick={() => window.print()} className={btn.secondary}>
+              <Printer size={16} /> {t("accounting.monthly.printBtn")}
+            </button>
+          </>}
+        />
       </div>
 
       <p className="hidden print:block text-lg font-semibold">{t("purchaseTaxRegister.printHeadingPrefix")} {thaiMonthLabel(month)}</p>
@@ -87,69 +70,88 @@ export function PurchaseTaxRegisterPage() {
       {loading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}</div>
       ) : loadError ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <p className="text-sm text-muted-foreground">{t("purchaseTaxRegister.loadError")}</p>
-          <button onClick={() => setAttempt((a) => a + 1)}
-            className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            {t("accounting.monthly.retry")}
-          </button>
+        <div className={surface.card}>
+          <ListEmpty
+            title={t("purchaseTaxRegister.loadError")}
+            action={<button type="button" onClick={() => setAttempt((a) => a + 1)} className={btn.secondary}>{t("accounting.monthly.retry")}</button>}
+          />
         </div>
       ) : entries.length === 0 ? (
-        <EmptyState icon={CalendarDays} title={t("purchaseTaxRegister.empty.title")} description={`${t("purchaseTaxRegister.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+        <div className={surface.card}>
+          <ListEmpty title={t("purchaseTaxRegister.empty.title")} hint={`${t("purchaseTaxRegister.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+        </div>
       ) : (
         <>
-          <div className="bg-card border border-border rounded-xl p-4 print:border-black">
-            <h2 className="text-sm font-semibold text-foreground mb-2">{t("purchaseTaxRegister.summaryHeading")} {thaiMonthLabel(month)}</h2>
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.kpi.count")}</p><p className="font-mono font-bold text-foreground mt-0.5">{entries.length}</p></div>
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.valueBeforeVat")}</p><p className="font-mono font-bold text-foreground mt-0.5">{money(subtotal)}</p></div>
-              <div><p className="text-xs text-muted-foreground">{t("purchaseTaxRegister.kpi.vat")}</p><p className="font-mono font-bold text-foreground mt-0.5">{money(vatAmt)}</p></div>
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.kpi.netTotal")}</p><p className="font-mono font-bold text-[#207e52] mt-0.5">{money(total)}</p></div>
-            </div>
-          </div>
+          <TotalsStrip
+            title={`${t("purchaseTaxRegister.summaryHeading")} ${thaiMonthLabel(month)}`}
+            items={[
+              { label: t("accounting.monthly.kpi.count"), value: entries.length, unit: t("accounting.monthly.unit.copies") },
+              { label: t("accounting.monthly.valueBeforeVat"), value: money(subtotal), alignEnd: true },
+              { label: t("purchaseTaxRegister.kpi.vat"), value: money(vatAmt), alignEnd: true },
+              { label: t("accounting.monthly.kpi.netTotal"), value: money(total), alignEnd: true, strong: true },
+            ]}
+          />
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden print:border-black">
+          <section className={REPORT.card}>
+            <div className={`${REPORT.cardHead} print:hidden`}>
+              <h2 className="flex-1 text-base font-semibold text-foreground">{t("purchaseTaxRegister.listHeading")}</h2>
+              <span className="text-[13px] text-muted-foreground">{t("ui.itemCount").replace("{n}", String(entries.length))} · {t("accounting.report.amountsInBaht")}</span>
+            </div>
             {/* `print:overflow-visible` + คอลัมน์ที่ยอมขึ้นบรรทัดใหม่ — บนกระดาษ A4 ตั้ง (กว้างพิมพ์ได้
                 186 มม.) ตารางเก้าคอลัมน์นี้กว้างเกิน `overflow-x-auto` จึงตัดสามคอลัมน์เงินทิ้ง
                 (มูลค่าสินค้า/ภาษี/รวม) แล้ววาดแถบเลื่อนของหน้าจอลงบนกระดาษแทน — คือคอลัมน์ที่รายงานนี้
                 มีไว้เพื่อพิมพ์โดยเฉพาะ (พบ 2026-09-04 ตอนตรวจใบพิมพ์เป็น PDF จริง) */}
             <div className="overflow-x-auto print:overflow-visible">
-              <table className="w-full print:text-[9px]">
+              <table className={REPORT.table}>
                 <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    {[
-                      t("purchaseTaxRegister.col.seq"), t("purchaseTaxRegister.col.invoiceDate"), t("purchaseTaxRegister.col.invoiceNumber"),
-                      t("purchaseTaxRegister.col.vendor"), t("purchaseTaxRegister.col.taxId"), t("purchaseTaxRegister.col.reference"),
-                      t("purchaseTaxRegister.col.value"), t("purchaseTaxRegister.col.vat"), t("purchaseTaxRegister.col.total"),
-                    ].map((h) => (
-                      <th key={h} className="px-3 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap print:whitespace-normal print:tracking-normal">{h}</th>
-                    ))}
+                  <tr className={REPORT.headRow}>
+                    <th className={`${REPORT.thNum} print:text-left`}>{t("purchaseTaxRegister.col.seq")}</th>
+                    <th className={REPORT.th}>{t("purchaseTaxRegister.col.invoiceDate")}</th>
+                    <th className={REPORT.th}>{t("purchaseTaxRegister.col.invoiceNumber")}</th>
+                    <th className={REPORT.th}>
+                      {t("purchaseTaxRegister.col.vendor")}
+                      <span className="print:hidden"> · {t("purchaseTaxRegister.col.taxId")}</span>
+                    </th>
+                    <th className={`${REPORT.th} hidden print:table-cell`}>{t("purchaseTaxRegister.col.taxId")}</th>
+                    <th className={REPORT.th}>{t("purchaseTaxRegister.col.reference")}</th>
+                    <th className={`${REPORT.thNum}`}>{t("purchaseTaxRegister.col.value")}</th>
+                    <th className={`${REPORT.thNum}`}>{t("purchaseTaxRegister.col.vat")}</th>
+                    <th className={`${REPORT.thNum}`}>{t("purchaseTaxRegister.col.total")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((e, i) => (
-                    <tr key={e.id} className="border-b border-border/50">
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground">{i + 1}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap print:whitespace-normal">{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-foreground whitespace-nowrap print:whitespace-normal">{e.invoiceNumber}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-sm text-foreground max-w-[240px] truncate print:max-w-none print:overflow-visible print:whitespace-normal print:text-clip" title={e.vendorName}>{e.vendorName || "—"}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap print:whitespace-normal">{e.vendorTaxId || "—"}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap print:whitespace-normal">{e.receivingReportNumber}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right text-foreground whitespace-nowrap print:whitespace-normal">{money(e.subtotal)}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right text-foreground whitespace-nowrap print:whitespace-normal">{money(e.vatAmt)}</td>
-                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-foreground whitespace-nowrap print:whitespace-normal">{money(e.total)}</td>
+                    <tr key={e.id} className={REPORT.row}>
+                      <td className={`${REPORT.td} ${REPORT.num} text-muted-foreground print:text-left`}>{i + 1}</td>
+                      <td className={`${REPORT.td} text-[#3d5173]`}>{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
+                      <td className={`${REPORT.td} font-mono text-[13px] text-foreground`}>{e.invoiceNumber}</td>
+                      <td className={`${REPORT.td} max-w-[280px] print:max-w-none`}>
+                        <span className="flex flex-col leading-snug min-w-0">
+                          <span className="font-medium text-foreground truncate print:overflow-visible print:whitespace-normal print:text-clip" title={e.vendorName}>{e.vendorName || "—"}</span>
+                          <span className="font-mono text-xs text-muted-foreground print:hidden">{e.vendorTaxId || "—"}</span>
+                        </span>
+                      </td>
+                      <td className={`${REPORT.td} hidden print:table-cell font-mono text-muted-foreground`}>{e.vendorTaxId || "—"}</td>
+                      <td className={`${REPORT.td} font-mono text-[13px] text-[#3d5173]`}>{e.receivingReportNumber}</td>
+                      <td className={`${REPORT.td} ${REPORT.num} text-foreground`}>{money(e.subtotal)}</td>
+                      <td className={`${REPORT.td} ${REPORT.num} text-foreground`}>{money(e.vatAmt)}</td>
+                      <td className={`${REPORT.td} ${REPORT.num} font-semibold text-foreground`}>{money(e.total)}</td>
                     </tr>
                   ))}
-                  <tr className="bg-muted/40">
-                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-semibold text-foreground" colSpan={6}>{t("purchaseTaxRegister.grandTotal")}</td>
-                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-foreground">{money(subtotal)}</td>
-                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-foreground">{money(vatAmt)}</td>
-                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-[#207e52]">{money(total)}</td>
-                  </tr>
                 </tbody>
+                <tfoot>
+                  <tr className={REPORT.footRow}>
+                    <td className={`${REPORT.td} text-foreground`} colSpan={5}>{t("purchaseTaxRegister.grandTotal")}</td>
+                    {/* คอลัมน์เลขผู้เสียภาษีที่ซ่อนบนจอ — บนกระดาษช่องรวมต้องกินเพิ่มอีกหนึ่งช่อง */}
+                    <td className={`${REPORT.td} hidden print:table-cell`} />
+                    <td className={`${REPORT.td} ${REPORT.num} text-foreground`}>{money(subtotal)}</td>
+                    <td className={`${REPORT.td} ${REPORT.num} text-foreground`}>{money(vatAmt)}</td>
+                    <td className={`${REPORT.td} ${REPORT.num} text-foreground`}>{money(total)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
-          </div>
+          </section>
         </>
       )}
     </div>

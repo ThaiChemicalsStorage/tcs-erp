@@ -6,6 +6,7 @@ import { ServiceReportEditor } from "./ServiceReportEditor";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { btn } from "../../components/ui/styles";
 
 // หน้าจัดการรายงานบริการ — แสดงรายการและรายละเอียด/ฟอร์มสร้าง-แก้ไข
 // Service Report management page — list/detail(create-or-edit) view state.
@@ -107,10 +108,7 @@ export function ServicePage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
         <p className="text-sm text-muted-foreground">{t("service.loadError")}</p>
-        <button
-          onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
-        >
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("service.retry")}
         </button>
       </div>

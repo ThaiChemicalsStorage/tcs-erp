@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Receipt, Search, X, Printer, Ban, FileText, Settings2, Boxes, Plus } from "lucide-react";
+import { Printer, Ban, FileText, Settings2, Boxes, Plus, Receipt, RotateCcw } from "lucide-react";
 import {
   fetchArDocuments, fetchArDocument, cancelArDocument, issueArReceipt,
   DOC_TYPE_LABEL_KEY, receiptByInvoiceId as buildReceiptByInvoiceId, paidByInvoiceId as buildPaidByInvoiceId,
@@ -7,9 +7,6 @@ import {
 } from "../../lib/accounting";
 import { fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
 import { formatQuoteDateThai } from "../../lib/quotes";
-import { EmptyState } from "../../components/EmptyState";
-import { PromptDialog } from "../../components/PromptDialog";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
@@ -17,8 +14,15 @@ import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPri
 import { ArDocumentNcrPrintDocument, NcrCalibrationTestPage } from "./ArDocumentNcrPrintDocument";
 import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSettings } from "../../lib/ncrPrintSettings";
 import { ArStockPanel } from "./ArStockPanel";
-import { ManualTaxInvoiceDialog } from "./ManualTaxInvoiceDialog";
+import { ManualTaxInvoicePage } from "./ManualTaxInvoicePage";
 import { useI18n } from "../../lib/i18n";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, FilterSelect, ListEmpty } from "../../components/ui/ListPage";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
+import { AccountingDialog, DocStatusPill, PAGE_CLASS, PickerRow, RowIconButton, RowMoreMenu, RowPickerDialog, SummaryBox } from "./accountingUi";
+import { money, monthsPresent, thaiMonthLabel } from "./accountingFormat";
+
+type StatusTab = "all" | "issued" | "cancelled";
 
 // หน้ารายการเอกสารบัญชีแยกตามประเภท — "1 ใบคือ 1 หน้า" ตามที่เจ้าของสั่ง (2026-08-18) ให้แต่ละ
 // ประเภทเอกสาร (ใบรับเงินมัดจำ/ใบกำกับภาษี, ใบแจ้งหนี้/ใบวางบิล, ใบเสร็จรับเงิน, ใบกำกับภาษี/ใบส่งสินค้า)
@@ -49,7 +53,7 @@ export function ArDocumentListPage({
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "issued" | "cancelled">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusTab>("all");
   const [printDoc, setPrintDoc] = useState<ArDocument | null>(null);
   // พิมพ์ลงฟอร์ม NCR (เฉพาะข้อมูล ลงกระดาษเคมีที่มีกรอบพิมพ์มาแล้ว) — แยก state จากพิมพ์กระดาษเปล่า
   const [ncrPrintDoc, setNcrPrintDoc] = useState<ArDocument | null>(null);
@@ -59,8 +63,10 @@ export function ArDocumentListPage({
   const [cancelTarget, setCancelTarget] = useState<ArDocument | null>(null);
   const [receiptTarget, setReceiptTarget] = useState<ArDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ArDocument | null>(null);
-  const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  // หน้าสร้างใบกำกับภาษี (Manual) — เดิมเป็นกล่องโต้ตอบ ดีไซน์ใหม่เป็นหน้าเต็มที่สลับแทนหน้ารายการ
+  const [manualOpen, setManualOpen] = useState(false);
   const [receiptPickerOpen, setReceiptPickerOpen] = useState(false);
+  const [menuRowId, setMenuRowId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -159,10 +165,12 @@ export function ArDocumentListPage({
     return ids;
   }, [documents, docType]);
 
+  const months = useMemo(() => monthsPresent(documents.map((d) => d.docDate)), [documents]);
+
   const normalizedSearch = search.trim().toLowerCase();
-  // ทุกตัวกรอง "ยกเว้น" สถานะ — การ์ดสรุปด้านล่างนับจากชุดนี้ ไม่ใช่ documents ดิบ เพราะการ์ดสามใบ
-  // สะท้อนแท็บสถานะแบบ 1:1 ถ้านับจาก documents ดิบ ตัวเลขบนการ์ดจะขัดกับแถวที่เห็นในตารางทันทีที่
-  // ผู้ใช้กรองเดือน/ค้นหา (ดู "Filter Honesty" ใน docs/UI_GUIDELINES.md)
+  // ทุกตัวกรอง "ยกเว้น" สถานะ — ตัวเลขบนแท็บนับจากชุดนี้ ไม่ใช่ documents ดิบ ถ้านับจาก documents ดิบ
+  // ตัวเลขบนแท็บจะขัดกับแถวที่เห็นในตารางทันทีที่ผู้ใช้กรองเดือน/ค้นหา (ดู "Filter Honesty" ใน docs/UI_GUIDELINES.md)
+  // แท็บแทนการ์ดนับสามใบเดิม (ดีไซน์ใหม่ 2026-09-30) — ยอดรวมเดือนนี้ยังอยู่ในสรุปเอกสารประจำเดือน
   const scoped = documents
     .filter((d) => !monthFilter || d.docDate.startsWith(monthFilter))
     .filter((d) => !normalizedSearch
@@ -226,273 +234,188 @@ export function ArDocumentListPage({
     }
   };
 
-  const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
+  const typeLabel = t(DOC_TYPE_LABEL_KEY[docType]);
+  const backToAll = t("accounting.list.backToAll").replace("{type}", typeLabel);
+  const canManual = isTaxInvoicePage && canCreate && canIssue;
 
-  return (
-    <>
-    {/* ส่วนแสดงผลบนหน้าจอทั้งหมดต้องซ่อนตอนพิมพ์ — เอกสารพิมพ์ (ArDocumentPrintDocument ด้านล่าง)
-        ต้องเป็นสิ่งเดียวที่ออกกระดาษ (pattern เดียวกับ DeliveryOrderDocument's print:hidden blocks).
-        ArStockPanel เป็นอีก view หนึ่งของหน้าเดียวกัน (ไม่ early-return ทิ้ง fragment) เพื่อให้ปุ่มพิมพ์ใน
-        panel นั้นยังเรียก printDoc/ncrPrintDoc state เดียวกับด้านล่างได้ — พิมพ์ได้ทันทีหลังตัดสต๊อกเสร็จ
-        โดยไม่ต้องย้อนกลับไปหน้ารายการก่อน (ตามคำขอ "พอเสร็จก็สามารถเลือกได้ว่าจะกดปริ้นอันไหน") */}
-    {detailDoc ? (
-      <ArStockPanel
-        doc={detailDoc}
-        canAdjust={canAdjustStock}
-        onBack={() => setDetailDoc(null)}
-        onDocumentUpdated={(updated) => {
-          setDetailDoc(updated);
-          setDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
-        }}
-        onPrint={() => void handlePrint(detailDoc.id)}
-        onNcrPrint={() => void handleNcrPrint(detailDoc.id)}
-      />
-    ) : (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t(DOC_TYPE_LABEL_KEY[docType])}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">
-            {t("accounting.list.subtitle.before")} {docType} {t("accounting.list.subtitle.after")}
-            {isTaxInvoicePage && canCreate && canIssue ? ` ${t("accounting.list.subtitle.orManual")}` : ""}
-            {docType === "RE" && canIssue ? ` ${t("accounting.list.subtitle.orReceiptHere")}` : ""}
-          </p>
-        </div>
-        {isTaxInvoicePage && canCreate && canIssue && (
-          <button
-            onClick={() => setManualDialogOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-          >
-            <Plus size={15} /> {t("accounting.list.btn.createManual")}
-          </button>
-        )}
-        {docType === "RE" && canIssue && (
-          <button
-            onClick={() => setReceiptPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-          >
-            <Plus size={15} /> {t("accounting.list.btn.createReceipt")}
-          </button>
-        )}
-      </div>
+  const tabs = [
+    { key: "all" as const, label: t("accounting.list.status.all"), count: scoped.length },
+    { key: "issued" as const, label: t("accounting.list.status.issued"), count: scoped.filter((d) => d.status === "issued").length },
+    { key: "cancelled" as const, label: t("accounting.list.status.cancelled"), count: scoped.filter((d) => d.status === "cancelled").length },
+  ];
 
-      {/* การ์ดสรุปสถานะ 3 ใบ ตรงกับแท็บกรองสถานะด้านล่างแบบ 1:1 เสมอ (ทั้งหมด/ใช้งาน/ยกเลิกแล้ว) — สีเดียวกับ
-          badge สถานะในตาราง (เขียว = ใช้งาน, แดง = ยกเลิกแล้ว) เพื่อให้เห็นความหมายตรงกันทั้งหน้า ปรับ
-          layout ให้ตรงกับหน้าใบส่งมอบสินค้า (Delivery Order) ตามคำขอ 2026-08-18 — ยอดรวมเดือนนี้ (บาท) ที่
-          เคยอยู่ตรงนี้ยังคงอยู่ในสรุปเอกสารประจำเดือน (ArMonthlyReportPage) ไม่ได้หายไปจากระบบ
-          Status-summary cards mirror the filter tabs below 1:1 (ทั้งหมด/ใช้งาน/ยกเลิกแล้ว), same color
-          language as the table's own status badges — matches Delivery Order's card layout per direct
-          request. The this-month money total previously shown here still lives on the monthly report page. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: t("accounting.list.status.all"), value: String(scoped.length), color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: t("accounting.list.status.issued"), value: String(scoped.filter((d) => d.status === "issued").length), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: t("accounting.list.status.cancelled"), value: String(scoped.filter((d) => d.status === "cancelled").length), color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
-        ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
-              <Receipt size={15} style={{ color: s.color }} />
-            </div>
-            <p className="text-xl font-bold text-foreground font-mono">{s.value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative h-9 w-72">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("accounting.list.search.placeholder")}
-              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground">
-                <X size={13} />
-              </button>
-            )}
-          </div>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            {t("accounting.list.filter.month")}
-            <input
-              type="month"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            {monthFilter && (
-              <button onClick={() => setMonthFilter("")} className="text-foreground" title={t("accounting.list.filter.clearMonth")}>
-                <X size={13} />
-              </button>
-            )}
-          </label>
-          <button
-            onClick={() => setNcrSettingsOpen(true)}
-            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all ml-auto"
-            title={t("accounting.list.ncr.settingsTitle")}
-          >
-            <Settings2 size={13} /> {t("accounting.list.ncr.settingsBtn")}
+  const listView = (
+    <div className={`${PAGE_CLASS} print:hidden`}>
+      <ListPageHeader
+        module={t("nav.group.accounting")}
+        title={typeLabel}
+        description={<>
+          {t("accounting.list.subtitle.before")} <span className="font-mono text-[#3d5173]">{docType}</span> {t("accounting.list.subtitle.after")}
+          {canManual ? ` ${t("accounting.list.subtitle.orManualTop")}` : ""}
+          {docType === "RE" && canIssue ? ` ${t("accounting.list.subtitle.orReceiptHere")}` : ""}
+        </>}
+        actions={<>
+          <button type="button" onClick={() => setNcrSettingsOpen(true)} className={btn.secondary} title={t("accounting.list.ncr.settingsTitle")}>
+            <Settings2 size={16} /> {t("accounting.list.ncr.settingsBtn")}
           </button>
-        </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([["all", t("accounting.list.status.all")], ["issued", t("accounting.list.status.issued")], ["cancelled", t("accounting.list.status.cancelled")]] as const).map(([key, label]) => (
-            <button key={key} onClick={() => setStatusFilter(key)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${statusFilter === key ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {label}
+          {canManual && (
+            <button type="button" onClick={() => setManualOpen(true)} className={btn.primary}>
+              <Plus size={16} /> {t("accounting.list.btn.createManual")}
             </button>
-          ))}
-        </div>
-      </div>
+          )}
+          {docType === "RE" && canIssue && (
+            <button type="button" onClick={() => setReceiptPickerOpen(true)} className={btn.primary}>
+              <Plus size={16} /> {t("accounting.list.btn.createReceipt")}
+            </button>
+          )}
+        </>}
+      />
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <ListCard>
+        <ListTabs tabs={tabs} active={statusFilter} onChange={setStatusFilter} ariaLabel={t("accounting.list.statusTabs")} />
+        <ListToolbar
+          search={search}
+          onSearch={setSearch}
+          searchPlaceholder={t("accounting.list.search.placeholder")}
+          count={loading || loadError ? undefined : t("ui.itemCount").replace("{n}", String(filtered.length))}
+        >
+          <FilterSelect
+            label={t("accounting.list.filter.month")}
+            value={monthFilter}
+            options={[{ value: "", label: t("accounting.list.status.all") }, ...months.map((m) => ({ value: m, label: thaiMonthLabel(m) }))]}
+            onChange={setMonthFilter}
+          />
+        </ListToolbar>
+
         {loading ? (
           <div className="p-6 space-y-3">
             {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />)}
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <p className="text-sm text-muted-foreground">{t("accounting.list.error.loadFailed")}</p>
-            <button onClick={load} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">{t("accounting.list.error.retry")}</button>
-          </div>
+          <ListEmpty
+            title={t("accounting.list.error.loadFailed")}
+            action={<button type="button" onClick={load} className={btn.secondary}>{t("accounting.list.error.retry")}</button>}
+          />
         ) : documents.length === 0 ? (
-          <EmptyState
-            icon={FileText}
-            title={`${t("accounting.list.empty.titlePrefix")}${t(DOC_TYPE_LABEL_KEY[docType])}`}
-            description={docType === "RE"
-              ? t("accounting.list.empty.descRE")
-              : t("accounting.list.empty.descOther")}
-            compact
+          <ListEmpty
+            title={`${t("accounting.list.empty.titlePrefix")}${typeLabel}`}
+            hint={docType === "RE" ? t("accounting.list.empty.descRE") : t("accounting.list.empty.descOther")}
           />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <FileText size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("accounting.list.noMatch")}</p>
-          </div>
+          <ListEmpty title={t("accounting.list.noMatch")} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className={`overflow-x-auto ${menuRowId ? "pb-28" : ""}`}>
+            <table className="w-full min-w-[960px]">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {[t("accounting.list.col.docNo"), t("accounting.list.col.date"), t("accounting.list.col.customer"), t("accounting.list.col.scopeNumber"), docType === "RE" ? t("accounting.list.col.refInvoice") : t("accounting.list.col.receipt"), t("accounting.list.col.netTotal"), t("accounting.list.col.status"), ""].map((h, i) => (
-                    <th key={i} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
+                <tr className={table.head}>
+                  <th className={table.th}>{t("accounting.list.col.docNo")}</th>
+                  <th className={table.th}>{t("accounting.list.col.date")}</th>
+                  <th className={table.th}>{t("accounting.list.col.customer")}</th>
+                  <th className={table.th}>{t("accounting.list.col.scopeNumber")}</th>
+                  {/* AR/IV = ใบเสร็จที่ออกให้ใบนี้แล้ว · BI/RE = เลขที่ใบกำกับภาษี (AR/IV) ที่ใบนี้อ้างถึง (field `reference`
+                      ซึ่งเซิร์ฟเวอร์ใส่เป็นเลขที่ใบกำกับภาษีต้นทางตอนออก BI/RE) — เดิมหน้า BI ใช้หัวว่า "ใบเสร็จรับเงิน"
+                      ทั้งที่แสดงเลขที่ใบกำกับภาษี แก้หัวให้ตรงกับข้อมูล 2026-09-30 */}
+                  <th className={table.th}>{isTaxInvoicePage ? t("accounting.list.col.receipt") : t("accounting.list.col.refInvoice")}</th>
+                  <th className={table.th.replace("text-left", "text-right")}>{t("accounting.list.col.netTotal")}</th>
+                  <th className={table.th}>{t("accounting.list.col.status")}</th>
+                  <th className={table.th}><span className="sr-only">{t("accounting.list.col.actions")}</span></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((d) => {
                   const receipt = isTaxInvoicePage ? receiptByInvoiceId[d.id] : undefined;
+                  const cancelled = d.status === "cancelled";
+                  const scopeNo = scopeNumbers[d.scopeOfWorkId];
                   return (
-                    <tr key={d.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                      <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">
-                        {d.docNo}
-                        {d.isManual && (
-                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-sans font-medium bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20 align-middle" title={t("accounting.list.badge.manualTitle")}>
-                            {t("accounting.list.badge.manual")}
-                          </span>
-                        )}
+                    <tr key={d.id} className={table.row}>
+                      <td className={`${table.td} whitespace-nowrap`}>
+                        <span className="flex flex-col items-start leading-snug">
+                          <span className={`font-mono text-[13px] font-medium ${cancelled ? "text-muted-foreground" : "text-foreground"}`}>{d.docNo}</span>
+                          {d.isManual && (
+                            <span className="mt-0.5 h-[18px] px-1.5 rounded bg-[#eef1f6] text-[#3d5173] text-xs font-semibold inline-flex items-center" title={t("accounting.list.badge.manualTitle")}>
+                              {t("accounting.list.badge.manual")}
+                            </span>
+                          )}
+                        </span>
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(d.docDate)}</td>
-                      <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[240px] truncate" title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
-                      <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{scopeNumbers[d.scopeOfWorkId] ?? "—"}</td>
-                      <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
-                        {docType === "RE"
-                          ? <span className="text-muted-foreground">{d.reference || "—"}</span>
-                          : isTaxInvoicePage
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(d.docDate)}</td>
+                      <td className={`${table.td} text-sm font-medium text-foreground max-w-[260px] truncate`} title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
+                      <td className={`${table.td} font-mono text-[13px] whitespace-nowrap ${scopeNo ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{scopeNo ?? "—"}</td>
+                      <td className={`${table.td} text-[13px] whitespace-nowrap`}>
+                        {isTaxInvoicePage
                           ? (receipt
-                            ? <span className="text-[#207e52]">{receipt.docNo}</span>
-                            : <span className="text-muted-foreground">{t("accounting.list.receiptNotIssued")}</span>)
-                          : <span className="text-muted-foreground">{d.reference || "—"}</span>}
+                            ? <span className="font-mono text-[#1b7f4f]">{receipt.docNo}</span>
+                            : <span className="text-[#8a97ad]">{t("accounting.list.receiptNotIssued")}</span>)
+                          : <span className={`font-mono ${d.reference ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{d.reference || "—"}</span>}
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-foreground font-mono whitespace-nowrap">{money(d.netTotal)}</td>
-                      <td className="px-4 py-3.5">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${d.status === "issued" ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-[#e05252]/10 text-[#c23f3f] border border-[#e05252]/20"}`}>
- {d.status === "issued" ? t("accounting.list.status.issued") : t("accounting.list.status.cancelled")}
- </span>
- </td>
- <td className="px-4 py-3.5 whitespace-nowrap">
- <div className="flex items-center justify-end gap-2">
- {isTaxInvoicePage && canIssue && d.status === "issued" && !receipt && (
- <button
- onClick={() => setReceiptTarget(d)}
- className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
- >
- {t("accounting.list.action.issueReceipt")}
- </button>
- )}
- {isStockPage && canViewStock && (
- <button onClick={() => void handleOpenStock(d.id)} className="text-foreground transition-colors" title={t("accounting.list.action.viewStockTitle")}>
- <Boxes size={14} />
- </button>
- )}
- <button onClick={() => void handlePrint(d.id)} className="text-foreground transition-colors" title={t("accounting.list.action.printTitle")}>
- <Printer size={14} />
- </button>
- <button
- onClick={() => void handleNcrPrint(d.id)}
- className="px-1.5 py-0.5 text-xs font-mono border border-[#c3ccda] bg-white rounded text-foreground hover:bg-[#f4f6fa] transition-all"
- title={t("accounting.list.action.ncrPrintTitle")}
- >
- NCR
- </button>
- {canCancel && d.status === "issued" && (
- <button onClick={() => setCancelTarget(d)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.list.action.cancelTitle")}>
- <Ban size={14} />
- </button>
- )}
- </div>
- </td>
- </tr>
- );
- })}
- </tbody>
- </table>
- </div>
- )}
- </div>
+                      <td className={`${table.td} ${table.money} whitespace-nowrap ${cancelled ? "text-[#8a97ad] line-through" : "text-foreground"}`}>{money(d.netTotal)}</td>
+                      <td className={table.td}><DocStatusPill status={d.status} /></td>
+                      <td className={`${table.td} whitespace-nowrap`}>
+                        <div className="flex items-center justify-end gap-1">
+                          {isTaxInvoicePage && canIssue && d.status === "issued" && !receipt && (
+                            <button type="button" onClick={() => setReceiptTarget(d)} className={`${btn.secondarySm.replace("h-9", "h-8")} mr-1`}>
+                              {t("accounting.list.action.issueReceipt")}
+                            </button>
+                          )}
+                          {isStockPage && canViewStock && (
+                            <RowIconButton icon={Boxes} label={t("accounting.list.action.viewStockTitle")} onClick={() => void handleOpenStock(d.id)} />
+                          )}
+                          <RowIconButton icon={Printer} label={t("accounting.list.action.printTitle")} onClick={() => void handlePrint(d.id)} />
+                          <RowMoreMenu
+                            label={t("ui.more")}
+                            onOpenChange={(open) => setMenuRowId((prev) => (open ? d.id : prev === d.id ? null : prev))}
+                            items={[
+                              { key: "ncr", label: t("accounting.list.action.ncrPrint"), icon: FileText, hint: t("accounting.list.action.ncrPrintTitle"), onSelect: () => void handleNcrPrint(d.id) },
+                              canCancel && d.status === "issued" && { key: "cancel", label: t("accounting.list.action.cancelTitle"), icon: Ban, danger: true, onSelect: () => setCancelTarget(d) },
+                            ]}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ListCard>
 
- <PromptDialog
- open={cancelTarget !== null}
- title={`${t("accounting.list.action.cancelTitle")} ${cancelTarget?.docNo ?? ""}`}
-        message={t("accounting.list.cancelDialog.message")}
-        label={t("accounting.list.cancelDialog.label")}
-        confirmLabel={busy ? t("accounting.list.cancelDialog.busy") : t("accounting.list.action.cancelTitle")}
-        requiredMessage={t("accounting.list.cancelDialog.required")}
-        busy={busy}
-        onConfirm={(reason) => void handleCancel(reason)}
-        onCancel={() => setCancelTarget(null)}
-      />
-      <ConfirmDialog
+      {cancelTarget && (
+        <CancelDocumentDialog
+          doc={cancelTarget}
+          busy={busy}
+          onConfirm={(reason) => void handleCancel(reason)}
+          onCancel={() => setCancelTarget(null)}
+        />
+      )}
+      <AccountingDialog
         open={receiptTarget !== null}
+        tone="success"
+        icon={Receipt}
         title={t("accounting.list.receiptDialog.title")}
-        message={`${t("accounting.list.receiptDialog.messageBefore")} ${receiptTarget?.docNo ?? ""} ${t("accounting.list.receiptDialog.messageMid")} ${receiptTarget ? money(receiptTarget.netTotal) : ""} ${t("accounting.list.receiptDialog.messageAfter")}`}
+        message={t("accounting.receiptDialog.message")}
         confirmLabel={busy ? t("accounting.list.receiptDialog.busy") : t("accounting.list.receiptDialog.confirm")}
+        confirmIcon={Receipt}
         busy={busy}
         onConfirm={() => void handleIssueReceipt()}
         onCancel={() => setReceiptTarget(null)}
-      />
+      >
+        {receiptTarget && (
+          <SummaryBox
+            mono
+            primary={receiptTarget.docNo}
+            secondary={`${receiptTarget.customerSnapshot.companyName} · ${scopeNumbers[receiptTarget.scopeOfWorkId] ?? "—"}`}
+            amountLabel={t("accounting.summary.netTotal")}
+            amount={`฿${money(receiptTarget.netTotal)}`}
+          />
+        )}
+      </AccountingDialog>
       {ncrSettingsOpen && (
         <NcrSettingsDialog
           settings={ncrSettings}
           onSave={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); toast.show(t("accounting.list.ncr.savedToast")); }}
           onTestPrint={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); setNcrTestPrinting(true); }}
           onClose={() => setNcrSettingsOpen(false)}
-        />
-      )}
-      {manualDialogOpen && (
-        <ManualTaxInvoiceDialog
-          docType={docType === "IV" ? "IV" : "AR"}
-          onClose={() => setManualDialogOpen(false)}
-          onIssued={(issued) => {
-            setManualDialogOpen(false);
-            toast.show(`${t("accounting.list.toast.issuedPrefix")} ${issued.map((d) => d.docNo).join(` ${t("accounting.list.and")} `)} ${t("accounting.list.suffixDone")}`);
-            load();
-          }}
         />
       )}
       {receiptPickerOpen && (
@@ -504,13 +427,105 @@ export function ArDocumentListPage({
       )}
       <Toast message={toast.message} />
     </div>
-    )}
+  );
+
+  return (
+    <>
+    {/* ส่วนแสดงผลบนหน้าจอทั้งหมดต้องซ่อนตอนพิมพ์ — เอกสารพิมพ์ (ArDocumentPrintDocument ด้านล่าง)
+        ต้องเป็นสิ่งเดียวที่ออกกระดาษ (pattern เดียวกับ DeliveryOrderDocument's print:hidden blocks).
+        ArStockPanel เป็นอีก view หนึ่งของหน้าเดียวกัน (ไม่ early-return ทิ้ง fragment) เพื่อให้ปุ่มพิมพ์ใน
+        panel นั้นยังเรียก printDoc/ncrPrintDoc state เดียวกับด้านล่างได้ — พิมพ์ได้ทันทีหลังตัดสต๊อกเสร็จ
+        โดยไม่ต้องย้อนกลับไปหน้ารายการก่อน (ตามคำขอ "พอเสร็จก็สามารถเลือกได้ว่าจะกดปริ้นอันไหน") */}
+    {detailDoc ? (
+      <ArStockPanel
+        doc={detailDoc}
+        backLabel={t("accounting.list.backToAll").replace("{type}", t(DOC_TYPE_LABEL_KEY[detailDoc.docType]))}
+        receiptDocNo={receiptByInvoiceId[detailDoc.id]?.docNo}
+        canAdjust={canAdjustStock}
+        onBack={() => setDetailDoc(null)}
+        onDocumentUpdated={(updated) => {
+          setDetailDoc(updated);
+          setDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+        }}
+        onPrint={() => void handlePrint(detailDoc.id)}
+        onNcrPrint={() => void handleNcrPrint(detailDoc.id)}
+      />
+    ) : manualOpen ? (
+      <ManualTaxInvoicePage
+        docType={docType === "IV" ? "IV" : "AR"}
+        backLabel={backToAll}
+        onBack={() => setManualOpen(false)}
+        onIssued={(issued) => {
+          setManualOpen(false);
+          toast.show(`${t("accounting.list.toast.issuedPrefix")} ${issued.map((d) => d.docNo).join(` ${t("accounting.list.and")} `)} ${t("accounting.list.suffixDone")}`);
+          load();
+        }}
+      />
+    ) : listView}
     {printDoc && <ArDocumentPrintDocument document={printDoc} paidByInvoiceId={paidByInvoiceId} />}
     {ncrPrintDoc && <ArDocumentNcrPrintDocument document={ncrPrintDoc} settings={ncrSettings} paidByInvoiceId={paidByInvoiceId} />}
     {ncrTestPrinting && <NcrCalibrationTestPage settings={ncrSettings} variant={docType === "BI" ? "billingNote" : "standard"} />}
     </>
   );
 }
+
+// กล่องยืนยันการยกเลิกเอกสาร — ต้องใส่เหตุผลเสมอ (เดิมใช้ PromptDialog ดีไซน์ใหม่มีกล่องสรุปเอกสารให้เห็นว่ายกเลิกใบไหน)
+function CancelDocumentDialog({ doc, busy, onConfirm, onCancel }: {
+  doc: ArDocument;
+  busy: boolean;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  const [reason, setReason] = useState("");
+  const [blankError, setBlankError] = useState("");
+  const submit = () => {
+    if (busy) return;
+    const trimmed = reason.trim();
+    if (!trimmed) { setBlankError(t("accounting.list.cancelDialog.required")); return; }
+    onConfirm(trimmed);
+  };
+  return (
+    <AccountingDialog
+      open
+      tone="danger"
+      icon={Ban}
+      title={<>{t("accounting.list.action.cancelTitle")} <span className="font-mono font-medium">{doc.docNo}</span></>}
+      message={t("accounting.list.cancelDialog.message")}
+      confirmLabel={busy ? t("accounting.list.cancelDialog.busy") : t("accounting.list.action.cancelTitle")}
+      confirmIcon={Ban}
+      danger
+      busy={busy}
+      onConfirm={submit}
+      onCancel={onCancel}
+    >
+      <SummaryBox
+        primary={<span className="font-normal text-[#3d5173]">{t(DOC_TYPE_LABEL_KEY[doc.docType])} · {formatQuoteDateThai(doc.docDate)}</span>}
+        secondary={doc.customerSnapshot.companyName}
+        amount={`฿${money(doc.netTotal)}`}
+      />
+      <Field label={t("accounting.list.cancelDialog.label")} required htmlFor="ar-cancel-reason" error={blankError || undefined}>
+        <input
+          id="ar-cancel-reason"
+          autoFocus
+          value={reason}
+          onChange={(e) => { setReason(e.target.value); setBlankError(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          aria-invalid={blankError ? true : undefined}
+          className={`${blankError ? field.input.replace("border-[#c3ccda]", "border-[#b93636]") : field.input} w-full`}
+        />
+      </Field>
+    </AccountingDialog>
+  );
+}
+
+type NcrKey = keyof NcrPrintSettings;
+const NCR_FIELDS: { key: NcrKey; label: "accounting.list.ncr.label.pageWidth" | "accounting.list.ncr.label.pageHeight" | "accounting.list.ncr.label.offsetX" | "accounting.list.ncr.label.offsetY" }[] = [
+  { key: "pageWidthMm", label: "accounting.list.ncr.label.pageWidth" },
+  { key: "pageHeightMm", label: "accounting.list.ncr.label.pageHeight" },
+  { key: "offsetXMm", label: "accounting.list.ncr.label.offsetX" },
+  { key: "offsetYMm", label: "accounting.list.ncr.label.offsetY" },
+];
 
 // กล่องตั้งค่าตำแหน่งพิมพ์ลงฟอร์ม NCR — ค่าเก็บใน localStorage ต่อเครื่อง (การเยื้องเป็นเรื่องของ
 // เครื่องพิมพ์/เครื่องคอมแต่ละตัว ไม่ใช่ข้อมูลธุรกิจ) ใช้ร่วมกันทุกประเภทเอกสารเพราะฟอร์มจริงเป็นผังเดียวกัน
@@ -530,60 +545,57 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
     if (!Number.isFinite(n)) return fallback;
     return positiveOnly && n <= 0 ? fallback : n;
   };
-  const field = (label: string, key: keyof NcrPrintSettings) => (
-    <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-      {label}
-      <input
-        type="number"
-        step="0.5"
-        value={draft[key]}
-        onChange={(e) => setDraft((d) => ({ ...d, [key]: num(e.target.value, d[key], key === "pageWidthMm" || key === "pageHeightMm") }))}
-        className="w-24 h-8 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors font-mono text-right"
-      />
-    </label>
-  );
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
-      <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">{t("accounting.list.ncr.settingsBtn")}</h2>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {t("accounting.list.ncr.description")}
-        </p>
-        {field(t("accounting.list.ncr.field.pageWidth"), "pageWidthMm")}
-        {field(t("accounting.list.ncr.field.pageHeight"), "pageHeightMm")}
-        {field(t("accounting.list.ncr.field.offsetX"), "offsetXMm")}
-        {field(t("accounting.list.ncr.field.offsetY"), "offsetYMm")}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <button
-            onClick={() => setDraft({ ...DEFAULT_NCR_SETTINGS })}
-            className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {t("accounting.list.ncr.reset")}
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onTestPrint(draft)}
-              className="px-3 py-1.5 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
-            >
-              {t("accounting.list.ncr.testPrint")}
-            </button>
-            <button
-              onClick={() => onSave(draft)}
-              className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-            >
-              {t("accounting.list.ncr.save")}
-            </button>
-          </div>
-        </div>
+    <AccountingDialog
+      open
+      wide
+      tone="info"
+      icon={Settings2}
+      title={t("accounting.list.ncr.settingsBtn")}
+      message={t("accounting.list.ncr.description")}
+      confirmLabel={t("accounting.list.ncr.save")}
+      footerLeft={
+        <button type="button" onClick={() => setDraft({ ...DEFAULT_NCR_SETTINGS })} className={btn.text}>
+          <RotateCcw size={16} /> {t("accounting.list.ncr.reset")}
+        </button>
+      }
+      extraActions={
+        <button type="button" onClick={() => onTestPrint(draft)} className={btn.secondary}>
+          <Printer size={16} /> {t("accounting.list.ncr.testPrint")}
+        </button>
+      }
+      onConfirm={() => onSave(draft)}
+      onCancel={onClose}
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:pl-[60px]">
+        {NCR_FIELDS.map(({ key, label }) => (
+          <Field key={key} label={t(label)} htmlFor={`ncr-${key}`}>
+            <span data-field-box className="h-10 rounded-lg border border-[#c3ccda] bg-white flex items-stretch overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+              <input
+                id={`ncr-${key}`}
+                type="number"
+                step="0.5"
+                inputMode="decimal"
+                value={draft[key]}
+                onChange={(e) => setDraft((d) => ({ ...d, [key]: num(e.target.value, d[key], key === "pageWidthMm" || key === "pageHeightMm") }))}
+                className="flex-1 min-w-0 h-full px-3 bg-transparent text-sm text-right tabular-nums text-foreground outline-none"
+              />
+              <span className="px-3 flex items-center bg-[#f4f6fa] border-l border-border text-[13px] text-[#3d5173]">{t("accounting.list.ncr.unitMm")}</span>
+            </span>
+          </Field>
+        ))}
+        <p className={`${field.help} sm:col-span-2`}>{t("accounting.list.ncr.localNote")}</p>
       </div>
-    </div>
+    </AccountingDialog>
   );
 }
+
+const RECEIPT_PICKER_GRID = "grid-cols-[110px_200px_minmax(0,1fr)_108px_120px_20px]";
 
 // Dialog เปิดจากปุ่ม "+ ออกใบเสร็จ" บนหน้า RE เอง — ให้เลือกใบกำกับภาษี (AR/IV) ที่ออกแล้วและยังไม่มี
 // ใบเสร็จมาออกได้ตรงนี้เลย (เดิมต้องไปกดปุ่ม "ออกใบเสร็จ" ที่แถวเอกสารในหน้า AR/IV เท่านั้น) — เหมือน
 // action "Register Payment" ของ Odoo ที่อยู่บนตัวเอกสารต้นทาง เพียงแต่เพิ่มทางเข้าอีกทางจากหน้า RE เอง
+// กดแถวแล้วไปที่กล่องยืนยันออกใบเสร็จ (ยังไม่ออกทันที)
 function ReceiptSourcePickerDialog({ excludeIds, onClose, onSelect }: {
   excludeIds: Set<string>;
   onClose: () => void;
@@ -622,61 +634,47 @@ function ReceiptSourcePickerDialog({ excludeIds, onClose, onSelect }: {
       || (scopeNumbers[d.scopeOfWorkId] ?? "").toLowerCase().includes(normalizedSearch));
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">
-            {t("accounting.list.receiptPicker.title")}
-          </h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
-            <X size={18} />
-          </button>
+    <RowPickerDialog
+      title={t("accounting.list.receiptPicker.title")}
+      subtitle={t("accounting.list.receiptPicker.description")}
+      search={search}
+      onSearch={setSearch}
+      searchPlaceholder={t("accounting.list.search.placeholder")}
+      countLabel={loading || loadError ? undefined : t("ui.itemCount").replace("{n}", String(filtered.length))}
+      gridClass={RECEIPT_PICKER_GRID}
+      headers={<>
+        <span>{t("accounting.list.col.docNo")}</span>
+        <span>{t("accounting.jobBilling.col.type")}</span>
+        <span>{t("accounting.list.col.customer")}</span>
+        <span>{t("accounting.list.col.scopeNumber")}</span>
+        <span className="text-right">{t("accounting.list.col.netTotal")}</span>
+        <span />
+      </>}
+      footerNote={t("accounting.list.receiptPicker.footer")}
+      onClose={onClose}
+    >
+      {loading ? (
+        <div className="p-6 space-y-2">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}
         </div>
-        <p className="text-xs text-muted-foreground">{t("accounting.list.receiptPicker.description")}</p>
-
-        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 flex-shrink-0 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
-          <Search size={14} className="text-muted-foreground flex-shrink-0" />
-          <input
-            autoFocus
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("accounting.list.search.placeholder")}
-            className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
-          />
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="space-y-2">
-              {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}
-            </div>
-          ) : loadError ? (
-            <p className="text-sm text-muted-foreground text-center py-6">{t("accounting.list.error.loadFailed")}</p>
-          ) : filtered.length === 0 ? (
-            <EmptyState icon={FileText} title={t("accounting.list.receiptPicker.empty.title")} description={t("accounting.list.receiptPicker.empty.description")} compact />
-          ) : (
-            <div className="space-y-1.5">
-              {filtered.map((d) => (
-                <button
-                  key={d.id}
-                  onClick={() => onSelect(d)}
-                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white/60 hover:bg-secondary/40 hover:bg-[#f4f6fa] transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-mono font-medium text-foreground truncate">
-                      {d.docNo} <span className="text-muted-foreground font-sans">· {t(DOC_TYPE_LABEL_KEY[d.docType])}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {d.customerSnapshot.companyName} · {scopeNumbers[d.scopeOfWorkId] ?? "—"}
-                    </p>
-                  </div>
-                  <span className="font-mono text-xs text-foreground flex-shrink-0">฿{d.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      ) : loadError ? (
+        <ListEmpty title={t("accounting.list.error.loadFailed")} />
+      ) : filtered.length === 0 ? (
+        <ListEmpty title={t("accounting.list.receiptPicker.empty.title")} hint={t("accounting.list.receiptPicker.empty.description")} />
+      ) : (
+        filtered.map((d) => {
+          const scopeNo = scopeNumbers[d.scopeOfWorkId];
+          return (
+            <PickerRow key={d.id} gridClass={RECEIPT_PICKER_GRID} onClick={() => onSelect(d)}>
+              <span className={table.code}>{d.docNo}</span>
+              <span className="text-[13px] text-[#3d5173] truncate">{t(DOC_TYPE_LABEL_KEY[d.docType])}</span>
+              <span className="text-sm font-medium text-foreground truncate">{d.customerSnapshot.companyName}</span>
+              <span className={`font-mono text-[13px] ${scopeNo ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{scopeNo ?? "—"}</span>
+              <span className="text-right text-sm font-semibold tabular-nums text-foreground">{money(d.netTotal)}</span>
+            </PickerRow>
+          );
+        })
+      )}
+    </RowPickerDialog>
   );
 }

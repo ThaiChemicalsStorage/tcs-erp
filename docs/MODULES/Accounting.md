@@ -699,3 +699,10 @@ Three deliberate limits:
 The month filter reads the **invoice date**, not the posting date — a purchase-tax report follows the
 tax invoice's own month, and an invoice dated the 31st arriving on the 2nd is routine. Full writeup in
 [Store.md](./Store.md).
+
+## Redesign (2026-09-30, phase 3)
+Manual tax invoice creation is now a full page (`src/pages/accounting/ManualTaxInvoicePage.tsx`, opened from the same
+"+ create" button — `ManualTaxInvoiceDialog.tsx` was removed). AR lists use tabs with counts; NCR print and cancel live in the
+row ⋯ menu. The BI list's reference column is titled "อ้างถึงใบกำกับภาษี" (it always showed the principal AR/IV number).
+The AP register is one table with vendor group rows. The three pages that print the screen itself (monthly summary, purchase
+tax register, AP register) print in the new layout — pending the owner's OK.

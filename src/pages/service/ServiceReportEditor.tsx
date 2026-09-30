@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
 import type { DriveStep } from "driver.js";
-import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, ChevronRight, Wrench, Printer, Plus, Send } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, Printer, Plus, Send, HelpCircle, Copy, Check, Link2, X, Info } from "lucide-react";
 import {
   type ServiceReport, type ServiceReportDraft, type ServiceChecklistSectionValue, type ServiceChecklistItemValue,
-  type ServiceReportStatus,
   fetchServiceReport, createServiceReport, updateServiceReport, changeServiceReportStatus, deleteServiceReport,
   uploadServiceReportPhoto, deleteServiceReportPhoto, printServiceReport, mergeServerPhotosIntoChecklist,
   sendServiceReportCustomerApproval,
@@ -12,16 +11,22 @@ import { type ServiceTemplateSummary, type ServiceTemplate, type ServiceChecklis
 import { type Customer, fetchCustomers, createLinePairingCode } from "../../lib/customers";
 import { type User, fetchUsers } from "../../lib/users";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
-import { CustomerSelector } from "../quotation/CustomerSelector";
 import { ServiceChecklistItemControl } from "../../components/ServiceChecklistItemControl";
 import { SignaturePad } from "../../components/SignaturePad";
 import { InlineEditableLabel } from "../../components/InlineEditableLabel";
 import { useModuleTour } from "../../components/GuidedTour";
-import { TourReplayButton } from "../../components/TourReplayButton";
 import { MAX_CHECKLIST_GROUP_TITLE_LENGTH } from "../../lib/validation/serviceReportValidation";
 import { ServiceReportPrintDocument } from "./ServiceReportPrintDocument";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { btn, field } from "../../components/ui/styles";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
+import { formatQuoteDateThai } from "../../lib/quotes";
+import { ServiceCustomerSearch } from "./ServiceCustomerSearch";
+import { ServiceConfirmDialog, ServiceStatusBadge } from "./serviceUi";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -92,11 +97,25 @@ function formFromReport(report: ServiceReport): FormState {
   };
 }
 
-const statusStyle: Record<ServiceReportStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  Completed: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-  Cancelled: "bg-[#e05252]/10 text-[#c23f3f] border border-[#e05252]/20",
-};
+// นับความคืบหน้าของหนึ่งหมวด — ใช้ทั้งตัวเลขบนหัวหมวดและการ์ดสรุปบนคอลัมน์ขวา
+// (รายการ "ค่าที่วัดได้" นับว่าตรวจแล้วเมื่อกรอกค่า · รายการ ปกติ/ผิดปกติ นับเมื่อเลือกอย่างใดอย่างหนึ่ง)
+function sectionProgress(sectionDef: ServiceChecklistSectionDef, sectionValue: ServiceChecklistSectionValue | undefined) {
+  let answered = 0, total = 0, normal = 0, abnormal = 0, measured = 0;
+  for (const groupDef of sectionDef.groups) {
+    const groupValue = sectionValue?.groups.find((g) => g.key === groupDef.key);
+    for (const itemDef of groupDef.items) {
+      total += 1;
+      const itemValue = groupValue?.items.find((it) => it.key === itemDef.key);
+      if (itemDef.kind === "measurement") {
+        if (itemValue?.measurementValue.trim()) { answered += 1; measured += 1; }
+      } else if (itemValue?.status && itemValue.status !== "not_selected") {
+        answered += 1;
+        if (itemValue.status === "normal") normal += 1; else abnormal += 1;
+      }
+    }
+  }
+  return { answered, total, normal, abnormal, measured };
+}
 
 // ฟอร์มสร้าง/แก้ไขรายงานบริการ รวมข้อมูลรายงานและเช็คลิสต์ตรวจเช็ค
 // Create/edit form for a Service Report, combining report info and the inspection checklist.
@@ -193,7 +212,6 @@ export function ServiceReportEditor({
     return () => { cancelled = true; };
   }, [isNew, selectedTemplateId]);
 
-  const selectedCustomer = customers.find((c) => c.id === form.customerId);
   // Follows the form, not the saved report, so reassigning the engineer updates the sign-off panel
   // immediately rather than only after a save.
   const engineerUser = users.find((u) => u.id === form.assignedServiceEngineerId);
@@ -291,9 +309,9 @@ export function ServiceReportEditor({
       try {
         const ok = document.execCommand("copy");
         if (ok) setApprovalLinkCopied(true);
-        else showToast("คัดลอกไม่สำเร็จ กรุณาคัดลอกลิงก์ด้วยตนเอง");
+        else showToast(t("service.approval.copyFailed"));
       } catch {
-        showToast("คัดลอกไม่สำเร็จ กรุณาคัดลอกลิงก์ด้วยตนเอง");
+        showToast(t("service.approval.copyFailed"));
       } finally {
         document.body.removeChild(textarea);
       }
@@ -402,7 +420,7 @@ export function ServiceReportEditor({
       setPairing(null);
       setApprovalResult({ url: result.approvalUrl, sentViaLine: result.sentViaLine, lineError: result.lineError });
     } catch (err) {
-      applyApiError(err, "ส่งให้ลูกค้าอนุมัติไม่สำเร็จ");
+      applyApiError(err, t("service.approval.sendFailed"));
     } finally {
       setSendingApproval(false);
     }
@@ -417,7 +435,7 @@ export function ServiceReportEditor({
     try {
       setPairing(await createLinePairingCode(customerId));
     } catch (err) {
-      applyApiError(err, "ออกรหัสจับคู่ LINE ไม่สำเร็จ");
+      applyApiError(err, t("service.approval.pairingFailed"));
     } finally {
       setPairingBusy(false);
     }
@@ -703,15 +721,13 @@ export function ServiceReportEditor({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
         <p className="text-sm text-muted-foreground">{t("service.loadError")}</p>
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">
-          <ArrowLeft size={13} /> {t("scopeOfWorkDoc.backToList")}
+        <button type="button" onClick={() => requestLeave(onBack)} className={btn.secondary}>
+          <ArrowLeft size={16} /> {t("scopeOfWorkDoc.backToList")}
         </button>
       </div>
     );
   }
 
-  const inputClass = "h-9 w-full px-3 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60";
-  const labelClass = "text-xs font-medium text-muted-foreground mb-1 block";
   const companyHeader: CompanyHeaderInfo = {
     name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
     phone: company.phone, fax: "", email: company.email, website: company.website,
@@ -719,31 +735,127 @@ export function ServiceReportEditor({
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
 
-  let answeredCount = 0;
-  let applicableCount = 0;
+  // ความคืบหน้ารวม (นับเฉพาะหมวดที่รวมในรายงาน) — การ์ดกรมท่าบนคอลัมน์ขวา + ตัวเลขบนหัวการ์ดรายการตรวจเช็ค
+  let answeredCount = 0, applicableCount = 0, normalCount = 0, abnormalCount = 0, measuredCount = 0;
   for (const sectionDef of displaySections) {
     const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
     if (sectionDef.isOptionalAddon && !(sectionValue?.included ?? false)) continue;
-    for (const groupDef of sectionDef.groups) {
-      const groupValue = sectionValue?.groups.find((g) => g.key === groupDef.key);
-      for (const itemDef of groupDef.items) {
-        applicableCount += 1;
-        const itemValue = groupValue?.items.find((it) => it.key === itemDef.key);
-        if (itemDef.kind === "measurement") { if (itemValue?.measurementValue.trim()) answeredCount += 1; }
-        else if (itemValue?.status && itemValue.status !== "not_selected") answeredCount += 1;
-      }
-    }
+    const p = sectionProgress(sectionDef, sectionValue);
+    answeredCount += p.answered; applicableCount += p.total;
+    normalCount += p.normal; abnormalCount += p.abnormal; measuredCount += p.measured;
   }
+
+  const status = report?.status;
+  const itemsLabel = (n: number) => t("ui.itemCount").replace("{n}", String(n));
+  const photoCountLabel = (n: number) => t("service.confirm.photoCount").replace("{n}", String(n));
+  const reportSummaryLine = report ? [report.customerSnapshot.companyName, report.serviceSystemName].filter(Boolean).join(" · ") : "";
+
+  // สรุปในกล่องยืนยันการลบรายการ/หัวข้อ (บอร์ด Dlg-ServiceChecklistRemove*)
+  const removeSummary = (() => {
+    if (!removeTarget) return null;
+    const groupDef = sections.find((s) => s.key === removeTarget.sectionKey)?.groups.find((g) => g.key === removeTarget.groupKey);
+    const groupValue = checklist.find((s) => s.key === removeTarget.sectionKey)?.groups.find((g) => g.key === removeTarget.groupKey);
+    if (removeTarget.type === "item") {
+      const itemDef = groupDef?.items.find((it) => it.key === removeTarget.itemKey);
+      const photos = groupValue?.items.find((it) => it.key === removeTarget.itemKey)?.photos?.length ?? 0;
+      return {
+        secondary: itemDef?.label,
+        meta: [groupDef ? t("service.confirm.groupName").replace("{name}", groupDef.title) : "", photos > 0 ? photoCountLabel(photos) : ""].filter(Boolean).join(" · "),
+      };
+    }
+    const values = groupValue?.items ?? [];
+    const recorded = values.filter(itemHasRecordedData).length;
+    const photos = values.reduce((sum, v) => sum + (v.photos?.length ?? 0), 0);
+    return {
+      secondary: groupDef?.title,
+      meta: [itemsLabel(groupDef?.items.length ?? 0), recorded > 0 ? t("service.confirm.recordedCount").replace("{n}", String(recorded)) : "", photos > 0 ? photoCountLabel(photos) : ""].filter(Boolean).join(" · "),
+    };
+  })();
+
+  const sectionTitleOf = (key: string | null) => (key ? sections.find((s) => s.key === key)?.title ?? "" : "");
+  const groupTitleOf = (target: { sectionKey: string; groupKey: string } | null) =>
+    (target ? sections.find((s) => s.key === target.sectionKey)?.groups.find((g) => g.key === target.groupKey)?.title ?? "" : "");
+
+  const creator = report ? users.find((u) => u.id === report.createdBy) : undefined;
+  const templateSnapshot = report?.templateSnapshot;
+
+  const statusLine = (() => {
+    const approval = report?.customerApproval;
+    if (!approval) return null;
+    if (approval.status === "pending") {
+      return (
+        <p className="text-[13px] text-[#8a5a00]">
+          {t("service.approval.pending")
+            .replace("{via}", approval.sentViaLine ? t("service.approval.viaLine") : "")
+            .replace("{date}", formatQuoteDateThai(approval.expiresAt))}
+        </p>
+      );
+    }
+    if (approval.status === "approved") {
+      return (
+        <p className="text-[13px] text-[#1b7f4f]">
+          {t("service.approval.approved")
+            .replace("{by}", approval.signedName ? t("service.approval.by").replace("{name}", approval.signedName) : "")
+            .replace("{date}", formatQuoteDateThai(approval.respondedAt ?? ""))}
+        </p>
+      );
+    }
+    if (approval.status === "rejected") {
+      return <p className="text-[13px] text-[#b93636]">{t("service.approval.rejected").replace("{reason}", approval.rejectReason || "-")}</p>;
+    }
+    return null;
+  })();
+
+  const headerActions = (
+    <div data-tour="servicedoc-actions" className="flex items-center gap-2.5 flex-wrap">
+      {!isNew && report && isEditable && (
+        <button type="button" onClick={handleSaveDraft} disabled={saving} className={btn.secondary}>
+          <Save size={16} /> {saving ? t("service.saving") : t("service.saveDraft")}
+        </button>
+      )}
+      {!isNew && report && canPrint && (
+        <button type="button" onClick={handlePrint} className={btn.secondary}>
+          <Printer size={16} /> {t("service.print")}
+        </button>
+      )}
+      {!isNew && report && status === "Completed" && canEdit && (
+        <button type="button" onClick={handleReopen} disabled={actionBusy} className={btn.secondary}>
+          <RotateCcw size={16} /> {t("service.reopen")}
+        </button>
+      )}
+      {/* "ดูคำแนะนำหน้านี้" อยู่ในเมนูเสมอ (ไม่ขึ้นกับสถานะ/สิทธิ์) — เมนูจึงไม่มีวันว่างและทัวร์เล่นซ้ำได้ทุกคน */}
+      <MoreMenu
+        items={[
+          { key: "tour", label: t("tour.replay"), icon: HelpCircle, onSelect: docTour.start },
+          !isNew && report && status !== "Cancelled" && canComplete && { key: "cancel", label: t("service.cancelReport"), icon: Ban, danger: true, onSelect: () => setConfirmAction("cancel") },
+          !isNew && report && canDelete && isEditable && { key: "delete", label: t("service.confirm.deleteConfirm"), icon: Trash2, danger: true, onSelect: () => setConfirmAction("delete") },
+        ]}
+      />
+      {isNew && (
+        <button type="button" onClick={handleCreate} disabled={saving} className={btn.primary}>
+          <Save size={16} /> {saving ? t("service.saving") : t("service.createDraft")}
+        </button>
+      )}
+      {!isNew && report && status === "Draft" && canComplete && (
+        <button type="button" onClick={handleComplete} disabled={completing} className={btn.primary}>
+          <CheckCircle2 size={16} /> {completing ? t("service.saving") : t("service.complete")}
+        </button>
+      )}
+    </div>
+  );
+
+  const fieldInput = `${field.input} w-full`;
+  const errorOf = (key: string) => fieldErrors[key];
 
   return (
     <>
-    <div className="doc-form flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
-      <ConfirmDialog
+    <div className="doc-form flex-1 overflow-y-auto print:hidden">
+      <ServiceConfirmDialog
         open={confirmAction !== null}
         title={confirmAction === "delete" ? t("service.confirm.deleteTitle") : t("service.confirm.cancelTitle")}
-        message={confirmAction === "delete" ? t("service.confirm.deleteMessage") : t("service.confirm.cancelMessage")}
+        message={confirmAction === "delete" ? t("service.confirm.deleteMessage") : t("service.confirm.cancelMessageLong")}
+        summary={report ? { primary: report.id, secondary: reportSummaryLine } : null}
         confirmLabel={confirmAction === "delete" ? t("service.confirm.deleteConfirm") : t("service.confirm.cancelConfirm")}
-        danger
         busy={actionBusy}
         onConfirm={confirmAction === "delete" ? handleDelete : handleCancel}
         onCancel={() => setConfirmAction(null)}
@@ -751,6 +863,7 @@ export function ServiceReportEditor({
       <PromptDialog
         open={addItemTarget !== null}
         title={t("service.checklist.addItemTitle")}
+        message={t("service.checklist.addItemMessage").replace("{group}", groupTitleOf(addItemTarget))}
         label={t("service.checklist.addItemLabel")}
         confirmLabel={t("service.checklist.addConfirm")}
         requiredMessage={t("service.checklist.addItemRequired")}
@@ -763,6 +876,7 @@ export function ServiceReportEditor({
       <PromptDialog
         open={addGroupTarget !== null}
         title={t("service.checklist.addGroupTitle")}
+        message={t("service.checklist.addGroupMessage").replace("{section}", sectionTitleOf(addGroupTarget))}
         label={t("service.checklist.addGroupLabel")}
         confirmLabel={t("service.checklist.addConfirm")}
         requiredMessage={t("service.checklist.addGroupRequired")}
@@ -772,285 +886,303 @@ export function ServiceReportEditor({
         }}
         onCancel={() => setAddGroupTarget(null)}
       />
-      <ConfirmDialog
+      <ServiceConfirmDialog
         open={removeTarget !== null}
         title={removeTarget?.type === "group" ? t("service.checklist.removeGroupTitle") : t("service.checklist.removeItemTitle")}
         message={removeTarget?.type === "group" ? t("service.checklist.removeGroupMessage") : t("service.checklist.removeItemMessage")}
+        summary={removeSummary}
         confirmLabel={t("service.checklist.removeConfirm")}
-        danger
         onConfirm={confirmRemove}
         onCancel={() => setRemoveTarget(null)}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all">
-            <ArrowLeft size={15} />
-          </button>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground leading-tight flex items-center gap-2">
-              {isNew ? t("service.newReport") : report?.id}
-              {!isNew && report && (
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[report.status]}`}>
-                  {t(`service.status.${report.status.toLowerCase()}` as "service.status.draft")}
-                </span>
-              )}
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5 font-mono">{t("service.pageSubtitle")}</p>
-          </div>
-        </div>
-        <div data-tour="servicedoc-actions" className="flex items-center gap-2 flex-wrap print:hidden">
-          {/* Unconditional, and first in the toolbar — every other button here is gated by status
-              or permission, so anchoring the tour to one of those could leave a user with no way
-              to replay it. */}
-          <TourReplayButton onClick={docTour.start} />
-          {isEditable && (
+      <div className="sticky top-0 z-20">
+        <DocumentHeader
+          backLabel={t("service.backToList")}
+          onBack={() => requestLeave(onBack)}
+          number={isNew ? <span className="font-sans font-semibold">{t("service.newReport")}</span> : report?.id}
+          status={!isNew && report ? <ServiceStatusBadge status={report.status} /> : undefined}
+          meta={isEditable ? (
             isNew
               ? <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />
               : <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
-          )}
-          {!isNew && report && canPrint && (
-            <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-              <Printer size={14} /> {t("service.print")}
-            </button>
-          )}
-          {isNew && (
-            <button onClick={handleCreate} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-              <Save size={14} /> {saving ? t("service.saving") : t("service.createDraft")}
-            </button>
-          )}
-          {!isNew && report && isEditable && (
-            <button onClick={handleSaveDraft} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              <Save size={14} /> {saving ? t("service.saving") : t("service.saveDraft")}
-            </button>
-          )}
-          {!isNew && report && report.status === "Draft" && canComplete && (
-            <button onClick={handleComplete} disabled={completing} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors disabled:opacity-60">
-              <CheckCircle2 size={14} /> {completing ? t("service.saving") : t("service.complete")}
-            </button>
-          )}
-          {!isNew && report && report.status === "Completed" && canEdit && (
-            <button onClick={handleReopen} disabled={actionBusy} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              <RotateCcw size={14} /> {t("service.reopen")}
-            </button>
-          )}
-          {!isNew && report && report.status !== "Cancelled" && canComplete && (
-            <button onClick={() => setConfirmAction("cancel")} className="flex items-center gap-1.5 px-3.5 py-2 text-sm border border-[#e05252]/30 rounded-lg text-[#c23f3f] hover:bg-[#e05252]/5 transition-all">
-              <Ban size={14} /> {t("service.cancelReport")}
-            </button>
-          )}
-          {!isNew && report && canDelete && (isEditable) && (
-            <button onClick={() => setConfirmAction("delete")} className="flex items-center justify-center w-9 h-9 text-[#e05252] border border-[#e05252]/25 rounded-lg hover:bg-[#e05252]/5 transition-all">
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {draftBackup.recovered && draftBackup.recoveredAt !== null && (
-        <DraftRecoveryBanner
-          savedAt={draftBackup.recoveredAt}
-          onRestore={() => {
-            const recovered = draftBackup.recovered!;
-            setForm(recovered.form);
-            setChecklist(recovered.checklist);
-            if (isNew) setSelectedTemplateId(recovered.selectedTemplateId);
-            draftBackup.clear();
-            showToast(t("common.draftRecovery.restoredToast"));
-          }}
-          onDiscard={draftBackup.dismiss}
+          ) : undefined}
+          actions={headerActions}
         />
-      )}
-
-      {isNew && (
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4 space-y-2">
-          <label className={labelClass}>{t("service.form.template")}</label>
-          <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className={inputClass}>
-            <option value="">{t("service.form.selectTemplate")}</option>
-            <option value={NO_TEMPLATE_VALUE}>{t("service.form.noTemplate")}</option>
-            {templates.map((tp) => <option key={tp.id} value={tp.id}>{tp.templateName}</option>)}
-          </select>
-        </div>
-      )}
-
-      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <label className={labelClass}>{t("service.form.customer")}</label>
-          <CustomerSelector
-            customers={customers}
-            selectedId={form.customerId}
-            disabled={!isEditable}
-            onSelect={(c: Customer) => setForm((f) => ({
-              ...f, customerId: c.id,
-              customerSnapshot: { companyName: c.companyName, contactName: c.contactName, address: c.address, taxId: c.taxId, phone: c.phone, email: c.email, projectName: c.projectName },
-            }))}
-            onClear={() => setForm((f) => ({ ...f, customerId: "", customerSnapshot: emptyCustomerSnapshot }))}
-          />
-          {!selectedCustomer && form.customerId === "" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-              <input placeholder={t("service.form.companyName")} value={form.customerSnapshot.companyName} disabled={!isEditable}
-                onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, companyName: e.target.value } }))} className={inputClass} />
-              <input placeholder={t("service.form.contactName")} value={form.customerSnapshot.contactName} disabled={!isEditable}
-                onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, contactName: e.target.value } }))} className={inputClass} />
-              <input placeholder={t("service.form.phone")} value={form.customerSnapshot.phone} disabled={!isEditable}
-                onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, phone: e.target.value } }))} className={inputClass} />
-              <input placeholder={t("service.form.address")} value={form.customerSnapshot.address} disabled={!isEditable}
-                onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, address: e.target.value } }))} className={inputClass} />
-            </div>
-          )}
-          {fieldErrors["customerSnapshot.companyName"] && <p className="text-xs text-[#e05252] mt-1">{fieldErrors["customerSnapshot.companyName"]}</p>}
-        </div>
-
-        <div><label className={labelClass}>{t("service.form.serviceLocation")}</label>
-          <input value={form.serviceLocation} disabled={!isEditable} onChange={(e) => setField("serviceLocation", e.target.value)} className={inputClass} />
-          {fieldErrors.serviceLocation && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.serviceLocation}</p>}
-        </div>
-        <div><label className={labelClass}>{t("service.form.projectOrJobCode")}</label>
-          <input value={form.projectOrJobCode} disabled={!isEditable} onChange={(e) => setField("projectOrJobCode", e.target.value)} className={inputClass} />
-        </div>
-        <div><label className={labelClass}>{t("service.form.serviceSystemName")}</label>
-          <input value={form.serviceSystemName} disabled={!isEditable} onChange={(e) => setField("serviceSystemName", e.target.value)} className={inputClass} />
-          {fieldErrors.serviceSystemName && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.serviceSystemName}</p>}
-        </div>
-        <div><label className={labelClass}>{t("service.form.serviceType")}</label>
-          <input value={form.serviceType} disabled={!isEditable} onChange={(e) => setField("serviceType", e.target.value)} className={inputClass} />
-        </div>
-        <div><label className={labelClass}>{t("service.form.inspectionDate")}</label>
-          <input type="date" value={form.inspectionDate} disabled={!isEditable} onChange={(e) => setField("inspectionDate", e.target.value)} className={inputClass} />
-          {fieldErrors.inspectionDate && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.inspectionDate}</p>}
-        </div>
-        <div><label className={labelClass}>{t("service.form.reportDate")}</label>
-          <input type="date" value={form.reportDate} disabled={!isEditable} onChange={(e) => setField("reportDate", e.target.value)} className={inputClass} />
-          {fieldErrors.reportDate && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.reportDate}</p>}
-        </div>
-        <div><label className={labelClass}>{t("service.form.nextPmDate")}</label>
-          <input type="date" value={form.nextPmDate} disabled={!isEditable} onChange={(e) => setField("nextPmDate", e.target.value)} className={inputClass} />
-        </div>
-        <div><label className={labelClass}>{t("service.form.assignedEngineer")}</label>
-          <select value={form.assignedServiceEngineerId} disabled={!isEditable} onChange={(e) => setField("assignedServiceEngineerId", e.target.value)} className={inputClass}>
-            <option value="">{t("service.form.selectEngineer")}</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-          </select>
-          {fieldErrors.assignedServiceEngineerId && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.assignedServiceEngineerId}</p>}
-        </div>
-        <div className="md:col-span-2"><label className={labelClass}>{t("service.form.additionalInspectors")}</label>
-          <input value={form.additionalInspectorNamesText} disabled={!isEditable} onChange={(e) => setField("additionalInspectorNamesText", e.target.value)} placeholder={t("service.form.additionalInspectorsPlaceholder")} className={inputClass} />
-        </div>
-        <div><label className={labelClass}>{t("service.form.onSiteContactName")}</label>
-          <input value={form.onSiteContactName} disabled={!isEditable} onChange={(e) => setField("onSiteContactName", e.target.value)} className={inputClass} />
-        </div>
-        <div><label className={labelClass}>{t("service.form.onSiteContactPhone")}</label>
-          <input value={form.onSiteContactPhone} disabled={!isEditable} onChange={(e) => setField("onSiteContactPhone", e.target.value)} className={inputClass} />
-        </div>
-        <div className="md:col-span-2"><label className={labelClass}>{t("service.form.overallCustomerSummary")}</label>
-          <textarea value={form.overallCustomerSummary} disabled={!isEditable} onChange={(e) => setField("overallCustomerSummary", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 resize-y" />
-        </div>
-        <div className="md:col-span-2"><label className={labelClass}>{t("service.form.overallRemark")}</label>
-          <textarea value={form.overallRemark} disabled={!isEditable} onChange={(e) => setField("overallRemark", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 resize-y" />
-        </div>
       </div>
 
-      {displaySections.length > 0 && (
-        <div data-tour="servicedoc-checklist" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2">
-              <Wrench size={14} className="text-[#c9a84c]" />
-              <h2 className="text-sm font-semibold text-foreground">{t("service.checklist.title")}</h2>
-            </span>
-            {!isNew && applicableCount > 0 && (
-              <span className={`text-xs font-mono px-2.5 py-1 rounded-full ${answeredCount === applicableCount ? "bg-[#2aa36b]/10 text-[#207e52]" : "bg-muted text-muted-foreground"}`}>
-                {answeredCount} / {applicableCount} {t("service.checklist.completedCount")}
-              </span>
-            )}
-          </div>
-          {isNew && (
-            <p className="px-5 py-3 text-xs text-muted-foreground">{t("service.checklist.previewNote")}</p>
-          )}
-          {/* Renaming has no icon of its own by design (the row already carries ✕, and a second
-              control per row would crowd it), so the gesture is stated once here — otherwise it's
-              undiscoverable. Text, not a button: it competes with nothing. */}
-          {structureEditable && (
-            <p className="px-5 pt-3 text-xs text-muted-foreground">{t("service.checklist.renameHint")}</p>
-          )}
-          {displaySections.map((sectionDef) => {
-            const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
-            const collapsed = collapsedSections.has(sectionDef.key);
-            return (
-              <div key={sectionDef.key} className="border-b border-border last:border-b-0">
-                <button
-                  type="button"
-                  onClick={() => toggleSection(sectionDef.key)}
-                  className="w-full flex items-center justify-between gap-3 px-5 py-3 bg-muted/30 hover:bg-muted/50 transition-colors"
-                >
-                  <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                    {sectionDef.title}
-                    {sectionDef.isOptionalAddon && (
-                      <span className="text-[10px] font-normal text-muted-foreground">({t("service.checklist.optionalAddon")})</span>
-                    )}
-                  </span>
-                  {sectionDef.isOptionalAddon && !isNew && (
-                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={sectionValue?.included ?? false}
-                        disabled={!isEditable}
-                        onChange={(e) => setChecklist((prev) => prev.map((s) => (s.key === sectionDef.key ? { ...s, included: e.target.checked } : s)))}
-                      />
-                      {t("service.checklist.included")}
-                    </label>
+      <div className="px-4 md:px-8 pt-6 pb-10 flex flex-col gap-5">
+        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+          <DraftRecoveryBanner
+            savedAt={draftBackup.recoveredAt}
+            onRestore={() => {
+              const recovered = draftBackup.recovered!;
+              setForm(recovered.form);
+              setChecklist(recovered.checklist);
+              if (isNew) setSelectedTemplateId(recovered.selectedTemplateId);
+              draftBackup.clear();
+              showToast(t("common.draftRecovery.restoredToast"));
+            }}
+            onDiscard={draftBackup.dismiss}
+          />
+        )}
+
+        {status !== "Cancelled" && (
+          <DocumentStepper
+            ariaLabel={t("service.stepperAria")}
+            current={status === "Completed" ? 2 : 0}
+            steps={[
+              { label: t("service.status.draft"), hint: t("service.step.draftHint") },
+              { label: t("service.status.completed") },
+            ]}
+          />
+        )}
+
+        {isNew && (
+          <SectionCard title={t("service.form.template")} subtitle={t("service.new.templateHelp")} bodyClassName="">
+            <TemplatePicker templates={templates} value={selectedTemplateId} onChange={setSelectedTemplateId} />
+          </SectionCard>
+        )}
+
+        <DocumentColumns
+          main={(
+            <>
+              <SectionCard title={t("service.section.customer")}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-[18px]">
+                  <Field label={t("service.form.customer")} required className="md:col-span-3" error={form.customerId ? errorOf("customerSnapshot.companyName") : undefined}>
+                    <ServiceCustomerSearch
+                      customers={customers}
+                      selectedId={form.customerId}
+                      selectedName={form.customerSnapshot.companyName}
+                      disabled={!isEditable}
+                      onSelect={(c: Customer) => setForm((f) => ({
+                        ...f, customerId: c.id,
+                        customerSnapshot: { companyName: c.companyName, contactName: c.contactName, address: c.address, taxId: c.taxId, phone: c.phone, email: c.email, projectName: c.projectName },
+                      }))}
+                      onClear={() => setForm((f) => ({ ...f, customerId: "", customerSnapshot: emptyCustomerSnapshot }))}
+                    />
+                  </Field>
+                  {form.customerId ? (
+                    <>
+                      <ReadonlyField label={t("service.form.contactName")} value={form.customerSnapshot.contactName} />
+                      <ReadonlyField label={t("service.form.phone")} value={form.customerSnapshot.phone} />
+                      <ReadonlyField label={t("service.form.taxId")} value={form.customerSnapshot.taxId} mono />
+                      <ReadonlyField label={t("service.form.address")} value={form.customerSnapshot.address} className="md:col-span-3" />
+                    </>
+                  ) : (
+                    <>
+                      <Field label={t("service.form.companyName")} required className="md:col-span-3" error={errorOf("customerSnapshot.companyName")}>
+                        <input value={form.customerSnapshot.companyName} disabled={!isEditable}
+                          onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, companyName: e.target.value } }))} className={fieldInput} />
+                      </Field>
+                      <Field label={t("service.form.contactName")} required error={errorOf("customerSnapshot.contactName")}>
+                        <input value={form.customerSnapshot.contactName} disabled={!isEditable}
+                          onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, contactName: e.target.value } }))} className={fieldInput} />
+                      </Field>
+                      <Field label={t("service.form.phone")} required error={errorOf("customerSnapshot.phone")}>
+                        <input value={form.customerSnapshot.phone} disabled={!isEditable}
+                          onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, phone: e.target.value } }))} className={fieldInput} />
+                      </Field>
+                      <Field label={t("service.form.address")}>
+                        <input value={form.customerSnapshot.address} disabled={!isEditable}
+                          onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, address: e.target.value } }))} className={fieldInput} />
+                      </Field>
+                    </>
                   )}
-                </button>
-                {!collapsed && (!sectionDef.isOptionalAddon || sectionValue?.included) && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="bg-muted/40 border-b border-border">
-                          <th className="text-left pl-5 pr-3 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">
-                            {t("service.checklist.col.item")}
-                          </th>
-                          <th className="text-center px-2 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20">
-                            {t("service.checklist.normal")}
-                          </th>
-                          <th className={`text-center px-2 ${structureEditable ? "" : "pr-5"} py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20`}>
-                            {t("service.checklist.abnormal")}
-                          </th>
-                          {structureEditable && <th className="w-10 pr-4" />}
-                        </tr>
-                      </thead>
+                </div>
+              </SectionCard>
+
+              <SectionCard title={t("service.section.visit")}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-[18px]">
+                  <Field label={t("service.form.serviceLocation")} required className="md:col-span-2" error={errorOf("serviceLocation")}>
+                    <input value={form.serviceLocation} disabled={!isEditable} onChange={(e) => setField("serviceLocation", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.projectOrJobCode")}>
+                    <input value={form.projectOrJobCode} disabled={!isEditable} onChange={(e) => setField("projectOrJobCode", e.target.value)} className={`${fieldInput} font-mono`} />
+                  </Field>
+                  <Field label={t("service.form.serviceSystemName")} required className="md:col-span-2" error={errorOf("serviceSystemName")}>
+                    <input value={form.serviceSystemName} disabled={!isEditable} onChange={(e) => setField("serviceSystemName", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.serviceType")}>
+                    <input value={form.serviceType} disabled={!isEditable} onChange={(e) => setField("serviceType", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.inspectionDate")} required error={errorOf("inspectionDate")}>
+                    <input type="date" value={form.inspectionDate} disabled={!isEditable} onChange={(e) => setField("inspectionDate", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.reportDate")} required error={errorOf("reportDate")}>
+                    <input type="date" value={form.reportDate} disabled={!isEditable} onChange={(e) => setField("reportDate", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.nextPmDate")}>
+                    <input type="date" value={form.nextPmDate} disabled={!isEditable} onChange={(e) => setField("nextPmDate", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.onSiteContactName")}>
+                    <input value={form.onSiteContactName} disabled={!isEditable} onChange={(e) => setField("onSiteContactName", e.target.value)} className={fieldInput} />
+                  </Field>
+                  <Field label={t("service.form.onSiteContactPhone")}>
+                    <input value={form.onSiteContactPhone} disabled={!isEditable} onChange={(e) => setField("onSiteContactPhone", e.target.value)} className={fieldInput} />
+                  </Field>
+                </div>
+              </SectionCard>
+            </>
+          )}
+          rail={(
+            <>
+              {!isNew && applicableCount > 0 && (
+                <ChecklistProgressCard
+                  answered={answeredCount}
+                  applicable={applicableCount}
+                  rows={[
+                    { label: t("service.checklist.normal"), value: itemsLabel(normalCount) },
+                    { label: t("service.checklist.abnormal"), value: itemsLabel(abnormalCount) },
+                    { label: t("service.rail.measured"), value: itemsLabel(measuredCount) },
+                    { label: t("service.rail.left"), value: itemsLabel(applicableCount - answeredCount) },
+                  ]}
+                />
+              )}
+              <RailCard title={t("service.rail.inspectors")}>
+                <Field label={t("service.form.assignedEngineer")} required help={t("service.rail.engineerHelp")} error={errorOf("assignedServiceEngineerId")}>
+                  <select value={form.assignedServiceEngineerId} disabled={!isEditable} onChange={(e) => setField("assignedServiceEngineerId", e.target.value)} className={fieldInput}>
+                    <option value="">{t("service.form.selectEngineer")}</option>
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+                  </select>
+                </Field>
+                <Field label={t("service.form.additionalInspectors")} help={isEditable ? t("service.rail.additionalHelp") : undefined}>
+                  <input value={form.additionalInspectorNamesText} disabled={!isEditable} onChange={(e) => setField("additionalInspectorNamesText", e.target.value)} placeholder={t("service.form.additionalInspectorsPlaceholder")} className={fieldInput} />
+                </Field>
+              </RailCard>
+              {!isNew && report && templateSnapshot && (
+                <RailCard title={t("service.rail.other")}>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs text-muted-foreground">{t("service.form.template")}</span>
+                    <span className="text-sm font-medium text-foreground break-words">{templateSnapshot.templateName || t("service.form.noTemplate")}</span>
+                    {templateSnapshot.templateCode && (
+                      <span className="text-xs text-muted-foreground font-mono">{templateSnapshot.templateCode}{templateSnapshot.version ? ` · v${templateSnapshot.version}` : ""}</span>
+                    )}
+                  </div>
+                  <ReadonlyField
+                    label={t("service.rail.createdBy")}
+                    value={[creator?.fullName, formatQuoteDateThai(report.createdAt)].filter(Boolean).join(" · ")}
+                  />
+                </RailCard>
+              )}
+              {isNew && <NextStepHint title={t("service.nextStep.title")}>{t("service.nextStep.new")}</NextStepHint>}
+              {!isNew && status === "Draft" && canComplete && <NextStepHint title={t("service.nextStep.title")}>{t("service.nextStep.draft")}</NextStepHint>}
+            </>
+          )}
+        />
+
+        {displaySections.length > 0 && (
+          <section data-tour="servicedoc-checklist" className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#eef1f6] flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-base font-semibold text-foreground">{t("service.checklist.title")}</h2>
+              {!isNew && applicableCount > 0 && (
+                <span className={`text-[13px] tabular-nums ${answeredCount === applicableCount ? "text-[#1b7f4f] font-medium" : "text-muted-foreground"}`}>
+                  {answeredCount} / {itemsLabel(applicableCount)}
+                </span>
+              )}
+              <span className="flex-1" />
+              {/* Renaming has no icon of its own by design (the row already carries ✕, and a second
+                  control per row would crowd it), so the gesture is stated once here — otherwise it's
+                  undiscoverable. Text, not a button: it competes with nothing. */}
+              {structureEditable && (
+                <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+                  <Info size={14} className="flex-shrink-0" />
+                  {t("service.checklist.renameHint")}
+                </span>
+              )}
+            </div>
+            {isNew && (
+              <p className="px-6 py-3 text-[13px] text-muted-foreground border-b border-[#eef1f6]">{t("service.checklist.previewNote")}</p>
+            )}
+            {displaySections.map((sectionDef) => {
+              const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
+              const collapsed = collapsedSections.has(sectionDef.key);
+              const included = !sectionDef.isOptionalAddon || !!sectionValue?.included;
+              const showBody = !collapsed && included;
+              const progress = sectionProgress(sectionDef, sectionValue);
+              const countLabel = included
+                ? `${progress.answered} / ${itemsLabel(progress.total)}`
+                : t("service.checklist.notIncludedCount").replace("{n}", String(progress.total));
+              return (
+                <div key={sectionDef.key} className="border-b border-border last:border-b-0">
+                  <div className="min-h-14 px-6 flex items-center gap-2.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(sectionDef.key)}
+                      aria-expanded={showBody}
+                      className="flex-1 min-w-0 min-h-14 flex items-center gap-2.5 text-left flex-wrap"
+                    >
+                      <ChevronDown size={18} className={`text-muted-foreground flex-shrink-0 transition-transform ${showBody ? "" : "-rotate-90"}`} />
+                      <span className="text-[15px] font-semibold text-foreground">{sectionDef.title}</span>
+                      {sectionDef.isOptionalAddon && (
+                        <span className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-medium inline-flex items-center">{t("service.checklist.optionalAddon")}</span>
+                      )}
+                      <span className="text-[13px] text-muted-foreground tabular-nums">{countLabel}</span>
+                    </button>
+                    {sectionDef.isOptionalAddon && !isNew && (
+                      <label className="flex items-center gap-2.5 text-[13px] text-[#3d5173] cursor-pointer">
+                        {t("service.checklist.included")}
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={!!sectionValue?.included}
+                          aria-label={`${t("service.checklist.included")} ${sectionDef.title}`}
+                          disabled={!isEditable}
+                          onClick={() => {
+                            const next = !sectionValue?.included;
+                            setChecklist((prev) => prev.map((s) => (s.key === sectionDef.key ? { ...s, included: next } : s)));
+                            // เปิดรวม = กางหมวดให้กรอกต่อทันที (บอร์ด) · ปิดรวม = พับ
+                            setCollapsedSections((prev) => {
+                              const set = new Set(prev);
+                              if (next) set.delete(sectionDef.key); else set.add(sectionDef.key);
+                              return set;
+                            });
+                          }}
+                          className={`relative w-10 h-[22px] rounded-full flex-shrink-0 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 disabled:cursor-default ${sectionValue?.included ? "bg-[#0b1d3a]" : "bg-[#c3ccda]"}`}
+                        >
+                          <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-all ${sectionValue?.included ? "left-[21px]" : "left-[3px]"}`} />
+                        </button>
+                      </label>
+                    )}
+                  </div>
+                  {showBody && (
+                    <div>
+                      <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_240px_80px] gap-3 items-center h-10 px-6 bg-[#f8f9fc] border-y border-[#eef1f6] text-[12.5px] font-semibold text-[#3d5173]">
+                        <span>{t("service.checklist.col.item")}</span>
+                        <span>{t("service.checklist.col.result")}</span>
+                        <span />
+                      </div>
                       {sectionDef.groups.map((groupDef) => {
                         const groupValue = sectionValue?.groups.find((g) => g.key === groupDef.key);
                         return (
-                          <tbody key={groupDef.key}>
-                            <tr className="bg-secondary/30">
-                              <td colSpan={structureEditable ? 4 : 3} className="pl-5 pr-4 py-1.5">
-                                <span className="flex items-center justify-between gap-2">
-                                  {structureEditable ? (
-                                    <InlineEditableLabel
-                                      value={groupDef.title}
-                                      onCommit={(title) => renameChecklistGroup(sectionDef.key, groupDef.key, title)}
-                                      maxLength={MAX_CHECKLIST_GROUP_TITLE_LENGTH}
-                                      editHint={t("service.checklist.renameGroup")}
-                                      className="text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                                      inputClassName="text-xs font-semibold uppercase tracking-wide w-full max-w-sm"
-                                    />
-                                  ) : (
-                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{groupDef.title}</span>
-                                  )}
-                                  {structureEditable && (
-                                    <button
-                                      type="button"
-                                      title={t("service.checklist.removeGroup")}
-                                      aria-label={t("service.checklist.removeGroup")}
-                                      onClick={() => requestRemoveGroup(sectionDef.key, groupDef.key)}
-                                      className="inline-flex items-center justify-center w-6 h-6 rounded text-muted-foreground/50 hover:text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  )}
-                                </span>
-                              </td>
-                            </tr>
+                          <div key={groupDef.key}>
+                            <div className="min-h-11 px-6 flex items-center gap-2.5 bg-[#fbfcfd] border-b border-[#eef1f6]">
+                              <span className="flex-1 min-w-0">
+                                {structureEditable ? (
+                                  <InlineEditableLabel
+                                    value={groupDef.title}
+                                    onCommit={(title) => renameChecklistGroup(sectionDef.key, groupDef.key, title)}
+                                    maxLength={MAX_CHECKLIST_GROUP_TITLE_LENGTH}
+                                    editHint={t("service.checklist.renameGroup")}
+                                    className="text-[13px] font-semibold text-[#3d5173]"
+                                    inputClassName="text-[13px] font-semibold w-full max-w-sm"
+                                  />
+                                ) : (
+                                  <span className="text-[13px] font-semibold text-[#3d5173]">{groupDef.title}</span>
+                                )}
+                              </span>
+                              {structureEditable && (
+                                <button
+                                  type="button"
+                                  title={t("service.checklist.removeGroup")}
+                                  aria-label={`${t("service.checklist.removeGroup")} ${groupDef.title}`}
+                                  onClick={() => requestRemoveGroup(sectionDef.key, groupDef.key)}
+                                  className="w-8 h-8 rounded-lg text-[#8a97ad] hover:text-[#b93636] hover:bg-[#fcebeb] flex items-center justify-center transition-colors"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
                             {groupDef.items.map((itemDef) => {
                               const itemValue = groupValue?.items.find((it) => it.key === itemDef.key) ?? { key: itemDef.key, status: "not_selected" as const, abnormalDetail: "", measurementValue: "", photos: [] };
                               return (
@@ -1074,196 +1206,138 @@ export function ServiceReportEditor({
                               );
                             })}
                             {structureEditable && (
-                              <tr>
-                                <td colSpan={4} className="pl-5 pr-5 py-1.5 border-b border-border/40">
-                                  <button
-                                    type="button"
-                                    onClick={() => setAddItemTarget({ sectionKey: sectionDef.key, groupKey: groupDef.key })}
-                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-[#c9a84c] transition-colors"
-                                  >
-                                    <Plus size={12} /> {t("service.checklist.addItem")}
-                                  </button>
-                                </td>
-                              </tr>
+                              <div className="pl-[30px] pr-6 py-1.5 border-b border-[#eef1f6]">
+                                <button
+                                  type="button"
+                                  onClick={() => setAddItemTarget({ sectionKey: sectionDef.key, groupKey: groupDef.key })}
+                                  className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium text-[#1a5fb4] hover:bg-[#e8f0fb] transition-colors"
+                                >
+                                  <Plus size={15} /> {t("service.checklist.addItem")}
+                                </button>
+                              </div>
                             )}
-                          </tbody>
+                          </div>
                         );
                       })}
                       {structureEditable && (
-                        <tbody>
-                          <tr>
-                            <td colSpan={4} className="pl-5 pr-5 py-2">
-                              <button
-                                type="button"
-                                onClick={() => setAddGroupTarget(sectionDef.key)}
-                                className="flex items-center gap-1 text-xs font-medium text-[#c9a84c] hover:text-[#f0c040] transition-colors"
-                              >
-                                <Plus size={13} /> {t("service.checklist.addGroup")}
-                              </button>
-                            </td>
-                          </tr>
-                        </tbody>
+                        <div className="pl-3.5 pr-6 pt-2.5 pb-3">
+                          <button
+                            type="button"
+                            onClick={() => setAddGroupTarget(sectionDef.key)}
+                            className="h-9 px-2.5 rounded-lg inline-flex items-center gap-2 text-sm font-medium text-[#1a5fb4] hover:bg-[#e8f0fb] transition-colors"
+                          >
+                            <Plus size={16} /> {t("service.checklist.addGroup")}
+                          </button>
+                        </div>
                       )}
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        )}
 
-      {!isNew && report && (
-        <div data-tour="servicedoc-signature" className="bg-card border border-border rounded-xl p-6 print:hidden">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-            {t("service.signature.sectionTitle")}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <span className={labelClass}>{t("service.signature.engineer")}</span>
-              {/* Read-only by design: the engineer's signature is their saved profile image, so it
-                  can't be drawn on someone else's behalf here. */}
-              <div className="border border-border rounded-lg bg-secondary/40 p-3">
-                <div className="bg-white border border-border rounded-lg h-[110px] flex items-center justify-center overflow-hidden">
+        <SectionCard title={t("service.section.summary")}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-[18px]">
+            <Field label={t("service.form.overallCustomerSummary")} help={isEditable ? t("service.form.overallCustomerSummaryHelp") : undefined}>
+              <textarea value={form.overallCustomerSummary} disabled={!isEditable} onChange={(e) => setField("overallCustomerSummary", e.target.value)} rows={4} className={`${field.textarea} w-full resize-y`} />
+            </Field>
+            <Field label={t("service.form.overallRemark")}>
+              <textarea value={form.overallRemark} disabled={!isEditable} onChange={(e) => setField("overallRemark", e.target.value)} rows={4} className={`${field.textarea} w-full resize-y`} />
+            </Field>
+          </div>
+        </SectionCard>
+
+        {!isNew && report && (
+          <section data-tour="servicedoc-signature" className="bg-card border border-border rounded-xl print:hidden">
+            <div className="px-6 py-4 border-b border-[#eef1f6] flex items-center gap-2.5 flex-wrap">
+              <h2 className="flex-1 text-base font-semibold text-foreground">{t("service.signature.sectionTitle")}</h2>
+              <span className="text-xs text-muted-foreground">{t("service.signature.optionalNote")}</span>
+            </div>
+            <div className="px-6 pt-5 pb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-2">
+                <span className={field.label}>{t("service.signature.engineer")}</span>
+                {/* Read-only by design: the engineer's signature is their saved profile image, so it
+                    can't be drawn on someone else's behalf here. */}
+                <div className="h-[140px] border border-border rounded-lg bg-white flex items-center justify-center overflow-hidden">
                   {engineerUser?.signatureDataUrl ? (
-                    <img src={engineerUser.signatureDataUrl} alt="" className="max-h-full max-w-full object-contain" />
+                    <img src={engineerUser.signatureDataUrl} alt={engineerUser.fullName} className="max-h-full max-w-full object-contain" />
                   ) : (
-                    <p className="text-xs text-muted-foreground px-3 text-center">
+                    <p className="text-[13px] text-muted-foreground px-3 text-center">
                       {engineerUser ? t("service.signature.noProfileSignature") : t("service.signature.noEngineerAssigned")}
                     </p>
                   )}
                 </div>
-                <div className="mt-2.5">
-                  <p className="text-sm text-foreground truncate">{engineerUser?.fullName || t("common.dash")}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground truncate">{engineerUser?.fullName || t("common.dash")}</span>
+                  <span className={field.help}>
                     {engineerUser && !engineerUser.signatureDataUrl
                       ? t("service.signature.goToSettings")
                       : t("service.signature.engineerFromProfile")}
-                  </p>
+                  </span>
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className={field.label}>{t("service.signature.customer")}</span>
+                <SignaturePad
+                  dataUrl={form.customerSignatureDataUrl}
+                  signerName={form.customerSignedName}
+                  signedAt={form.customerSignedAt}
+                  disabled={!isEditable}
+                  allowUpload={false}
+                  onConfirm={({ dataUrl, name }) => setForm((f) => ({
+                    ...f,
+                    customerSignatureDataUrl: dataUrl,
+                    customerSignedName: name,
+                    customerSignedAt: new Date().toISOString(),
+                  }))}
+                  onClear={() => setForm((f) => ({
+                    ...f, customerSignatureDataUrl: "", customerSignedName: "", customerSignedAt: null,
+                  }))}
+                />
+                {isEditable && form.customerSignatureDataUrl && (
+                  <p className={field.help}>{t("service.signature.saveHint")}</p>
+                )}
               </div>
             </div>
 
-            <div>
-              <span className={labelClass}>{t("service.signature.customer")}</span>
-              <SignaturePad
-                dataUrl={form.customerSignatureDataUrl}
-                signerName={form.customerSignedName}
-                signedAt={form.customerSignedAt}
-                disabled={!isEditable}
-                allowUpload={false}
-                onConfirm={({ dataUrl, name }) => setForm((f) => ({
-                  ...f,
-                  customerSignatureDataUrl: dataUrl,
-                  customerSignedName: name,
-                  customerSignedAt: new Date().toISOString(),
-                }))}
-                onClear={() => setForm((f) => ({
-                  ...f, customerSignatureDataUrl: "", customerSignedName: "", customerSignedAt: null,
-                }))}
-              />
-              {isEditable && form.customerSignatureDataUrl && (
-                <p className="text-[10px] text-muted-foreground mt-1.5">{t("service.signature.saveHint")}</p>
-              )}
-            </div>
-          </div>
-
-          {/* การอนุมัติจากลูกค้าทางไกล (2026-08-10) — แทนที่ปุ่ม placeholder เดิมของเฟส LINE:
-              ส่งลิงก์อนุมัติอายุ 7 วัน (เข้า LINE ลูกค้าอัตโนมัติถ้าผูกบัญชีแล้ว) ลูกค้าเปิดดู
-              รายงาน เซ็นชื่อ และกดอนุมัติ/ไม่อนุมัติจากมือถือได้เอง */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-border">
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">{t("service.signature.optionalNote")}</p>
-              {report?.customerApproval?.status === "pending" && (
-                <p className="text-xs text-[#866d28] mt-0.5">
-                  ส่งให้ลูกค้าอนุมัติแล้ว{report.customerApproval.sentViaLine ? " (ผ่าน LINE)" : ""} — รอคำตอบ ลิงก์หมดอายุ {report.customerApproval.expiresAt.slice(0, 10)}
-                </p>
-              )}
-              {report?.customerApproval?.status === "approved" && (
-                <p className="text-xs text-[#207e52] mt-0.5">
-                  ลูกค้าอนุมัติแล้ว{report.customerApproval.signedName ? ` โดย ${report.customerApproval.signedName}` : ""} ({(report.customerApproval.respondedAt ?? "").slice(0, 10)})
-                </p>
-              )}
-              {report?.customerApproval?.status === "rejected" && (
-                <p className="text-xs text-[#d22626] mt-0.5">
-                  ลูกค้าไม่อนุมัติ — เหตุผล: {report.customerApproval.rejectReason || "-"}
-                </p>
-              )}
-            </div>
-            {!isNew && report && report.customerApproval?.status !== "approved" && (
-              <button
-                type="button"
-                onClick={handleSendApproval}
-                disabled={sendingApproval || saving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={12} /> {sendingApproval ? "กำลังส่ง..." : report.customerApproval ? "ส่งให้ลูกค้าอนุมัติอีกครั้ง" : "ส่งให้ลูกค้าอนุมัติ (ลิงก์/LINE)"}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-    {/* ผลการส่งให้ลูกค้าอนุมัติ: ลิงก์สำหรับคัดลอก + สถานะ LINE + รหัสจับคู่ (2026-08-10) */}
-    {approvalResult && (
-      <div className="fixed inset-0 z-50 bg-[#0b1d3a]/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="ส่งให้ลูกค้าอนุมัติแล้ว">
-        <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md p-5 space-y-4">
-          <div className="flex items-start gap-2.5">
-            <CheckCircle2 size={18} className="text-[#207e52] flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">สร้างลิงก์อนุมัติแล้ว (ใช้ได้ 7 วัน)</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {approvalResult.sentViaLine
-                  ? "ส่งเข้า LINE ของลูกค้าเรียบร้อยแล้ว — คัดลอกลิงก์ด้านล่างส่งช่องทางอื่นเพิ่มได้"
-                  : "ลูกค้ายังไม่ได้ผูก LINE — คัดลอกลิงก์ด้านล่างส่งให้ลูกค้าทางช่องทางที่สะดวก"}
-              </p>
-              {approvalResult.lineError && <p className="text-xs text-[#a75d1a] mt-1">{approvalResult.lineError}</p>}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input readOnly value={approvalResult.url} onFocus={(e) => e.target.select()} aria-label="ลิงก์อนุมัติ"
-              className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground min-w-0" />
-            <button
-              type="button"
-              onClick={() => { void copyApprovalLink(approvalResult.url); }}
-              className="px-3 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors whitespace-nowrap"
-            >
-              {approvalLinkCopied ? "คัดลอกแล้ว ✓" : "คัดลอกลิงก์"}
-            </button>
-          </div>
-
-          {!approvalResult.sentViaLine && (report?.customerId || form.customerId) && (
-            <div className="border-t border-border pt-3 space-y-2">
-              <p className="text-xs text-muted-foreground">
-                อยากให้ครั้งหน้าส่งเข้า LINE ลูกค้าอัตโนมัติ? ออกรหัสจับคู่ แล้วให้ลูกค้าแอด LINE บริษัทและพิมพ์รหัสนี้ในแชท (ทำครั้งเดียว)
-              </p>
-              {pairing ? (
-                <p className="text-sm">
-                  รหัสจับคู่: <span className="font-mono font-bold text-[#0b1d3a] bg-[#c9a84c]/15 border border-[#c9a84c]/25 rounded px-2 py-0.5">{pairing.code}</span>
-                  <span className="text-xs text-muted-foreground"> (ใช้ได้ถึง {pairing.expiresAt.slice(0, 10)})</span>
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleCreatePairing}
-                  disabled={pairingBusy}
-                  className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50"
-                >
-                  {pairingBusy ? "กำลังออกรหัส..." : "ออกรหัสจับคู่ LINE"}
+            {/* การอนุมัติจากลูกค้าทางไกล (2026-08-10) — แทนที่ปุ่ม placeholder เดิมของเฟส LINE:
+                ส่งลิงก์อนุมัติอายุ 7 วัน (เข้า LINE ลูกค้าอัตโนมัติถ้าผูกบัญชีแล้ว) ลูกค้าเปิดดู
+                รายงาน เซ็นชื่อ และกดอนุมัติ/ไม่อนุมัติจากมือถือได้เอง */}
+            <div className="px-6 py-4 border-t border-[#eef1f6] flex flex-wrap items-center gap-4">
+              <div className="flex-1 min-w-[240px] flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">{t("service.approval.remoteTitle")}</span>
+                <span className="text-[13px] text-muted-foreground">{t("service.approval.remoteDesc")}</span>
+                {statusLine}
+              </div>
+              {report.customerApproval?.status !== "approved" && (
+                <button type="button" onClick={handleSendApproval} disabled={sendingApproval || saving} className={btn.secondarySm}>
+                  <Send size={15} />
+                  {sendingApproval ? t("service.approval.sending") : report.customerApproval ? t("service.approval.resend") : t("service.approval.send")}
                 </button>
               )}
             </div>
-          )}
-
-          <div className="flex justify-end">
-            <button type="button" onClick={() => setApprovalResult(null)}
-              className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-              ปิด
-            </button>
-          </div>
-        </div>
+          </section>
+        )}
       </div>
+    </div>
+    {/* ผลการส่งให้ลูกค้าอนุมัติ: ลิงก์สำหรับคัดลอก + สถานะ LINE + รหัสจับคู่ (2026-08-10) */}
+    {approvalResult && (
+      <ApprovalLinkDialog
+        url={approvalResult.url}
+        sentViaLine={approvalResult.sentViaLine}
+        lineError={approvalResult.lineError}
+        expiresAt={report?.customerApproval?.expiresAt ?? ""}
+        copied={approvalLinkCopied}
+        onCopy={() => { void copyApprovalLink(approvalResult.url); }}
+        canPair={!approvalResult.sentViaLine && !!(report?.customerId || form.customerId)}
+        pairing={pairing}
+        pairingBusy={pairingBusy}
+        onCreatePairing={handleCreatePairing}
+        onClose={() => setApprovalResult(null)}
+      />
     )}
     {!isNew && report && (
       <ServiceReportPrintDocument
@@ -1273,5 +1347,184 @@ export function ServiceReportEditor({
       />
     )}
     </>
+  );
+}
+
+// การ์ดกรมท่าบนคอลัมน์ขวา: ตรวจเช็คแล้ว N / M รายการ + แถบความคืบหน้า + แยกตามผล (บอร์ด ServiceReportEditor)
+function ChecklistProgressCard({ answered, applicable, rows }: {
+  answered: number;
+  applicable: number;
+  rows: { label: string; value: string }[];
+}) {
+  const { t } = useI18n();
+  const pct = applicable ? Math.round((answered * 100) / applicable) : 0;
+  return (
+    <section className="rounded-xl bg-[#0b1d3a] text-white p-5 flex flex-col gap-3">
+      <span className="text-[13px] text-[#c5d3e8]">{t("service.rail.checked")}</span>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[26px] leading-tight font-semibold tabular-nums">{answered} / {applicable}</span>
+        <span className="text-sm text-[#c5d3e8]">{t("service.checklist.completedCount")}</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={t("service.rail.progressAria")}
+        aria-valuemin={0}
+        aria-valuemax={applicable}
+        aria-valuenow={answered}
+        className="h-1.5 rounded-full bg-white/15 overflow-hidden"
+      >
+        <div className="h-1.5 rounded-full bg-white transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="h-px bg-white/10" />
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center justify-between gap-3 text-[13px]">
+          <span className="text-[#c5d3e8]">{r.label}</span>
+          <span className="tabular-nums text-white">{r.value}</span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// ตารางเลือก Template ของรายงานใหม่ (แบบบอร์ด ServiceReportNew) — ปุ่มวิทยุทั้งแถว · ↑/↓ เลื่อนตัวเลือก
+// เก็บเป็นการ์ดบนหน้าสร้างรายงาน ไม่ใช่กล่องโต้ตอบ: เซิร์ฟเวอร์บังคับชื่อลูกค้า/ผู้ติดต่อ/เบอร์โทรตั้งแต่สร้าง
+// (sanitizeCustomerSnapshotManual) จึงยังสร้างรายงานร่างจาก Template อย่างเดียวไม่ได้
+function TemplatePicker({ templates, value, onChange }: {
+  templates: ServiceTemplateSummary[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const labelId = useId();
+  const options = [
+    ...templates.map((tp) => ({ id: tp.id, name: tp.templateName, sub: tp.version ? `v${tp.version}` : "", code: tp.templateCode, sections: String(tp.sectionCount), items: String(tp.itemCount) })),
+    { id: NO_TEMPLATE_VALUE, name: t("service.form.noTemplate"), sub: t("service.new.noTemplateSub"), code: t("common.dash"), sections: t("common.dash"), items: t("common.dash") },
+  ];
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const next = options[(i + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length];
+    onChange(next.id);
+    const el = e.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`[data-option="${CSS.escape(next.id)}"]`);
+    el?.focus();
+  };
+  const grid = "grid grid-cols-[20px_minmax(0,1fr)_56px_64px] md:grid-cols-[20px_minmax(0,1fr)_210px_56px_64px] gap-3.5 items-center";
+  const focusIndex = Math.max(0, options.findIndex((o) => o.id === value));
+  return (
+    <div>
+      <div className={`${grid} h-10 px-6 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]`}>
+        <span />
+        <span id={labelId}>{t("service.form.template")}</span>
+        <span className="hidden md:block">{t("serviceTemplates.col.code")}</span>
+        <span className="text-right">{t("serviceTemplates.col.sections")}</span>
+        <span className="text-right">{t("serviceTemplates.col.items")}</span>
+      </div>
+      <div role="radiogroup" aria-labelledby={labelId}>
+        {options.map((o, i) => {
+          const on = o.id === value;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              data-option={o.id}
+              tabIndex={i === focusIndex ? 0 : -1}
+              onClick={() => onChange(o.id)}
+              onKeyDown={(e) => onKeyDown(e, i)}
+              className={`${grid} w-full min-h-16 px-6 py-3 text-left border-b border-[#eef1f6] last:border-b-0 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 ${on ? "bg-[#eef4fc]" : "bg-white hover:bg-[#f8f9fc]"}`}
+            >
+              <span className={`w-[18px] h-[18px] rounded-full border-[1.5px] bg-white flex items-center justify-center ${on ? "border-[#0b1d3a]" : "border-[#a3aec2]"}`}>
+                {on && <span className="w-2 h-2 rounded-full bg-[#0b1d3a]" />}
+              </span>
+              <span className="flex flex-col min-w-0 leading-snug">
+                <span className="text-sm font-medium text-foreground">{o.name}</span>
+                {o.sub && <span className="text-xs text-muted-foreground truncate">{o.sub}</span>}
+              </span>
+              <span className="hidden md:block font-mono text-[12.5px] text-[#3d5173] truncate">{o.code}</span>
+              <span className="text-right text-sm text-[#3d5173] tabular-nums">{o.sections}</span>
+              <span className="text-right text-sm text-[#3d5173] tabular-nums">{o.items}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// กล่อง "สร้างลิงก์อนุมัติแล้ว" (บอร์ด Dlg-ServiceApprovalLink) — ลิงก์อายุ 7 วัน · ปุ่มคัดลอกเป็นปุ่มหลัก
+// · ลูกค้ายังไม่ผูก LINE → ออกรหัสจับคู่ได้จากกล่องนี้
+function ApprovalLinkDialog({ url, sentViaLine, lineError, expiresAt, copied, onCopy, canPair, pairing, pairingBusy, onCreatePairing, onClose }: {
+  url: string;
+  sentViaLine: boolean;
+  lineError?: string;
+  expiresAt: string;
+  copied: boolean;
+  onCopy: () => void;
+  canPair: boolean;
+  pairing: { code: string; expiresAt: string } | null;
+  pairingBusy: boolean;
+  onCreatePairing: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const panelRef = useDialogA11y(onClose);
+  const titleId = useId();
+  const descId = useId();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={onClose} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId} className="relative bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] w-full max-w-[480px] flex flex-col">
+        <div className="flex items-start gap-4 px-6 pt-6">
+          <span className="w-11 h-11 rounded-full bg-[#e6f4ec] text-[#1b7f4f] flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={20} />
+          </span>
+          <div className="flex-1 min-w-0 pt-0.5 flex flex-col gap-1">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">{t("service.approval.dialogTitle")}</h2>
+            <p id={descId} className="text-sm text-[#3d5173]">
+              {sentViaLine ? t("service.approval.sentViaLineDesc") : t("service.approval.notLinkedDesc")}
+            </p>
+            {lineError && <p className="text-[13px] text-[#8a5a00]">{lineError}</p>}
+          </div>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} className="w-9 h-9 -mt-1.5 -mr-2 rounded-lg text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground flex items-center justify-center flex-shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 pt-5 pb-6 flex flex-col gap-[18px]">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">
+              {expiresAt ? t("service.approval.linkExpires").replace("{date}", formatQuoteDateThai(expiresAt)) : t("service.approval.linkLabel")}
+            </span>
+            <p aria-label={t("service.approval.linkLabel")} className="font-mono text-[13px] font-medium text-foreground break-all select-all">{url}</p>
+          </div>
+
+          {canPair && (
+            <div className="p-3.5 bg-[#f8f9fc] border border-border rounded-lg flex flex-col gap-2.5">
+              <span className="text-[13px] text-[#3d5173]">{t("service.approval.pairingHint")}</span>
+              {pairing ? (
+                <span className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-[13px] text-[#3d5173]">{t("service.approval.pairingCode")}</span>
+                  <span className="h-8 px-3 border border-[#c3ccda] rounded-lg bg-white font-mono text-[15px] font-medium tracking-[0.08em] inline-flex items-center">{pairing.code}</span>
+                  <span className="text-xs text-muted-foreground">{t("service.approval.pairingValid").replace("{date}", formatQuoteDateThai(pairing.expiresAt))}</span>
+                </span>
+              ) : (
+                <button type="button" onClick={onCreatePairing} disabled={pairingBusy} className={`${btn.text} self-start`}>
+                  <Link2 size={16} /> {pairingBusy ? t("service.approval.issuing") : t("service.approval.issuePairing")}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#eef1f6]">
+          <button type="button" onClick={onClose} className={btn.secondary}>{t("common.close")}</button>
+          <button type="button" onClick={onCopy} className={btn.primary}>
+            {copied ? <Check size={16} /> : <Copy size={16} />}
+            {copied ? t("service.approval.copied") : t("service.approval.copy")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

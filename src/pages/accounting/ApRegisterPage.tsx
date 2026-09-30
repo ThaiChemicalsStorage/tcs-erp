@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
-import { BadgeCheck, CalendarDays, Printer, RotateCcw } from "lucide-react";
-import { EmptyState } from "../../components/EmptyState";
-import { PromptDialog } from "../../components/PromptDialog";
+import { BadgeCheck, Building2, Printer, RotateCcw } from "lucide-react";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchApEntries, updateApEntry, type ApEntry } from "../../lib/apEntries";
+import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
+import { Field } from "../../components/ui/Field";
+import { btn, field, surface } from "../../components/ui/styles";
+import { AccountingDialog, MonthField, Pill, SummaryBox, TotalsStrip } from "./accountingUi";
+import { currentMonthLocal, groupApEntriesByVendor, money, thaiMonthLabel } from "./accountingFormat";
+import { REPORT } from "./reportTable";
 
 /**
  * ทะเบียนเจ้าหนี้ (2026-09-03) — จัดกลุ่มตามผู้ขาย ตอบคำถามเดียวที่บัญชีจ่ายถามทุกวัน:
@@ -16,19 +20,11 @@ import { fetchApEntries, updateApEntry, type ApEntry } from "../../lib/apEntries
  * แก้ได้อย่างเดียวคือสถานะจ่าย/ยังไม่จ่าย พร้อมเลขที่เช็ค/อ้างอิง — ยอดเงินแก้ที่นี่ไม่ได้เลย
  * ยอดผิดต้องไปยกเลิกรอบการรับที่ใบรับสินค้า ซึ่งย้อนทั้งสต๊อกและหนี้พร้อมกัน ถ้าเปิดให้แก้ยอด
  * ตรงนี้ ทะเบียนกับคลังจะเดินคนละทางทันทีโดยไม่มีอะไรฟ้อง
+ *
+ * ดีไซน์ใหม่ 2026-09-30 (เจ้าของอนุมัติ): จากตารางแยกใบละผู้ขาย เป็นตารางเดียวที่มีแถวหัวกลุ่มผู้ขาย
+ * (ชื่อ · เลขผู้เสียภาษี · ค้างจ่าย) คั่นก่อนรายการของผู้ขายนั้น — ลำดับผู้ขายเหมือนเดิม (ค้างมากสุดก่อน)
  */
-const THAI_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-
-function currentMonthLocal(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function thaiMonthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  if (!y || !m) return month;
-  return `${THAI_MONTHS[m - 1]} ${y + 543}`;
-}
+const COLS = 7;
 
 export function ApRegisterPage({ canManage }: { canManage: boolean }) {
   const { t } = useI18n();
@@ -53,19 +49,9 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
   const loadError = current?.error === true;
   const entries = current?.entries ?? [];
 
-  const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
   const unpaidTotal = entries.filter((e) => e.status !== "Paid").reduce((s, e) => s + e.total, 0);
   const paidTotal = entries.filter((e) => e.status === "Paid").reduce((s, e) => s + e.total, 0);
-
-  const byVendor = new Map<string, ApEntry[]>();
-  for (const e of entries) {
-    const key = e.vendorName || t("apRegister.unknownVendor");
-    byVendor.set(key, [...(byVendor.get(key) ?? []), e]);
-  }
-  const vendors = [...byVendor.entries()].sort((a, b) => {
-    const unpaid = (rows: ApEntry[]) => rows.filter((r) => r.status !== "Paid").reduce((s, r) => s + r.total, 0);
-    return unpaid(b[1]) - unpaid(a[1]);
-  });
+  const vendors = groupApEntriesByVendor(entries, t("apRegister.unknownVendor"));
 
   const applyStatus = async (entry: ApEntry, status: "Paid" | "Unpaid", paymentRef?: string) => {
     setBusy(true);
@@ -82,29 +68,19 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:overflow-visible print:p-0">
-      <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("apRegister.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("apRegister.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            {t("accounting.monthly.monthLabel")}
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => { if (e.target.value) setMonth(e.target.value); }}
-              className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-          </label>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
-          >
-            <Printer size={13} /> {t("accounting.monthly.printBtn")}
-          </button>
-        </div>
+    <div className={REPORT.page}>
+      <div className="print:hidden">
+        <ListPageHeader
+          module={t("nav.group.accounting")}
+          title={t("apRegister.title")}
+          description={t("apRegister.subtitle")}
+          actions={<>
+            <MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} />
+            <button type="button" onClick={() => window.print()} className={btn.secondary}>
+              <Printer size={16} /> {t("accounting.monthly.printBtn")}
+            </button>
+          </>}
+        />
       </div>
 
       <p className="hidden print:block text-lg font-semibold">{t("apRegister.printHeadingPrefix")} {thaiMonthLabel(month)}</p>
@@ -112,106 +88,150 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
       {loading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}</div>
       ) : loadError ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <p className="text-sm text-muted-foreground">{t("apRegister.loadError")}</p>
-          <button onClick={() => setAttempt((a) => a + 1)}
-            className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            {t("accounting.monthly.retry")}
-          </button>
+        <div className={surface.card}>
+          <ListEmpty
+            title={t("apRegister.loadError")}
+            action={<button type="button" onClick={() => setAttempt((a) => a + 1)} className={btn.secondary}>{t("accounting.monthly.retry")}</button>}
+          />
         </div>
       ) : entries.length === 0 ? (
-        <EmptyState icon={CalendarDays} title={t("apRegister.empty.title")} description={`${t("apRegister.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+        <div className={surface.card}>
+          <ListEmpty title={t("apRegister.empty.title")} hint={`${t("apRegister.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+        </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: t("apRegister.kpi.entries"), value: String(entries.length), tone: "text-foreground" },
-              { label: t("apRegister.kpi.unpaid"), value: money(unpaidTotal), tone: "text-[#a75d1a]" },
-              { label: t("apRegister.kpi.paid"), value: money(paidTotal), tone: "text-[#207e52]" },
-            ].map((k) => (
-              <div key={k.label} className="bg-card border border-border rounded-xl p-4 print:border-black">
-                <p className="text-xs text-muted-foreground">{k.label}</p>
-                <p className={`text-xl font-semibold font-mono mt-1 ${k.tone}`}>{k.value}</p>
-              </div>
-            ))}
-          </div>
+          <TotalsStrip
+            items={[
+              { label: t("apRegister.kpi.entries"), value: entries.length },
+              { label: t("apRegister.kpi.unpaid"), value: money(unpaidTotal), dot: "#d89614", alignEnd: true, bold: true },
+              { label: t("apRegister.kpi.paid"), value: money(paidTotal), dot: "#1b7f4f", alignEnd: true },
+            ]}
+          />
 
-          {vendors.map(([vendorName, rows]) => {
-            const vendorUnpaid = rows.filter((r) => r.status !== "Paid").reduce((s, r) => s + r.total, 0);
-            return (
-              <section key={vendorName} className="bg-card border border-border rounded-xl overflow-hidden print:border-black">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 border-b border-border">
-                  <h2 className="text-sm font-semibold text-foreground">{vendorName}</h2>
-                  <span className="text-xs text-muted-foreground font-mono">{rows[0].vendorTaxId || "—"}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {t("apRegister.vendorUnpaid")} <span className={`font-mono font-semibold ${vendorUnpaid > 0 ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{money(vendorUnpaid)}</span>
-                  </span>
-                </div>
-                <div className="overflow-x-auto print:overflow-visible">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/40">
-                        {[
-                          t("apRegister.col.invoiceDate"), t("apRegister.col.invoiceNumber"), t("apRegister.col.reference"),
-                          t("apRegister.col.jobCode"), t("apRegister.col.total"), t("apRegister.col.status"), "",
-                        ].map((h, i) => (
-                          // คอลัมน์ว่างท้ายตารางคือหัวของช่องปุ่มจัดการ ซึ่ง `print:hidden` ตอนพิมพ์ —
-                          // หัวต้องหายไปด้วย ไม่งั้นบนกระดาษยังกินความกว้างเป็นคอลัมน์เปล่า
-                          <th key={h || `spacer-${i}`} className={`px-3 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap${h ? "" : " print:hidden"}`}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((e) => (
-                        <tr key={e.id} className="border-b border-border/50 last:border-0">
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-foreground whitespace-nowrap">{e.invoiceNumber}</td>
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.receivingReportNumber}</td>
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.jobCode || "—"}</td>
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right text-foreground whitespace-nowrap">{money(e.total)}</td>
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${e.status === "Paid" ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"}`}>
-                              {e.status === "Paid" ? t("apRegister.status.paid") : t("apRegister.status.unpaid")}
+          <section className={REPORT.card}>
+            <div className={`${REPORT.cardHead} print:hidden`}>
+              <h2 className="flex-1 text-base font-semibold text-foreground">{t("apRegister.listHeading")}</h2>
+              <span className="text-[13px] text-muted-foreground">{t("apRegister.vendorCount").replace("{n}", String(vendors.length))} · {t("accounting.report.amountsInBaht")}</span>
+            </div>
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className={REPORT.table}>
+                <thead>
+                  <tr className={REPORT.headRow}>
+                    <th className={REPORT.th}>{t("apRegister.col.invoiceDate")}</th>
+                    <th className={REPORT.th}>{t("apRegister.col.invoiceNumber")}</th>
+                    <th className={REPORT.th}>{t("apRegister.col.reference")}</th>
+                    <th className={REPORT.th}>{t("apRegister.col.jobCode")}</th>
+                    <th className={REPORT.thNum}>{t("apRegister.col.total")}</th>
+                    <th className={REPORT.th}>{t("apRegister.col.status")}</th>
+                    {/* คอลัมน์ปุ่มจัดการซ่อนตอนพิมพ์ — หัวต้องหายไปด้วย ไม่งั้นบนกระดาษยังกินความกว้างเป็นคอลัมน์เปล่า */}
+                    <th className={`${REPORT.th} print:hidden`}><span className="sr-only">{t("accounting.list.col.actions")}</span></th>
+                  </tr>
+                </thead>
+                {vendors.map((g) => (
+                  <tbody key={g.vendorName} style={{ breakInside: "avoid" }}>
+                    <tr className="bg-[#fbfcfe] border-b border-border">
+                      <td colSpan={COLS} className="px-6 h-12 print:h-auto print:px-1 print:py-1">
+                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span aria-hidden="true" className="w-7 h-7 rounded-md bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0 print:hidden"><Building2 size={15} /></span>
+                          <span className="font-semibold text-sm text-foreground print:text-xs">{g.vendorName}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{g.vendorTaxId || "—"}</span>
+                          <span className="flex-1" />
+                          <span className="text-[13px] text-muted-foreground print:text-xs">{t("apRegister.vendorUnpaid")}</span>
+                          <span className={`min-w-[110px] text-right font-bold tabular-nums text-sm print:text-xs ${g.unpaid > 0 ? "text-foreground" : "text-[#8a97ad]"}`}>{money(g.unpaid)}</span>
+                        </span>
+                      </td>
+                    </tr>
+                    {g.rows.map((e) => {
+                      const paid = e.status === "Paid";
+                      return (
+                        <tr key={e.id} className={REPORT.row}>
+                          <td className={`${REPORT.td} text-[#3d5173]`}>{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
+                          <td className={`${REPORT.td} font-mono text-[13px] font-medium text-foreground`}>{e.invoiceNumber}</td>
+                          <td className={`${REPORT.td} font-mono text-[13px] text-[#3d5173]`}>{e.receivingReportNumber}</td>
+                          <td className={`${REPORT.td} font-mono text-[13px] ${e.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{e.jobCode || "—"}</td>
+                          <td className={`${REPORT.td} ${REPORT.num} font-semibold text-foreground`}>{money(e.total)}</td>
+                          <td className={REPORT.td}>
+                            <span className="flex flex-col items-start gap-0.5">
+                              {paid ? <Pill tone="green" label={t("apRegister.status.paid")} /> : <Pill tone="amber" label={t("apRegister.status.unpaid")} />}
+                              {paid && e.paymentRef ? <span className="font-mono text-xs text-muted-foreground">{e.paymentRef}</span> : null}
                             </span>
-                            {e.status === "Paid" && e.paymentRef ? <span className="ml-2 text-xs font-mono text-muted-foreground">{e.paymentRef}</span> : null}
                           </td>
-                          <td className="px-3 py-2.5 text-right whitespace-nowrap print:hidden">
-                            {canManage && (e.status === "Paid" ? (
-                              <button onClick={() => void applyStatus(e, "Unpaid")} disabled={busy}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all disabled:opacity-60">
-                                <RotateCcw size={12} /> {t("apRegister.clearPaidBtn")}
+                          <td className={`${REPORT.td} text-right print:hidden`}>
+                            {canManage && (paid ? (
+                              <button type="button" onClick={() => void applyStatus(e, "Unpaid")} disabled={busy}
+                                className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground transition-colors disabled:opacity-60">
+                                <RotateCcw size={14} /> {t("apRegister.clearPaidBtn")}
                               </button>
                             ) : (
-                              <button onClick={() => setPayTarget(e)} disabled={busy}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-[#207e52] hover:bg-[#2aa36b]/10 transition-all disabled:opacity-60">
-                                <BadgeCheck size={12} /> {t("apRegister.markPaidBtn")}
+                              <button type="button" onClick={() => setPayTarget(e)} disabled={busy} className={btn.secondarySm.replace("h-9", "h-8")}>
+                                <BadgeCheck size={14} /> {t("apRegister.markPaidBtn")}
                               </button>
                             ))}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            );
-          })}
+                      );
+                    })}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          </section>
         </>
       )}
 
-      <PromptDialog
-        open={payTarget !== null}
-        title={t("apRegister.payDialog.title")}
-        message={payTarget ? `${payTarget.vendorName} · ${payTarget.invoiceNumber} · ${money(payTarget.total)}` : ""}
-        label={t("apRegister.payDialog.label")}
-        placeholder={t("apRegister.payDialog.placeholder")}
-        confirmLabel={t("apRegister.markPaidBtn")}
-        mono
-        busy={busy}
-        onConfirm={(ref) => { if (payTarget) void applyStatus(payTarget, "Paid", ref); }}
-        onCancel={() => setPayTarget(null)}
-      />
+      {payTarget && (
+        <MarkPaidDialog
+          entry={payTarget}
+          busy={busy}
+          onConfirm={(ref) => void applyStatus(payTarget, "Paid", ref)}
+          onCancel={() => setPayTarget(null)}
+        />
+      )}
       <Toast message={toast.message} />
     </div>
+  );
+}
+
+// บันทึกการจ่ายเงิน — เลขที่เช็ค/อ้างอิงไม่บังคับ (เหมือนเดิม) · มีกล่องสรุปให้เห็นว่ากำลังปิดหนี้ใบไหน
+function MarkPaidDialog({ entry, busy, onConfirm, onCancel }: {
+  entry: ApEntry;
+  busy: boolean;
+  onConfirm: (paymentRef: string) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  const [ref, setRef] = useState("");
+  const submit = () => { if (!busy) onConfirm(ref.trim()); };
+  return (
+    <AccountingDialog
+      open
+      tone="success"
+      icon={BadgeCheck}
+      title={t("apRegister.payDialog.title")}
+      message={t("apRegister.payDialog.message")}
+      confirmLabel={t("apRegister.markPaidBtn")}
+      confirmIcon={BadgeCheck}
+      busy={busy}
+      onConfirm={submit}
+      onCancel={onCancel}
+    >
+      <SummaryBox
+        primary={entry.vendorName || t("apRegister.unknownVendor")}
+        secondary={<>{t("apRegister.payDialog.invoicePrefix")} <span className="font-mono">{entry.invoiceNumber}</span> · <span className="font-mono">{entry.receivingReportNumber}</span></>}
+        amountLabel={t("apRegister.col.total")}
+        amount={`฿${money(entry.total)}`}
+      />
+      <Field label={t("apRegister.payDialog.label")} htmlFor="ap-payment-ref">
+        <input
+          id="ap-payment-ref"
+          autoFocus
+          value={ref}
+          onChange={(e) => setRef(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder={t("apRegister.payDialog.placeholder")}
+          className={`${field.input} w-full font-mono`}
+        />
+      </Field>
+    </AccountingDialog>
   );
 }

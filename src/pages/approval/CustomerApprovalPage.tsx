@@ -6,6 +6,7 @@ import {
   type CustomerApprovalPublicData,
 } from "../../lib/serviceReports";
 import { ApiError } from "../../lib/apiClient";
+import { btn, field } from "../../components/ui/styles";
 
 /**
  * Public customer-approval page (added 2026-08-10) — rendered WITHOUT the app shell or a session:
@@ -64,8 +65,8 @@ export default function CustomerApprovalPage() {
   if (linkMissing || loadError || !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="bg-card border border-border rounded-xl p-6 max-w-sm text-center" role="alert">
-          <AlertTriangle size={22} className="text-[#e08a3c] mx-auto mb-2" />
+        <div className="bg-card border border-border rounded-xl p-6 max-w-sm flex flex-col items-center gap-3 text-center" role="alert">
+          <span className="w-11 h-11 rounded-full bg-[#fdf3e0] text-[#8a5a00] flex items-center justify-center"><AlertTriangle size={20} /></span>
           <p className="text-sm text-foreground">{linkMissing ? "ลิงก์ไม่ถูกต้อง กรุณาติดต่อเจ้าหน้าที่" : loadError || "ไม่พบลิงก์อนุมัติ"}</p>
         </div>
       </div>
@@ -74,44 +75,52 @@ export default function CustomerApprovalPage() {
 
   const { report, approval, companyName, companyLogoDataUrl } = data;
   const pending = approval.status === "pending" && !approval.expired;
+  const sectionHead = "px-5 py-4 border-b border-[#eef1f6]";
+  const sectionTitle = "text-base font-semibold text-foreground";
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-16">
+      {/* หัวหน้า: แบรนด์บริษัทผู้ออกรายงาน (บอร์ด CustomerApproval) — ยังเป็นหน้าแบบมือถือก่อน ตามที่เจ้าของเลือก */}
       <header className="bg-[#0b1d3a] px-5 py-4">
-        <div className="max-w-2xl mx-auto flex items-center gap-3">
-          {companyLogoDataUrl && <img src={companyLogoDataUrl} alt="" className="h-9 w-9 object-contain rounded bg-white/90 p-0.5" />}
-          <div>
-            <p className="text-[#c9a84c] text-xs font-semibold tracking-wide">{companyName || "TCS ERP"}</p>
-            <h1 className="text-white text-base font-semibold leading-tight">รายงานบริการ {report.id}</h1>
+        <div className="max-w-2xl mx-auto flex items-center gap-3.5 flex-wrap">
+          {companyLogoDataUrl && <img src={companyLogoDataUrl} alt={companyName || "TCS ERP"} className="h-11 w-11 object-contain rounded-full bg-white p-0.5 flex-shrink-0" />}
+          <div className="flex-1 min-w-0 flex flex-col leading-snug">
+            <p className="text-[#e3c56f] text-[12.5px] font-semibold truncate">{companyName || "TCS ERP"}</p>
+            <h1 className="text-white text-lg font-semibold">รายงานบริการ <span className="font-mono font-medium">{report.id}</span></h1>
           </div>
+          {pending && (
+            <span className="text-[13px] text-[#c5d3e8] inline-flex items-center gap-2">
+              <Clock size={15} /> ลิงก์ใช้ได้ถึง {approval.expiresAt.slice(0, 10)}
+            </span>
+          )}
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-5 mt-4 space-y-4">
+      <main className="max-w-2xl mx-auto px-4 sm:px-5 mt-5 flex flex-col gap-4">
         {/* สถานะปัจจุบันของการอนุมัติ */}
         {approval.status === "approved" && (
-          <div className="bg-[#2aa36b]/10 border border-[#2aa36b]/30 rounded-xl p-4 flex items-start gap-2.5" role="status">
-            <CheckCircle2 size={18} className="text-[#207e52] flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-[#207e52]">อนุมัติรายงานนี้เรียบร้อยแล้ว{approval.signedName ? ` โดย ${approval.signedName}` : ""} — ขอบคุณครับ</p>
-          </div>
+          <section className="bg-card border border-[#b5dcc6] rounded-xl px-5 py-5 flex items-start gap-3" role="status">
+            <span className="w-11 h-11 rounded-full bg-[#e6f4ec] text-[#1b7f4f] flex items-center justify-center flex-shrink-0"><CheckCircle2 size={20} /></span>
+            <p className="text-[15px] font-semibold text-[#1b7f4f] pt-2">อนุมัติรายงานนี้เรียบร้อยแล้ว{approval.signedName ? ` โดย ${approval.signedName}` : ""} — ขอบคุณครับ</p>
+          </section>
         )}
         {approval.status === "rejected" && (
-          <div className="bg-[#e05252]/10 border border-[#e05252]/30 rounded-xl p-4 flex items-start gap-2.5" role="status">
-            <XCircle size={18} className="text-[#d22626] flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-[#d22626]">ท่านแจ้งไม่อนุมัติรายงานนี้แล้ว — เจ้าหน้าที่ได้รับเหตุผลของท่านและจะติดต่อกลับ</p>
-          </div>
+          <section className="bg-card border border-[#f0c2c2] rounded-xl px-5 py-5 flex items-start gap-3" role="status">
+            <span className="w-11 h-11 rounded-full bg-[#fcebeb] text-[#b93636] flex items-center justify-center flex-shrink-0"><XCircle size={20} /></span>
+            <p className="text-[15px] font-semibold text-[#b93636] pt-2">ท่านแจ้งไม่อนุมัติรายงานนี้แล้ว — เจ้าหน้าที่ได้รับเหตุผลของท่านและจะติดต่อกลับ</p>
+          </section>
         )}
         {approval.status === "pending" && approval.expired && (
-          <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-2.5" role="alert">
-            <Clock size={18} className="text-[#a75d1a] flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-[#a75d1a]">ลิงก์นี้หมดอายุแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อขอลิงก์ใหม่</p>
-          </div>
+          <section className="bg-[#fdf3e0] border border-[#f0d9a8] rounded-xl p-4 flex items-start gap-2.5" role="alert">
+            <Clock size={18} className="text-[#8a5a00] flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-[#8a5a00]">ลิงก์นี้หมดอายุแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อขอลิงก์ใหม่</p>
+          </section>
         )}
 
         {/* ข้อมูลงาน */}
-        <section className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold mb-3">ข้อมูลงานบริการ</h2>
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        <section className="bg-card border border-border rounded-xl">
+          <div className={sectionHead}><h2 className={sectionTitle}>ข้อมูลงานบริการ</h2></div>
+          <dl className="px-5 pt-4 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
             {/* Field order matches the editor form (ServiceReportEditor.tsx) so the same record
                 reads the same way to the engineer who filled it in and the customer who receives
                 it. Empty values drop out — most of these are optional, and a customer-facing page
@@ -132,64 +141,70 @@ export default function CustomerApprovalPage() {
               ["วันที่ออกรายงาน", report.reportDate],
               ["ผู้เข้าตรวจสอบ", [report.engineerName, ...report.additionalInspectorNames].filter(Boolean).join(", ")],
             ] as [string, string, "mono"?][]).filter(([, v]) => v).map(([label, value, mono]) => (
-              <div key={label} className="flex flex-col">
+              <div key={label} className="flex flex-col gap-0.5">
                 <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className={mono ? "text-foreground font-mono" : "text-foreground"}>{value}</dd>
+                <dd className={`text-sm font-medium text-foreground ${mono ? "font-mono" : ""}`}>{value}</dd>
               </div>
             ))}
           </dl>
         </section>
 
         {/* ผลการตรวจเช็ค */}
-        <section className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold mb-3">ผลการตรวจเช็ค</h2>
-          <div className="space-y-4">
+        <section className="bg-card border border-border rounded-xl">
+          <div className={sectionHead}><h2 className={sectionTitle}>ผลการตรวจเช็ค</h2></div>
+          <div className="px-5 pt-4 pb-5 flex flex-col gap-5">
             {report.templateSnapshot.sections.map((section) => {
               const sectionValue = report.checklist.find((s) => s.key === section.key);
               if (section.isOptionalAddon && !(sectionValue?.included ?? false)) return null;
               return (
-                <div key={section.key}>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{section.title}</h3>
-                  <div className="border border-border rounded-lg divide-y divide-border">
-                    {section.groups.map((group) => {
-                      const groupValue = sectionValue?.groups.find((g) => g.key === group.key);
-                      return group.items.map((item) => {
-                        const value = groupValue?.items.find((it) => it.key === item.key);
-                        const status = value?.status ?? "not_selected";
-                        return (
-                          <div key={`${group.key}-${item.key}`} className="px-3 py-2 text-sm">
-                            <div className="flex items-start justify-between gap-3">
-                              <span className="text-foreground">{group.title !== item.label ? `${group.title} — ${item.label}` : item.label}</span>
-                              {item.kind === "measurement" ? (
-                                <span className="font-mono text-foreground whitespace-nowrap">{value?.measurementValue || "-"}</span>
-                              ) : status === "normal" ? (
-                                <span className="text-[#207e52] text-xs font-medium whitespace-nowrap">✓ ปกติ</span>
-                              ) : status === "abnormal" ? (
-                                <span className="text-[#d22626] text-xs font-medium whitespace-nowrap">✕ ผิดปกติ</span>
-                              ) : (
-                                <span className="text-muted-foreground text-xs whitespace-nowrap">-</span>
+                <div key={section.key} className="flex flex-col gap-2.5">
+                  <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="h-9 px-3.5 bg-[#f8f9fc] border-b border-border flex items-center text-[12.5px] font-semibold text-[#3d5173]">
+                      <span className="flex-1">รายการตรวจ</span>
+                      <span className="text-right">ผล</span>
+                    </div>
+                    <div className="divide-y divide-[#eef1f6]">
+                      {section.groups.map((group) => {
+                        const groupValue = sectionValue?.groups.find((g) => g.key === group.key);
+                        return group.items.map((item) => {
+                          const value = groupValue?.items.find((it) => it.key === item.key);
+                          const status = value?.status ?? "not_selected";
+                          return (
+                            <div key={`${group.key}-${item.key}`} className="px-3.5 py-2.5 text-sm flex flex-col gap-1">
+                              <div className="flex items-start justify-between gap-3">
+                                <span className="text-foreground pt-0.5">{group.title !== item.label ? `${group.title} — ${item.label}` : item.label}</span>
+                                {item.kind === "measurement" ? (
+                                  <span className="font-mono text-[13px] font-medium text-foreground whitespace-nowrap pt-0.5">{value?.measurementValue || "-"}</span>
+                                ) : status === "normal" ? (
+                                  <span className="h-[26px] px-2.5 rounded-full bg-[#e6f4ec] text-[#1b7f4f] text-[12.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap flex-shrink-0"><span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#1b7f4f]" />ปกติ</span>
+                                ) : status === "abnormal" ? (
+                                  <span className="h-[26px] px-2.5 rounded-full bg-[#fcebeb] text-[#b93636] text-[12.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap flex-shrink-0"><span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#b93636]" />ผิดปกติ</span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs whitespace-nowrap pt-0.5">-</span>
+                                )}
+                              </div>
+                              {/* รายละเอียด/รูป แสดงทุกสถานะ ไม่ใช่เฉพาะ "ผิดปกติ" — ช่างแนบรูปกับรายการที่
+                                  ติ๊ก "ปกติ" ได้ ถ้ากรองด้วย status ลูกค้าจะไม่มีวันเห็นรูปพวกนั้นเลย */}
+                              {value?.abnormalDetail && (
+                                <p className={`text-[13px] ${status === "abnormal" ? "text-[#b93636]" : "text-muted-foreground"}`}>{value.abnormalDetail}</p>
+                              )}
+                              {(value?.photos ?? []).length > 0 && (
+                                <div className="grid grid-cols-3 gap-2 mt-1">
+                                  {value!.photos.map((p) => (
+                                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" aria-label={`เปิดรูป ${p.fileName}`}>
+                                      {/* object-contain ไม่ใช่ cover — รูปถ่ายหน้างานส่วนใหญ่เป็นแนวตั้ง
+                                          พอ cover ลงกรอบเตี้ยกว้าง หัวกับท้ายรูปจะโดนเฉือนทิ้ง */}
+                                      <img src={p.url} alt={p.fileName} loading="lazy" className="rounded-lg border border-border w-full h-20 object-contain bg-[#eef1f6]" />
+                                    </a>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                            {/* รายละเอียด/รูป แสดงทุกสถานะ ไม่ใช่เฉพาะ "ผิดปกติ" — ช่างแนบรูปกับรายการที่
-                                ติ๊ก "ปกติ" ได้ ถ้ากรองด้วย status ลูกค้าจะไม่มีวันเห็นรูปพวกนั้นเลย */}
-                            {value?.abnormalDetail && (
-                              <p className={`text-xs mt-1 ${status === "abnormal" ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{value.abnormalDetail}</p>
-                            )}
-                            {(value?.photos ?? []).length > 0 && (
-                              <div className="grid grid-cols-3 gap-1.5 mt-2">
-                                {value!.photos.map((p) => (
-                                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
-                                    {/* object-contain ไม่ใช่ cover — รูปถ่ายหน้างานส่วนใหญ่เป็นแนวตั้ง
-                                        พอ cover ลงกรอบเตี้ยกว้าง หัวกับท้ายรูปจะโดนเฉือนทิ้ง */}
-                                    <img src={p.url} alt={p.fileName} loading="lazy" className="rounded border border-border w-full h-20 object-contain bg-secondary" />
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })}
+                          );
+                        });
+                      })}
+                    </div>
                   </div>
                 </div>
               );
@@ -198,17 +213,18 @@ export default function CustomerApprovalPage() {
         </section>
 
         {(report.overallCustomerSummary || report.overallRemark) && (
-          <section className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <section className="bg-card border border-border rounded-xl px-5 py-5 flex flex-col gap-4">
             {report.overallCustomerSummary && (
-              <div>
-                <h2 className="text-xs text-muted-foreground mb-1">สรุปภาพรวมการให้บริการ</h2>
-                <p className="text-sm whitespace-pre-wrap">{report.overallCustomerSummary}</p>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xs text-muted-foreground">สรุปภาพรวมการให้บริการ</h2>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{report.overallCustomerSummary}</p>
               </div>
             )}
+            {report.overallCustomerSummary && report.overallRemark && <div className="h-px bg-[#eef1f6]" />}
             {report.overallRemark && (
-              <div>
-                <h2 className="text-xs text-muted-foreground mb-1">หมายเหตุ</h2>
-                <p className="text-sm whitespace-pre-wrap">{report.overallRemark}</p>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xs text-muted-foreground">หมายเหตุ</h2>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{report.overallRemark}</p>
               </div>
             )}
           </section>
@@ -216,80 +232,89 @@ export default function CustomerApprovalPage() {
 
         {/* ส่วนตอบรับ */}
         {pending && (
-          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold">การอนุมัติรายงาน</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">กรุณาตรวจสอบรายงานด้านบน แล้วลงลายเซ็นเพื่ออนุมัติ หรือแจ้งเหตุผลหากไม่อนุมัติ (ลิงก์ใช้ได้ถึง {approval.expiresAt.slice(0, 10)})</p>
+          <section className="bg-card border border-border rounded-xl flex flex-col">
+            <div className={`${sectionHead} flex flex-col gap-1`}>
+              <h2 className="text-[15px] font-semibold">{mode === "reject" ? "ไม่อนุมัติ / แจ้งแก้ไข" : "การอนุมัติรายงาน"}</h2>
+              <p className="text-[13px] text-[#3d5173]">กรุณาตรวจสอบรายงานด้านบน แล้วลงลายเซ็นเพื่ออนุมัติ หรือแจ้งเหตุผลหากไม่อนุมัติ (ลิงก์ใช้ได้ถึง {approval.expiresAt.slice(0, 10)})</p>
             </div>
 
             {mode === "idle" && (
               <>
-                <SignaturePad
-                  dataUrl={signature?.dataUrl ?? ""}
-                  signerName={signature?.name ?? report.customerSnapshot.contactName}
-                  signedAt={null}
-                  allowUpload={false}
-                  onConfirm={(sig) => setSignature(sig)}
-                  onClear={() => setSignature(null)}
-                />
-                {submitError && <p role="alert" className="text-xs text-[#e05252]">{submitError}</p>}
-                <div className="flex flex-col sm:flex-row gap-2.5">
+                <div className="px-5 py-5 flex flex-col gap-4">
+                  <SignaturePad
+                    dataUrl={signature?.dataUrl ?? ""}
+                    signerName={signature?.name ?? report.customerSnapshot.contactName}
+                    signedAt={null}
+                    allowUpload={false}
+                    onConfirm={(sig) => setSignature(sig)}
+                    onClear={() => setSignature(null)}
+                  />
+                  {submitError && <p role="alert" className={field.error}>{submitError}</p>}
+                </div>
+                <div className="px-5 pt-4 pb-5 border-t border-[#eef1f6] flex flex-col gap-2.5">
                   <button
+                    type="button"
                     onClick={() => signature && submit({ decision: "approved", signatureDataUrl: signature.dataUrl, signedName: signature.name })}
                     disabled={!signature || submitting}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-describedby={!signature ? "approve-why" : undefined}
+                    className={`${btn.primary} w-full`}
                   >
-                    {submitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} อนุมัติรายงาน
+                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} อนุมัติรายงาน
                   </button>
+                  {!signature && <p id="approve-why" className={field.help}>ลงลายเซ็นและกด "ยืนยันลายเซ็น" ก่อน จึงจะกดอนุมัติได้</p>}
                   <button
+                    type="button"
                     onClick={() => { setMode("reject"); setSubmitError(""); }}
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-[#e05252] hover:border-[#e05252]/40 transition-all disabled:opacity-50"
+                    className={`${btn.secondary} w-full`}
                   >
                     ไม่อนุมัติ / แจ้งแก้ไข
                   </button>
                 </div>
-                {!signature && <p className="text-xs text-muted-foreground">ลงลายเซ็นและกด "ยืนยันลายเซ็น" ก่อน จึงจะกดอนุมัติได้</p>}
               </>
             )}
 
             {mode === "reject" && (
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="reject-name" className="text-xs text-muted-foreground block mb-1.5">ชื่อผู้แจ้ง</label>
-                  <input
-                    id="reject-name" type="text" value={rejectName}
-                    onChange={(e) => setRejectName(e.target.value)}
-                    placeholder={report.customerSnapshot.contactName || "ชื่อ-นามสกุล"}
-                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 focus:outline-none"
-                  />
+              <>
+                <div className="px-5 py-5 flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="reject-name" className={field.label}>ชื่อผู้แจ้ง</label>
+                    <input
+                      id="reject-name" type="text" value={rejectName}
+                      onChange={(e) => setRejectName(e.target.value)}
+                      placeholder={report.customerSnapshot.contactName || "ชื่อ-นามสกุล"}
+                      className={`${field.input} w-full`}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="reject-reason" className={field.label}>เหตุผลที่ไม่อนุมัติ / สิ่งที่ต้องแก้ไข <span className="text-[#b93636]">*</span></label>
+                    <textarea
+                      id="reject-reason" rows={4} value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      className={`${field.textarea} w-full resize-y`}
+                    />
+                  </div>
+                  {submitError && <p role="alert" className={field.error}>{submitError}</p>}
                 </div>
-                <div>
-                  <label htmlFor="reject-reason" className="text-xs text-muted-foreground block mb-1.5">เหตุผลที่ไม่อนุมัติ / สิ่งที่ต้องแก้ไข <span className="text-[#e05252]">*</span></label>
-                  <textarea
-                    id="reject-reason" rows={4} value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 focus:outline-none"
-                  />
-                </div>
-                {submitError && <p role="alert" className="text-xs text-[#e05252]">{submitError}</p>}
-                <div className="flex flex-col sm:flex-row gap-2.5">
+                <div className="px-5 py-4 border-t border-[#eef1f6] flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5">
                   <button
-                    onClick={() => submit({ decision: "rejected", rejectReason, signedName: rejectName.trim() || report.customerSnapshot.contactName })}
-                    disabled={!rejectReason.trim() || submitting}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />} ยืนยันไม่อนุมัติ
-                  </button>
-                  <button
+                    type="button"
                     onClick={() => setMode("idle")}
                     disabled={submitting}
-                    className="flex-1 px-4 py-2.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    className={btn.secondary}
                   >
                     ย้อนกลับ
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => submit({ decision: "rejected", rejectReason, signedName: rejectName.trim() || report.customerSnapshot.contactName })}
+                    disabled={!rejectReason.trim() || submitting}
+                    className={btn.danger}
+                  >
+                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />} ยืนยันไม่อนุมัติ
+                  </button>
                 </div>
-              </div>
+              </>
             )}
           </section>
         )}

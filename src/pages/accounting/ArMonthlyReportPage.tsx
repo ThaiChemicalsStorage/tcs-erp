@@ -1,29 +1,21 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, Printer } from "lucide-react";
+import { Printer } from "lucide-react";
 import { fetchArDocuments, DOC_TYPE_LABEL_KEY, type ArDocument, type ArDocumentType } from "../../lib/accounting";
 import { formatQuoteDateThai } from "../../lib/quotes";
-import { EmptyState } from "../../components/EmptyState";
 import { useI18n } from "../../lib/i18n";
+import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
+import { btn, surface } from "../../components/ui/styles";
+import { MonthField, Pill, TotalsStrip } from "./accountingUi";
+import { currentMonthLocal, money, thaiMonthLabel } from "./accountingFormat";
+import { REPORT } from "./reportTable";
 
 // หน้าสรุปเอกสารบัญชีประจำเดือน — ตอบโจทย์ที่บัญชีขอไว้ (2026-08-18) ว่าต้อง "ดึงข้อมูลได้ว่าเดือนนี้
 // เราออกเอกสารเลขที่อะไรไปแล้วบ้าง บริษัทอะไร วันที่เท่าไหร่ รวมทั้งหมดเท่าไหร่ ยอดรวมเท่าไหร่
 // เพื่อในการตรวจเช็คเวลาส่งยื่นภาษี" — จัดกลุ่มตามประเภทเอกสาร พร้อมยอดรวมต่อประเภทและยอดรวมใบกำกับภาษี
 // Monthly accounting-document summary for tax-filing checks — grouped per document type with
 // per-type counts/totals and a tax-invoice (AR+IV) grand total for the VAT return.
+// พิมพ์แบบ Pattern B (พิมพ์หน้าจอตัวเอง) — class `print:*` ในไฟล์นี้คุมหน้าตาบนกระดาษ ห้ามตัดทิ้งตอนแต่งหน้าจอ
 const SECTION_ORDER: ArDocumentType[] = ["AR", "IV", "BI", "RE"];
-
-function currentMonthLocal(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-const THAI_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-
-function thaiMonthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  if (!y || !m) return month;
-  return `${THAI_MONTHS[m - 1]} ${y + 543}`;
-}
 
 export function ArMonthlyReportPage() {
   const { t } = useI18n();
@@ -49,7 +41,6 @@ export function ArMonthlyReportPage() {
   const loadError = current?.error === true;
   const documents = current?.documents ?? [];
 
-  const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
   const active = (docs: ArDocument[]) => docs.filter((d) => d.status === "issued");
 
   // ยอดรวมใบกำกับภาษี (AR + IV) สำหรับกระทบยอดยื่น ภ.พ.30 — ไม่รวมเอกสารที่ยกเลิก
@@ -57,31 +48,22 @@ export function ArMonthlyReportPage() {
   const taxValueTotal = taxInvoices.reduce((s, d) => s + d.valueAmount, 0);
   const taxVatTotal = taxInvoices.reduce((s, d) => s + d.vatAmount, 0);
   const taxNetTotal = taxInvoices.reduce((s, d) => s + d.netTotal, 0);
+  const copies = t("accounting.monthly.unit.copies");
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:overflow-visible print:p-0">
-      <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("accounting.monthly.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("accounting.monthly.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            {t("accounting.monthly.monthLabel")}
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => { if (e.target.value) setMonth(e.target.value); }}
-              className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-          </label>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
-          >
-            <Printer size={13} /> {t("accounting.monthly.printBtn")}
-          </button>
-        </div>
+    <div className={REPORT.page}>
+      <div className="print:hidden">
+        <ListPageHeader
+          module={t("nav.group.accounting")}
+          title={t("accounting.monthly.title")}
+          description={t("accounting.monthly.subtitle")}
+          actions={<>
+            <MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} />
+            <button type="button" onClick={() => window.print()} className={btn.secondary}>
+              <Printer size={16} /> {t("accounting.monthly.printBtn")}
+            </button>
+          </>}
+        />
       </div>
 
       <p className="hidden print:block text-lg font-semibold">{t("accounting.monthly.printHeadingPrefix")} {thaiMonthLabel(month)}</p>
@@ -91,28 +73,28 @@ export function ArMonthlyReportPage() {
           {[...Array(4)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}
         </div>
       ) : loadError ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <p className="text-sm text-muted-foreground">{t("accounting.monthly.error.loadFailed")}</p>
-          <button
-            onClick={() => setAttempt((a) => a + 1)}
-            className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
-          >
-            {t("accounting.monthly.retry")}
-          </button>
+        <div className={surface.card}>
+          <ListEmpty
+            title={t("accounting.monthly.error.loadFailed")}
+            action={<button type="button" onClick={() => setAttempt((a) => a + 1)} className={btn.secondary}>{t("accounting.monthly.retry")}</button>}
+          />
         </div>
       ) : documents.length === 0 ? (
-        <EmptyState icon={CalendarDays} title={t("accounting.monthly.empty.title")} description={`${t("accounting.monthly.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+        <div className={surface.card}>
+          <ListEmpty title={t("accounting.monthly.empty.title")} hint={`${t("accounting.monthly.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+        </div>
       ) : (
         <>
-          <div className="bg-card border border-border rounded-xl p-4 print:border-black">
-            <h2 className="text-sm font-semibold text-foreground mb-2">{t("accounting.monthly.taxSummary.headingPrefix")} {thaiMonthLabel(month)} {t("accounting.monthly.taxSummary.headingSuffix")}</h2>
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.kpi.count")}</p><p className="font-mono font-bold text-foreground mt-0.5">{taxInvoices.length}</p></div>
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.valueBeforeVat")}</p><p className="font-mono font-bold text-foreground mt-0.5">{money(taxValueTotal)}</p></div>
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.kpi.vat7")}</p><p className="font-mono font-bold text-foreground mt-0.5">{money(taxVatTotal)}</p></div>
-              <div><p className="text-xs text-muted-foreground">{t("accounting.monthly.kpi.netTotal")}</p><p className="font-mono font-bold text-[#207e52] mt-0.5">{money(taxNetTotal)}</p></div>
-            </div>
-          </div>
+          <TotalsStrip
+            title={`${t("accounting.monthly.taxSummary.headingPrefix")} ${thaiMonthLabel(month)}`}
+            sub={t("accounting.monthly.taxSummary.headingSuffix")}
+            items={[
+              { label: t("accounting.monthly.kpi.count"), value: taxInvoices.length, unit: copies },
+              { label: t("accounting.monthly.valueBeforeVat"), value: money(taxValueTotal), alignEnd: true },
+              { label: t("accounting.monthly.kpi.vat7"), value: money(taxVatTotal), alignEnd: true },
+              { label: t("accounting.monthly.kpi.netTotal"), value: money(taxNetTotal), alignEnd: true, strong: true },
+            ]}
+          />
 
           {SECTION_ORDER.map((docType) => {
             const sectionDocs = documents.filter((d) => d.docType === docType).sort((a, b) => a.docNo.localeCompare(b.docNo));
@@ -120,47 +102,60 @@ export function ArMonthlyReportPage() {
             const sectionActive = active(sectionDocs);
             const sectionTotal = sectionActive.reduce((s, d) => s + d.netTotal, 0);
             return (
-              <div key={docType} className="bg-card border border-border rounded-xl overflow-hidden print:border-black" style={{ breakInside: "avoid" }}>
-                <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border">
-                  <h2 className="text-sm font-semibold text-foreground">{t(DOC_TYPE_LABEL_KEY[docType])} ({docType})</h2>
-                  <p className="text-xs text-muted-foreground font-mono">{sectionActive.length} {t("accounting.monthly.unit.copies")} · {t("accounting.monthly.totalPrefix")} {money(sectionTotal)} {t("accounting.monthly.currency.baht")}</p>
+              <section key={docType} className={REPORT.card} style={{ breakInside: "avoid" }}>
+                <div className={REPORT.cardHead}>
+                  <span className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center print:hidden">{docType}</span>
+                  <h2 className="flex-1 text-base font-semibold text-foreground print:text-sm">{t(DOC_TYPE_LABEL_KEY[docType])} ({docType})</h2>
+                  <p className="text-[13px] text-muted-foreground print:text-xs">
+                    {sectionActive.length} {copies} · {t("accounting.monthly.totalPrefix")} <span className="font-semibold tabular-nums text-foreground">{money(sectionTotal)}</span> {t("accounting.monthly.currency.baht")}
+                  </p>
                 </div>
                 <div className="overflow-x-auto print:overflow-visible">
-                  <table className="w-full print:text-[9px]">
+                  <table className={REPORT.table}>
                     <thead>
-                      <tr className="border-b border-border">
-                        {[t("accounting.monthly.col.docNo"), t("accounting.monthly.col.date"), t("accounting.monthly.col.company"), t("accounting.monthly.valueBeforeVat"), "VAT", t("accounting.monthly.col.netTotal"), t("accounting.monthly.col.status")].map((h) => (
-                          <th key={h} className="px-4 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap print:whitespace-normal">{h}</th>
-                        ))}
+                      <tr className={REPORT.headRow}>
+                        <th className={REPORT.th}>{t("accounting.monthly.col.docNo")}</th>
+                        <th className={REPORT.th}>{t("accounting.monthly.col.date")}</th>
+                        <th className={REPORT.th}>{t("accounting.monthly.col.company")}</th>
+                        <th className={`${REPORT.thNum}`}>{t("accounting.monthly.valueBeforeVat")}</th>
+                        <th className={`${REPORT.thNum}`}>VAT</th>
+                        <th className={`${REPORT.thNum}`}>{t("accounting.monthly.col.netTotal")}</th>
+                        <th className={REPORT.th}>{t("accounting.monthly.col.status")}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {sectionDocs.map((d) => (
-                        <tr key={d.id} className={`border-b border-border/50 ${d.status === "cancelled" ? "opacity-50" : ""}`}>
-                          <td className={`px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-semibold whitespace-nowrap print:whitespace-normal ${d.status === "cancelled" ? "line-through text-muted-foreground" : "text-[#c9a84c]"}`}>{d.docNo}</td>
-                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-muted-foreground font-mono whitespace-nowrap print:whitespace-normal">{formatQuoteDateThai(d.docDate)}</td>
-                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-sm text-foreground max-w-[280px] truncate print:max-w-none print:overflow-visible print:whitespace-normal print:text-clip" title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
-                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-foreground font-mono whitespace-nowrap print:whitespace-normal">{money(d.valueAmount)}</td>
-                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-foreground font-mono whitespace-nowrap print:whitespace-normal">{money(d.vatAmount)}</td>
-                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-foreground font-mono whitespace-nowrap print:whitespace-normal">{money(d.netTotal)}</td>
-                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs whitespace-nowrap print:whitespace-normal">
-                            {d.status === "cancelled" ? <span className="text-[#c23f3f]">{t("accounting.monthly.status.cancelled")}</span> : <span className="text-[#207e52]">{t("accounting.monthly.status.active")}</span>}
-                          </td>
-                        </tr>
-                      ))}
+                      {sectionDocs.map((d) => {
+                        const cancelled = d.status === "cancelled";
+                        const strike = cancelled ? "line-through text-[#8a97ad]" : "text-foreground";
+                        return (
+                          <tr key={d.id} className={`${REPORT.row} ${cancelled ? "print:opacity-50" : ""}`}>
+                            <td className={`${REPORT.td} font-mono text-[13px] font-medium ${strike}`}>{d.docNo}</td>
+                            <td className={`${REPORT.td} ${cancelled ? "text-[#8a97ad]" : "text-[#3d5173]"}`}>{formatQuoteDateThai(d.docDate)}</td>
+                            <td className={`${REPORT.td} font-medium max-w-[280px] truncate print:max-w-none print:overflow-visible print:text-clip ${cancelled ? "text-[#8a97ad]" : "text-foreground"}`} title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
+                            <td className={`${REPORT.td} ${REPORT.num} ${strike}`}>{money(d.valueAmount)}</td>
+                            <td className={`${REPORT.td} ${REPORT.num} ${strike}`}>{money(d.vatAmount)}</td>
+                            <td className={`${REPORT.td} ${REPORT.num} font-semibold ${strike}`}>{money(d.netTotal)}</td>
+                            <td className={REPORT.td}>
+                              {cancelled
+                                ? <Pill tone="grey" label={t("accounting.monthly.status.cancelled")} struck />
+                                : <Pill tone="blue" label={t("accounting.monthly.status.active")} />}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-muted/30">
-                        <td colSpan={3} className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-semibold text-foreground">{t("accounting.monthly.totalPrefix")} {sectionActive.length} {t("accounting.monthly.footer.suffix")}</td>
-                        <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-bold text-foreground whitespace-nowrap print:whitespace-normal">{money(sectionActive.reduce((s, d) => s + d.valueAmount, 0))}</td>
-                        <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-bold text-foreground whitespace-nowrap print:whitespace-normal">{money(sectionActive.reduce((s, d) => s + d.vatAmount, 0))}</td>
-                        <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-bold text-foreground whitespace-nowrap print:whitespace-normal">{money(sectionTotal)}</td>
+                      <tr className={REPORT.footRow}>
+                        <td colSpan={3} className={REPORT.td}>{t("accounting.monthly.totalPrefix")} {sectionActive.length} {t("accounting.monthly.footer.suffix")}</td>
+                        <td className={`${REPORT.td} ${REPORT.num}`}>{money(sectionActive.reduce((s, d) => s + d.valueAmount, 0))}</td>
+                        <td className={`${REPORT.td} ${REPORT.num}`}>{money(sectionActive.reduce((s, d) => s + d.vatAmount, 0))}</td>
+                        <td className={`${REPORT.td} ${REPORT.num}`}>{money(sectionTotal)}</td>
                         <td />
                       </tr>
                     </tfoot>
                   </table>
                 </div>
-              </div>
+              </section>
             );
           })}
         </>

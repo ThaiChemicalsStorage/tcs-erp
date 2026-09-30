@@ -1,25 +1,23 @@
 import { useState } from "react";
-import { Wrench, Search, X, Plus } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { EmptyState } from "../../components/EmptyState";
 import type { ServiceReportListItem, ServiceReportStatus } from "../../lib/serviceReports";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { btn, table } from "../../components/ui/styles";
+import { ServiceStatusBadge } from "./serviceUi";
 
 const FILTER_ALL = "all";
+type StatusTab = typeof FILTER_ALL | ServiceReportStatus;
+const PAGE_SIZE = 20;
 
-const statusStyle: Record<ServiceReportStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  Completed: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-  Cancelled: "bg-[#e05252]/10 text-[#c23f3f] border border-[#e05252]/20",
-};
-
-// แสดงตารางรายการรายงานบริการ พร้อมตัวกรองและช่องค้นหา
-// Renders the Service Report list table with filters and search.
+// แสดงตารางรายการรายงานบริการ — ดีไซน์ใหม่ (บอร์ด ServiceList): แท็บสถานะพร้อมจำนวน → ค้นหา/ช่วงวันที่ → ตาราง → แบ่งหน้า
+// Renders the Service Report list — REDESIGN board ServiceList: status tabs with counts → search/date → table → pagination.
 export function ServiceList({
   serviceReports,
   currentUserId,
@@ -41,160 +39,142 @@ export function ServiceList({
   ];
   const tour = useModuleTour("service", currentUserId, tourSteps);
 
-  const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  const [filterStatus, setFilterStatus] = useState<StatusTab>(FILTER_ALL);
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  const statusLabel: Record<ServiceReportStatus, string> = {
-    Draft: t("service.status.draft"),
-    Completed: t("service.status.completed"),
-    Cancelled: t("service.status.cancelled"),
-  };
-
   const dateRangeResolved = resolveRange(dateRange);
-  const filtered = serviceReports
+  // ตัวเลขบนแท็บนับหลังกรองวันที่/คำค้น แต่ก่อนกรองสถานะ — แท็บตอบว่า "ในผลค้นหานี้ มีสถานะไหนกี่ใบ"
+  const searched = serviceReports
     .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
-    .filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus)
     .filter((s) => !normalizedSearch || [s.id, s.customerName, s.serviceLocation, s.serviceSystemName, s.projectOrJobCode, s.assignedServiceEngineerName]
       .some((v) => v.toLowerCase().includes(normalizedSearch)));
+  const filtered = searched.filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus);
+  const countOf = (s: ServiceReportStatus) => searched.filter((r) => r.status === s).length;
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const resetPage = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setPage(1); };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("service.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("service.pageSubtitle")}</p>
-        </div>
-        {/* The replay button sits outside the canCreate gate on purpose — a read-only role needs
-            the walkthrough as much as anyone, and this must never be conditional on tour state. */}
-        <div className="flex items-center gap-2">
-          <TourReplayButton onClick={tour.start} />
-          {canCreate && (
-            <button
-              onClick={onCreate}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-            >
-              <Plus size={15} /> {t("service.newReport")}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div data-tour="service-summary" className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: t("quotation.filterAll"), count: serviceReports.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: t("service.status.draft"), count: serviceReports.filter((s) => s.status === "Draft").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: t("service.status.completed"), count: serviceReports.filter((s) => s.status === "Completed").length, color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: t("service.status.cancelled"), count: serviceReports.filter((s) => s.status === "Cancelled").length, color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
-        ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
-              <Wrench size={15} style={{ color: s.color }} />
-            </div>
-            <p className="text-xl font-bold text-foreground font-mono">{s.count}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div data-tour="service-filters" className="flex items-center gap-3 flex-wrap">
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("service.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {[FILTER_ALL, "Draft", "Completed", "Cancelled"].map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as ServiceReportStatus] ?? s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div data-tour="service-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        {serviceReports.length === 0 ? (
-          <EmptyState
-            icon={Wrench}
-            title={t("service.empty.title")}
-            description={t("service.empty.description")}
-            actionLabel={canCreate ? t("service.newReport") : undefined}
-            onAction={canCreate ? onCreate : undefined}
-            compact
-          />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Wrench size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("service.noFilterResults")}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {[
-                    t("service.col.reportNo"),
-                    t("service.col.customer"),
-                    t("service.col.system"),
-                    t("service.col.engineer"),
-                    t("service.col.inspectionDate"),
-                    t("service.col.status"),
-                    t("service.col.updatedAt"),
-                  ].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s) => (
-                  <tr
-                    key={s.id}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`${t("service.openRow")} ${s.id}`}
-                    onClick={() => onOpen(s.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onOpen(s.id);
-                      }
-                    }}
-                    className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-                  >
-                    <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{s.id}</td>
-                    <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[220px] truncate" title={s.customerName}>{s.customerName || "—"}</td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate" title={s.serviceSystemName}>{s.serviceSystemName || "—"}</td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{s.assignedServiceEngineerName || "—"}</td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(s.inspectionDate)}</td>
-                    <td className="px-4 py-3.5">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[s.status]}`}>
-                        {statusLabel[s.status] ?? s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(s.updatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 pt-6 pb-8 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("service.pageTitle")}
+        title={t("service.listTitle")}
+        // The replay button sits outside the canCreate gate on purpose — a read-only role needs
+        // the walkthrough as much as anyone, and this must never be conditional on tour state.
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={canCreate && (
+          <button type="button" onClick={onCreate} className={btn.primary}>
+            <Plus size={16} /> {t("service.newReport")}
+          </button>
         )}
-      </div>
+      />
+
+      <ListCard>
+        <div data-tour="service-summary">
+          <ListTabs<StatusTab>
+            ariaLabel={t("service.tabsAria")}
+            active={filterStatus}
+            onChange={resetPage(setFilterStatus)}
+            tabs={[
+              { key: FILTER_ALL, label: t("quotation.filterAll"), count: searched.length },
+              { key: "Draft", label: t("service.status.draft"), count: countOf("Draft") },
+              { key: "Completed", label: t("service.status.completed"), count: countOf("Completed") },
+              { key: "Cancelled", label: t("service.status.cancelled"), count: countOf("Cancelled") },
+            ]}
+          />
+        </div>
+        <div data-tour="service-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={resetPage(setSearchQuery)}
+            searchPlaceholder={t("service.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <DateRangeFilter value={dateRange} onChange={resetPage(setDateRange)} />
+          </ListToolbar>
+        </div>
+
+        <div data-tour="service-table">
+          {serviceReports.length === 0 ? (
+            <ListEmpty
+              title={t("service.empty.title")}
+              hint={t("service.empty.description")}
+              action={canCreate ? (
+                <button type="button" onClick={onCreate} className={btn.primary}><Plus size={16} /> {t("service.newReport")}</button>
+              ) : undefined}
+            />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("service.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px]">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={`${table.th} w-[170px]`}>{t("service.col.reportNo")}</th>
+                    <th className={table.th}>{t("service.col.customerLocation")}</th>
+                    <th className={`${table.th} w-[210px]`}>{t("service.col.system")}</th>
+                    <th className={`${table.th} w-[150px]`}>{t("service.col.engineer")}</th>
+                    <th className={`${table.th} w-[128px]`}>{t("service.col.inspectionDate")}</th>
+                    <th className={`${table.th} w-[110px]`}>{t("service.col.status")}</th>
+                    <th className={`${table.th} w-[118px]`}>{t("service.col.updatedAt")}</th>
+                    <th className={`${table.th} w-10`}><span className="sr-only">{t("service.openRow")}</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((s) => (
+                    <tr
+                      key={s.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${t("service.openRow")} ${s.id}`}
+                      onClick={() => onOpen(s.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onOpen(s.id);
+                        }
+                      }}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} ${table.code} whitespace-nowrap`}>{s.id}</td>
+                      <td className={`${table.td} max-w-0`}>
+                        <span className="flex flex-col min-w-0 leading-snug">
+                          <span className="text-sm font-medium text-foreground truncate" title={s.customerName}>{s.customerName || t("common.dash")}</span>
+                          {s.serviceLocation && <span className="text-xs text-muted-foreground truncate" title={s.serviceLocation}>{s.serviceLocation}</span>}
+                        </span>
+                      </td>
+                      <td className={`${table.td} max-w-[210px]`}>
+                        <span className="block text-sm text-foreground truncate" title={s.serviceSystemName}>{s.serviceSystemName || t("common.dash")}</span>
+                      </td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap max-w-[150px] truncate`}>{s.assignedServiceEngineerName || t("common.dash")}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(s.inspectionDate) || t("common.dash")}</td>
+                      <td className={table.td}><ServiceStatusBadge status={s.status} /></td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(s.updatedAt)}</td>
+                      <td className={`${table.td} text-[#a3aec2] group-hover:text-foreground`}><ChevronRight size={16} className="ml-auto" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={(currentPage - 1) * PAGE_SIZE + pageRows.length}
+            total={filtered.length}
+            onPage={setPage}
+          />
+        )}
+      </ListCard>
     </div>
   );
 }
