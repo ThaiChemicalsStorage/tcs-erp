@@ -1,37 +1,31 @@
 import { useCallback, useMemo, useState } from "react";
-import {
-  Plus, Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Pencil, Copy, Archive, ArchiveRestore, Trash2, Tags, Package, HelpCircle, Upload,
-} from "lucide-react";
+import { Plus, ChevronUp, ChevronDown, ChevronRight, Tags, Package, Upload, Layers } from "lucide-react";
 import type { DriveStep } from "driver.js";
-import type { Product, ProductCategory } from "../../lib/products";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { type Product, type ProductCategory, isKitProduct, kitBreakdownText } from "../../lib/products";
 import { useModuleTour } from "../../components/GuidedTour";
 import { EmptyState } from "../../components/EmptyState";
-import { StatusBadge } from "../../components/StatusBadge";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { SelectBox } from "../../components/ui/Field";
+import { btn, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
+import { Tag } from "../stock/inventoryUi";
+import { fmtProductDate, rowOpenProps } from "../stock/inventoryFormat";
 
-type SortKey = "code" | "name" | "category" | "unit" | "defaultPrice" | "status" | "updatedAt";
+type SortKey = "code" | "name" | "category" | "unit" | "defaultPrice" | "updatedAt";
+type StatusTab = "active" | "archived";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 20;
 const ALL_CATEGORIES = "all";
 
-// จัดรูปแบบวันที่ ISO ให้เป็นรูปแบบไทยแบบสั้น
-// Formats an ISO date string into a short Thai date format.
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
-}
-
-// หน้ารายการสินค้า พร้อมค้นหา กรองตามหมวดหมู่ เรียงลำดับ และแบ่งหน้า
-// Product list page with search, category filtering, sorting, and pagination.
+// หน้ารายการสินค้า (ดีไซน์ใหม่ 2026-09-30) — แท็บ ใช้งาน/เก็บถาวร แทนช่องติ๊ก · ค้นหา + หมวดหมู่ ·
+// คลิกหัวคอลัมน์เพื่อเรียง · ทั้งแถวกดเปิดแผงข้อมูลสินค้า (ทำสำเนา/เก็บถาวร/ลบ อยู่ในเมนูท้ายแผง)
+// Product list — active/archived tabs, search + category filter, sortable headers; a row opens the product drawer.
 export function ProductList({
   products,
   categories,
   currentUserId,
-  onEdit,
-  onArchiveToggle,
-  onDelete,
-  onDuplicate,
+  onOpen,
   onCreateNew,
   onManageCategories,
   onImport,
@@ -39,10 +33,7 @@ export function ProductList({
   products: Product[];
   categories: ProductCategory[];
   currentUserId: string;
-  onEdit: (id: string) => void;
-  onArchiveToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-  onDuplicate: (id: string) => void;
+  onOpen: (id: string) => void;
   onCreateNew: () => void;
   onManageCategories: () => void;
   /** เปิดกล่องนำเข้าสินค้าจากไฟล์ Excel (2026-09-04) */
@@ -54,29 +45,33 @@ export function ProductList({
     { element: '[data-tour="products-create"]', popover: { title: t("tour.products.create.title"), description: t("tour.products.create.desc"), side: "bottom" } },
     { element: '[data-tour="products-import"]', popover: { title: t("tour.products.import.title"), description: t("tour.products.import.desc"), side: "bottom" } },
     { element: '[data-tour="products-categories"]', popover: { title: t("tour.products.categories.title"), description: t("tour.products.categories.desc"), side: "bottom" } },
-    { element: '[data-tour="products-toolbar"]', popover: { title: t("tour.products.toolbar.title"), description: t("tour.products.toolbar.desc"), side: "bottom" } },
-    { element: '[data-tour="products-table"]', popover: { title: t("tour.products.table.title"), description: t("tour.products.table.desc"), side: "top" } },
+    { element: '[data-tour="products-toolbar"]', popover: { title: t("tour.products.toolbar.title"), description: t("tour.products.toolbar.descTabs"), side: "bottom" } },
+    { element: '[data-tour="products-table"]', popover: { title: t("tour.products.table.title"), description: t("tour.products.table.descDrawer"), side: "top" } },
   ];
   const tour = useModuleTour("products", currentUserId, tourSteps);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES);
-  const [showArchived, setShowArchived] = useState(false);
+  const [statusTab, setStatusTab] = useState<StatusTab>("active");
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
   const [page, setPage] = useState(1);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const categoryName = useCallback(
     (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified"),
     [categories, t],
   );
 
+  const counts = useMemo(() => ({
+    active: products.filter((p) => !p.archived).length,
+    archived: products.filter((p) => p.archived).length,
+  }), [products]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return products
-      .filter((p) => (showArchived ? true : !p.archived))
+      .filter((p) => (statusTab === "archived" ? p.archived : !p.archived))
       .filter((p) => (categoryFilter === ALL_CATEGORIES ? true : p.categoryId === categoryFilter))
       .filter((p) => (q ? p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) : true));
-  }, [products, search, categoryFilter, showArchived]);
+  }, [products, search, categoryFilter, statusTab]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -88,7 +83,6 @@ export function ProductList({
         case "category": return categoryName(a.categoryId).localeCompare(categoryName(b.categoryId)) * dir;
         case "unit": return a.unit.localeCompare(b.unit) * dir;
         case "defaultPrice": return (a.defaultPrice - b.defaultPrice) * dir;
-        case "status": return (Number(a.archived) - Number(b.archived)) * dir;
         case "updatedAt": return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
         default: return 0;
       }
@@ -107,186 +101,142 @@ export function ProductList({
     setPage(1);
   };
 
-  const columns: { key: SortKey; label: string }[] = [
-    { key: "code", label: t("products.col.code") },
-    { key: "name", label: t("products.col.name") },
-    { key: "category", label: t("products.col.category") },
-    { key: "unit", label: t("products.col.unit") },
-    { key: "defaultPrice", label: t("products.col.price") },
-    { key: "status", label: t("products.col.status") },
-    { key: "updatedAt", label: t("products.col.updatedAt") },
+  const columns: { key: SortKey; label: string; className: string; right?: boolean }[] = [
+    { key: "code", label: t("products.col.code"), className: "w-[168px]" },
+    { key: "name", label: t("products.col.name"), className: "" },
+    { key: "category", label: t("products.col.category"), className: "w-[190px]" },
+    { key: "unit", label: t("products.col.unit"), className: "w-[90px]" },
+    { key: "defaultPrice", label: t("products.col.price"), className: "w-[140px]", right: true },
+    { key: "updatedAt", label: t("products.col.updatedAt"), className: "w-[140px]" },
+  ];
+
+  const tabs = [
+    { key: "active" as const, label: t("common.status.active"), count: counts.active },
+    { key: "archived" as const, label: t("common.status.archived"), count: counts.archived },
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("products.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("products.pageSubtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={tour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
-          >
-            <HelpCircle size={15} />
-          </button>
-          <button data-tour="products-import" onClick={onImport} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all">
-            <Upload size={15} /> {t("products.importFromFile")}
-          </button>
-          <button data-tour="products-categories" onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all">
-            <Tags size={15} /> {t("products.manageCategories")}
-          </button>
-          <button data-tour="products-create" onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-            <Plus size={15} /> {t("products.addNew")}
-          </button>
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.inventory")}
+        title={t("products.pageTitle")}
+        description={t("products.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={(
+          <>
+            <button data-tour="products-categories" onClick={onManageCategories} className={btn.secondary}>
+              <Tags size={16} /> {t("products.manageCategories")}
+            </button>
+            <button data-tour="products-import" onClick={onImport} className={btn.secondary}>
+              <Upload size={16} /> {t("products.importFromFile")}
+            </button>
+            <button data-tour="products-create" onClick={onCreateNew} className={btn.primary}>
+              <Plus size={16} /> {t("products.addNew")}
+            </button>
+          </>
+        )}
+      />
 
-      <div data-tour="products-toolbar" className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
-          <Search size={14} className="text-muted-foreground flex-shrink-0" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder={t("products.searchPlaceholder")}
-            className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
-          />
-        </div>
-        <select
-          value={categoryFilter}
-          onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-          className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none"
-        >
-          <option value={ALL_CATEGORIES}>{t("products.allCategories")}</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.archived ? t("products.categoryArchivedSuffix") : ""}</option>
-          ))}
-        </select>
-        <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-muted-foreground ml-auto">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
-            className="w-4 h-4 rounded border-border accent-[#c9a84c]"
-          />
-          {t("products.showArchived")}
-        </label>
-      </div>
-
-      <div data-tour="products-table" className="bg-card border border-border rounded-xl overflow-hidden">
+      <ListCard>
         {products.length === 0 ? (
-          <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={t("empty.products.action")} onAction={onCreateNew} compact />
-        ) : sorted.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Package size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("products.noFilterResults")}</p>
+          <div data-tour="products-table">
+            <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={t("empty.products.action")} onAction={onCreateNew} compact />
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {columns.map((col) => (
-                    <th
-                      key={col.key}
-                      aria-sort={sort.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-                      className="px-4 py-3 text-left whitespace-nowrap"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(col.key)}
-                        className="flex items-center gap-1 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider select-none hover:text-foreground transition-colors"
-                      >
-                        {col.label}
-                        {sort.key === col.key && (sort.dir === "asc" ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
-                      </button>
-                    </th>
+            <div data-tour="products-toolbar">
+              <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); setPage(1); }} ariaLabel={t("products.col.status")} />
+              <ListToolbar
+                search={search}
+                onSearch={(v) => { setSearch(v); setPage(1); }}
+                searchPlaceholder={t("products.searchPlaceholder")}
+                count={t("ui.itemCount").replace("{n}", String(sorted.length))}
+              >
+                <SelectBox
+                  aria-label={t("products.col.category")}
+                  value={categoryFilter}
+                  onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+                  className="w-full sm:w-[220px]"
+                >
+                  <option value={ALL_CATEGORIES}>{t("products.allCategories")}</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{c.archived ? t("products.categoryArchivedSuffix") : ""}</option>
                   ))}
-                  <th className="px-4 py-3 w-32" />
-                </tr>
-              </thead>
-              <tbody>
-                {pageItems.map((p) => (
-                  <tr key={p.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
-                    <td className="px-4 py-3 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.code}</td>
-                    <td className="px-4 py-3 text-sm text-foreground font-medium max-w-[240px] truncate" title={p.name}>{p.name}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{categoryName(p.categoryId)}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{p.unit}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-foreground">฿{p.defaultPrice.toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge
-                        status={p.archived ? "archived" : "active"}
-                        label={p.archived ? t("common.status.archived") : t("common.status.active")}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{fmtDate(p.updatedAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <button onClick={() => onEdit(p.id)} title={t("common.edit")} aria-label={`${t("common.edit")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => onDuplicate(p.id)} title={t("products.action.duplicate")} aria-label={`${t("products.action.duplicate")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
-                          <Copy size={14} />
-                        </button>
-                        <button onClick={() => onArchiveToggle(p.id)} title={p.archived ? t("common.unarchive") : t("common.archive")} aria-label={`${p.archived ? t("common.unarchive") : t("common.archive")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
-                          {p.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                        </button>
-                        <button onClick={() => setConfirmDeleteId(p.id)} title={t("common.delete")} aria-label={`${t("common.delete")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </SelectBox>
+              </ListToolbar>
             </div>
 
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <p className="text-xs text-muted-foreground font-mono">
-                {t("products.showingRange")
-                  .replace("{a}", String((clampedPage - 1) * PAGE_SIZE + 1))
-                  .replace("{b}", String(Math.min(clampedPage * PAGE_SIZE, sorted.length)))
-                  .replace("{c}", String(sorted.length))}
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={clampedPage === 1}
-                  className="p-1.5 rounded-lg border border-[#c3ccda] bg-white text-muted-foreground hover:text-foreground hover:bg-[#f4f6fa] disabled:opacity-40 disabled:pointer-events-none transition-all"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="text-xs font-mono text-foreground px-2">{clampedPage} / {totalPages}</span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={clampedPage === totalPages}
-                  className="p-1.5 rounded-lg border border-[#c3ccda] bg-white text-muted-foreground hover:text-foreground hover:bg-[#f4f6fa] disabled:opacity-40 disabled:pointer-events-none transition-all"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
+            <div data-tour="products-table">
+              {sorted.length === 0 ? (
+                <ListEmpty title={t("products.noFilterResults")} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] table-fixed">
+                    <thead>
+                      <tr className={table.head}>
+                        {columns.map((col) => (
+                          <th
+                            key={col.key}
+                            aria-sort={sort.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                            className={`${table.th} ${col.className}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleSort(col.key)}
+                              className={`inline-flex items-center gap-1 select-none hover:text-foreground transition-colors ${col.right ? "w-full justify-end" : ""}`}
+                            >
+                              {col.label}
+                              {sort.key === col.key && (sort.dir === "asc" ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+                            </button>
+                          </th>
+                        ))}
+                        <th className={`${table.th} w-12`}><span className="sr-only">{t("common.edit")}</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageItems.map((p) => {
+                        const kit = isKitProduct(p);
+                        const sub = kit ? `${t("kit.perKit")} ${kitBreakdownText(p.kitComponents!, 1)}` : p.description;
+                        return (
+                          <tr key={p.id} {...rowOpenProps(() => onOpen(p.id), `${p.code} ${p.name}`)} className={`${table.row} group cursor-pointer text-sm outline-none focus-visible:bg-[#f8f9fc]`}>
+                            <td className={`${table.td} ${table.code} break-all`}>{p.code}</td>
+                            <td className={table.td}>
+                              <span className="flex items-center gap-2 min-w-0">
+                                <span className="font-medium text-foreground truncate" title={p.name}>{p.name}</span>
+                                {kit && <Tag tone="blue" icon={Layers}>{t("products.tag.kit")}</Tag>}
+                                {p.isTool && <Tag tone="grey">{t("stock.toolBadge")}</Tag>}
+                              </span>
+                              {sub && <span className="block text-xs text-muted-foreground truncate" title={sub}>{sub}</span>}
+                            </td>
+                            <td className={`${table.td} text-[#3d5173] truncate`}>{categoryName(p.categoryId)}</td>
+                            <td className={`${table.td} text-[#3d5173] truncate`}>{p.unit || "—"}</td>
+                            <td className={`${table.td} ${table.money}`}>฿{p.defaultPrice.toLocaleString()}</td>
+                            <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{fmtProductDate(p.updatedAt)}</td>
+                            <td className={`${table.td} text-right`}>
+                              <ChevronRight size={18} aria-hidden="true" className="inline text-[#a3aec2] group-hover:text-foreground transition-colors" />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+
+            {sorted.length > 0 && (
+              <ListPagination
+                page={clampedPage}
+                pageCount={totalPages}
+                from={(clampedPage - 1) * PAGE_SIZE + 1}
+                to={Math.min(clampedPage * PAGE_SIZE, sorted.length)}
+                total={sorted.length}
+                onPage={setPage}
+              />
+            )}
           </>
         )}
-      </div>
-
-      <ConfirmDialog
-        open={confirmDeleteId !== null}
-        title={t("products.deleteConfirmTitle")}
-        message={t("products.deleteConfirmMessage")}
-        confirmLabel={t("products.deletePermanently")}
-        danger
-        onCancel={() => setConfirmDeleteId(null)}
-        onConfirm={() => { if (confirmDeleteId) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
-      />
+      </ListCard>
     </div>
   );
 }

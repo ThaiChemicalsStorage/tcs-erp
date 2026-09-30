@@ -1,5 +1,5 @@
-import { useCallback, useId, useState } from "react";
-import { Upload, FileSpreadsheet, Loader2, AlertTriangle, X, Download, CheckCircle2 } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Upload, Loader2, AlertTriangle, Download, CheckCircle2, Info } from "lucide-react";
 import {
   parseProductRows, buildProductImportPreview,
   PRODUCT_IMPORT_TEMPLATE_HEADERS, PRODUCT_IMPORT_TEMPLATE_SAMPLE, PRODUCT_IMPORT_MAX_ROWS,
@@ -8,8 +8,9 @@ import {
 import { importProducts } from "../../lib/products";
 import type { Product, ProductCategory } from "../../lib/products";
 import { ApiError } from "../../lib/apiClient";
-import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useI18n } from "../../lib/i18n";
+import { btn } from "../../components/ui/styles";
+import { ImportDialogShell, ImportFileDrop, ImportStat, NoticeBox, WarningBox, BoldCount } from "../stock/inventoryUi";
 
 /**
  * นำเข้าสินค้าจากไฟล์ Excel (2026-09-04) — เจ้าของสั่งว่าเวลาย้ายสินค้าจากอีกระบบเข้ามาต้อง
@@ -33,8 +34,6 @@ export function ProductImportDialog({
   onImported: () => Promise<void> | void;
 }) {
   const { t } = useI18n();
-  const titleId = useId();
-  const inputId = useId();
 
   const [fileName, setFileName] = useState("");
   const [reading, setReading] = useState(false);
@@ -102,175 +101,136 @@ export function ProductImportDialog({
   };
 
   const busy = reading || importing;
-  // Escape ต้องไม่ปิดกล่องระหว่างที่คำขอนำเข้ายังค้างอยู่ — ปุ่มและฉากหลังถูกปิดตอน busy อยู่แล้ว
-  // แต่ Escape ไม่ได้ถูกกัน ถ้าปิดกลางคัน สินค้าเข้าไปจริงแต่ผู้ใช้ไม่เห็นสรุปว่าสร้าง/ข้ามไปกี่รายการ
-  // แล้วมักลากไฟล์เดิมเข้าไปซ้ำ
-  const panelRef = useDialogA11y(useCallback(() => { if (!busy) onClose(); }, [busy, onClose]));
+  const skipped = preview ? preview.duplicates.length + problems.length : 0;
+  const summary = preview && !done ? (
+    <>
+      <BoldCount template={t("products.import.footerCreate")} value={preview.toCreate.length.toLocaleString("th-TH")} />
+      {skipped > 0 && ` · ${t("products.import.footerSkip").replace("{n}", skipped.toLocaleString("th-TH"))}`}
+    </>
+  ) : undefined;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={busy ? undefined : onClose} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId}
-        className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-        <div className="flex items-start justify-between gap-3 p-5 pb-3">
-          <div>
-            <h2 id={titleId} className="text-sm font-semibold text-foreground">
-              {t("products.import.title")}
-            </h2>
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("products.import.subtitle")}</p>
-          </div>
-          <button onClick={onClose} disabled={busy} aria-label={t("common.close")}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-60">
-            <X size={16} />
+    <ImportDialogShell
+      title={t("products.import.title")}
+      subtitle={t("products.import.subtitle")}
+      busy={busy}
+      onClose={onClose}
+      footerSummary={summary}
+      footerActions={(
+        <>
+          <button onClick={onClose} disabled={busy} className={btn.secondary}>
+            {done ? t("common.close") : t("common.cancel")}
           </button>
-        </div>
-
-        <div className="px-5 pb-5 overflow-y-auto space-y-4">
           {!done && (
-            <label
-              htmlFor={inputId}
-              onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                if (busy) return;
-                const file = e.dataTransfer.files?.[0];
-                if (file) void readFile(file);
-              }}
-              className={`flex flex-col items-center justify-center gap-2 py-8 px-4 border-2 border-dashed rounded-xl text-center transition-colors ${
-                busy ? "opacity-60 cursor-wait" : "cursor-pointer"
-              } ${dragging ? "border-[#c9a84c] bg-[#c9a84c]/5" : "border-border hover:border-[#c9a84c]/50"}`}
+            <button
+              onClick={() => void confirmImport()}
+              disabled={busy || !preview || preview.toCreate.length === 0}
+              className={btn.primary}
             >
-              {reading ? <Loader2 size={22} className="animate-spin text-muted-foreground" /> : <Upload size={22} className="text-muted-foreground" />}
-              <span className="text-sm text-foreground">{fileName || t("products.import.dropzone")}</span>
-              <span className="text-xs text-muted-foreground">{t("products.import.dropzoneHint").replace("{max}", String(PRODUCT_IMPORT_MAX_ROWS))}</span>
-              <input
-                id={inputId} type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={busy}
-                onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void readFile(file); }}
-              />
-            </label>
+              {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              {preview ? t("products.import.confirm").replace("{n}", String(preview.toCreate.length)) : t("products.import.confirmEmpty")}
+            </button>
           )}
+        </>
+      )}
+    >
+      <div className="flex items-center gap-3 flex-wrap">
+        {!done && (
+          <ImportFileDrop
+            fileName={fileName}
+            placeholder={t("products.import.dropzone")}
+            hint={t("products.import.dropzoneHint").replace("{max}", String(PRODUCT_IMPORT_MAX_ROWS))}
+            reading={reading}
+            disabled={busy}
+            dragging={dragging}
+            onDragging={setDragging}
+            onFile={(file) => void readFile(file)}
+          />
+        )}
+        <button type="button" onClick={() => void downloadTemplate()} className={btn.text}>
+          <Download size={16} /> {t("products.import.downloadTemplate")}
+        </button>
+      </div>
 
-          <button onClick={() => void downloadTemplate()}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <Download size={13} /> {t("products.import.downloadTemplate")}
-          </button>
+      {error && <NoticeBox tone="error" icon={AlertTriangle}>{error}</NoticeBox>}
 
-          {error && (
-            <p className="flex items-start gap-2 text-xs text-[#c23f3f] bg-[#e05252]/10 border border-[#e05252]/20 rounded-lg p-3">
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {error}
+      {done && (
+        <NoticeBox tone="success" icon={CheckCircle2}>
+          <p>{t("products.import.doneCreated").replace("{n}", String(done.created))}</p>
+          {done.skipped > 0 && <p>{t("products.import.doneSkipped").replace("{n}", String(done.skipped))}</p>}
+          {done.categoriesCreated.length > 0 && (
+            <p>{t("products.import.doneCategories").replace("{n}", String(done.categoriesCreated.length))} — {done.categoriesCreated.join(", ")}</p>
+          )}
+        </NoticeBox>
+      )}
+
+      {preview && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <ImportStat label={t("products.import.stat.create")} value={preview.toCreate.length.toLocaleString("th-TH")} tone="green" />
+            <ImportStat label={t("products.import.stat.skip")} value={preview.duplicates.length.toLocaleString("th-TH")} />
+            <ImportStat label={t("products.import.stat.newCategories")} value={preview.newCategories.length.toLocaleString("th-TH")} />
+          </div>
+
+          {preview.newCategories.length > 0 && (
+            <p className="text-[13px] text-[#3d5173] flex items-center gap-2 -mt-1">
+              <Info size={16} className="text-[#1a5fb4] flex-shrink-0" aria-hidden="true" />
+              <span>{t("products.import.newCategoriesNote")} <strong className="font-semibold">{preview.newCategories.join(", ")}</strong></span>
             </p>
           )}
 
-          {done && (
-            <div className="flex items-start gap-2 text-xs text-[#207e52] bg-[#2aa36b]/10 border border-[#2aa36b]/20 rounded-lg p-3">
-              <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <p>{t("products.import.doneCreated").replace("{n}", String(done.created))}</p>
-                {done.skipped > 0 && <p>{t("products.import.doneSkipped").replace("{n}", String(done.skipped))}</p>}
-                {done.categoriesCreated.length > 0 && (
-                  <p>{t("products.import.doneCategories").replace("{n}", String(done.categoriesCreated.length))} — {done.categoriesCreated.join(", ")}</p>
-                )}
+          {unmapped.length > 0 && (
+            <p className="text-[13px] text-muted-foreground">
+              {t("products.import.unmappedNote")} {unmapped.join(", ")}
+            </p>
+          )}
+
+          {preview.toCreate.length > 0 && (
+            <div className="border border-border rounded-[10px] overflow-hidden flex-shrink-0">
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full min-w-[640px]">
+                  <thead className="sticky top-0 bg-[#f8f9fc]">
+                    <tr className="h-9 border-b border-border text-[12.5px] font-semibold text-[#3d5173]">
+                      {[t("products.col.code"), t("products.col.name"), t("products.col.category"), t("products.col.unit"), t("products.col.price")].map((h, i) => (
+                        <th key={h} className={`px-3 first:pl-4 last:pr-4 font-semibold whitespace-nowrap ${i === 4 ? "text-right" : "text-left"}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.toCreate.slice(0, 50).map((r) => (
+                      <tr key={r.rowNumber} className="h-[34px] border-b border-[#eef1f6] text-sm">
+                        <td className="px-3 first:pl-4 font-mono text-[13px] text-[#3d5173] whitespace-nowrap">{r.code}</td>
+                        <td className="px-3 text-foreground">{r.name}</td>
+                        <td className="px-3 text-[#3d5173] whitespace-nowrap">{r.categoryName || "—"}</td>
+                        <td className="px-3 text-[#3d5173] whitespace-nowrap">{r.unit || "—"}</td>
+                        <td className="px-3 last:pr-4 text-right tabular-nums whitespace-nowrap">{r.defaultPrice.toLocaleString("th-TH")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+              {preview.toCreate.length > 50 && (
+                <p className="px-4 py-2 text-xs text-muted-foreground">
+                  {t("products.import.previewTruncated").replace("{n}", String(preview.toCreate.length - 50))}
+                </p>
+              )}
             </div>
           )}
 
-          {preview && (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                <Stat label={t("products.import.stat.create")} value={preview.toCreate.length} accent />
-                <Stat label={t("products.import.stat.skip")} value={preview.duplicates.length} />
-                <Stat label={t("products.import.stat.newCategories")} value={preview.newCategories.length} />
-              </div>
-
-              {preview.newCategories.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t("products.import.newCategoriesNote")} {preview.newCategories.join(", ")}
-                </p>
+          {problems.length > 0 && (
+            <WarningBox title={t("products.import.problemsTitle").replace("{n}", String(problems.length))}>
+              {problems.slice(0, 20).map((p) => (
+                <span key={`${p.rowNumber}-${p.message}`}>
+                  {t("products.import.problemRow").replace("{row}", String(p.rowNumber))} {p.message}
+                </span>
+              ))}
+              {problems.length > 20 && (
+                <span>{t("products.import.problemsTruncated").replace("{n}", String(problems.length - 20))}</span>
               )}
-
-              {unmapped.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t("products.import.unmappedNote")} {unmapped.join(", ")}
-                </p>
-              )}
-
-              {preview.toCreate.length > 0 && (
-                <div className="border border-border rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto max-h-56 overflow-y-auto">
-                    <table className="w-full">
-                      <thead className="sticky top-0 bg-muted/60 backdrop-blur">
-                        <tr>
-                          {[t("products.col.code"), t("products.col.name"), t("products.col.category"), t("products.col.unit"), t("products.col.price")].map((h) => (
-                            <th key={h} className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.toCreate.slice(0, 50).map((r) => (
-                          <tr key={r.rowNumber} className="border-t border-border/50">
-                            <td className="px-3 py-1.5 text-xs font-mono text-foreground whitespace-nowrap">{r.code}</td>
-                            <td className="px-3 py-1.5 text-xs text-foreground">{r.name}</td>
-                            <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{r.categoryName || "—"}</td>
-                            <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{r.unit || "—"}</td>
-                            <td className="px-3 py-1.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap">{r.defaultPrice.toLocaleString("th-TH")}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {preview.toCreate.length > 50 && (
-                    <p className="px-3 py-2 text-xs text-muted-foreground border-t border-border/50">
-                      {t("products.import.previewTruncated").replace("{n}", String(preview.toCreate.length - 50))}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {problems.length > 0 && (
-                <div className="border border-[#e08a3c]/30 bg-[#e08a3c]/5 rounded-xl p-3 space-y-1 max-h-40 overflow-y-auto">
-                  <p className="text-xs font-semibold text-[#a75d1a]">{t("products.import.problemsTitle").replace("{n}", String(problems.length))}</p>
-                  {problems.slice(0, 20).map((p) => (
-                    <p key={`${p.rowNumber}-${p.message}`} className="text-xs text-[#a75d1a]">
- {t("products.import.problemRow").replace("{row}", String(p.rowNumber))} {p.message}
- </p>
- ))}
- {problems.length > 20 && (
- <p className="text-xs text-[#a75d1a]">{t("products.import.problemsTruncated").replace("{n}", String(problems.length - 20))}</p>
- )}
- </div>
- )}
- </>
- )}
- </div>
-
- <div className="flex items-center justify-end gap-2 border-t border-border p-4">
- <button onClick={onClose} disabled={busy}
- className="px-3.5 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- {done ? t("common.close") : t("common.cancel")}
- </button>
- {!done && (
- <button
- onClick={() => void confirmImport()}
- disabled={busy || !preview || preview.toCreate.length === 0}
- className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
- >
- {importing ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
- {preview ? t("products.import.confirm").replace("{n}", String(preview.toCreate.length)) : t("products.import.confirmEmpty")}
- </button>
- )}
- </div>
- </div>
- </div>
- );
-}
-
-function Stat({ label, value, accent = false }: { label: string; value: number; accent?: boolean }) {
- return (
- <div className=" border border-[#c3ccda] bg-white rounded-lg px-3 py-2">
- <p className="text-xs text-muted-foreground">{label}</p>
- <p className={`text-lg font-mono font-bold ${accent ? "text-[#207e52]" : "text-foreground"}`}>{value.toLocaleString("th-TH")}</p>
-    </div>
+            </WarningBox>
+          )}
+        </>
+      )}
+    </ImportDialogShell>
   );
 }

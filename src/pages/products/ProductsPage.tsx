@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { createProduct, updateProduct, deleteProduct, fetchProducts, fetchCategories, resetKitRecipeCache } from "../../lib/products";
 import { ProductList } from "./ProductList";
-import { ProductForm, type ProductDraft } from "./ProductForm";
+import { ProductDrawer, type ProductDraft } from "./ProductDrawer";
 import { CategoriesManager } from "./CategoriesManager";
 import { ProductImportDialog } from "./ProductImportDialog";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useI18n } from "../../lib/i18n";
 
-type View = "list" | "create" | "edit" | "categories";
+type View = "list" | "categories";
 
-// หน้าหลักของโมดูลสินค้า สลับมุมมองระหว่างรายการ สร้าง/แก้ไข และจัดการหมวดหมู่
-// Products module root page — switches between list, create/edit, and category-management views.
+// หน้าหลักของโมดูลสินค้า — รายการ + แผงข้อมูลสินค้าด้านขวา (สร้าง/แก้ไข) และหน้าจัดการหมวดหมู่
+// Products module root page — list + right-side product drawer (create/edit), and the category-management view.
 export function ProductsPage({
   products,
   onProductsChange,
@@ -36,15 +37,17 @@ export function ProductsPage({
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<View>("list");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  /** id ของสินค้าที่เปิดในแผง หรือ "new" — เก็บเป็น id เพื่อให้แผงเห็นสถานะล่าสุดหลังเก็บถาวรจากเมนู */
+  const [formTarget, setFormTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
   const [appliedEditId, setAppliedEditId] = useState<string | null>(null);
   if (initialEditId && initialEditId !== appliedEditId) {
     setAppliedEditId(initialEditId);
     if (products.some((p) => p.id === initialEditId)) {
-      setEditingId(initialEditId);
-      setView("edit");
+      setView("list");
+      setFormTarget(initialEditId);
     }
   }
   useEffect(() => {
@@ -54,41 +57,32 @@ export function ProductsPage({
   const [appliedAutoViewSeq, setAppliedAutoViewSeq] = useState<number | null>(null);
   if (autoViewSeq != null && autoViewSeq !== appliedAutoViewSeq && autoView) {
     setAppliedAutoViewSeq(autoViewSeq);
-    setView(autoView);
+    if (autoView === "create") { setView("list"); setFormTarget("new"); } else setView(autoView);
   }
   useEffect(() => {
     if (autoViewSeq != null) onAutoActionConsumed?.();
   }, [autoViewSeq, onAutoActionConsumed]);
 
-  const editingProduct = products.find((p) => p.id === editingId);
+  const drawerProduct = formTarget && formTarget !== "new" ? products.find((p) => p.id === formTarget) ?? null : null;
+  const drawerOpen = formTarget === "new" || drawerProduct !== null;
 
-  // สร้างสินค้าใหม่แล้วอัปเดตรายการ, กลับไปหน้ารายการเมื่อสำเร็จ
-  // Creates a new product, updates the list, and returns to the list view on success.
-  const handleCreate = async (draft: ProductDraft): Promise<string | null> => {
+  // บันทึกจากแผง — สร้างสินค้าใหม่หรืออัปเดตตัวที่เปิดอยู่ แล้วปิดแผงเมื่อสำเร็จ
+  // Saves from the drawer — creates a new product or updates the open one, closing the drawer on success.
+  const handleSave = async (draft: ProductDraft): Promise<string | null> => {
     try {
-      const created = await createProduct(draft.kitComponents.length > 0 ? draft : { ...draft, kitComponents: undefined });
-      if (draft.kitComponents.length > 0) resetKitRecipeCache();
-      onProductsChange([...products, created]);
-      setView("list");
+      if (formTarget === "new") {
+        const created = await createProduct(draft.kitComponents.length > 0 ? draft : { ...draft, kitComponents: undefined });
+        if (draft.kitComponents.length > 0) resetKitRecipeCache();
+        onProductsChange([...products, created]);
+      } else if (formTarget) {
+        const updated = await updateProduct(formTarget, draft);
+        resetKitRecipeCache(); // สูตรชุดอาจเปลี่ยน — เอกสารที่เปิดต่อจากนี้โหลดสูตรใหม่
+        onProductsChange(products.map((p) => (p.id === formTarget ? updated : p)));
+      }
+      setFormTarget(null);
       return null;
     } catch (err) {
-      return err instanceof Error ? err.message : t("products.createError");
-    }
-  };
-
-  // บันทึกการแก้ไขสินค้าที่กำลังเปิดอยู่แล้วกลับไปหน้ารายการ
-  // Saves edits to the currently open product and returns to the list view.
-  const handleUpdate = async (draft: ProductDraft): Promise<string | null> => {
-    if (!editingId) return null;
-    try {
-      const updated = await updateProduct(editingId, draft);
-      resetKitRecipeCache(); // สูตรชุดอาจเปลี่ยน — เอกสารที่เปิดต่อจากนี้โหลดสูตรใหม่
-      onProductsChange(products.map((p) => (p.id === editingId ? updated : p)));
-      setView("list");
-      setEditingId(null);
-      return null;
-    } catch (err) {
-      return err instanceof Error ? err.message : t("products.saveError");
+      return err instanceof Error ? err.message : t(formTarget === "new" ? "products.createError" : "products.saveError");
     }
   };
 
@@ -127,32 +121,7 @@ export function ProductsPage({
     return <CategoriesManager categories={categories} products={products} onChange={onCategoriesChange} onBack={() => setView("list")} />;
   }
 
-  if (view === "create") {
-    return (
-      <ProductForm
-        mode="create"
-        categories={categories}
-        existingCodes={products.map((p) => p.code)}
-        allProducts={products}
-        onSave={handleCreate}
-        onCancel={() => setView("list")}
-      />
-    );
-  }
-
-  if (view === "edit" && editingProduct) {
-    return (
-      <ProductForm
-        mode="edit"
-        initial={editingProduct}
-        categories={categories}
-        existingCodes={products.filter((p) => p.id !== editingId).map((p) => p.code)}
-        allProducts={products}
-        onSave={handleUpdate}
-        onCancel={() => { setView("list"); setEditingId(null); }}
-      />
-    );
-  }
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified");
 
   return (
     <>
@@ -160,13 +129,44 @@ export function ProductsPage({
         products={products}
         categories={categories}
         currentUserId={currentUserId}
-        onEdit={(id) => { setEditingId(id); setView("edit"); }}
-        onArchiveToggle={handleArchiveToggle}
-        onDelete={handleDelete}
-        onDuplicate={handleDuplicate}
-        onCreateNew={() => setView("create")}
+        onOpen={setFormTarget}
+        onCreateNew={() => setFormTarget("new")}
         onManageCategories={() => setView("categories")}
         onImport={() => setImportOpen(true)}
+      />
+      {drawerOpen && (
+        <ProductDrawer
+          key={formTarget ?? ""}
+          product={drawerProduct}
+          categories={categories}
+          existingCodes={products.filter((p) => p.id !== drawerProduct?.id).map((p) => p.code)}
+          allProducts={products}
+          locked={deleteTarget !== null}
+          onSave={handleSave}
+          onClose={() => setFormTarget(null)}
+          onDuplicate={(p) => { setFormTarget(null); void handleDuplicate(p.id); }}
+          onArchiveToggle={(p) => { if (!p.archived) setFormTarget(null); void handleArchiveToggle(p.id); }}
+          onDelete={setDeleteTarget}
+        />
+      )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("products.deleteConfirmTitle")}
+        message={t("products.deleteConfirmMessage")}
+        confirmLabel={t("products.deletePermanently")}
+        danger
+        summary={deleteTarget && (
+          <span className="flex items-center gap-2.5 min-w-0">
+            <span className="font-mono text-[13px] font-medium text-[#3d5173] flex-shrink-0">{deleteTarget.code}</span>
+            <span className="font-medium text-foreground truncate">{deleteTarget.name}</span>
+            <span className="text-muted-foreground truncate">{categoryName(deleteTarget.categoryId)}</span>
+          </span>
+        )}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) { void handleDelete(deleteTarget.id); setFormTarget(null); }
+          setDeleteTarget(null);
+        }}
       />
       {importOpen && (
         <ProductImportDialog

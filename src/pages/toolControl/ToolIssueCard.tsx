@@ -7,10 +7,13 @@ import type { Department } from "../../lib/departments";
 import type { Team } from "../../lib/teams";
 import type { CodeEntry } from "../../lib/codeRegister";
 import { fetchToolHoldings, issueTools, type ToolHoldingRow } from "../../lib/toolHoldings";
-import { AddCommonToolDialog, CommonToolStockDialog } from "./CommonToolDialogs";
+import { Field, SelectBox } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
+import { BoldCount, Tag } from "../stock/inventoryUi";
+import { AddCommonToolDrawer, CommonToolStockDialog } from "./CommonToolDialogs";
 
-const selectCls = "h-9 w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
-const qtyCls = "w-24 px-2 py-1.5 text-sm text-right bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
+/** ช่องจำนวนเกินเพดาน — กรอบแดงแทนกรอบเทา */
+const qtyErrorCls = field.cell.replace("border-[#c3ccda]", "border-[#b93636]");
 
 /**
  * จ่าย / รับคืนเครื่องมือให้ทีมโดยตรง — เจ้าของสั่ง *"หน้าตัดเบิกเครื่องมือ มีแผนกในการเบิกโครงการ
@@ -22,6 +25,9 @@ const qtyCls = "w-24 px-2 py-1.5 text-sm text-right bg-white border border-[#c3c
  *
  * โหมดรับคืนอ่านยอดที่ทีมถืออยู่จริงมาแสดงเป็นเพดาน — คืนได้เฉพาะของที่เบิกไปจริง เซิร์ฟเวอร์
  * ตรวจซ้ำอีกชั้น (ตรงนี้แค่ช่วยให้รู้เร็ว)
+ *
+ * ดีไซน์ใหม่ 2026-09-30: อยู่ในการ์ดเดียวกับแท็บ — ส่วนบน (จ่าย/รับคืน + แผนก/ทีม/งาน) · แถบค้นหา ·
+ * ตาราง (แถวที่ใส่จำนวนแล้วพื้นฟ้าอ่อน) · หมายเหตุ · แถบท้าย (เลือกไว้ N รายการ + ปุ่มบันทึก)
  */
 export function ToolIssueCard({
   departments, teams, workTypes, onDone, showToast,
@@ -118,97 +124,106 @@ export function ToolIssueCard({
     }
   };
 
+  const toolName = (p: Product) => (
+    <>
+      <span className="font-mono text-[12.5px] font-medium text-[#3d5173] flex-shrink-0">{p.code}</span>
+      <span className="truncate">{p.name}</span>
+    </>
+  );
+
   return (
-    <div className="bg-card border border-border rounded-xl p-5 space-y-5 print:hidden">
-      <div className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit">
-        {(["issue", "return"] as const).map((m) => (
-          <button key={m} onClick={() => { setMode(m); setQty({}); setError(""); }}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-medium transition-all ${mode === m ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
- {m === "issue" ? <PackageMinus size={13} /> : <Undo2 size={13} />}
- {t(m === "issue" ? "toolControl.issue.modeIssue" : "toolControl.issue.modeReturn")}
- </button>
- ))}
- </div>
+    <div className="print:hidden flex flex-col">
+      {/* จ่ายให้ใคร */}
+      <div className="px-5 py-5 border-b border-[#eef1f6] flex flex-col gap-4">
+        <div role="radiogroup" aria-label={t("toolControl.col.kind")} className="self-start w-full sm:w-[380px] grid grid-cols-2 gap-0.5 p-[3px] bg-[#eef1f6] rounded-lg">
+          {(["issue", "return"] as const).map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => { setMode(m); setQty({}); setError(""); }}
+              className={`h-[34px] rounded-md flex items-center justify-center gap-2 text-sm transition-colors ${mode === m ? "bg-white text-foreground font-semibold shadow-[0_1px_2px_rgba(11,29,58,0.12)]" : "text-muted-foreground font-medium hover:text-foreground"}`}>
+              {m === "issue" ? <PackageMinus size={16} /> : <Undo2 size={16} />}
+              {t(m === "issue" ? "toolControl.issue.modeIssue" : "toolControl.issue.modeReturn")}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 max-w-[900px]">
+          <Field label={t("toolControl.issue.department")} htmlFor="tool-issue-dept" required>
+            <SelectBox id="tool-issue-dept" value={departmentId} onChange={(e) => { setDepartmentId(e.target.value); setTeamId(""); }}>
+              <option value="">{t("toolControl.issue.choose")}</option>
+              {departments.filter((d) => d.isActive).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </SelectBox>
+          </Field>
+          <Field label={t("toolControl.issue.team")} htmlFor="tool-issue-team" required>
+            <SelectBox id="tool-issue-team" value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!departmentId}>
+              <option value="">{t("toolControl.issue.choose")}</option>
+              {teamsOfDepartment.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+            </SelectBox>
+          </Field>
+          <Field label={t("toolControl.issue.workType")} htmlFor="tool-issue-worktype">
+            <SelectBox id="tool-issue-worktype" value={workTypeCode} onChange={(e) => setWorkTypeCode(e.target.value)}>
+              <option value="">{t("toolControl.issue.none")}</option>
+              {workTypes.map((w) => <option key={w.id} value={w.code}>{w.code} — {w.name}</option>)}
+            </SelectBox>
+          </Field>
+        </div>
+      </div>
 
- <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
- <label className="text-xs text-muted-foreground space-y-1.5">
- <span className="block">{t("toolControl.issue.department")} *</span>
- <select value={departmentId} onChange={(e) => { setDepartmentId(e.target.value); setTeamId(""); }} className={selectCls}>
- <option value="">{t("toolControl.issue.choose")}</option>
- {departments.filter((d) => d.isActive).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
- </select>
- </label>
- <label className="text-xs text-muted-foreground space-y-1.5">
- <span className="block">{t("toolControl.issue.team")} *</span>
- <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className={selectCls} disabled={!departmentId}>
- <option value="">{t("toolControl.issue.choose")}</option>
- {teamsOfDepartment.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
- </select>
- </label>
- <label className="text-xs text-muted-foreground space-y-1.5">
- <span className="block">{t("toolControl.issue.workType")}</span>
- <select value={workTypeCode} onChange={(e) => setWorkTypeCode(e.target.value)} className={selectCls}>
- <option value="">{t("toolControl.issue.none")}</option>
- {workTypes.map((w) => <option key={w.id} value={w.code}>{w.code} — {w.name}</option>)}
- </select>
- </label>
- </div>
+      {/* รายการเครื่องมือ */}
+      <div className="flex items-center gap-2.5 flex-wrap px-5 py-3.5 border-b border-[#eef1f6]">
+        <label className={`${field.box} w-full sm:w-[340px]`}>
+          <Search size={16} className="text-muted-foreground flex-shrink-0" aria-hidden="true" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("toolControl.issue.searchPlaceholder")}
+            aria-label={t("toolControl.issue.searchPlaceholder")}
+            className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-[#8a97ad] outline-none" />
+        </label>
+        <span className="flex-1" />
+        <button type="button" onClick={() => setAddingTool(true)} className={btn.secondarySm}>
+          <Plus size={15} /> {t("toolControl.commonTool.add")}
+        </button>
+      </div>
 
- <div className="flex items-center gap-2 flex-wrap">
- <div className="relative h-9 w-72 max-w-full">
- <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
- <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("toolControl.issue.searchPlaceholder")}
- className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
- </div>
- <button onClick={() => setAddingTool(true)}
- className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- <Plus size={13} /> {t("toolControl.commonTool.add")}
- </button>
- </div>
-
- <div className="border border-[#c3ccda] bg-white rounded-lg overflow-x-auto max-h-[22rem] overflow-y-auto">
- <table className="w-full">
- <thead className="sticky top-0 backdrop-blur">
- <tr className="border-b border-border">
- {[t("toolControl.col.product"), t("toolControl.col.unit"), t("toolControl.issue.onHand"), t("toolControl.issue.qty")].map((h, i) => (
- <th key={h} className={`px-3 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${i >= 2 ? "text-right" : "text-left"}`}>{h}</th>
-              ))}
+      <div className="overflow-x-auto max-h-[26rem] overflow-y-auto">
+        <table className="w-full min-w-[620px] table-fixed">
+          <thead className="sticky top-0 z-[1]">
+            <tr className={table.head}>
+              <th className={table.th}>{t("toolControl.col.product")}</th>
+              <th className={`${table.th} w-[100px]`}>{t("toolControl.col.unit")}</th>
+              <th className={`${table.th} w-[110px] text-right`}>{mode === "issue" ? t("toolControl.issue.onHand") : t("toolControl.col.held")}</th>
+              <th className={`${table.th} w-[140px] text-right`}>{t("toolControl.issue.qty")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-8 text-center text-sm text-muted-foreground">
+              <tr><td colSpan={4} className="px-5 py-10 text-center text-sm text-muted-foreground">
                 {mode === "return" && !teamId ? t("toolControl.issue.pickTeamFirst") : t("toolControl.issue.noTools")}
               </td></tr>
             )}
             {rows.map((p) => {
               const cap = mode === "issue" ? (p.stockQty ?? 0) : (heldByProduct.get(p.id) ?? 0);
-              const typed = Number(qty[p.id] ?? "");
+              const raw = qty[p.id] ?? "";
+              const typed = Number(raw);
+              const picked = raw !== "" && Number.isFinite(typed) && typed > 0;
+              const over = Number.isFinite(typed) && typed > cap;
               return (
-                <tr key={p.id} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-2 text-sm text-foreground">
-                    {p.commonTool ? (
-                      // เครื่องมือกองกลาง: กดรหัสหรือชื่อ = อัปเดตยอดสต๊อก (ทั้งปุ่มเป็นเป้าเดียว)
-                      <button onClick={() => setStockTool(p)} title={t("toolControl.commonTool.stockTitle")}
-                        className="text-left hover:underline decoration-[#c9a84c]/60 underline-offset-2">
-                        <span className="font-mono text-xs text-[#c9a84c] mr-2">{p.code}</span>{p.name}
-                      </button>
-                    ) : (
-                      <><span className="font-mono text-xs text-[#c9a84c] mr-2">{p.code}</span>{p.name}</>
-                    )}
-                    {p.commonTool && (
-                      <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20 whitespace-nowrap">
-                        {t("toolControl.commonTool.badge")}
-                      </span>
-                    )}
+                <tr key={p.id} className={`h-[52px] border-b border-[#eef1f6] text-sm transition-colors ${picked ? "bg-[#eef4fc]" : "bg-white hover:bg-[#f8f9fc]"}`}>
+                  <td className={table.td}>
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      {p.commonTool ? (
+                        // เครื่องมือกองกลาง: กดรหัสหรือชื่อ = อัปเดตยอดสต๊อก (ทั้งปุ่มเป็นเป้าเดียว)
+                        <button type="button" onClick={() => setStockTool(p)} title={t("toolControl.commonTool.stockTitle")}
+                          className="flex items-center gap-2.5 min-w-0 text-left hover:text-[#1a5fb4] hover:underline underline-offset-2">
+                          {toolName(p)}
+                        </button>
+                      ) : toolName(p)}
+                      {p.commonTool && <Tag tone="gold">{t("toolControl.commonTool.badge")}</Tag>}
+                    </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{p.unit || "—"}</td>
-                  <td className={`px-3 py-2 text-xs font-mono text-right ${cap <= 0 ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{cap.toLocaleString("th-TH")}</td>
-                  <td className="px-3 py-2 text-right">
-                    <input type="number" min={0} max={cap} value={qty[p.id] ?? ""}
+                  <td className={`${table.td} text-[#3d5173] truncate`}>{p.unit || "—"}</td>
+                  <td className={`${table.td} text-right font-medium tabular-nums ${cap <= 0 ? "text-[#b93636]" : "text-foreground"}`}>{cap.toLocaleString("th-TH")}</td>
+                  <td className={`${table.td} text-right`}>
+                    <input type="number" min={0} max={cap} value={raw} placeholder="0"
                       aria-label={`${t("toolControl.issue.qty")} ${p.name}`}
+                      aria-invalid={over || undefined}
                       onChange={(e) => setQty((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                      className={`${qtyCls} ${Number.isFinite(typed) && typed > cap ? "border-[#e05252]" : ""}`} />
+                      className={`${over ? qtyErrorCls : field.cell} w-24 text-right tabular-nums`} />
                   </td>
                 </tr>
               );
@@ -217,33 +232,33 @@ export function ToolIssueCard({
         </table>
       </div>
 
-      <label className="text-xs text-muted-foreground space-y-1.5 block">
-        <span className="block">{t("toolControl.issue.note")}</span>
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("toolControl.issue.notePlaceholder")}
-          className="h-9 w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-      </label>
-
-      {error && <p className="text-xs text-[#e05252]" role="alert">{error}</p>}
-
-      <div className="flex items-center gap-3">
-        <button onClick={() => void submit()} disabled={busy || lines.length === 0}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <Hammer size={13} />}
-          {t(mode === "issue" ? "toolControl.issue.submitIssue" : "toolControl.issue.submitReturn")}
-        </button>
-        <span className="text-xs text-muted-foreground">{t("toolControl.issue.selected").replace("{n}", String(lines.length))}</span>
+      <div className="px-5 py-4">
+        <Field label={t("toolControl.issue.note")} htmlFor="tool-issue-note" className="max-w-[600px]">
+          <input id="tool-issue-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("toolControl.issue.notePlaceholder")}
+            className={`${field.input} w-full`} />
+        </Field>
+        {error && <p className={`${field.error} mt-3`} role="alert">{error}</p>}
       </div>
 
-      {addingTool && (
-        <AddCommonToolDialog
-          onCancel={() => setAddingTool(false)}
-          onSaved={(product) => {
-            setAddingTool(false);
-            showToast(t("toolControl.commonTool.addedToast").replace("{code}", product.code));
-            setReloadToken((n) => n + 1);
-          }}
-        />
-      )}
+      <div className="flex items-center gap-2.5 px-5 py-3.5 border-t border-border">
+        <span className="flex-1 text-sm text-[#3d5173]">
+          <BoldCount template={t("toolControl.issue.selected")} value={lines.length} />
+        </span>
+        <button type="button" onClick={() => void submit()} disabled={busy || lines.length === 0} className={btn.primary}>
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <Hammer size={16} />}
+          {t(mode === "issue" ? "toolControl.issue.submitIssue" : "toolControl.issue.submitReturn")}
+        </button>
+      </div>
+
+      <AddCommonToolDrawer
+        open={addingTool}
+        onCancel={() => setAddingTool(false)}
+        onSaved={(product) => {
+          setAddingTool(false);
+          showToast(t("toolControl.commonTool.addedToast").replace("{code}", product.code));
+          setReloadToken((n) => n + 1);
+        }}
+      />
       {stockTool && (
         <CommonToolStockDialog
           product={stockTool}

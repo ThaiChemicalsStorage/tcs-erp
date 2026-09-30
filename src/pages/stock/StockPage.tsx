@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList, FileSpreadsheet, FileText, Sheet } from "lucide-react";
+import { History, Printer, AlertTriangle, ClipboardList, FileSpreadsheet, FileText, Sheet, SlidersHorizontal, Layers } from "lucide-react";
 import { StockImportDialog } from "./StockImportDialog";
 import { type Product, type ProductCategory, updateProduct, fetchProducts, isKitProduct, kitBreakdownText } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
@@ -10,18 +10,22 @@ import { downloadXlsx, exportFileName } from "../../lib/tableExport";
 import { stockBalanceSheet, stockCardSheet } from "../../lib/stockExport";
 import { printDate } from "../../lib/printFormat";
 import { fetchStockMovements, createStockMovement, stockValueOf, STOCK_MOVEMENT_KIND_LABEL_KEY, type StockMovement, type StockMovementKind } from "../../lib/stock";
-import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
-
-const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+import { ListPageHeader, ListCard, ListToolbar, ListEmpty } from "../../components/ui/ListPage";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
+import { FormDialog, StatCard, Tag, UnitInput } from "./inventoryUi";
+import { money } from "./inventoryFormat";
 
 // หน้าสต๊อกสินค้า — เพิ่ม 2026-08-18 เป็นโครงสร้างที่ตั้งใจให้ใช้ร่วมกันได้ในอนาคต (ไม่ใช่ของฝ่ายบัญชี
 // เท่านั้น) ดูหมายเหตุใน api/_lib/collections.ts (StockMovementFields) — ตัวเลขคงเหลือ (stockQty) แก้ได้
 // ทางเดียวคือผ่าน applyStockMovement() เท่านั้น ทุกการเปลี่ยนแปลงจึงมีประวัติย้อนหลังเสมอ
 // 2026-09-03: มูลค่าสต๊อก (ต้นทุนถัวเฉลี่ย) · ประวัติแยก "คืนของ" และกรองตามประเภทได้ · การ์ดสต๊อกพิมพ์ได้
+// ดีไซน์ใหม่ 2026-09-30: การ์ดตัวเลข 5 ใบ · ปุ่มส่งออกรวมเป็นเมนู "ส่งออก ▾" · ปรับสต๊อกเป็นกล่อง 480 แบบใหม่
 // The Stock page — added 2026-08-18, deliberately shared infrastructure (see the doc comment on
 // StockMovementFields in api/_lib/collections.ts). Product.stockQty only ever changes through
 // applyStockMovement(), so every change is traceable in the movement log below.
@@ -193,170 +197,152 @@ export function StockPage({
     return () => window.removeEventListener("afterprint", reset);
   }, [cardProduct, cardMovements]);
 
+  const noRows = filtered.length === 0;
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:overflow-visible">
-      <div className="print:hidden">
-        <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("stock.title")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("stock.subtitle")}</p>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 print:hidden">
-        {[
-          { label: t("stock.kpi.itemCount"), value: String(activeProducts.length) },
-          { label: t("stock.kpi.totalUnits"), value: totalUnits.toLocaleString("th-TH") },
-          { label: t("stock.kpi.stockValue"), value: money(totalValue) },
-          { label: t("stock.kpi.zeroStock"), value: String(zeroStockCount) },
-          { label: t("stock.kpi.lowStock"), value: String(lowStockCount) },
-        ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#5a7299]/15 to-[#5a7299]/5 flex items-center justify-center mb-3">
-              <Boxes size={15} style={{ color: "#5a7299" }} />
-            </div>
-            <p className="text-xl font-bold text-foreground font-mono">{s.value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3 flex-wrap print:hidden">
-      <div className="relative h-9 w-72">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("stock.search.placeholder")}
-          className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+    <div className="flex-1 overflow-y-auto print:p-0 print:overflow-visible">
+      <div className="px-4 md:px-8 py-6 flex flex-col gap-5 print:hidden">
+        <ListPageHeader
+          module={t("nav.group.inventory")}
+          title={t("stock.title")}
+          description={t("stock.subtitle")}
+          actions={(
+            <>
+              <button type="button" onClick={() => window.print()} disabled={noRows || cardProduct !== null} className={btn.secondary}>
+                <Printer size={16} /> {t("stock.printCountSheet")}
+              </button>
+              <MoreMenu
+                label={t("stock.export.menu")}
+                items={[
+                  { key: "excel", label: t("stock.export.excel"), icon: Sheet, disabled: noRows || exporting, onSelect: () => void exportListXlsx() },
+                  { key: "pdf", label: t("stock.export.pdf"), icon: FileText, hint: t("stock.export.pdfHint"), disabled: noRows || cardProduct !== null || listPrinting, onSelect: () => setListPrinting(true) },
+                ]}
+              />
+              {canAdjust && (
+                <button type="button" onClick={() => setImportOpen(true)} className={btn.primary}>
+                  <FileSpreadsheet size={16} /> {t("stock.import.button")}
+                </button>
+              )}
+            </>
+          )}
         />
-        {search && (
-          <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-            <X size={13} />
-          </button>
-        )}
-      </div>
-        <button
-          onClick={() => window.print()}
-          disabled={filtered.length === 0 || cardProduct !== null}
-          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-50"
-        >
-          <Printer size={13} /> {t("stock.printCountSheet")}
-        </button>
-        <button
-          onClick={() => void exportListXlsx()}
-          disabled={filtered.length === 0 || exporting}
-          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-50"
-        >
-          <Sheet size={13} /> {t("stock.export.excel")}
-        </button>
-        <button
-          onClick={() => setListPrinting(true)}
-          disabled={filtered.length === 0 || cardProduct !== null || listPrinting}
-          title={t("stock.export.pdfHint")}
-          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-50"
-        >
-          <FileText size={13} /> {t("stock.export.pdf")}
-        </button>
-        {canAdjust && (
-          <button
-            onClick={() => setImportOpen(true)}
-            className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
-          >
-            <FileSpreadsheet size={13} /> {t("stock.import.button")}
-          </button>
-        )}
-      </div>
 
-      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden print:hidden">
-        {activeProducts.length === 0 ? (
-          <EmptyState icon={Boxes} title={t("stock.empty.title")} description={t("stock.empty.description")} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <p className="text-sm text-muted-foreground">{t("stock.noMatch")}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), t("stock.table.avgCost"), t("stock.table.lastCost"), t("stock.table.value"), t("stock.table.reorderPoint"), ""].map((h, i) => (
-                    <th key={i} className={`px-4 py-3 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${i === 5 || i === 6 ? "text-right" : "text-left"}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.code}</td>
-                    <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[280px] truncate" title={p.name}>
-                      {p.name}
-                      {p.isTool && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">{t("stock.toolBadge")}</span>}
-                      {isKitProduct(p) && (
-                        <span className="block text-xs text-muted-foreground font-normal truncate mt-0.5" title={kitBreakdownText(p.kitComponents!, 1)}>
-                          <span className="inline-flex items-center px-1.5 rounded bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/25 mr-1.5">{t("kit.badge")}</span>
-                          {t("kit.perKit")} {kitBreakdownText(p.kitComponents!, 1)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{categoryName(p.categoryId)}</td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{p.unit || "—"}</td>
-                    <td className={`px-4 py-3.5 text-sm font-mono font-semibold whitespace-nowrap ${p.stockQty <= 0 ? "text-[#c23f3f]" : isLowStock(p) ? "text-[#a75d1a]" : "text-foreground"}`}>
-                      <span className="inline-flex items-center gap-1.5" title={isKitProduct(p) ? t("kit.availableHint") : undefined}>
-                        {p.stockQty.toLocaleString("th-TH")}
-                        {isLowStock(p) && p.stockQty > 0 && <AlertTriangle size={12} aria-label={t("stock.lowStockBadge")} />}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap">{(p.avgCost ?? 0) > 0 ? money(p.avgCost ?? 0) : "—"}</td>
-                    {/* ราคาซื้อล่าสุด (2026-09-09) — ราคาที่ของคืนเข้าคลังใช้ลงบัญชี ไม่ใช่ฐานของมูลค่าสต๊อก */}
-                    <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap" title={(p.lastCostAt ?? "") ? t("stock.table.lastCostOn").replace("{date}", (p.lastCostAt ?? "").slice(0, 10)) : t("stock.table.lastCostHint")}>
-                      {(p.lastCost ?? 0) > 0 ? money(p.lastCost ?? 0) : "—"}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs font-mono text-foreground text-right whitespace-nowrap">{stockValueOf(p) > 0 ? money(stockValueOf(p)) : "—"}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      {canAdjust ? (
-                        <input
-                          type="number"
-                          min={0}
-                          defaultValue={p.reorderPoint ?? 0}
-                          disabled={savingReorderId === p.id}
-                          aria-label={`${t("stock.table.reorderPoint")} — ${p.name}`}
-                          onBlur={(e) => void saveReorderPoint(p, e.target.value)}
-                          className="w-20 h-8 px-2 text-xs font-mono text-center text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-50"
-                        />
-                      ) : (
-                        <span className="text-xs font-mono text-muted-foreground">{(p.reorderPoint ?? 0) || "—"}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      {isKitProduct(p) ? (
-                        <p className="text-xs text-muted-foreground text-right whitespace-normal max-w-[180px] ml-auto">{t("kit.noOwnStock")}</p>
-                      ) : (
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => onOpenHistory(p.id)} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity" title={t("stock.action.viewHistoryTitle")} aria-label={t("stock.action.viewHistoryTitle")}>
-                          <History size={14} />
-                        </button>
-                        <button onClick={() => void printStockCard(p)} disabled={cardProduct !== null} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity disabled:opacity-30" title={t("stock.action.stockCardTitle")} aria-label={t("stock.action.stockCardTitle")}>
-                          <ClipboardList size={14} />
-                        </button>
-                        <button onClick={() => void exportCardXlsx(p)} disabled={exporting} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity disabled:opacity-30" title={t("stock.action.stockCardExcelTitle")} aria-label={`${t("stock.action.stockCardExcelTitle")} — ${p.name}`}>
-                          <Sheet size={14} />
-                        </button>
-                        {canAdjust && (
-                          <button
-                            onClick={() => setAdjustTarget(p)}
-                            className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
-                          >
-                            {t("stock.action.adjustBtn")}
-                          </button>
-                        )}
-                      </div>
-                      )}
-                    </td>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard label={t("stock.kpi.itemCount")} value={activeProducts.length.toLocaleString("th-TH")} unit={t("stock.unit.items")} />
+          <StatCard label={t("stock.kpi.totalUnitsShort")} value={totalUnits.toLocaleString("th-TH")} unit={t("stock.unit.units")} />
+          <StatCard label={t("stock.kpi.stockValueShort")} value={`฿${money(totalValue)}`} />
+          <StatCard label={t("stock.kpi.zeroStock")} value={zeroStockCount.toLocaleString("th-TH")} unit={t("stock.unit.items")} tone={zeroStockCount > 0 ? "red" : "default"} />
+          <StatCard label={t("stock.kpi.lowStock")} value={lowStockCount.toLocaleString("th-TH")} unit={t("stock.unit.items")} tone={lowStockCount > 0 ? "amber" : "default"} />
+        </div>
+
+        <ListCard>
+          <ListToolbar
+            search={search}
+            onSearch={setSearch}
+            searchPlaceholder={t("stock.search.placeholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5 sm:ml-2">
+              <AlertTriangle size={14} className="text-[#8a5a00]" aria-hidden="true" /> {t("stock.lowStockBadge")}
+            </span>
+          </ListToolbar>
+
+          {activeProducts.length === 0 ? (
+            <ListEmpty title={t("stock.empty.title")} hint={t("stock.empty.description")} />
+          ) : noRows ? (
+            <ListEmpty title={t("stock.noMatch")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] table-fixed">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={`${table.th} w-[160px]`}>{t("stock.table.code")}</th>
+                    <th className={table.th}>{t("stock.table.nameCategory")}</th>
+                    <th className={`${table.th} w-[120px] text-right`}>{t("stock.table.remaining")}</th>
+                    <th className={`${table.th} w-[112px] text-right`}>{t("stock.table.avgCost")}</th>
+                    <th className={`${table.th} w-[120px] text-right`}>{t("stock.table.lastCost")}</th>
+                    <th className={`${table.th} w-[124px] text-right`}>{t("stock.table.value")}</th>
+                    <th className={`${table.th} w-[96px] text-right`}>{t("stock.table.reorderPoint")}</th>
+                    <th className={`${table.th} w-[210px]`}><span className="sr-only">{t("ui.more")}</span></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {filtered.map((p) => {
+                    const kit = isKitProduct(p);
+                    const low = isLowStock(p);
+                    const breakdown = kit ? kitBreakdownText(p.kitComponents!, 1) : "";
+                    const sub = kit ? `${categoryName(p.categoryId)} · ${t("kit.perKit")} ${breakdown}` : categoryName(p.categoryId);
+                    const qtyColor = p.stockQty <= 0 ? "text-[#b93636]" : low ? "text-[#8a5a00]" : "text-foreground";
+                    return (
+                      <tr key={p.id} className={`${table.row} text-sm`}>
+                        <td className={`${table.td} ${table.code} break-all`}>{p.code}</td>
+                        <td className={table.td}>
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-foreground truncate" title={p.name}>{p.name}</span>
+                            {p.isTool && <Tag tone="grey">{t("stock.toolBadge")}</Tag>}
+                            {kit && <Tag tone="blue" icon={Layers}>{t("products.tag.kit")}</Tag>}
+                          </span>
+                          <span className="block text-xs text-muted-foreground truncate" title={kit ? breakdown : undefined}>{sub}</span>
+                        </td>
+                        <td className={`${table.td} text-right whitespace-nowrap`}>
+                          <span className={`inline-flex items-baseline justify-end gap-1.5 font-semibold tabular-nums ${qtyColor}`} title={kit ? t("kit.availableHint") : undefined}>
+                            {low && p.stockQty > 0 && <AlertTriangle size={14} className="self-center" aria-label={t("stock.lowStockBadge")} />}
+                            {p.stockQty.toLocaleString("th-TH")}
+                            <span className="text-[13px] font-normal text-muted-foreground">{p.unit}</span>
+                          </span>
+                        </td>
+                        <td className={`${table.td} text-right tabular-nums ${!((p.avgCost ?? 0) > 0) ? "text-[#8a97ad]" : "text-[#3d5173]"}`}>{(p.avgCost ?? 0) > 0 ? money(p.avgCost ?? 0) : "—"}</td>
+                        {/* ราคาซื้อล่าสุด (2026-09-09) — ราคาที่ของคืนเข้าคลังใช้ลงบัญชี ไม่ใช่ฐานของมูลค่าสต๊อก */}
+                        <td className={`${table.td} text-right tabular-nums ${(p.lastCost ?? 0) > 0 ? "text-[#3d5173]" : "text-[#8a97ad]"}`}
+                          title={(p.lastCostAt ?? "") ? t("stock.table.lastCostOn").replace("{date}", (p.lastCostAt ?? "").slice(0, 10)) : t("stock.table.lastCostHint")}>
+                          {(p.lastCost ?? 0) > 0 ? money(p.lastCost ?? 0) : "—"}
+                        </td>
+                        <td className={`${table.td} text-right tabular-nums ${stockValueOf(p) > 0 ? "font-semibold text-foreground" : "text-[#8a97ad]"}`}>{stockValueOf(p) > 0 ? money(stockValueOf(p)) : "—"}</td>
+                        <td className={`${table.td} text-right`}>
+                          {canAdjust ? (
+                            <input
+                              type="number"
+                              min={0}
+                              defaultValue={p.reorderPoint ?? 0}
+                              disabled={savingReorderId === p.id}
+                              aria-label={`${t("stock.table.reorderPoint")} — ${p.name}`}
+                              onBlur={(e) => void saveReorderPoint(p, e.target.value)}
+                              className={`${field.cell} w-[72px] text-right tabular-nums disabled:opacity-50`}
+                            />
+                          ) : (
+                            <span className="tabular-nums text-muted-foreground">{(p.reorderPoint ?? 0) || "—"}</span>
+                          )}
+                        </td>
+                        <td className={table.td}>
+                          {kit ? (
+                            <p className="text-xs leading-snug text-muted-foreground">{t("kit.noOwnStock")}</p>
+                          ) : (
+                            <span className="flex items-center justify-end gap-0.5">
+                              <button type="button" onClick={() => onOpenHistory(p.id)} className={btn.icon} title={t("stock.action.viewHistoryTitle")} aria-label={`${t("stock.action.viewHistoryTitle")} — ${p.name}`}>
+                                <History size={16} />
+                              </button>
+                              <button type="button" onClick={() => void printStockCard(p)} disabled={cardProduct !== null} className={btn.icon} title={t("stock.action.stockCardTitle")} aria-label={`${t("stock.action.stockCardTitle")} — ${p.name}`}>
+                                <ClipboardList size={16} />
+                              </button>
+                              <button type="button" onClick={() => void exportCardXlsx(p)} disabled={exporting} className={btn.icon} title={t("stock.action.stockCardExcelTitle")} aria-label={`${t("stock.action.stockCardExcelTitle")} — ${p.name}`}>
+                                <Sheet size={16} />
+                              </button>
+                              {canAdjust && (
+                                <button type="button" onClick={() => setAdjustTarget(p)} className={`${btn.secondarySm} ml-1.5`}>
+                                  {t("stock.action.adjustBtn")}
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ListCard>
       </div>
 
       {importOpen && (
@@ -397,6 +383,8 @@ export function StockPage({
   );
 }
 
+const ADJUST_KINDS = ["receive", "deduct", "adjust"] as const;
+
 function AdjustStockDialog({ product, onSaved, onCancel }: {
   product: Product;
   onSaved: (productId: string, movement: StockMovement) => void;
@@ -435,73 +423,78 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
     }
   };
 
+  const qtyLabel = kind === "adjust" ? t("stock.dialog.field.adjustQty") : t("stock.dialog.field.qty");
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-xl w-full max-w-md p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">{t("stock.dialog.adjustTitle")} — {product.name}</h2>
-          <p className="text-xs text-muted-foreground mt-0.5 font-mono">{t("stock.dialog.currentBalancePrefix")} {product.stockQty.toLocaleString("th-TH")} {product.unit}</p>
-        </div>
+    <FormDialog
+      icon={SlidersHorizontal}
+      title={`${t("stock.dialog.adjustTitle")} — ${product.name}`}
+      description={(
+        <>
+          <span className="font-mono text-[13px]">{product.code}</span> · {t("stock.dialog.currentBalancePrefix")}{" "}
+          <strong className="font-semibold text-foreground tabular-nums">{product.stockQty.toLocaleString("th-TH")}</strong> {product.unit}
+        </>
+      )}
+      busy={busy}
+      error={error}
+      confirmLabel={busy ? t("stock.dialog.saving") : t("stock.dialog.save")}
+      onConfirm={() => void handleSave()}
+      onCancel={onCancel}
+    >
+      <div role="radiogroup" aria-label={t("stock.dialog.kindLabel")} className="grid grid-cols-3 gap-0.5 p-[3px] bg-[#eef1f6] rounded-lg">
+        {ADJUST_KINDS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={kind === k}
+            onClick={() => { setKind(k); setError(""); }}
+            className={`h-[34px] rounded-md text-sm transition-colors ${kind === k ? "bg-white text-foreground font-semibold shadow-[0_1px_2px_rgba(11,29,58,0.12)]" : "text-muted-foreground font-medium hover:text-foreground"}`}
+          >
+            {t(STOCK_MOVEMENT_KIND_LABEL_KEY[k])}
+          </button>
+        ))}
+      </div>
 
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit">
-          {(["receive", "deduct", "adjust"] as const).map((k) => (
-            <button
-              key={k}
-              onClick={() => setKind(k)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${kind === k ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {t(STOCK_MOVEMENT_KIND_LABEL_KEY[k])}
-            </button>
-          ))}
-        </div>
-
-        <label className="block text-xs text-muted-foreground space-y-1">
-          <span>{kind === "adjust" ? t("stock.dialog.field.adjustQty") : t("stock.dialog.field.qty")}</span>
-          <input
+      <div className={`grid gap-4 ${kind === "receive" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+        <Field label={qtyLabel} htmlFor="stock-adjust-qty" required>
+          <UnitInput
+            id="stock-adjust-qty"
             type="number"
+            autoFocus
             value={qty}
             onChange={(e) => setQty(e.target.value)}
             placeholder={kind === "adjust" ? t("stock.dialog.field.adjustPlaceholder") : "0"}
-            className="h-9 w-full px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+            unit={product.unit || undefined}
           />
-        </label>
-
+        </Field>
         {/* ต้นทุน/หน่วยตอนรับเข้า — ไม่บังคับ ถ้ากรอกจะถัวเฉลี่ยใหม่ (ใบรับสินค้าส่งราคาจริงมาเองอยู่แล้ว
             ช่องนี้สำหรับรับเข้าด้วยมือ เช่นยอดตั้งต้น) */}
         {kind === "receive" && (
-          <label className="block text-xs text-muted-foreground space-y-1">
-            <span>{t("stock.dialog.field.unitCost")}</span>
-            <input
+          <Field label={t("stock.dialog.field.unitCost")} htmlFor="stock-adjust-cost">
+            <UnitInput
+              id="stock-adjust-cost"
               type="number" min={0} step="0.01"
               value={unitCost}
               onChange={(e) => setUnitCost(e.target.value)}
               placeholder={(product.avgCost ?? 0) > 0 ? money(product.avgCost ?? 0) : "0.00"}
-              className="h-9 w-full px-3 text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+              unit={t("stock.unit.baht")}
             />
-            <span className="block">{t("stock.dialog.unitCostHint")}</span>
-          </label>
+          </Field>
         )}
-
-        <label className="block text-xs text-muted-foreground space-y-1">
-          <span>{t("stock.dialog.field.reason")}</span>
-          <input
-            type="text"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder={kind === "receive" ? t("stock.dialog.placeholder.receive") : kind === "deduct" ? t("stock.dialog.placeholder.deduct") : t("stock.dialog.placeholder.adjust")}
-            className="h-9 w-full px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-        </label>
-
-        {error && <p className="text-xs text-[#c23f3f]">{error}</p>}
-
-        <div className="flex items-center justify-end gap-2 pt-1">
-          <button onClick={onCancel} disabled={busy} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">{t("stock.dialog.cancel")}</button>
-          <button onClick={() => void handleSave()} disabled={busy} className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-medium hover:brightness-95 transition-all disabled:opacity-50">
-            {busy ? t("stock.dialog.saving") : t("stock.dialog.save")}
-          </button>
-        </div>
       </div>
-    </div>
+      {kind === "receive" && <p className={`${field.help} -mt-2`}>{t("stock.dialog.unitCostHint")}</p>}
+
+      <Field label={t("stock.dialog.field.reason")} htmlFor="stock-adjust-reason">
+        <input
+          id="stock-adjust-reason"
+          type="text"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={kind === "receive" ? t("stock.dialog.placeholder.receive") : kind === "deduct" ? t("stock.dialog.placeholder.deduct") : t("stock.dialog.placeholder.adjust")}
+          className={`${field.input} w-full`}
+        />
+      </Field>
+    </FormDialog>
   );
 }

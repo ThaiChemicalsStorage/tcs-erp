@@ -1242,7 +1242,7 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
     ทุกครั้งที่ยิงต้องคุยกับเซิร์ฟเวอร์ ถ้าสัญญาณในสโตร์ไม่ดีต้องคิดเรื่องนี้แยกต่างหาก
 
 - [ ] **รูปงานคร่าว ๆ ถ้าตัดสินใจทำ (2026-08-28).**
-  (1) ฟิลด์ `barcode` ใน `src/lib/products.ts` + unique index แบบ lazy + backfill ของเก่า + ช่องแสดงใน `ProductForm.tsx`
+  (1) ฟิลด์ `barcode` ใน `src/lib/products.ts` + unique index แบบ lazy + backfill ของเก่า + ช่องแสดงใน `ProductDrawer.tsx` (แทน ProductForm ตั้งแต่ 2026-09-30)
   (2) **ใหม่** `src/lib/barcode.ts` (Code 128 → SVG, ฟังก์ชันบริสุทธิ์ unit test ง่าย) + `BarcodeLabel.tsx`
   + หน้าพิมพ์ฉลาก + `labelPrintSettings.ts` (ลอก `ncrPrintSettings.ts` ทั้งชุด รวมปุ่มทดสอบพิมพ์)
   (3) **ใหม่** `useBarcodeScanner()` แล้วเสียบเข้า `GoodsReceiptPage` (บวก `qtyReceived`) ·

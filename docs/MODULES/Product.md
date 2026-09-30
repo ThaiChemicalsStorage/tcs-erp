@@ -16,10 +16,11 @@ A reusable Product/Service library ("Product Templates") that Sales can draw fro
 
 ## Pages
 
-- `src/pages/products/ProductsPage.tsx` (101 lines) — top-level container: view-switching (`list`/`create`/`edit`/`categories`), owns all CRUD handlers, passes data + callbacks down.
-- `src/pages/products/ProductList.tsx` (247 lines) — list/table view: search, filter, sort, pagination, row actions, delete-confirmation.
-- `src/pages/products/ProductForm.tsx` (144 lines) — shared create/edit form.
-- `src/pages/products/CategoriesManager.tsx` (116 lines) — category CRUD (create/rename/archive).
+- `src/pages/products/ProductsPage.tsx` — top-level container: owns all CRUD handlers, switches between the list and the categories view, opens `ProductDrawer` for create/edit (since the 2026-09-30 redesign; before that it switched to a full-page `ProductForm`).
+- `src/pages/products/ProductList.tsx` — list/table view: tabs ใช้งาน/เก็บถาวร (replaced the "show archived" checkbox 2026-09-30), search, category filter, sort, pagination (20/page); the whole row opens the drawer.
+- `src/pages/products/ProductDrawer.tsx` — create/edit side panel (560px). Same fields, validation and kit (สินค้าชุด) section the old `ProductForm.tsx` had; duplicate / archive / restore / delete moved into its "เพิ่มเติม ▾" menu (2026-09-30). `ProductForm.tsx` was deleted.
+- `src/pages/products/ProductImportDialog.tsx` — Excel import preview (880px dialog).
+- `src/pages/products/CategoriesManager.tsx` — category CRUD (create/rename/archive) as one table with inline add/rename.
 - `src/pages/products/ProductPickerModal.tsx` (77 lines) — search-filterable picker, used only from Quotation.
 
 ## Components

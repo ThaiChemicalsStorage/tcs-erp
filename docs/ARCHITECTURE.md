@@ -189,7 +189,7 @@ Real REST API served by the standalone Express server (`server/`). Full route-by
 Within a module folder, the pattern established by `pages/quotation/` and `pages/products/`:
 
 1. A top-level `<Module>Page.tsx` holds `useState` for which "view" is active (list / create / edit / detail) and any cross-view identifiers (e.g. `selectedId`).
-2. Each view is its own component (`QuoteList.tsx`, `QuoteDocument.tsx`, `ProductList.tsx`, `ProductForm.tsx`, `CategoriesManager.tsx`), receiving data + callbacks as props — no direct `localStorage` access or cross-module imports from view components.
+2. Each view is its own component (`QuoteList.tsx`, `QuoteDocument.tsx`, `ProductList.tsx`, `ProductDrawer.tsx`, `CategoriesManager.tsx`), receiving data + callbacks as props — no direct `localStorage` access or cross-module imports from view components.
 3. Shared, small, presentation-only pieces used by multiple views in the same module (e.g. `InterestButtons.tsx`, `notesFormat.tsx`) live alongside them in the same folder.
 4. A view component that gets a `key={...}` prop tied to "which record is being edited" (see `QuoteDocument` keyed by `selectedId ?? "new"` in `QuotationPage.tsx`) is a deliberate pattern: it forces React to remount (and thus reset local form state) when switching between records, instead of manually syncing state via `useEffect`. Prefer this pattern over effect-based state synchronization when a component's entire local state should reset per-record.
 

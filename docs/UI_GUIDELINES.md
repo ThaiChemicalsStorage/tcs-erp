@@ -508,7 +508,7 @@ a repeatable sub-list is its own bordered block per entry with an inline remove 
 unsaved-changes discard-confirmation fires on Cancel/breadcrumb-back when dirty) used to be
 `CompanyProfileForm.tsx`/`CompanyProfileList.tsx`, both deleted when the Company Profiles module was
 removed (see [MODULES/CompanyProfiles.md](../MODULES/CompanyProfiles.md)). The pattern description
-itself is still good guidance for any future form that needs it — `ProductForm.tsx`/`SettingsPage.tsx`
+itself is still good guidance for any future form that needs it — `ProductDrawer.tsx` (was `ProductForm.tsx` until 2026-09-30)/`SettingsPage.tsx`
 follow variations of the same idea — just without a dedicated example component to point to anymore.
 
 ### Search-and-Pick Autofill (Quotation's Customer selector, added 2026-07-14)

@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { ChevronRight, Plus, Pencil, Archive, ArchiveRestore, Check, X, Tags } from "lucide-react";
+import { ChevronLeft, Plus, Pencil, Archive, ArchiveRestore, Tags } from "lucide-react";
 import type { ProductCategory } from "../../lib/products";
 import { createCategory, updateCategory } from "../../lib/products";
 import { StatusBadge } from "../../components/StatusBadge";
+import { ListPageHeader, ListCard } from "../../components/ui/ListPage";
+import { btn, field, surface, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
 
 /**
- * หน้าจัดการหมวดหมู่สินค้า: เพิ่ม แก้ไขชื่อ และเก็บ/เลิกเก็บถาวร
+ * หน้าจัดการหมวดหมู่สินค้า: เพิ่ม แก้ไขชื่อ และเก็บ/เลิกเก็บถาวร (ดีไซน์ใหม่ 2026-09-30 — ตารางเดียว
+ * เพิ่ม/แก้ชื่อในแถว)
  *
  * **2026-09-09 — ใช้ได้สองแบบ** ตามที่เจ้าของขอให้ "จัดการหมวดหมู่สินค้าได้ด้วย":
- *   1. เป็นหน้าย่อยของหน้าสินค้า (ส่ง `onBack` มา) — ทางเดิมที่มีอยู่ก่อนแล้ว
+ *   1. เป็นหน้าย่อยของหน้าสินค้า (ส่ง `onBack` มา) — มีลิงก์ย้อนกลับเหนือหัวหน้า
  *   2. เป็น **เมนูของตัวเองในกลุ่มคลังสินค้า** (ไม่ส่ง `onBack`) — สโตร์เข้าถึงได้โดยไม่ต้องผ่าน
  *      หน้าสินค้า ซึ่งเป็นหน้าของฝ่ายอื่นและต้องมีสิทธิ์คนละชุด
+ * ทั้งสองแบบหน้าตาเดียวกันแล้ว (เดิมหน้าย่อยกับหน้าเดี่ยวต่างกัน)
  *
  * `canManage` สะท้อนสิทธิ์จริงฝั่งเซิร์ฟเวอร์ (`products:create` ตอนสร้าง / `products:edit` ตอนแก้)
  * — คนที่ดูได้อย่างเดียวจะเห็นรายการแต่ไม่มีปุ่ม ดีกว่าให้กดแล้วได้ 403
@@ -32,6 +36,7 @@ export function CategoriesManager({
   canManage?: boolean;
 }) {
   const { t } = useI18n();
+  const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,12 +59,13 @@ export function CategoriesManager({
       onChange([...categories, created]);
       setNewName("");
       setError("");
+      setAdding(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("products.categories.createError"));
     }
   };
 
-  const startEdit = (c: ProductCategory) => { setEditingId(c.id); setEditingName(c.name); };
+  const startEdit = (c: ProductCategory) => { setEditingId(c.id); setEditingName(c.name); setError(""); };
   // บันทึกชื่อหมวดหมู่ที่แก้ไขแล้วไปยังเซิร์ฟเวอร์
   // Saves the edited category name to the server.
   const saveEdit = async () => {
@@ -95,93 +101,119 @@ export function CategoriesManager({
    */
   const activeProductCount = (categoryId: string) =>
     products.filter((p) => !p.archived && p.categoryId === categoryId).length;
+  const showCount = products.length > 0;
+  const activeCount = categories.filter((c) => !c.archived).length;
+  const cols = `grid-cols-[minmax(0,1fr)_auto] ${showCount ? "sm:grid-cols-[minmax(0,1fr)_160px_160px_96px]" : "sm:grid-cols-[minmax(0,1fr)_160px_96px]"}`;
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      {onBack ? (
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
-          </button>
-          <ChevronRight size={13} className="text-muted-foreground" />
-          <span className="text-sm text-[#c9a84c] font-medium">{t("products.manageCategories")}</span>
-        </div>
-      ) : (
-        <div className="px-6 pt-6 max-w-2xl mx-auto">
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("products.manageCategories")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("products.categories.pageSubtitle")}</p>
-        </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      {onBack && (
+        <button type="button" onClick={onBack} className={`${btn.text} self-start -mb-2`}>
+          <ChevronLeft size={16} /> {t("products.pageTitle")}
+        </button>
       )}
+      <ListPageHeader
+        module={t("nav.group.inventory")}
+        title={t("nav.productCategories")}
+        description={t("products.categories.pageSubtitle")}
+        actions={canManage && (
+          <button type="button" onClick={() => { setAdding(true); setError(""); }} className={btn.primary}>
+            <Plus size={16} /> {t("products.categories.addNewTitle")}
+          </button>
+        )}
+      />
 
-      <div className="p-6 max-w-2xl mx-auto space-y-5">
-        {canManage && (
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h2 id="categories-addNew-heading" className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
-            <Tags size={13} /> {t("products.categories.addNewTitle")}
-          </h2>
-          <div className="flex items-center gap-2">
-            <input
-              aria-labelledby="categories-addNew-heading"
-              value={newName}
-              onChange={(e) => { setNewName(e.target.value); setError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && addCategory()}
-              placeholder={t("products.categories.namePlaceholder")}
-              className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            <button onClick={addCategory} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-              <Plus size={14} /> {t("common.add")}
-            </button>
-          </div>
-          {error && <p className="text-xs text-[#e05252] mt-1.5">{error}</p>}
+      <ListCard>
+        <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-[#eef1f6]">
+          <h2 className={surface.cardTitle}>{t("products.categories.listTitle")}</h2>
+          <span className="flex-1" />
+          <span className="text-[13px] text-muted-foreground">
+            {t("products.categories.countSummary").replace("{active}", String(activeCount)).replace("{archived}", String(categories.length - activeCount))}
+          </span>
         </div>
+
+        <div className={`grid ${cols} items-center gap-x-3 px-5 ${table.head}`}>
+          <span>{t("products.categories.col.name")}</span>
+          {showCount && <span className="hidden sm:block text-right pr-10">{t("products.categories.col.count")}</span>}
+          <span className="hidden sm:block">{t("products.col.status")}</span>
+          <span />
+        </div>
+
+        {canManage && adding && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); void addCategory(); }}
+            className="flex items-end gap-2.5 flex-wrap px-5 py-3 bg-[#f8f9fc] border-b border-border"
+          >
+            <label className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-none">
+              <span className={field.label}>{t("products.categories.addNewTitle")} <span className="text-[#b93636]">*</span></span>
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => { setNewName(e.target.value); setError(""); }}
+                onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setAdding(false); } }}
+                placeholder={t("products.categories.namePlaceholder")}
+                aria-invalid={!!error}
+                className={`${field.cell} w-full sm:w-[420px]`}
+              />
+            </label>
+            <span className="flex gap-2">
+              <button type="button" onClick={() => { setAdding(false); setNewName(""); setError(""); }} className={btn.secondarySm}>{t("common.cancel")}</button>
+              <button type="submit" className={btn.secondarySm}><Plus size={15} /> {t("common.add")}</button>
+            </span>
+          </form>
         )}
 
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {categories.length === 0 && (
-            <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t("products.categories.empty")}</p>
-          )}
-          {categories.map((c, i) => (
-            <div key={c.id} className={`flex items-center justify-between px-5 py-3.5 ${i > 0 ? "border-t border-border" : ""}`}>
+        {error && <p role="alert" className={`${field.error} px-5 py-2.5 border-b border-[#eef1f6] bg-[#fcebeb]`}>{error}</p>}
+
+        {categories.length === 0 && (
+          <div className="py-14 px-6 flex flex-col items-center gap-2 text-center">
+            <Tags size={22} className="text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">{t("products.categories.empty")}</p>
+          </div>
+        )}
+        {categories.map((c) => (
+          <div key={c.id} className={`grid ${cols} items-center gap-x-3 px-5 min-h-14 py-2 border-b border-[#eef1f6] last:border-b-0 bg-white hover:bg-[#f8f9fc] transition-colors`}>
+            <span className="min-w-0 flex items-center">
               {editingId === c.id ? (
-                <div className="flex items-center gap-2 flex-1">
+                <form onSubmit={(e) => { e.preventDefault(); void saveEdit(); }} className="flex items-center gap-2 flex-wrap min-w-0">
                   <input
                     autoFocus
+                    aria-label={`${t("products.categories.editNameTitle")} ${c.name}`}
                     value={editingName}
                     onChange={(e) => setEditingName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-                    className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+                    onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditingId(null); } }}
+                    className={`${field.cell} w-full sm:w-[360px]`}
                   />
-                  <button onClick={saveEdit} className="p-1.5 text-[#2aa36b] hover:bg-[#2aa36b]/10 rounded-lg transition-colors"><Check size={15} /></button>
-                  <button onClick={() => setEditingId(null)} className="p-1.5 text-muted-foreground hover:bg-secondary rounded-lg transition-colors"><X size={15} /></button>
-                </div>
+                  <button type="button" onClick={() => setEditingId(null)} className={btn.secondarySm}>{t("common.cancel")}</button>
+                  <button type="submit" className={btn.secondarySm}>{t("common.save")}</button>
+                </form>
               ) : (
+                <span className={`text-sm font-medium truncate ${c.archived ? "text-muted-foreground" : "text-foreground"}`}>{c.name}</span>
+              )}
+            </span>
+            {showCount && (
+              <span className="hidden sm:block text-right pr-10 text-sm text-[#3d5173] tabular-nums">
+                {t("products.categories.productCount").replace("{n}", activeProductCount(c.id).toLocaleString())}
+              </span>
+            )}
+            <span className="hidden sm:block">
+              <StatusBadge status={c.archived ? "archived" : "active"} label={c.archived ? t("common.status.archived") : t("common.status.active")} />
+            </span>
+            <span className="flex justify-end gap-1">
+              {canManage && editingId !== c.id && (
                 <>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-sm text-foreground font-medium truncate">{c.name}</span>
-                    <StatusBadge
-                      status={c.archived ? "archived" : "active"}
-                      label={c.archived ? t("common.status.archived") : t("common.status.active")}
-                    />
-                    {products.length > 0 && (
-                      <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-                        {t("products.categories.productCount").replace("{n}", activeProductCount(c.id).toLocaleString())}
-                      </span>
-                    )}
-                  </div>
-                  {canManage && (
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => startEdit(c)} title={t("products.categories.editNameTitle")} aria-label={`${t("products.categories.editNameTitle")} ${c.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>
-                      <button onClick={() => toggleArchive(c.id)} title={c.archived ? t("common.unarchive") : t("common.archive")} aria-label={`${c.archived ? t("common.unarchive") : t("common.archive")} ${c.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
-                        {c.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                      </button>
-                    </div>
-                  )}
+                  <button type="button" onClick={() => startEdit(c)} title={t("products.categories.editNameTitle")} aria-label={`${t("products.categories.editNameTitle")} ${c.name}`} className={btn.icon}>
+                    <Pencil size={16} />
+                  </button>
+                  <button type="button" onClick={() => void toggleArchive(c.id)} title={c.archived ? t("common.unarchive") : t("common.archive")} aria-label={`${c.archived ? t("common.unarchive") : t("common.archive")} ${c.name}`} className={btn.icon}>
+                    {c.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                  </button>
                 </>
               )}
-            </div>
-          ))}
-        </div>
-      </div>
+            </span>
+          </div>
+        ))}
+      </ListCard>
     </div>
   );
 }
