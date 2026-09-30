@@ -1,15 +1,17 @@
-import { FileClock, CalendarClock, AlarmClock, PackageMinus, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useI18n } from "../../../lib/i18n";
 import type { DepartmentKey } from "../../../lib/dashboardTabs";
 import type { DepartmentDashboardResponse, DueItem, OpenPurchaseRequestStages, StatusCounts } from "../../../lib/departmentDashboard";
 import { fmtDateShort } from "../format";
 import { DEPARTMENT_META } from "./tabMeta";
+import { btn } from "../../../components/ui/styles";
+import { ScopeTag } from "../ChartCard";
 import {
-  ChartCard, DepartmentViewFrame, DueListTable, EmptyNote, KpiCard, KpiGrid, MonthlyBars, OpenListButton,
-  ProgressBar, SectionHeading, SegmentBar, SharedStatusPill, SplitRow, TabIntro, type DepartmentTabProps,
-  type Segment
+  CardFooterLink, ChartCard, DepartmentViewFrame, DueListTable, EmptyNote, KpiCard, KpiGrid, MonthlyBars, Num, ProgressBar,
+  SectionHeading, SegmentBar, SeriesLegend, SharedStatusPill, SplitRow, StatusChip, TabIntro, type DepartmentTabProps,
+  type PillTone, type Segment
 } from "./DepartmentWidgets";
-import { GOLD, STATUS_COLORS } from "./dashboardTokens";
+import { CHART, STATUS_COLORS } from "./dashboardTokens";
 import { fmtCount } from "./countFormat";
 
 /**
@@ -45,12 +47,12 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
   const pd = production?.detail ?? null;
   const pj = project?.detail ?? null;
 
-  /** แถบแยกสองแผนก — ข้ามแผนกที่ไม่มีสิทธิ์ หรือตัวเลขนั้นเป็น null */
+  /** แถบแยกสองแผนก (ผลิต = น้ำเงิน · โครงการ = ส้ม) — ข้ามแผนกที่ไม่มีสิทธิ์ หรือตัวเลขนั้นเป็น null */
   const split = (productionValue: number | null | undefined, projectValue: number | null | undefined): Segment[] => [
     ...(production && productionValue !== null && productionValue !== undefined
-      ? [{ key: "production", label: t("dashboard.tab.production"), value: productionValue, color: DEPARTMENT_META.production.accent }] : []),
+      ? [{ key: "production", label: t("dashboard.tab.production"), value: productionValue, color: CHART.blue }] : []),
     ...(project && projectValue !== null && projectValue !== undefined
-      ? [{ key: "project", label: t("dashboard.tab.project"), value: projectValue, color: DEPARTMENT_META.project.accent }] : []),
+      ? [{ key: "project", label: t("dashboard.tab.project"), value: projectValue, color: CHART.orange }] : []),
   ];
   const sum = (segments: Segment[]) => segments.reduce((s, x) => s + x.value, 0);
 
@@ -65,8 +67,8 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
     project: pj?.startedByMonth?.[i]?.count ?? 0,
   }));
   const startedSeries = [
-    ...(pd ? [{ key: "production", name: t("dashboard.ops.started.production"), color: DEPARTMENT_META.production.accent }] : []),
-    ...(pj?.startedByMonth ? [{ key: "project", name: t("dashboard.ops.started.project"), color: DEPARTMENT_META.project.accent }] : []),
+    ...(pd ? [{ key: "production", name: t("dashboard.ops.started.production"), color: CHART.blue }] : []),
+    ...(pj?.startedByMonth ? [{ key: "project", name: t("dashboard.ops.started.project"), color: CHART.orange }] : []),
   ];
 
   const dueRows: (DueItem & { dept: DepartmentKey })[] = [
@@ -77,6 +79,8 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
 
   const deliveryOrder = pd?.deliveryOrder ?? pj?.deliveryOrder ?? null;
   const worksFailed = response.failed.some((k) => k === "production" || k === "project");
+  const now = t("dashboard.dept.caption.asOfNow");
+  const docs = t("dashboard.unit.docs");
 
   return (
     <>
@@ -90,17 +94,17 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
         <>
           <SectionHeading depts={works} title={t("dashboard.ops.works.title")} note={t("dashboard.ops.works.note")} />
           <KpiGrid>
-            <KpiCard icon={FileClock} chip={GOLD} label={t("dashboard.ops.pending")} value={fmtCount(sum(pendingSplit))} segments={pendingSplit} />
-            <KpiCard icon={CalendarClock} chip="#e08a3c" tone={sum(dueSoonSplit) > 0 ? "warn" : undefined} label={t("dashboard.ops.dueSoon")} value={fmtCount(sum(dueSoonSplit))} segments={dueSoonSplit} />
-            <KpiCard icon={AlarmClock} chip="#e05252" tone={sum(pastDueSplit) > 0 ? "alert" : undefined} label={t("dashboard.ops.pastDue")} value={fmtCount(sum(pastDueSplit))} segments={pastDueSplit} help={t("dashboard.production.pastDueHelp")} />
-            {mrSplit.length > 0 && <KpiCard icon={PackageMinus} chip="#e08a3c" label={t("dashboard.ops.mrAwaitingIssue")} value={fmtCount(sum(mrSplit))} segments={mrSplit} />}
+            <KpiCard label={t("dashboard.ops.pending")} value={fmtCount(sum(pendingSplit))} unit={docs} scope={now} segments={pendingSplit} />
+            <KpiCard tone={sum(dueSoonSplit) > 0 ? "warn" : undefined} label={t("dashboard.ops.dueSoon")} value={fmtCount(sum(dueSoonSplit))} unit={docs} scope={now} segments={dueSoonSplit} />
+            <KpiCard tone={sum(pastDueSplit) > 0 ? "alert" : undefined} label={t("dashboard.ops.pastDue")} value={fmtCount(sum(pastDueSplit))} unit={docs} scope={now} segments={pastDueSplit} help={t("dashboard.production.pastDueHelp")} />
+            {mrSplit.length > 0 && <KpiCard label={t("dashboard.ops.mrAwaitingIssue")} value={fmtCount(sum(mrSplit))} unit={docs} scope={now} segments={mrSplit} />}
           </KpiGrid>
 
           {(pd || pj) && (
             <>
               <SplitRow
                 main={startedSeries.length > 0 && (
-                  <ChartCard fill title={t("dashboard.ops.started.title")} sub={t("dashboard.ops.started.sub")}>
+                  <ChartCard fill title={t("dashboard.ops.started.title")} sub={t("dashboard.ops.started.sub")} actions={startedSeries.length > 1 ? <SeriesLegend series={startedSeries} /> : undefined}>
                     <MonthlyBars rows={startedRows} series={startedSeries} format={fmtCount} empty={t("dashboard.ops.started.empty")} />
                   </ChartCard>
                 )}
@@ -110,8 +114,8 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
                       {pd && <StatusRow label={t("nav.productionOrder")} counts={pd.status} onOpen={() => onNavigatePage("productionOrder")} />}
                       {pj?.jobOrderStatus && <StatusRow label={t("nav.jobOrder")} counts={pj.jobOrderStatus} onOpen={() => onNavigatePage("jobOrder")} />}
                       {(pd?.prOpenStage || pj?.prOpenStage) && (
-                        <div className="pt-4 border-t border-border space-y-2">
-                          <p className="text-sm font-medium text-foreground">{t("dashboard.ops.prOpen.title")}</p>
+                        <div className="pt-4 border-t border-[#eef1f6] space-y-2">
+                          <p className="text-[13px] font-semibold text-muted-foreground">{t("dashboard.ops.prOpen.title")}</p>
                           {pd?.prOpenStage && <PrStageLine dept="production" stages={pd.prOpenStage} />}
                           {pj?.prOpenStage && <PrStageLine dept="project" stages={pj.prOpenStage} />}
                         </div>
@@ -129,26 +133,7 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
                     empty={t("dashboard.ops.due.empty")} deptOf={(row) => deptOfRow.get(row.id) ?? "production"}
                   />
                 )}
-                side={deliveryOrder && (
-                  <ChartCard
-                    title={t("nav.deliveryOrder")} sub={t("dashboard.dept.deliveryOrderShared")} className="h-full"
-                    actions={<OpenListButton onClick={() => onNavigatePage("deliveryOrder")} />}
-                  >
-                    <div className="grid grid-cols-2 gap-3">
-                      {([
-                        ["final", t("dashboard.dept.status.final"), deliveryOrder.final],
-                        ["pending", t("dashboard.dept.status.pending"), deliveryOrder.pending],
-                        ["draft", t("dashboard.dept.status.draft"), deliveryOrder.draft],
-                        ["total", t("dashboard.dept.status.total"), deliveryOrder.total],
-                      ] as const).map(([key, label, value]) => (
-                        <div key={key} className="rounded-lg bg-muted/70 p-3">
-                          <p className="text-xl font-semibold font-mono text-foreground leading-none">{fmtCount(value)}</p>
-                          <p className="text-xs text-muted-foreground mt-1.5">{label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </ChartCard>
-                )}
+                side={deliveryOrder && <DeliveryOrderCard counts={deliveryOrder} onOpen={() => onNavigatePage("deliveryOrder")} />}
               />
             </>
           )}

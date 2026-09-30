@@ -13,3 +13,12 @@ export function fmtMonthShort(month: string, lang: "th" | "en"): string {
   if (!y || !m) return month;
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(lang === "th" ? "th-TH" : "en-US", { month: "short", timeZone: "UTC" });
 }
+
+/** ป้ายแกนตัวเลขแบบย่อไม่มีสกุลเงิน — 1200000 → "1.2M" · 450000 → "450K" (แกนกราฟเงินในแดชบอร์ด) */
+export function fmtAxis(n: number): string {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}${Number((abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1))}M`;
+  if (abs >= 1_000) return `${sign}${Number((abs / 1_000).toFixed(abs >= 100_000 ? 0 : 1))}K`;
+  return `${sign}${abs.toLocaleString("th-TH")}`;
+}
