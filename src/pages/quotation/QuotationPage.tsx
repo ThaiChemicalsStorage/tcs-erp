@@ -7,12 +7,12 @@ import type { User } from "../../lib/users";
 import { type Role, hasPermission } from "../../lib/roles";
 import type { Customer } from "../../lib/customers";
 import {
-  type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction, type QuotationListFilter,
+  type Quote, type QuoteInterest, type QuoteDraftFields, type QuoteUpdateFields, type ApprovalAction, type QuotationListFilter,
   createQuote, updateQuote, duplicateQuote, rewriteQuote, performWorkflowAction, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
 } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { QuoteList } from "./QuoteList";
-import { QuoteDocument } from "./QuoteDocument";
+import { QuoteDocument, type QuoteFollowUpFields } from "./QuoteDocument";
 import { ScopeOfWorkDocument } from "./ScopeOfWorkDocument";
 import { QuotationTemplateWizard, type QuotationWizardResult } from "./QuotationTemplateWizard";
 import { Toast } from "../../components/Toast";
@@ -161,6 +161,20 @@ export function QuotationPage({
     }
   };
 
+  // บันทึกช่องติดตามการขายของใบที่ล็อกแล้ว (2026-09-30) — ส่งเฉพาะเลข PO วันที่ติดตาม และโอกาสในการขาย
+  // A locked quotation (Pending onward) only accepts its follow-up fields; the server answers 409
+  // to anything else, so this sends exactly those three and nothing from the rest of the form.
+  const handleSaveFollowUp = async (data: QuoteFollowUpFields) => {
+    if (!selectedQuote) return;
+    try {
+      const updated = await updateQuote(selectedQuote.id, data);
+      setQuotes((prev) => prev.map((q) => (q.id === selectedQuote.id ? updated : q)));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("quotation.saveErrorToast"));
+      throw err;
+    }
+  };
+
   // บันทึกร่างอัตโนมัติเบื้องหลัง (2026-08-25) — เงียบเสมอ ไม่มี toast และไม่เปลี่ยนหน้าจอ
   // Background auto-save. Deliberately narrower than `handleSave()`: it never creates a record
   // (a brand-new quotation is protected by the local snapshot instead — see QuoteDocument) and it
@@ -202,7 +216,7 @@ export function QuotationPage({
 
   // ดำเนินการตามขั้นตอนอนุมัติ (เช่น ส่งอนุมัติ/อนุมัติ/ตีกลับ) โดยใช้ข้อมูลร่างล่าสุดบนหน้าจอ
   // Performs a workflow action (e.g. submit/approve/reject) using the current on-screen draft
-  const handleWorkflowAction = async (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => {
+  const handleWorkflowAction = async (action: ApprovalAction, comment: string, draft: QuoteUpdateFields) => {
     if (!selectedQuote) return;
     try {
       const updated = await performWorkflowAction(selectedQuote.id, action, comment, draft);
@@ -326,6 +340,7 @@ export function QuotationPage({
         onOpenScopeOfWork={openScopeOfWork}
         onBack={() => setView("list")}
         onSave={handleSave}
+        onSaveFollowUp={handleSaveFollowUp}
         onAutoSave={handleAutoSave}
         onDuplicate={handleDuplicate}
         onRewrite={handleRewrite}

@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import { useDialogA11y } from "../hooks/useDialogA11y";
@@ -10,6 +10,10 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** โทนไอคอน: ค่าเริ่มต้นตาม danger (แดง) หรือฟ้า · "warning" = เหลือง (ปิดใช้งาน ถอนอนุมัติ ฯลฯ) */
+  tone?: "info" | "warning" | "danger";
+  /** กล่องสรุปรายการที่กำลังจะทำ (เลขที่ + ชื่อ) ใต้ข้อความ */
+  summary?: ReactNode;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -31,10 +35,13 @@ function ConfirmDialogPanel({
   confirmLabel,
   cancelLabel,
   danger = false,
+  tone,
+  summary,
   busy = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const iconTone = tone ?? (danger ? "danger" : "info");
   const { t } = useI18n();
   const panelRef = useDialogA11y(onCancel);
   const titleId = useId();
@@ -51,12 +58,13 @@ function ConfirmDialogPanel({
         className="relative bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] w-full max-w-[480px] flex flex-col"
       >
         <div className="flex items-start gap-4 px-6 pt-6">
-          <span className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${danger ? "bg-[#fcebeb] text-[#b93636]" : "bg-[#e8f0fb] text-[#1a5fb4]"}`}>
+          <span className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${iconTone === "danger" ? "bg-[#fcebeb] text-[#b93636]" : iconTone === "warning" ? "bg-[#fdf3e0] text-[#8a5a00]" : "bg-[#e8f0fb] text-[#1a5fb4]"}`}>
             <AlertTriangle size={20} />
           </span>
           <div className="flex-1 min-w-0 pt-0.5 space-y-1">
             <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">{title}</h2>
             <p id={messageId} className="text-sm text-[#3d5173] leading-relaxed">{message}</p>
+            {summary && <div className="mt-3 px-3.5 py-3 bg-[#f8f9fc] border border-border rounded-lg text-sm">{summary}</div>}
           </div>
           <button
             type="button"

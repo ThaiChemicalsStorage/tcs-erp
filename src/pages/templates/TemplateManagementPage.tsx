@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
-  Plus, Search, Pencil, Power, Archive, ArchiveRestore, Copy, Eye, FileStack, X, Loader2, Upload, FileText, HelpCircle,
+  Plus, Power, Archive, ArchiveRestore, Copy, Eye, FileStack, X, Loader2, Upload, FileText, MoreVertical,
 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -15,21 +15,47 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
-import { useToast } from "../../hooks/useToast";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { TemplatePreview } from "../../components/TemplatePreview";
+import { ListPageHeader, ListTabs, ListToolbar, FilterSelect, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field } from "../../components/ui/Field";
+import { btn, field, surface, table } from "../../components/ui/styles";
+import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { TemplateEditorView } from "./TemplateEditorView";
 
-type StatusFilter = "all" | "active" | "inactive";
+type StatusTab = "all" | "active" | "inactive" | "archived";
 type SourceFilter = "all" | "excel_import" | "manual";
+const PAGE_SIZE = 20;
+// MoreMenu เปิดลงล่างเสมอ — แถวท้ายตารางให้เปิดขึ้นบนแทน ไม่งั้นเมนูล้นขอบล่าง
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// หน้าต่างแสดงตัวอย่าง Template แบบ modal พร้อมการจัดการโฟกัส/ปุ่ม Escape
-// Modal dialog for previewing a template, with focus trap and Escape handling.
+function JobTypeChip({ code }: { code: string }) {
+  return <span className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center">{code}</span>;
+}
+
+// กล่องสรุป Template ที่กำลังทำรายการ (ในกล่องทำสำเนา)
+function TemplateSummaryBox({ tpl }: { tpl: QuotationTemplateSummary }) {
+  const { t } = useI18n();
+  const parts = [
+    tpl.templateName, tpl.jobTypeCode, t("templates.summary.version").replace("{v}", tpl.version),
+    t("templates.summary.counts").replace("{s}", String(tpl.sectionCount)).replace("{n}", String(tpl.itemCount)),
+  ];
+  return (
+    <div className="px-3.5 py-3 bg-[#f8f9fc] border border-border rounded-lg flex flex-col gap-0.5 min-w-0">
+      <span className="font-mono text-[13px] font-medium text-foreground truncate">{tpl.templateCode}</span>
+      <span className="text-[13px] text-[#3d5173] truncate">{parts.join(" · ")}</span>
+    </div>
+  );
+}
+
+// หน้าต่างแสดงตัวอย่าง Template (880px) — เนื้อหาเป็น TemplatePreview ตัวเดิมที่ใช้ในหน้าสร้างใบเสนอราคา
+// Template preview dialog (880px) — body is the same TemplatePreview used by the quotation wizard.
 function TemplatePreviewModal({ target, full, onClose }: {
   target: QuotationTemplateSummary;
   full: QuotationTemplate | null;
@@ -39,23 +65,38 @@ function TemplatePreviewModal({ target, full, onClose }: {
   const panelRef = useDialogA11y(onClose);
   const titleId = useId();
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground">{t("templates.action.preview")}: {target.templateName}</h2>
-          <button onClick={onClose} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={onClose} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative w-full max-w-[880px] max-h-[85vh] bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] flex flex-col overflow-hidden">
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b border-[#eef1f6]">
+          <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">{t("templates.action.preview")}: {target.templateName}</h2>
+            <div className="flex items-center gap-2.5 flex-wrap text-[13px] text-[#3d5173]">
+              <JobTypeChip code={target.jobTypeCode} />
+              <span>{t("templates.summary.version").replace("{v}", target.version)}</span>
+              <span className="text-[#c3ccda]">·</span>
+              <span>{t("templates.summary.counts").replace("{s}", String(target.sectionCount)).replace("{n}", String(target.itemCount))}</span>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} className="w-9 h-9 -mr-2 -mt-1 rounded-lg text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground flex items-center justify-center flex-shrink-0">
+            <X size={18} />
+          </button>
         </div>
-        {full ? <TemplatePreview template={full} /> : (
-          <div role="status" aria-live="polite" className="flex items-center justify-center py-10 gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>
-        )}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+          {full ? <TemplatePreview template={full} /> : (
+            <div role="status" aria-live="polite" className="flex items-center justify-center py-10 gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-border">
+          <button type="button" onClick={onClose} className={btn.secondary}>{t("common.close")}</button>
+        </div>
       </div>
     </div>
   );
 }
 
-// หน้าต่าง modal สำหรับทำสำเนา Template พร้อมตั้งรหัสใหม่
-// Modal dialog for duplicating a template with a new code.
+// หน้าต่างทำสำเนา Template พร้อมตั้งรหัสใหม่ (480px แบบกล่องยืนยัน)
+// Duplicate dialog — asks for a new Template Code.
 function TemplateDuplicateModal({ target, code, onCodeChange, duplicating, onConfirm, onCancel }: {
   target: QuotationTemplateSummary;
   code: string;
@@ -65,23 +106,51 @@ function TemplateDuplicateModal({ target, code, onCodeChange, duplicating, onCon
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const panelRef = useDialogA11y(onCancel);
+  const close = () => { if (!duplicating) onCancel(); };
+  const panelRef = useDialogA11y(close);
   const titleId = useId();
+  const descId = useId();
   const codeInputId = useId();
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!duplicating && code.trim()) onConfirm();
+  };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1">{t("templates.action.duplicate")}</h2>
-        <p className="text-xs text-muted-foreground mb-3">{t("templates.duplicate.prompt").replace("{name}", target.templateName)}</p>
-        <label htmlFor={codeInputId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")}</label>
-        <input id={codeInputId} autoFocus value={code} onChange={(e) => onCodeChange(e.target.value)} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors mb-4" />
-        <div className="flex items-center justify-end gap-2">
-          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-          <button onClick={onConfirm} disabled={duplicating || !code.trim()} className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-            {t("templates.action.duplicate")}
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={close} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
+        className="relative w-full max-w-[480px] bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)]"
+      >
+        <form onSubmit={submit} className="flex flex-col">
+          <div className="flex items-start gap-4 px-6 pt-6">
+            <span className="w-11 h-11 rounded-full bg-[#e8f0fb] text-[#1a5fb4] flex items-center justify-center flex-shrink-0"><Copy size={20} /></span>
+            <div className="flex-1 min-w-0 pt-0.5 flex flex-col gap-1">
+              <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">{t("templates.action.duplicate")}</h2>
+              <p id={descId} className="text-sm text-[#3d5173] leading-relaxed">{t("templates.duplicate.prompt").replace("{name}", target.templateName)}</p>
+            </div>
+            <button type="button" onClick={close} aria-label={t("common.close")} className="w-9 h-9 -mt-1.5 -mr-2 rounded-lg text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground flex items-center justify-center flex-shrink-0">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="px-6 pt-5 pb-6 flex flex-col gap-[18px]">
+            <TemplateSummaryBox tpl={target} />
+            <Field label={t("templates.col.code")} htmlFor={codeInputId} required help={t("templates.duplicate.codeHelp")}>
+              <input id={codeInputId} autoFocus value={code} onChange={(e) => onCodeChange(e.target.value)} className={`${field.input} w-full font-mono`} />
+            </Field>
+          </div>
+          <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#eef1f6]">
+            <button type="button" onClick={close} disabled={duplicating} className={btn.secondary}>{t("common.cancel")}</button>
+            <button type="submit" disabled={duplicating || !code.trim()} className={btn.primary}>
+              {duplicating ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+              {t("templates.action.duplicate")}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -133,9 +202,9 @@ export function TemplateManagementPage({
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [jobTypeFilter, setJobTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
-  const [showArchived, setShowArchived] = useState(false);
+  const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
 
   const [view, setView] = useState<"list" | "create" | { editId: string }>("list");
@@ -164,15 +233,26 @@ export function TemplateManagementPage({
     if (initialCreateForJobType) onCreateForJobTypeConsumed?.();
   }, [initialCreateForJobType, onCreateForJobTypeConsumed]);
 
+  const counts = useMemo(() => ({
+    all: templates.filter((tpl) => !tpl.isDeleted).length,
+    active: templates.filter((tpl) => !tpl.isDeleted && tpl.isActive).length,
+    inactive: templates.filter((tpl) => !tpl.isDeleted && !tpl.isActive).length,
+    archived: templates.filter((tpl) => tpl.isDeleted).length,
+  }), [templates]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return templates
-      .filter((tpl) => (showArchived ? true : !tpl.isDeleted))
+      .filter((tpl) => (statusTab === "archived" ? tpl.isDeleted : !tpl.isDeleted))
+      .filter((tpl) => (statusTab === "active" ? tpl.isActive : statusTab === "inactive" ? !tpl.isActive : true))
       .filter((tpl) => (jobTypeFilter === "all" ? true : tpl.jobTypeCode === jobTypeFilter))
-      .filter((tpl) => (statusFilter === "all" ? true : statusFilter === "active" ? tpl.isActive : !tpl.isActive))
       .filter((tpl) => (sourceFilter === "all" ? true : tpl.sourceType === sourceFilter))
       .filter((tpl) => (q ? [tpl.templateCode, tpl.templateName, tpl.jobTypeCode, tpl.jobTypeName].some((f) => f.toLowerCase().includes(q)) : true));
-  }, [templates, search, jobTypeFilter, statusFilter, sourceFilter, showArchived]);
+  }, [templates, search, jobTypeFilter, statusTab, sourceFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // สลับสถานะเปิด/ปิดใช้งานของ Template
   // Toggles a template's active/inactive status.
@@ -269,139 +349,181 @@ export function TemplateManagementPage({
   }
 
   const uniqueJobTypeCodes = Array.from(new Set(templates.map((tpl) => tpl.jobTypeCode))).sort();
+  const openRow = (tpl: QuotationTemplateSummary) => { if (canEdit) setView({ editId: tpl.id }); else void openPreview(tpl); };
+  const resetPage = () => setPage(1);
+
+  const tabs = [
+    { key: "all" as const, label: t("customers.filter.all"), count: counts.all },
+    { key: "active" as const, label: t("common.status.active"), count: counts.active },
+    { key: "inactive" as const, label: t("customers.status.inactive"), count: counts.inactive },
+    { key: "archived" as const, label: t("common.status.archived"), count: counts.archived },
+  ];
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("templates.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("templates.pageSubtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={tour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all"
-          >
-            <HelpCircle size={15} />
-          </button>
-          {canImport && (
-            <button data-tour="templates-import" onClick={handleImport} disabled={importing} title={t("templates.importFromExcelHint")} className="flex items-center gap-2 px-3.5 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} {t("templates.importFromExcel")}
-            </button>
-          )}
-          {canCreate && (
-            <button data-tour="templates-create" onClick={() => setView("create")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-              <Plus size={15} /> {t("templates.addNew")}
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.sales")}
+        title={t("templates.pageTitle")}
+        description={t("templates.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={(canImport || canCreate) && (
+          <>
+            {canImport && (
+              <button data-tour="templates-import" onClick={() => void handleImport()} disabled={importing} title={t("templates.importFromExcelHint")} className={btn.secondary}>
+                {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} {t("templates.importFromExcel")}
+              </button>
+            )}
+            {canCreate && (
+              <button data-tour="templates-create" onClick={() => setView("create")} className={btn.primary}>
+                <Plus size={16} /> {t("templates.addNew")}
+              </button>
+            )}
+          </>
+        )}
+      />
 
-      {templates.length > 0 && (
-        <div data-tour="templates-toolbar" className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-64 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
-            <Search size={14} className="text-muted-foreground flex-shrink-0" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("templates.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
-          </div>
-          <select value={jobTypeFilter} onChange={(e) => setJobTypeFilter(e.target.value)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
-            <option value="all">{t("templates.filter.allJobTypes")}</option>
-            {uniqueJobTypeCodes.map((code) => <option key={code} value={code}>{code}</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
-            <option value="all">{t("customers.filter.all")}</option>
-            <option value="active">{t("customers.filter.active")}</option>
-            <option value="inactive">{t("customers.filter.inactive")}</option>
-          </select>
-          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as SourceFilter)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
-            <option value="all">{t("templates.filter.allSources")}</option>
-            <option value="excel_import">{t("templates.source.excelImport")}</option>
-            <option value="manual">{t("templates.source.manual")}</option>
-          </select>
-          <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-muted-foreground ml-auto">
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="w-4 h-4 rounded border-border accent-[#c9a84c]" />
-            {t("customers.showArchived")}
-          </label>
-        </div>
-      )}
-
-      <div data-tour="templates-list" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-        {loading ? (
-          <div role="status" aria-live="polite" className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" /> {t("common.loading")}
-          </div>
-        ) : loadError ? (
-          <div role="alert" className="flex flex-col items-center justify-center py-16 gap-3">
-            <p className="text-sm text-muted-foreground">{t("templates.loadError")}</p>
-            <button onClick={load} className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">{t("quotation.wizard.retry")}</button>
-          </div>
-        ) : templates.length === 0 ? (
-          <EmptyState icon={FileStack} title={t("templates.empty.title")} description={t("templates.empty.sub")} actionLabel={canCreate ? t("templates.addNew") : undefined} onAction={canCreate ? () => setView("create") : undefined} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center"><FileStack size={20} className="text-muted-foreground" /></div>
-            <p className="text-sm text-muted-foreground">{t("templates.noFilterResults")}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.code")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.name")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.jobType")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.version")}</th>
-                  <th className="px-4 py-3 text-center text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.sections")}</th>
-                  <th className="px-4 py-3 text-center text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.items")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.status")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.source")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.updatedAt")}</th>
-                  <th className="px-4 py-3 w-40" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((tpl) => (
-                  <tr key={tpl.id} className={`border-b border-border/50 hover:bg-secondary/30 transition-colors group ${tpl.isDeleted ? "opacity-60" : ""}`}>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{tpl.templateCode}</td>
-                    <td className="px-4 py-3 text-sm text-foreground font-medium max-w-[200px] truncate" title={tpl.templateName}>{tpl.templateName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{tpl.jobTypeCode}</td>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{tpl.version}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground text-center whitespace-nowrap">{tpl.sectionCount}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground text-center whitespace-nowrap">{tpl.itemCount}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge
-                        status={tpl.isDeleted ? "archived" : tpl.isActive ? "active" : "inactive"}
-                        label={tpl.isDeleted ? t("common.status.archived") : tpl.isActive ? t("common.status.active") : t("customers.status.inactive")}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{tpl.sourceType === "excel_import" ? t("templates.source.excelImport") : t("templates.source.manual")}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDate(tpl.updatedAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <button onClick={() => void openPreview(tpl)} title={t("templates.action.preview")} aria-label={`${t("templates.action.preview")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Eye size={14} /></button>
-                        {canEdit && <button onClick={() => setView({ editId: tpl.id })} title={t("common.edit")} aria-label={`${t("common.edit")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>}
-                        {canDuplicate && <button onClick={() => openDuplicate(tpl)} title={t("templates.action.duplicate")} aria-label={`${t("templates.action.duplicate")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Copy size={14} /></button>}
-                        {canActivate && !tpl.isDeleted && (
-                          <button onClick={() => void handleToggleActive(tpl)} title={tpl.isActive ? t("templates.action.deactivate") : t("templates.action.activate")} aria-label={`${tpl.isActive ? t("templates.action.deactivate") : t("templates.action.activate")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Power size={14} /></button>
-                        )}
-                        {canArchive && (
-                          <button onClick={() => setArchiveTarget(tpl)} title={tpl.isDeleted ? t("common.unarchive") : t("common.archive")} aria-label={`${tpl.isDeleted ? t("common.unarchive") : t("common.archive")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
-                            {tpl.isDeleted ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                          </button>
-                        )}
-                        {!tpl.isDeleted && tpl.isActive && onCreateQuotationFromTemplate && (
-                          <button onClick={() => onCreateQuotationFromTemplate(tpl.jobTypeCode, tpl.id)} title={t("templates.action.createQuotation")} aria-label={`${t("templates.action.createQuotation")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><FileText size={14} /></button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ไม่ใช้ ListCard เพราะ overflow-hidden ของมันตัดเมนู ⋮ ของแถวท้ายตาราง */}
+      <section className={`${surface.card} flex flex-col min-w-0`}>
+        {templates.length > 0 && (
+          <div data-tour="templates-toolbar">
+            <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); resetPage(); }} ariaLabel={t("templates.col.status")} />
+            <ListToolbar
+              search={search}
+              onSearch={(v) => { setSearch(v); resetPage(); }}
+              searchPlaceholder={t("templates.searchPlaceholder")}
+              count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+            >
+              <FilterSelect
+                label={t("templates.col.jobType")}
+                value={jobTypeFilter}
+                options={[{ value: "all", label: t("customers.filter.all") }, ...uniqueJobTypeCodes.map((code) => ({ value: code, label: code }))]}
+                onChange={(v) => { setJobTypeFilter(v); resetPage(); }}
+              />
+              <FilterSelect<SourceFilter>
+                label={t("templates.col.source")}
+                value={sourceFilter}
+                options={[
+                  { value: "all", label: t("customers.filter.all") },
+                  { value: "excel_import", label: t("templates.source.excelImport") },
+                  { value: "manual", label: t("templates.source.manual") },
+                ]}
+                onChange={(v) => { setSourceFilter(v); resetPage(); }}
+              />
+            </ListToolbar>
           </div>
         )}
-      </div>
+
+        <div data-tour="templates-list">
+          {loading ? (
+            <div role="status" aria-live="polite" className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" /> {t("common.loading")}
+            </div>
+          ) : loadError ? (
+            <div role="alert" className="flex flex-col items-center justify-center py-16 gap-3">
+              <p className="text-sm text-muted-foreground">{t("templates.loadError")}</p>
+              <button onClick={load} className={btn.secondarySm}>{t("quotation.wizard.retry")}</button>
+            </div>
+          ) : templates.length === 0 ? (
+            <EmptyState icon={FileStack} title={t("templates.empty.title")} description={t("templates.empty.sub")} actionLabel={canCreate ? t("templates.addNew") : undefined} onAction={canCreate ? () => setView("create") : undefined} compact />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("templates.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto xl:overflow-visible">
+              <table className="w-full min-w-[900px] table-fixed text-sm">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("templates.col.nameCode")}</th>
+                    <th className={`${table.th} w-[100px]`}>{t("templates.col.jobType")}</th>
+                    <th className={`${table.th} w-[84px]`}>{t("templates.col.version")}</th>
+                    <th className={`${table.th} w-[130px] text-right`}>{t("templates.col.sectionsItems")}</th>
+                    <th className={`${table.th} w-[140px]`}>{t("templates.col.source")}</th>
+                    <th className={`${table.th} w-[120px]`}>{t("templates.col.updatedAt")}</th>
+                    <th className={`${table.th} w-[130px]`}>{t("templates.col.status")}</th>
+                    <th className={`${table.th} w-[60px]`}><span className="sr-only">{t("ui.more")}</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((tpl) => {
+                    return (
+                      <tr key={tpl.id} onClick={() => openRow(tpl)} className={`${table.row} cursor-pointer ${tpl.isDeleted ? "opacity-60" : ""}`}>
+                        <td className={table.td}>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openRow(tpl); }}
+                            title={tpl.templateName}
+                            className="block max-w-full text-left font-medium text-foreground truncate rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40"
+                          >
+                            {tpl.templateName}
+                          </button>
+                          <span className="block font-mono text-xs text-muted-foreground truncate">{tpl.templateCode}</span>
+                        </td>
+                        <td className={table.td}><JobTypeChip code={tpl.jobTypeCode} /></td>
+                        <td className={`${table.td} text-[#3d5173] tabular-nums`}>{tpl.version}</td>
+                        <td className={`${table.td} text-right text-[#3d5173] tabular-nums whitespace-nowrap`}>{tpl.sectionCount} · {tpl.itemCount}</td>
+                        <td className={`${table.td} text-[#3d5173] truncate`}>{tpl.sourceType === "excel_import" ? t("templates.source.excelImport") : t("templates.source.manual")}</td>
+                        <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{fmtDate(tpl.updatedAt)}</td>
+                        <td className={table.td}>
+                          <StatusBadge
+                            status={tpl.isDeleted ? "archived" : tpl.isActive ? "active" : "inactive"}
+                            label={tpl.isDeleted ? t("common.status.archived") : tpl.isActive ? t("common.status.active") : t("customers.status.inactive")}
+                          />
+                        </td>
+                        <td className={table.td} onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end">
+                            <MoreMenu
+                              trigger={({ open, toggle }) => (
+                                <button
+                                  type="button"
+                                  onClick={toggle}
+                                  aria-haspopup="menu"
+                                  aria-expanded={open}
+                                  aria-label={t("templates.rowMenu").replace("{name}", tpl.templateName)}
+                                  title={t("ui.more")}
+                                  className={`${btn.icon} ${open ? "bg-[#eef1f6]" : ""}`}
+                                >
+                                  <MoreVertical size={18} />
+                                </button>
+                              )}
+                              items={[
+                                { key: "preview", label: t("templates.action.preview"), icon: Eye, onSelect: () => void openPreview(tpl) },
+                                !tpl.isDeleted && tpl.isActive && onCreateQuotationFromTemplate && {
+                                  key: "quote", label: t("templates.action.createQuotation"), icon: FileText,
+                                  onSelect: () => onCreateQuotationFromTemplate(tpl.jobTypeCode, tpl.id),
+                                },
+                                canDuplicate && { key: "duplicate", label: t("templates.action.duplicate"), icon: Copy, onSelect: () => openDuplicate(tpl) },
+                                canActivate && !tpl.isDeleted && {
+                                  key: "active", label: tpl.isActive ? t("templates.action.deactivate") : t("templates.action.activate"), icon: Power,
+                                  onSelect: () => void handleToggleActive(tpl),
+                                },
+                                canArchive && {
+                                  key: "archive", label: tpl.isDeleted ? t("common.unarchive") : t("common.archive"),
+                                  icon: tpl.isDeleted ? ArchiveRestore : Archive, danger: !tpl.isDeleted,
+                                  onSelect: () => setArchiveTarget(tpl),
+                                },
+                              ]}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {!loading && !loadError && filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
+        )}
+      </section>
 
       {previewTarget && (
         <TemplatePreviewModal target={previewTarget} full={previewFull} onClose={() => setPreviewTarget(null)} />

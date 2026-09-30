@@ -20,7 +20,10 @@ import { handleVendorBill } from "../_lib/vendorBillHandler.js";
 import { handleApEntries } from "../_lib/apHandler.js";
 import { handleProductRequest } from "../_lib/productRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
-import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
+import {
+  workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS,
+  lockedContentKeys, QUOTE_LOCKED_MESSAGE, type ApprovalAction,
+} from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
 import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -432,6 +435,12 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   }
 
   const body: Record<string, unknown> = req.body ?? {};
+  // ล็อกเนื้อหาหลังส่งขออนุมัติ (2026-09-30) — ดู `POST_SUBMIT_EDITABLE_FIELDS` ใน quoteWorkflow.ts
+  // Checked before any sanitizing so a locked quotation answers 409 whatever else is wrong with the body.
+  const lockedKeys = lockedContentKeys(target.status, body);
+  if (lockedKeys.length > 0) {
+    throw new HttpError(409, QUOTE_LOCKED_MESSAGE, { code: "QUOTE_LOCKED", details: { fields: lockedKeys } });
+  }
   const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body);
   applyContactMirror(update, target);
   if ("interest" in body) {
@@ -713,6 +722,15 @@ async function handleWorkflow(req: ApiRequest, res: ApiResponse, id: string) {
   };
   if (!isWorkflowActionAllowed(action, isOwner, perms)) {
     throw new HttpError(403, `ต้องมีสิทธิ์ "${PERMISSION_LABELS[REQUIRED_PERMISSION_HINT[action]]}"`);
+  }
+
+  // A workflow action may carry the on-screen draft only while the quotation is still a Draft (the
+  // Submit click bundling the last edits). From Pending onward the content is locked — approving,
+  // sending, closing never rewrite it (2026-09-30). `target.status` is the status BEFORE this
+  // transition, so "submitted" (from ร่าง) still accepts its draft.
+  const lockedDraftKeys = lockedContentKeys(target.status, draft);
+  if (lockedDraftKeys.length > 0) {
+    throw new HttpError(409, QUOTE_LOCKED_MESSAGE, { code: "QUOTE_LOCKED", details: { fields: lockedDraftKeys } });
   }
 
   // Workflow drafts may not move `interest` (plain-edit-only field) — `sanitizePartialQuoteFields`

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing, Briefcase, Calculator } from "lucide-react";
+import {
+  ArrowLeft, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2,
+  Truck, BellRing, Briefcase, Calculator, FileText, Building2, Undo2, ChevronDown,
+} from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
@@ -10,31 +13,39 @@ import {
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
   fetchScopeOfWorksByQuotation, uploadScopeOfWorkAttachment, deleteScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES,
-  chaseScopeOfWorkPo, scopePoNumbers, scopeQuotationNumbers,
+  chaseScopeOfWorkPo, scopePoNumbers,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
 import { type CostControlSummary, fetchCostControlsByScope, createCostControlFromScope } from "../../lib/costControl";
-import { type ProjectSummary, fetchProjectsByScope, createProjectFromScope } from "../../lib/project";
+import { type ProjectSummary, type ProjectStatus, fetchProjectsByScope, createProjectFromScope } from "../../lib/project";
 import { getRevisionPredecessorId, getRevisionNumber, generateScopeOfWorkRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import { compressImageFile, isCompressibleImage } from "../../lib/imageCompression";
+import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
+import { Combobox, type ComboboxOption } from "../../components/Combobox";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import type { DriveStep } from "driver.js";
-import { useI18n } from "../../lib/i18n";
+import { useI18n, type TranslationKey } from "../../lib/i18n";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { DocumentRecipientsPicker } from "./DocumentRecipientsPicker";
 import { ScopeOfWorkItemsEditor } from "./ScopeOfWorkItemsEditor";
 import { ScopeOfWorkPrintDocument } from "./ScopeOfWorkPrintDocument";
-import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
 import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
-import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field } from "../../components/ui/styles";
+import {
+  ApprovalStatusPill, SourceTag, SourceDocRow, SourceNote, RailSummaryCard, RelatedDocRow, railLink, railTextBtn,
+} from "../scopeOfWork/sowDoShared";
+import { useApprovalStatusLabel, useApprovalSteps, useApprovalHint } from "../scopeOfWork/sowDoStatus";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -85,9 +96,18 @@ function toFollowUpFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   };
 }
 
-// ช่องแก้ไขข้อมูลผู้ลงนามคนหนึ่ง (เลือกพนักงานหรือกรอกชื่อเอง พร้อมวันที่)
-// Editor for one signatory: pick an employee or type a free-text name, plus a date
-function SignatoryEditor({ label, value, onChange, users, disabled, required, error }: {
+const PROJECT_STATUS_KEY: Record<ProjectStatus, TranslationKey> = {
+  Planning: "project.status.planning",
+  InProgress: "project.status.inProgress",
+  Completed: "project.status.completed",
+};
+
+/**
+ * ผู้ลงนามหนึ่งคน (ผู้ขาย / ผู้อนุมัติ) — ดีไซน์ใหม่ 2026-09-30 รวม "เลือกผู้ใช้" กับ "พิมพ์ชื่อเอง" เป็นช่องเดียว
+ * (Combobox) · เลือกจากรายการ = ผูกผู้ใช้ (ลายเซ็นบนใบพิมพ์ดึงจากผู้ใช้คนนั้น) · พิมพ์เอง = ผูกเฉพาะเมื่อ
+ * ชื่อที่พิมพ์ตรงกับชื่อผู้ใช้คนใดคนหนึ่งพอดี ไม่งั้นเป็นชื่ออิสระ ไม่ผูกใคร
+ */
+function SignatoryField({ label, value, onChange, users, disabled, required, error }: {
   label: string;
   value: ScopeOfWorkSignatory;
   onChange: (next: ScopeOfWorkSignatory) => void;
@@ -97,56 +117,54 @@ function SignatoryEditor({ label, value, onChange, users, disabled, required, er
   error?: string;
 }) {
   const { t } = useI18n();
+  const options: ComboboxOption[] = users.map((u) => ({ value: u.fullName, hint: u.department.trim() || undefined }));
   return (
-    <div>
-      <p className="text-[10px] text-muted-foreground font-mono mb-1.5">{label} {required && <span className="text-[#e05252]">*</span>}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-        <select
-          disabled={disabled}
-          className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none disabled:opacity-60"
-          value={value.userId}
-          onChange={(e) => {
-            const user = users.find((u) => u.id === e.target.value);
-            onChange({ ...value, userId: e.target.value, name: user ? user.fullName : value.name });
-          }}
-        >
-          <option value="">{t("scopeOfWorkDoc.selectUserPlaceholder")}</option>
-          {users.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-        </select>
+    <div className="flex flex-col gap-1.5">
+      <span className={field.label}>
+        {label}
+        {required && <span className="text-[#b93636]"> *</span>}
+      </span>
+      <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2">
+        <div className="relative min-w-0">
+          <Combobox
+            value={value.name}
+            onChange={(name) => onChange({ ...value, name, userId: users.find((u) => u.fullName === name.trim())?.id ?? "" })}
+            onPick={(option) => {
+              const user = users[options.indexOf(option)];
+              if (user) onChange({ ...value, userId: user.id, name: user.fullName });
+            }}
+            options={options}
+            disabled={disabled}
+            ariaLabel={label}
+            placeholder={t("scopeOfWorkDoc.signatoryPlaceholder")}
+            className={`${field.input.replace("px-3", "pl-3 pr-8")} w-full`}
+          />
+          {!disabled && <ChevronDown size={16} className="absolute right-2.5 top-3 text-muted-foreground pointer-events-none" aria-hidden="true" />}
+        </div>
         <input
           disabled={disabled}
-          className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
-          value={value.name}
-          onChange={(e) => onChange({ ...value, name: e.target.value })}
-          placeholder={t("scopeOfWorkDoc.nameFreeTextPlaceholder")}
+          type="date"
+          aria-label={t("scopeOfWorkDoc.signDateAria").replace("{label}", label)}
+          className={`${field.input} w-full min-w-0`}
+          value={value.date}
+          onChange={(e) => onChange({ ...value, date: e.target.value })}
         />
       </div>
-      <input
-        disabled={disabled}
-        type="date"
-        className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
-        value={value.date}
-        onChange={(e) => onChange({ ...value, date: e.target.value })}
-      />
       <FieldError message={error} />
     </div>
   );
 }
 
 /**
- * ช่องกรอกเลขเอกสารแบบหลายเลข พร้อมปุ่ม "+ เพิ่ม" — ใช้กับเลขใบเสนอราคาและเลข PO ของลูกค้า
+ * ช่องกรอกเลข PO ของลูกค้าแบบหลายเลข พร้อมปุ่ม "+ เพิ่มเลข PO"
  *
  * เจ้าของสั่งไว้ 2026-08-31: *"ใส่ตัวเลขของใบเสนอราคา 2 อันกับใบ PO 2 อันอยู่ใน Scope อันเดียว
- * ช่วยทำปุ่มเพิ่มมาให้หน่อย"* — งานหนึ่งงานกินได้หลายใบเสนอราคา และลูกค้าก็ออก PO มาหลายใบได้
+ * ช่วยทำปุ่มเพิ่มมาให้หน่อย"* — ลูกค้าออก PO มาหลายใบได้
  *
  * **ในหน้าจอเป็นลิสต์เดียว แต่ข้างหลังเก็บเป็น "เลขหลัก + รายการเพิ่มเติม"** ผู้เรียกเป็นคนแปลงกลับ
- * (ดู `scopePoNumbers()` ใน `lib/scopeOfWork.ts` ว่าทำไมถึงไม่รวมเป็นอาร์เรย์เดียวไปเลย) ที่นี่จึงคิด
- * เป็นอาร์เรย์ล้วน ๆ และรับประกันว่าคืนอย่างน้อยหนึ่งช่องเสมอ เพื่อให้ "เลขหลัก" มีที่อยู่ตลอด
- *
- * `firstReadOnly` ใช้กับเลขใบเสนอราคา: แถวแรกคือเลขของใบต้นทางที่ผูกกันอยู่ ระบบเป็นคนเติมให้และ
- * แก้เองไม่ได้ (เหมือนเดิมก่อนหน้านี้) ส่วนแถวที่สองขึ้นไปพิมพ์เองได้
+ * (ดู `scopePoNumbers()` ใน `lib/scopeOfWork.ts`) ที่นี่คืนอย่างน้อยหนึ่งช่องเสมอ เพื่อให้ "เลขหลัก" มีที่อยู่ตลอด
  */
-function DocumentNumberListEditor({ values, onChange, disabled, idPrefix, addLabel, removeLabel, placeholder, firstReadOnly = false }: {
+function PoNumberListEditor({ values, onChange, disabled, idPrefix, addLabel, removeLabel, placeholder }: {
   values: string[];
   onChange: (next: string[]) => void;
   disabled: boolean;
@@ -154,7 +172,6 @@ function DocumentNumberListEditor({ values, onChange, disabled, idPrefix, addLab
   addLabel: string;
   removeLabel: string;
   placeholder?: string;
-  firstReadOnly?: boolean;
 }) {
   const rows = values.length > 0 ? values : [""];
   const setRow = (index: number, next: string) => onChange(rows.map((v, i) => (i === index ? next : v)));
@@ -165,121 +182,184 @@ function DocumentNumberListEditor({ values, onChange, disabled, idPrefix, addLab
   };
 
   return (
-    <div className="space-y-1.5">
-      {rows.map((value, index) => {
-        const readOnly = firstReadOnly && index === 0;
-        return (
-          <div key={index} className="flex items-center gap-1.5">
-            <input
-              id={index === 0 ? idPrefix : `${idPrefix}-${index}`}
-              disabled={!readOnly && disabled}
-              readOnly={readOnly}
-              value={value}
-              placeholder={placeholder}
-              onChange={(e) => setRow(index, e.target.value)}
-              className={`flex-1 min-w-0 text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none transition-colors ${readOnly ? "opacity-80" : "focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60"}`}
- />
- {!disabled && !readOnly && rows.length > 1 && (
- <button type="button" onClick={() => removeRow(index)} title={removeLabel} aria-label={removeLabel} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={13} /></button>
- )}
- </div>
- );
- })}
- {!disabled && (
- <button type="button" onClick={() => onChange([...rows, ""])} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
- <Plus size={11} /> {addLabel}
- </button>
- )}
- </div>
- );
+    <div className="flex flex-col gap-2">
+      {rows.map((value, index) => (
+        <div key={index} className="flex items-center gap-2 flex-wrap">
+          <input
+            id={index === 0 ? idPrefix : `${idPrefix}-${index}`}
+            disabled={disabled}
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => setRow(index, e.target.value)}
+            className={`${field.input} w-full sm:w-80 font-mono`}
+          />
+          {!disabled && rows.length > 1 && (
+            <button type="button" onClick={() => removeRow(index)} title={removeLabel} aria-label={removeLabel} className="w-9 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors"><Trash2 size={15} /></button>
+          )}
+          {!disabled && index === rows.length - 1 && (
+            <span className="pl-3">
+              <button type="button" onClick={() => onChange([...rows, ""])} className={btn.text}>
+                <Plus size={16} /> {addLabel}
+              </button>
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * เลขใบเสนอราคาใบอื่นของงานเดียวกัน (ใบต้นทางที่ผูกกันอยู่แสดงแยกเป็นแถวเอกสารต้นทาง แก้ไม่ได้)
+ * พิมพ์เอง เพิ่มได้เฉพาะตอนเป็นร่าง · ว่างได้ ต่างจากเลข PO ที่ต้องมีเลขหลักหนึ่งช่องเสมอ
+ */
+function ExtraQuotationNumbers({ values, onChange, disabled }: { values: string[]; onChange: (next: string[]) => void; disabled: boolean }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col gap-2">
+      {values.map((value, index) => (
+        <div key={index} className="flex items-center gap-1.5">
+          <input
+            id={`sow-quotationNumber-${index + 1}`}
+            disabled={disabled}
+            value={value}
+            aria-label={t("scopeOfWorkDoc.field.quotationNumber")}
+            placeholder={t("scopeOfWorkDoc.quotationNumberPlaceholder")}
+            onChange={(e) => onChange(values.map((v, i) => (i === index ? e.target.value : v)))}
+            className={`${field.input} flex-1 min-w-0 font-mono`}
+          />
+          {!disabled && (
+            <button type="button" onClick={() => onChange(values.filter((_, i) => i !== index))} title={t("scopeOfWorkDoc.removeQuotationNumber")} aria-label={t("scopeOfWorkDoc.removeQuotationNumber")} className="w-9 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors flex-shrink-0"><Trash2 size={15} /></button>
+          )}
+        </div>
+      ))}
+      {!disabled && (
+        <button type="button" onClick={() => onChange([...values, ""])} className={`${btn.text} self-start`}>
+          <Plus size={16} /> {t("scopeOfWorkDoc.addQuotationNumber")}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ตารางแก้ไขงวดการชำระเงิน เพิ่ม/ลบ/แก้ไขงวดได้อิสระ พร้อมปุ่มเลือกรูปแบบสำเร็จรูป
 // Editable payment installment table, freely addable/removable, with quick-apply preset buttons
 function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
- installments: ScopeOfWorkPaymentInstallment[];
- onChange: (next: ScopeOfWorkPaymentInstallment[]) => void;
- disabled: boolean;
+  installments: ScopeOfWorkPaymentInstallment[];
+  onChange: (next: ScopeOfWorkPaymentInstallment[]) => void;
+  disabled: boolean;
 }) {
- const { t } = useI18n();
- const updateRow = (id: string, patch: Partial<ScopeOfWorkPaymentInstallment>) =>
- onChange(installments.map((row) => (row.id === id ? { ...row, ...patch } : row)));
- const removeRow = (id: string) => onChange(installments.filter((row) => row.id !== id));
- const addRow = () => onChange([...installments, blankPaymentInstallment()]);
- const applyPreset = (preset: (typeof PAYMENT_TERM_PRESETS)[number]) =>
- onChange(preset.installments.map((row) => ({ ...row, id: newPaymentInstallmentId() })));
- const total = installments.reduce((sum, row) => sum + (row.pct ?? 0), 0);
+  const { t } = useI18n();
+  const updateRow = (id: string, patch: Partial<ScopeOfWorkPaymentInstallment>) =>
+    onChange(installments.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  const removeRow = (id: string) => onChange(installments.filter((row) => row.id !== id));
+  const addRow = () => onChange([...installments, blankPaymentInstallment()]);
+  const applyPreset = (preset: (typeof PAYMENT_TERM_PRESETS)[number]) =>
+    onChange(preset.installments.map((row) => ({ ...row, id: newPaymentInstallmentId() })));
+  const total = installments.reduce((sum, row) => sum + (row.pct ?? 0), 0);
+  const cols = "grid grid-cols-[28px_minmax(0,1fr)_110px_140px_120px_36px] gap-2.5 items-center";
+  const suffixBox = "h-9 rounded-lg border border-[#c3ccda] bg-white flex items-stretch overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors";
+  const suffix = "px-2.5 flex items-center bg-[#f4f6fa] border-l border-border text-[13px] text-[#3d5173]";
+  const bare = "flex-1 min-w-0 px-2.5 bg-transparent text-sm text-right tabular-nums outline-none";
 
- return (
- <div className="sm:col-span-2 space-y-2.5">
- <label className="text-xs text-muted-foreground block">{t("scopeOfWorkDoc.installmentsLabel")}</label>
- {!disabled && (
- <div className="flex flex-wrap gap-1.5">
- {PAYMENT_TERM_PRESETS.map((preset) => (
- <button
- key={preset.label}
- type="button"
- onClick={() => applyPreset(preset)}
- className="px-2.5 py-1 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
- >
- {preset.label}
- </button>
- ))}
- </div>
- )}
- {installments.length > 0 && (
- <div className="space-y-1.5">
- {installments.map((row) => (
- <div key={row.id} className="flex items-center gap-1.5 flex-wrap">
- <input
- disabled={disabled}
- value={row.label}
- onChange={(e) => updateRow(row.id, { label: e.target.value })}
- placeholder={t("scopeOfWorkDoc.installmentLabelPlaceholder")}
- className="flex-1 min-w-[120px] text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
- />
- <input
- disabled={disabled}
- type="number"
- min={0}
- max={100}
- value={row.pct ?? ""}
- onChange={(e) => updateRow(row.id, { pct: e.target.value === "" ? null : parseFloat(e.target.value) || 0 })}
- placeholder="%"
- className="w-16 text-xs text-right text-foreground bg-white border border-[#c3ccda] rounded-lg px-2 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
- />
- <select
- disabled={disabled}
- value={row.paymentType}
- onChange={(e) => updateRow(row.id, { paymentType: e.target.value as ScopeOfWorkPaymentType })}
- className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none disabled:opacity-60"
- >
- <option value="">{t("scopeOfWorkDoc.paymentTypePlaceholder")}</option>
- <option value="Cash">Cash</option>
- <option value="Credit">Credit</option>
- </select>
- <input
- disabled={disabled}
- type="number"
- min={0}
- value={row.days ?? ""}
- onChange={(e) => updateRow(row.id, { days: e.target.value === "" ? null : parseInt(e.target.value, 10) || 0 })}
- placeholder={t("scopeOfWorkDoc.daysPlaceholder")}
- title={t("scopeOfWorkDoc.daysTitle")}
- className="w-24 text-xs text-right text-foreground bg-white border border-[#c3ccda] rounded-lg px-2 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
- />
- {!disabled && (
- <button onClick={() => removeRow(row.id)} title={t("scopeOfWorkDoc.removeInstallment")} aria-label={t("scopeOfWorkDoc.removeInstallment")} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={13} /></button>
- )}
- </div>
- ))}
- <p className={`text-[10px] font-mono ${total === 100 ? "text-[#2aa36b]" : "text-muted-foreground"}`}>{t("scopeOfWorkDoc.installmentsTotal")} {total}%</p>
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className={`flex flex-col gap-1.5 ${disabled && installments.length === 0 ? "hidden" : ""}`}>
+        <span className={field.label}>{t("scopeOfWorkDoc.installmentsLabel")}</span>
+        {!disabled && (
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_TERM_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => applyPreset(preset)}
+                className="h-8 px-2.5 rounded-lg border border-[#c3ccda] bg-white text-[13px] text-[#3d5173] hover:bg-[#f4f6fa] transition-colors"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {(installments.length > 0 || !disabled) && (
+        <div className="border border-border rounded-[10px] overflow-x-auto">
+          <div className="min-w-[620px]">
+            <div className={`${cols} px-3 h-9 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]`}>
+              <span>#</span>
+              <span>{t("scopeOfWorkDoc.col.installmentLabel")}</span>
+              <span className="text-right">{t("scopeOfWorkDoc.col.pct")}</span>
+              <span>{t("scopeOfWorkDoc.col.paymentType")}</span>
+              <span className="text-right">{t("scopeOfWorkDoc.col.days")}</span>
+              <span />
+            </div>
+            {installments.map((row, i) => (
+              <div key={row.id} className={`${cols} px-3 py-1.5 border-b border-[#eef1f6]`}>
+                <span className="text-[13px] text-muted-foreground tabular-nums">{i + 1}</span>
+                <input
+                  disabled={disabled}
+                  value={row.label}
+                  aria-label={t("scopeOfWorkDoc.col.installmentLabel")}
+                  onChange={(e) => updateRow(row.id, { label: e.target.value })}
+                  placeholder={t("scopeOfWorkDoc.installmentLabelPlaceholder")}
+                  className={`${field.cell} w-full min-w-0`}
+                />
+                <span data-field-box className={suffixBox}>
+                  <input
+                    disabled={disabled}
+                    type="number"
+                    min={0}
+                    max={100}
+                    aria-label={t("scopeOfWorkDoc.pctAria")}
+                    value={row.pct ?? ""}
+                    onChange={(e) => updateRow(row.id, { pct: e.target.value === "" ? null : parseFloat(e.target.value) || 0 })}
+                    className={bare}
+                  />
+                  <span className={suffix}>%</span>
+                </span>
+                <select
+                  disabled={disabled}
+                  value={row.paymentType}
+                  aria-label={t("scopeOfWorkDoc.col.paymentType")}
+                  onChange={(e) => updateRow(row.id, { paymentType: e.target.value as ScopeOfWorkPaymentType })}
+                  className={`${field.cell} w-full min-w-0`}
+                >
+                  <option value="">{t("scopeOfWorkDoc.paymentTypePlaceholder")}</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Credit">Credit</option>
+                </select>
+                <span data-field-box className={suffixBox} title={t("scopeOfWorkDoc.daysTitle")}>
+                  <input
+                    disabled={disabled}
+                    type="number"
+                    min={0}
+                    aria-label={t("scopeOfWorkDoc.daysTitle")}
+                    value={row.days ?? ""}
+                    onChange={(e) => updateRow(row.id, { days: e.target.value === "" ? null : parseInt(e.target.value, 10) || 0 })}
+                    placeholder="—"
+                    className={bare}
+                  />
+                  <span className={suffix}>{t("scopeOfWorkDoc.daysUnit")}</span>
+                </span>
+                {!disabled ? (
+                  <button type="button" onClick={() => removeRow(row.id)} title={t("scopeOfWorkDoc.removeInstallment")} aria-label={t("scopeOfWorkDoc.removeInstallment")} className="w-9 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors"><Trash2 size={15} /></button>
+                ) : <span />}
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-3 px-3 py-1 min-h-11">
+              {!disabled ? (
+                <button type="button" onClick={addRow} className={btn.text}>
+                  <Plus size={16} /> {t("scopeOfWorkDoc.addInstallment")}
+                </button>
+              ) : <span />}
+              {installments.length > 0 && (
+                <span className={`text-[13px] font-semibold inline-flex items-center gap-1.5 pr-12 ${total === 100 ? "text-[#1b7f4f]" : "text-muted-foreground"}`}>
+                  {total === 100 && <CheckCircle2 size={15} />}
+                  {t("scopeOfWorkDoc.installmentsTotal")} {total}%
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      )}
-      {!disabled && (
-        <button onClick={addRow} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
-          <Plus size={11} /> {t("scopeOfWorkDoc.addInstallment")}
-        </button>
       )}
     </div>
   );
@@ -339,6 +419,7 @@ export function ScopeOfWorkDocument({
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
+  const statusLabel = useApprovalStatusLabel();
   const resolvedBackLabel = backLabel ?? t("scopeOfWorkDoc.backToQuotation");
   const BLOCKED_TOOLTIP = t("scopeOfWorkDoc.blockedTooltip");
   const companyHeader: CompanyHeaderInfo = {
@@ -413,8 +494,8 @@ export function ScopeOfWorkDocument({
   }, [scopeOfWorkId, reloadKey, dirty]);
 
   const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions.desc"), side: "bottom" } },
-    { element: '[data-tour="sowdoc-completion"]', popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "bottom" } },
+    { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions2.desc"), side: "bottom" } },
+    { element: '[data-tour="sowdoc-completion"]', popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "left" } },
     { element: '[data-tour="sowdoc-header"]', popover: { title: t("tour.sowdoc.header.title"), description: t("tour.sowdoc.header.desc"), side: "top" } },
     { element: '[data-tour="sowdoc-checklist"]', popover: { title: t("tour.sowdoc.checklist.title"), description: t("tour.sowdoc.checklist.desc"), side: "top" } },
   ];
@@ -438,6 +519,15 @@ export function ScopeOfWorkDocument({
     onSave: async (fields) => { await updateScopeOfWork(scopeOfWorkId, fields, { autoSave: true }); },
   });
 
+  // ข้อความ "ขั้นต่อไป" และขั้นตอนของเอกสาร — เป็น hook จึงต้องอยู่เหนือ early return เช่นกัน
+  const steps = useApprovalSteps(scope?.status ?? "Draft");
+  const nextStepHint = useApprovalHint({
+    status: scope?.status ?? "Draft",
+    approverLabel: t("scopeOfWorkDoc.stepApprover"),
+    approvedByName: scope?.approver.name || users.find((u) => u.id === scope?.approver.userId)?.fullName || "",
+    approvedAt: scope?.approver.date,
+  });
+
   // บันทึกฉบับร่างเต็มรูปแบบ หรือเฉพาะฟิลด์ติดตามผลถ้าเอกสารผ่านการอนุมัติแล้ว
   // Saves the full draft, or just the follow-up fields once the record is no longer a Draft
   const save = async (): Promise<boolean> => {
@@ -452,10 +542,10 @@ export function ScopeOfWorkDocument({
       autoSave.markSaved(toUpdateFields(updated));
       dirty.markSaved(toUpdateFields(updated));
       draftBackup.clear();
-      showToast(draftPhase ? "บันทึกร่างแล้ว" : "บันทึกเลข PO / ผู้รับเอกสารแล้ว");
+      showToast(draftPhase ? t("sowdo.toast.savedDraft") : t("scopeOfWorkDoc.toast.savedFollowUp"));
       return true;
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.saveFailed"));
       return false;
     } finally {
       setSaving(false);
@@ -480,36 +570,28 @@ export function ScopeOfWorkDocument({
       : null,
   );
 
-  if (loadError) {
+  if (loadError || !scope) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
+        <div className="bg-card border-b border-border px-4 md:px-8 py-3.5">
+          <button type="button" onClick={() => requestLeave(onBack)} className="text-[13px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+            <ArrowLeft size={14} /> {resolvedBackLabel}
           </button>
         </div>
-        <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <AlertTriangle size={20} className="text-[#e05252]" />
-          <p className="text-sm text-muted-foreground">{t("scopeOfWork.loadError")}</p>
-          <button onClick={() => { setLoadError(false); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            <RotateCw size={12} /> {t("scopeOfWork.retry")}
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (!scope) {
-    return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-2.5 p-6">
-          <Loader2 size={20} className="text-muted-foreground animate-spin" />
-          <p className="text-xs text-muted-foreground">{t("scopeOfWork.loading")}</p>
-        </div>
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center" role="alert">
+            <AlertTriangle size={20} className="text-[#b93636]" />
+            <p className="text-sm text-muted-foreground">{t("scopeOfWork.loadError")}</p>
+            <button type="button" onClick={() => { setLoadError(false); setReloadKey((k) => k + 1); }} className={btn.secondary}>
+              <RotateCw size={15} /> {t("scopeOfWork.retry")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2.5 p-10" role="status">
+            <Loader2 size={20} className="text-muted-foreground animate-spin" />
+            <p className="text-[13px] text-muted-foreground">{t("scopeOfWork.loading")}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -529,6 +611,12 @@ export function ScopeOfWorkDocument({
   }
   const summaryMessages = [...Object.values(finalizeValidation.fieldErrors), ...Object.values(finalizeValidation.groupErrors).flat()];
   const totalRequiredChecks = Object.values(scopeOfWorkRequiredFields).filter((f) => f.required).length + MANDATORY_CHECKLIST_GROUP_KEYS.length + 1 + 1;
+  const completedChecks = Math.max(0, totalRequiredChecks - finalizeValidation.missingCount);
+  const completionPct = totalRequiredChecks > 0 ? Math.round((completedChecks / totalRequiredChecks) * 100) : 100;
+  const itemCount = scope.items.filter((it) => !it.isSectionHeader).length;
+  const sectionCount = scope.items.length - itemCount;
+  const installmentPctTotal = scope.paymentConditions.installments.reduce((sum, row) => sum + (row.pct ?? 0), 0);
+  const hasPo = scopePoNumbers(scope).length > 0;
 
   // ส่งการแจ้งเตือนทวงเลข PO ไปยังพนักงานขายของเอกสารนี้
   // Sends a chase-for-PO-number notification to this record's salesperson
@@ -537,9 +625,9 @@ export function ScopeOfWorkDocument({
     setChasingPo(true);
     try {
       const { notifiedUserName } = await chaseScopeOfWorkPo(scope.id);
-      showToast(`ส่งการแจ้งเตือนทวงเลข PO ถึง ${notifiedUserName} แล้ว`);
+      showToast(t("scopeOfWorkDoc.toast.chasePoSent").replace("{name}", notifiedUserName));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ส่งการแจ้งเตือนไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.notifyFailed"));
     } finally {
       setChasingPo(false);
     }
@@ -555,9 +643,9 @@ export function ScopeOfWorkDocument({
       setScope(saved);
       dirty.markSaved(toUpdateFields(saved));
       const result = await sendScopeOfWorkDocumentNotifications(scope.id);
-      showToast(`ส่งแจ้งเตือนผู้รับเอกสารแล้ว (${result.sentCount} คน)`);
+      showToast(t("scopeOfWorkDoc.toast.docsSent").replace("{n}", String(result.sentCount)));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ส่งแจ้งเตือนไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.notifyFailed"));
     } finally {
       setSendingDocs(false);
     }
@@ -577,7 +665,7 @@ export function ScopeOfWorkDocument({
       const isImage = isCompressibleImage(file);
       const payloadBlob: Blob = isImage ? (await compressImageFile(file)).blob : file;
       if (payloadBlob.size > MAX_ATTACHMENT_BYTES) {
-        showToast(`ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
+        showToast(t("scopeOfWorkDoc.toast.fileTooLarge").replace("{mb}", String(Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024))));
         return;
       }
       const buffer = await payloadBlob.arrayBuffer();
@@ -592,9 +680,9 @@ export function ScopeOfWorkDocument({
         dataBase64: btoa(binary),
       });
       setScope((prev) => (prev ? { ...prev, attachments: updated.attachments ?? [] } : prev));
-      showToast(`แนบไฟล์ "${file.name}" แล้ว`);
+      showToast(t("scopeOfWorkDoc.toast.attached").replace("{name}", file.name));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "แนบไฟล์ไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.attachFailed"));
     } finally {
       setUploadingAttachment(false);
     }
@@ -607,9 +695,9 @@ export function ScopeOfWorkDocument({
     try {
       const updated = await deleteScopeOfWorkAttachment(scope.id, attachmentId);
       setScope((prev) => (prev ? { ...prev, attachments: updated.attachments ?? [] } : prev));
-      showToast("ลบไฟล์แนบแล้ว");
+      showToast(t("scopeOfWorkDoc.toast.attachmentDeleted"));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ลบไฟล์แนบไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.attachmentDeleteFailed"));
     } finally {
       setUploadingAttachment(false);
     }
@@ -625,7 +713,7 @@ export function ScopeOfWorkDocument({
       const siblings = await fetchScopeOfWorksByQuotation(scope.quotationId);
       const predecessorSummary = siblings.find((s) => s.scopeNumber === revisionPredecessorScopeNumber);
       if (!predecessorSummary) {
-        showToast("ไม่พบข้อมูลต้นฉบับสำหรับเปรียบเทียบ");
+        showToast(t("scopeOfWorkDoc.toast.noPredecessor"));
         return;
       }
       const predecessor = await fetchScopeOfWork(predecessorSummary.id);
@@ -635,9 +723,9 @@ export function ScopeOfWorkDocument({
         const revisionNote = appendRevisionNoteEntry(predecessor.revisionNote, getRevisionNumber(prev.scopeNumber), summary);
         return { ...prev, revisionNote };
       });
-      showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
+      showToast(t("scopeOfWorkDoc.toast.revisionGenerated"));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "สร้างสรุปไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.revisionFailed"));
     } finally {
       setGeneratingRevisionNote(false);
     }
@@ -656,7 +744,7 @@ export function ScopeOfWorkDocument({
       const created = await createDeliveryOrderFromScope(scope.id);
       onOpenDeliveryOrder(created.id);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ไม่สามารถสร้างใบส่งมอบสินค้าได้");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.createDoFailed"));
     } finally {
       setDeliveryOrderBusy(false);
     }
@@ -745,9 +833,9 @@ export function ScopeOfWorkDocument({
       const updated = await rejectScopeOfWork(scope.id, comment);
       setScope(updated);
       dirty.markSaved(toUpdateFields(updated));
-      showToast("ตีกลับเป็นฉบับร่างแล้ว");
+      showToast(t("sowdo.toast.rejected"));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ปฏิเสธไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.rejectFailed"));
     }
   };
 
@@ -758,10 +846,10 @@ export function ScopeOfWorkDocument({
     setPromptOpen(null);
     try {
       const created = await duplicateScopeOfWork(scope.id, scopeNumber);
-      showToast(`ทำสำเนาเป็น ${created.scopeNumber} แล้ว`);
+      showToast(t("scopeOfWorkDoc.toast.duplicated").replace("{number}", created.scopeNumber));
       onDuplicated(created.id);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ทำสำเนาไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.duplicateFailed"));
     }
   };
 
@@ -772,10 +860,10 @@ export function ScopeOfWorkDocument({
     setRewriteBusy(true);
     try {
       const created = await rewriteScopeOfWork(scope.id);
-      showToast(`สร้าง Scope of Work แก้ไข ${created.scopeNumber} แล้ว`);
+      showToast(t("scopeOfWorkDoc.toast.rewritten").replace("{number}", created.scopeNumber));
       onRewritten(created.id);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "สร้าง Scope of Work แก้ไขไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.toast.rewriteFailed"));
     } finally {
       setRewriteBusy(false);
     }
@@ -792,29 +880,29 @@ export function ScopeOfWorkDocument({
         const updated = await submitScopeOfWorkApproval(scope.id);
         setScope(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("ส่งขออนุมัติแล้ว");
+        showToast(t("sowdo.toast.submitted"));
       } else if (confirmAction === "finalize") {
         const updated = await finalizeScopeOfWork(scope.id);
         setScope(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("อนุมัติแล้ว (Final)");
+        showToast(t("sowdo.toast.finalized"));
       } else if (confirmAction === "withdraw") {
         const updated = await withdrawScopeOfWorkApproval(scope.id);
         setScope(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("ถอนคำขออนุมัติแล้ว กลับเป็นฉบับร่าง");
+        showToast(t("sowdo.toast.withdrawn"));
       } else if (confirmAction === "refresh") {
         const updated = await refreshScopeOfWorkFromQuotation(scope.id);
         setScope(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("อัปเดตข้อมูลจากใบเสนอราคาแล้ว");
+        showToast(t("scopeOfWorkDoc.toast.refreshed"));
       } else if (confirmAction === "delete") {
         await deleteScopeOfWork(scope.id);
-        showToast("ลบ Scope of Work แล้ว");
+        showToast(t("scopeOfWorkDoc.toast.deleted"));
         onBack();
       }
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ดำเนินการไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.actionFailed"));
       if ((confirmAction === "finalize" || confirmAction === "submit") && err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
         setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
         summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -832,424 +920,397 @@ export function ScopeOfWorkDocument({
   const hasDocumentRecipientsToSend = Object.entries(scope.documentRecipients).some(
     ([key, ids]) => (checkedDocumentsToSendKeys.has(key) || key === ADDITIONAL_RECIPIENT_KEY) && ids.length > 0,
   );
+  const fe = finalizeValidation.fieldErrors;
+  const pendingApproval = scope.status === "PendingApproval";
+  const showRelated = canViewDeliveryOrder || canViewCostControl || canViewProject;
+
+  const busyIcon = (busy: boolean) => (busy ? <Loader2 size={13} className="inline animate-spin mr-1" /> : null);
 
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">{scope.scopeNumber}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-          isDraft ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
-          : scope.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
-          : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"
-        }`}>
-          {isDraft ? "Draft" : scope.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
-        </span>
-
-        <div data-tour="sowdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <TourReplayButton onClick={docTour.start} />
-          {/* นอก data-tour="sowdoc-completion" — ไม่งั้นกรอบไฮไลต์ของทัวร์ "ความครบถ้วนของเอกสาร"
-              จะกินป้ายบันทึกอัตโนมัติเข้าไปด้วย และวางไม่ตรงกับหน้าเอกสารอื่นทุกหน้า */}
-          {scopeEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-          <div data-tour="sowdoc-completion">
-            <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
-          </div>
-          {canPrint && (
-            <button
-              onClick={handlePrint}
-              disabled={!printValidation.valid}
-              title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all ${!printValidation.valid ? "opacity-40 cursor-not-allowed" : ""}`}
- >
- <Printer size={13} /> {t("scopeOfWorkDoc.print")}
- </button>
- )}
- {canCreate && (
- <button onClick={() => setPromptOpen("duplicate")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- <Copy size={13} /> {t("scopeOfWorkDoc.duplicate")}
- </button>
- )}
- {canCreate && (
- <button onClick={handleRewrite} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <GitBranch size={13} /> {t("scopeOfWorkDoc.rewrite")}
- </button>
- )}
- {canViewDeliveryOrder && canCreateDeliveryOrder && (
- <button onClick={handleDeliveryOrderClick} disabled={deliveryOrderBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <Truck size={13} /> {existingDeliveryOrder ? t("scopeOfWorkDoc.openDeliveryOrder") : t("scopeOfWorkDoc.createDeliveryOrder")}
- </button>
- )}
- {canViewProject && canCreateProject && (
- <button
- onClick={handleProjectClick}
- // เปิดโครงการใหม่ได้เฉพาะงานที่อนุมัติแล้ว (Final) — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน handleCreate()
- // ถ้ามีโครงการอยู่แล้ว ปุ่มนี้เป็นแค่ทางลัด "เปิดโครงการ" จึงกดได้เสมอไม่ว่าสถานะใด
- disabled={projectBusy || (!existingProject && scope.status !== "Final")}
- title={!existingProject && scope.status !== "Final" ? t("scopeOfWorkDoc.createProjectNeedsFinal") : undefined}
- className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
- >
- <Briefcase size={13} /> {existingProject ? t("scopeOfWorkDoc.openProject") : t("scopeOfWorkDoc.createProject")}
- </button>
- )}
- {canViewCostControl && canCreateCostControl && (
- <button onClick={handleCostControlClick} disabled={costControlBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <Calculator size={13} /> {existingCostControl ? t("scopeOfWorkDoc.openCostControl") : t("scopeOfWorkDoc.createCostControl")}
- </button>
- )}
- {editable && (
- <button onClick={() => setConfirmAction("refresh")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- <RotateCw size={13} /> {t("scopeOfWorkDoc.refreshFromQuotation")}
- </button>
- )}
- {canEdit && (
- <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <Save size={13} /> {isDraft ? t("scopeOfWorkDoc.saveDraft") : t("scopeOfWorkDoc.saveFollowUp")}
- </button>
- )}
- {canChasePo && scopePoNumbers(scope).length === 0 && (
- <button
- onClick={handleChasePo}
- disabled={chasingPo}
- title={t("scopeOfWorkDoc.chasePoTitle")}
- className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e08a3c]/40 text-[#e08a3c] rounded-lg font-medium hover:bg-[#e08a3c]/10 transition-colors disabled:opacity-60"
- >
- {chasingPo ? <Loader2 size={13} className="animate-spin" /> : <BellRing size={13} />} {t("scopeOfWorkDoc.chasePo")}
- </button>
- )}
- {canEdit && isDraft && (
- <button
- onClick={handleSubmitClick}
- disabled={!printValidation.valid}
- title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined}
- className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors ${!printValidation.valid ? "opacity-40 cursor-not-allowed" : ""}`}
-            >
-              <Send size={13} /> {t("scopeOfWorkDoc.submit")}
-            </button>
-          )}
-          {scope.status === "PendingApproval" && canFinalize && (
-            <>
-              <button
-                onClick={() => setConfirmAction("finalize")}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors"
-              >
-                <CheckCircle2 size={13} /> {t("scopeOfWorkDoc.approve")}
-              </button>
-              <button
-                onClick={() => setPromptOpen("reject")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors"
-              >
-                {t("scopeOfWorkDoc.reject")}
-              </button>
-            </>
-          )}
-          {scope.status === "PendingApproval" && canEdit && (
-            <button
-              onClick={() => setConfirmAction("withdraw")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("scopeOfWorkDoc.withdraw")}
-            </button>
-          )}
-          {canDelete && (
-            <button onClick={() => setConfirmAction("delete")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Trash2 size={13} /> {t("scopeOfWorkDoc.delete")}
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20 print:hidden">
+        <DocumentHeader
+          backLabel={resolvedBackLabel}
+          onBack={() => requestLeave(onBack)}
+          number={scope.scopeNumber || "—"}
+          status={<ApprovalStatusPill status={scope.status} />}
+          meta={scopeEditable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
+          actions={
+            <div data-tour="sowdoc-actions" className="flex items-center gap-2.5 flex-wrap">
+              <TourReplayButton variant="title" onClick={docTour.start} />
+              {canPrint && (
+                <button type="button" onClick={handlePrint} disabled={!printValidation.valid} title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined} className={btn.secondary}>
+                  <Printer size={16} /> {t("scopeOfWorkDoc.print")}
+                </button>
+              )}
+              {canEdit && (
+                <button type="button" onClick={save} disabled={saving} className={btn.secondary}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {isDraft ? t("scopeOfWorkDoc.saveDraft") : t("scopeOfWorkDoc.saveFollowUp")}
+                </button>
+              )}
+              <MoreMenu
+                items={[
+                  editable && { key: "refresh", label: t("scopeOfWorkDoc.refreshFromQuotation"), icon: RotateCw, hint: t("scopeOfWorkDoc.refreshMenuHint").replace("{number}", scope.quotationNumber), onSelect: () => setConfirmAction("refresh") },
+                  canChasePo && !hasPo && { key: "chasePo", label: t("scopeOfWorkDoc.chasePo"), icon: BellRing, hint: t("scopeOfWorkDoc.chasePoTitle"), disabled: chasingPo, onSelect: () => void handleChasePo() },
+                  canCreate && { key: "duplicate", label: t("scopeOfWorkDoc.duplicate"), icon: Copy, onSelect: () => setPromptOpen("duplicate") },
+                  canCreate && { key: "rewrite", label: t("scopeOfWorkDoc.rewrite"), icon: GitBranch, hint: t("scopeOfWorkDoc.rewriteMenuHint"), disabled: rewriteBusy, onSelect: () => void handleRewrite() },
+                  pendingApproval && canEdit && { key: "withdraw", label: t("scopeOfWorkDoc.withdraw"), icon: Undo2, onSelect: () => setConfirmAction("withdraw") },
+                  canDelete && { key: "delete", label: t("scopeOfWorkDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmAction("delete") },
+                ]}
+              />
+              {pendingApproval && canFinalize && (
+                <>
+                  <button type="button" onClick={() => setPromptOpen("reject")} className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-lg border border-[#e5b8b8] bg-white text-[#b93636] text-sm font-medium hover:bg-[#fcebeb] transition-colors whitespace-nowrap">
+                    {t("scopeOfWorkDoc.reject")}
+                  </button>
+                  <button type="button" onClick={() => setConfirmAction("finalize")} className={btn.primary}>
+                    <CheckCircle2 size={16} /> {t("scopeOfWorkDoc.approve")}
+                  </button>
+                </>
+              )}
+              {canEdit && isDraft && (
+                <button type="button" onClick={handleSubmitClick} disabled={!printValidation.valid} title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined} className={btn.primary}>
+                  <Send size={16} /> {t("scopeOfWorkDoc.submit")}
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
-        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
-          <DraftRecoveryBanner
-            savedAt={draftBackup.recoveredAt}
-            onRestore={() => {
-              const recovered = draftBackup.recovered!;
-              setScope((prev) => (prev ? { ...prev, ...recovered } : prev));
-              draftBackup.clear();
-              showToast(t("common.draftRecovery.restoredToast"));
-            }}
-            onDiscard={draftBackup.dismiss}
-          />
-        )}
+      <div className="px-4 md:px-8 py-6 print:p-0">
+        <div className="flex flex-col gap-5 print:hidden">
+          {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+            <DraftRecoveryBanner
+              savedAt={draftBackup.recoveredAt}
+              onRestore={() => {
+                const recovered = draftBackup.recovered!;
+                setScope((prev) => (prev ? { ...prev, ...recovered } : prev));
+                draftBackup.clear();
+                showToast(t("common.draftRecovery.restoredToast"));
+              }}
+              onDiscard={draftBackup.dismiss}
+            />
+          )}
 
-        <DocumentStatusStepper
-          status={scope.status}
-          approverLabel={t("scopeOfWorkDoc.stepApprover")}
-          approvedByName={scope.approver.name}
-          approvedByUserId={scope.approver.userId}
-          approvedAt={scope.approver.date}
-        />
+          <DocumentStepper steps={steps.steps} current={steps.current} ariaLabel={t("sowdo.stepsAria")} />
 
-        <div ref={summaryRef}>
-          <ValidationSummary missingCount={finalizeValidation.missingCount} messages={summaryMessages} />
-        </div>
-
-        <div data-tour="sowdoc-header" className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 print:hidden">
-            <h1 className="text-[#c9a84c] text-xl font-bold">SCOPE OF WORK</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">
-              {t("scopeOfWorkDoc.subtitleFrom")} {scopeQuotationNumbers(scope).join(", ") || "-"} — {t("scopeOfWorkDoc.subtitleJobType")} {scope.jobTypeCode || "-"} {scope.jobTypeName}
-              {scope.quotationSalesperson && ` — ${t("scopeOfWorkDoc.subtitleSalesperson")} ${scope.quotationSalesperson}`}
-            </p>
+          <div ref={summaryRef} className="empty:hidden">
+            <ValidationSummary missingCount={finalizeValidation.missingCount} messages={summaryMessages} />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border">
-            <div className="p-6 border-b sm:border-b-0 sm:border-r border-border space-y-2.5">
-              <div>
-                <RequiredFieldLabel htmlFor="sow-customerName">{t("scopeOfWorkDoc.field.customerName")}</RequiredFieldLabel>
-                <input id="sow-customerName" readOnly className="w-full text-sm font-medium text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none opacity-80" value={scope.customerSnapshot.companyName} />
-                <FieldError message={finalizeValidation.fieldErrors["customerSnapshot.companyName"]} />
-              </div>
-              <div>
-                <RequiredFieldLabel htmlFor="sow-contactName">{t("scopeOfWorkDoc.field.contactName")}</RequiredFieldLabel>
-                <input id="sow-contactName" readOnly className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none opacity-80" value={scope.customerSnapshot.contactName} />
-                <FieldError message={finalizeValidation.fieldErrors["customerSnapshot.contactName"]} />
-              </div>
-              <div>
-                <RequiredFieldLabel htmlFor="sow-scopeNumber">{t("scopeOfWorkDoc.field.scopeNumber")}</RequiredFieldLabel>
-                <input id="sow-scopeNumber" disabled={!editable} className="w-full text-xs font-mono text-[#c9a84c] font-medium bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.scopeNumber} onChange={(e) => updateField("scopeNumber", e.target.value)} placeholder={t("scopeOfWorkDoc.field.scopeNumberPlaceholder")} />
-                {editable && <p className="text-[10px] text-muted-foreground mt-1">{t("scopeOfWorkDoc.field.scopeNumberHelp")}</p>}
-                <FieldError message={finalizeValidation.fieldErrors.scopeNumber} />
-              </div>
-              <div>
-                <label htmlFor="sow-secondaryCode" className="text-xs text-muted-foreground block mb-1">{t("scopeOfWorkDoc.field.secondaryCode")}</label>
-                <input id="sow-secondaryCode" disabled={!editable} className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.secondaryCode} onChange={(e) => updateField("secondaryCode", e.target.value)} placeholder={t("scopeOfWorkDoc.field.secondaryCodePlaceholder")} />
-                <FieldError message={finalizeValidation.fieldErrors.secondaryCode} />
-              </div>
-              <div>
-                <RequiredFieldLabel htmlFor="sow-drawingCode">{t("scopeOfWorkDoc.field.drawingCode")}</RequiredFieldLabel>
-                <input id="sow-drawingCode" disabled={!editable} className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.drawingCode} onChange={(e) => updateField("drawingCode", e.target.value)} />
-                <FieldError message={finalizeValidation.fieldErrors.drawingCode} />
-              </div>
-              <div>
-                <RequiredFieldLabel htmlFor="sow-deliveryLocation">{t("scopeOfWorkDoc.field.deliveryLocation")}</RequiredFieldLabel>
-                <input id="sow-deliveryLocation" disabled={!editable} className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.deliveryLocation} onChange={(e) => updateField("deliveryLocation", e.target.value)} />
-                <FieldError message={finalizeValidation.fieldErrors.deliveryLocation} />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <RequiredFieldLabel htmlFor="sow-shippingContact">{t("scopeOfWorkDoc.field.shippingContact")}</RequiredFieldLabel>
-                  <input id="sow-shippingContact" disabled={!editable} className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.shippingContact} onChange={(e) => updateField("shippingContact", e.target.value)} />
-                  <FieldError message={finalizeValidation.fieldErrors.shippingContact} />
-                </div>
-                <div>
-                  <RequiredFieldLabel htmlFor="sow-shippingPhone">{t("scopeOfWorkDoc.field.shippingPhone")}</RequiredFieldLabel>
-                  <input id="sow-shippingPhone" disabled={!editable} className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.shippingPhone} onChange={(e) => updateField("shippingPhone", e.target.value)} />
-                  <FieldError message={finalizeValidation.fieldErrors.shippingPhone} />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <RequiredFieldLabel htmlFor="sow-billingContact">{t("scopeOfWorkDoc.field.billingContact")}</RequiredFieldLabel>
-                  <input id="sow-billingContact" disabled={!editable} className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.billingContact} onChange={(e) => updateField("billingContact", e.target.value)} />
-                  <FieldError message={finalizeValidation.fieldErrors.billingContact} />
-                </div>
-                <div>
-                  <RequiredFieldLabel htmlFor="sow-billingPhone">{t("scopeOfWorkDoc.field.billingPhone")}</RequiredFieldLabel>
-                  <input id="sow-billingPhone" disabled={!editable} className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.billingPhone} onChange={(e) => updateField("billingPhone", e.target.value)} />
-                  <FieldError message={finalizeValidation.fieldErrors.billingPhone} />
+
+          {noSourceItems && (
+            <div className="rounded-xl bg-[#fdf3e0] border border-[#f1d8a3] px-4 py-3.5 flex items-start gap-3">
+              <AlertTriangle size={18} className="text-[#8a5a00] flex-shrink-0 mt-0.5" />
+              <div className="flex-1 flex flex-col gap-2.5">
+                <p className="text-sm font-medium text-foreground">{t("scopeOfWorkDoc.noSourceItems.message")}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={() => requestLeave(onBack)} className={btn.secondarySm}>{t("scopeOfWorkDoc.noSourceItems.backToQuotation")}</button>
+                  {editable && (
+                    <button type="button" onClick={() => updateField("items", [blankScopeOfWorkItem()])} className={btn.secondarySm}>
+                      <Plus size={15} /> {t("scopeOfWorkDoc.noSourceItems.addManually")}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="p-6 space-y-2.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <RequiredFieldLabel htmlFor="sow-issueDate">{t("scopeOfWorkDoc.field.issueDate")}</RequiredFieldLabel>
-                  <input id="sow-issueDate" disabled={!editable} type="date" className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.issueDate} onChange={(e) => updateField("issueDate", e.target.value)} />
-                  <FieldError message={finalizeValidation.fieldErrors.issueDate} />
+          )}
+
+          <DocumentColumns
+            main={
+              <>
+                <SectionCard title={t("scopeOfWorkDoc.customerTitle")} actions={<SourceTag icon={FileText}>{t("sowdo.fromQuotation")}</SourceTag>}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0"><Building2 size={18} /></span>
+                      <div className="min-w-0">
+                        <ReadonlyField label={t("scopeOfWorkDoc.field.customerName")} value={scope.customerSnapshot.companyName} />
+                        <FieldError message={fe["customerSnapshot.companyName"]} />
+                      </div>
+                    </div>
+                    <div className="self-center">
+                      <ReadonlyField label={t("scopeOfWorkDoc.field.contactName")} value={scope.customerSnapshot.contactName} />
+                      <FieldError message={fe["customerSnapshot.contactName"]} />
+                    </div>
+                    <ReadonlyField label={t("scopeOfWorkDoc.subtitleJobType")} value={scope.jobTypeCode ? `${scope.jobTypeCode}${scope.jobTypeName ? ` — ${scope.jobTypeName}` : ""}` : scope.jobTypeName} />
+                    <ReadonlyField label={t("scopeOfWorkDoc.subtitleSalesperson")} value={scope.quotationSalesperson} />
+                  </div>
+                </SectionCard>
+
+                <div data-tour="sowdoc-header">
+                  <SectionCard title={t("scopeOfWorkDoc.documentInfoTitle")}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+                      <Field className="md:col-span-2" label={t("scopeOfWorkDoc.field.scopeNumber")} htmlFor="sow-scopeNumber" required help={editable ? t("scopeOfWorkDoc.field.scopeNumberHelp") : undefined} error={fe.scopeNumber}>
+                        <input id="sow-scopeNumber" disabled={!editable} className={`${field.input} w-full font-mono`} value={scope.scopeNumber} onChange={(e) => updateField("scopeNumber", e.target.value)} placeholder={t("scopeOfWorkDoc.field.scopeNumberPlaceholder")} />
+                      </Field>
+                      <Field
+                        label={<>{t("scopeOfWorkDoc.field.secondaryCodeShort")} <span className="font-normal text-muted-foreground">{t("sowdo.optionalParen")}</span></>}
+                        htmlFor="sow-secondaryCode"
+                        help={t("scopeOfWorkDoc.field.secondaryCodeHelp")}
+                        error={fe.secondaryCode}
+                      >
+                        <input id="sow-secondaryCode" disabled={!editable} className={`${field.input} w-full font-mono`} value={scope.secondaryCode} onChange={(e) => updateField("secondaryCode", e.target.value)} placeholder={t("scopeOfWorkDoc.field.secondaryCodePlaceholder")} />
+                      </Field>
+                      <Field label={t("scopeOfWorkDoc.field.drawingCode")} htmlFor="sow-drawingCode" required error={fe.drawingCode}>
+                        <input id="sow-drawingCode" disabled={!editable} className={`${field.input} w-full`} value={scope.drawingCode} onChange={(e) => updateField("drawingCode", e.target.value)} />
+                      </Field>
+                      <Field label={t("scopeOfWorkDoc.field.issueDate")} htmlFor="sow-issueDate" required error={fe.issueDate}>
+                        <input id="sow-issueDate" disabled={!editable} type="date" className={`${field.input} w-full`} value={scope.issueDate} onChange={(e) => updateField("issueDate", e.target.value)} />
+                      </Field>
+                      <Field label={t("scopeOfWorkDoc.field.deliveryDate")} htmlFor="sow-deliveryDate" required error={fe.deliveryDate}>
+                        <input id="sow-deliveryDate" disabled={!editable} type="date" className={`${field.input} w-full`} value={scope.deliveryDate} onChange={(e) => updateField("deliveryDate", e.target.value)} />
+                      </Field>
+                      {/* ลูกค้าออก PO มาได้หลายใบต่อหนึ่งงาน — เก็บเลขแรกไว้ที่ `customerPoNumber` (ตัวที่
+                          แท็บ "ยังไม่มี PO" กับคำสั่งทวง PO ใช้) ที่เหลือลง `additionalPoNumbers` ·
+                          แก้ได้แม้เอกสารอนุมัติแล้ว (PO มักมาทีหลัง) จึงผูกกับ canEdit ไม่ใช่ editable */}
+                      <Field className="md:col-span-3" label={t("scopeOfWorkDoc.field.customerPoNumber")} htmlFor="sow-customerPoNumber" help={canEdit && !isDraft ? t("scopeOfWorkDoc.field.poHelp") : undefined}>
+                        <PoNumberListEditor
+                          idPrefix="sow-customerPoNumber"
+                          disabled={!canEdit}
+                          values={[scope.customerPoNumber, ...scope.additionalPoNumbers]}
+                          onChange={(next) => setScope((prev) => (prev ? { ...prev, customerPoNumber: next[0] ?? "", additionalPoNumbers: next.slice(1) } : prev))}
+                          addLabel={t("scopeOfWorkDoc.addPoNumber")}
+                          removeLabel={t("scopeOfWorkDoc.removePoNumber")}
+                          placeholder={t("scopeOfWorkDoc.poPlaceholder")}
+                        />
+                      </Field>
+                    </div>
+                  </SectionCard>
                 </div>
-                <div>
-                  <RequiredFieldLabel htmlFor="sow-deliveryDate">{t("scopeOfWorkDoc.field.deliveryDate")}</RequiredFieldLabel>
-                  <input id="sow-deliveryDate" disabled={!editable} type="date" className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={scope.deliveryDate} onChange={(e) => updateField("deliveryDate", e.target.value)} />
-                  <FieldError message={finalizeValidation.fieldErrors.deliveryDate} />
-                </div>
-              </div>
-              <div>
-                <RequiredFieldLabel required={false} htmlFor="sow-customerPoNumber">{t("scopeOfWorkDoc.field.customerPoNumber")}</RequiredFieldLabel>
-                {/* ลูกค้าออก PO มาได้หลายใบต่อหนึ่งงาน — เก็บเลขแรกไว้ที่ `customerPoNumber` (ตัวที่
-                    KPI "ยังไม่มี PO" กับปุ่มทวง PO ใช้) ที่เหลือลง `additionalPoNumbers` */}
-                <DocumentNumberListEditor
-                  idPrefix="sow-customerPoNumber"
-                  disabled={!canEdit}
-                  values={[scope.customerPoNumber, ...scope.additionalPoNumbers]}
-                  onChange={(next) => setScope((prev) => (prev ? { ...prev, customerPoNumber: next[0] ?? "", additionalPoNumbers: next.slice(1) } : prev))}
-                  addLabel={t("scopeOfWorkDoc.addPoNumber")}
-                  removeLabel={t("scopeOfWorkDoc.removePoNumber")}
+
+                <SectionCard title={t("scopeOfWorkDoc.shippingTitle")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px]">
+                    <Field className="sm:col-span-2" label={t("scopeOfWorkDoc.field.deliveryLocation")} htmlFor="sow-deliveryLocation" required error={fe.deliveryLocation}>
+                      <input id="sow-deliveryLocation" disabled={!editable} className={`${field.input} w-full`} value={scope.deliveryLocation} onChange={(e) => updateField("deliveryLocation", e.target.value)} />
+                    </Field>
+                    <Field label={t("scopeOfWorkDoc.field.shippingContact")} htmlFor="sow-shippingContact" required error={fe.shippingContact}>
+                      <input id="sow-shippingContact" disabled={!editable} className={`${field.input} w-full`} value={scope.shippingContact} onChange={(e) => updateField("shippingContact", e.target.value)} />
+                    </Field>
+                    <Field label={t("scopeOfWorkDoc.field.shippingPhone")} htmlFor="sow-shippingPhone" required error={fe.shippingPhone}>
+                      <input id="sow-shippingPhone" disabled={!editable} className={`${field.input} w-full`} value={scope.shippingPhone} onChange={(e) => updateField("shippingPhone", e.target.value)} />
+                    </Field>
+                    <Field label={t("scopeOfWorkDoc.field.billingContact")} htmlFor="sow-billingContact" required error={fe.billingContact}>
+                      <input id="sow-billingContact" disabled={!editable} className={`${field.input} w-full`} value={scope.billingContact} onChange={(e) => updateField("billingContact", e.target.value)} />
+                    </Field>
+                    <Field label={t("scopeOfWorkDoc.field.billingPhone")} htmlFor="sow-billingPhone" required error={fe.billingPhone}>
+                      <input id="sow-billingPhone" disabled={!editable} className={`${field.input} w-full`} value={scope.billingPhone} onChange={(e) => updateField("billingPhone", e.target.value)} />
+                    </Field>
+                  </div>
+                </SectionCard>
+
+                <SectionCard title={<span id="sow-remarks-heading">{t("scopeOfWorkDoc.remarksTitle")}</span>}>
+                  <textarea disabled={!editable} rows={4} aria-labelledby="sow-remarks-heading" className={`${field.textarea} w-full resize-y`} value={scope.remarks} onChange={(e) => updateField("remarks", e.target.value)} />
+                </SectionCard>
+              </>
+            }
+            rail={
+              <>
+                <RailSummaryCard
+                  dataTour="sowdoc-completion"
+                  label={t("scopeOfWorkDoc.completionTitle")}
+                  value={`${completionPct}%`}
+                  valueNote={t("scopeOfWorkDoc.completionCount").replace("{done}", String(completedChecks)).replace("{total}", String(totalRequiredChecks))}
+                  progress={completionPct}
+                  rows={[
+                    { label: t("scopeOfWorkItems.title"), value: t("scopeOfWorkItems.count").replace("{items}", String(itemCount)).replace("{sections}", String(sectionCount)) },
+                    { label: t("scopeOfWorkDoc.installmentsLabel"), value: t("scopeOfWorkDoc.railInstallmentsValue").replace("{n}", String(scope.paymentConditions.installments.length)).replace("{pct}", String(installmentPctTotal)) },
+                    { label: t("scopeOfWorkDoc.field.deliveryDate"), value: scope.deliveryDate ? formatQuoteDateThai(scope.deliveryDate) : "—" },
+                  ]}
                 />
-                {canEdit && !isDraft && <p className="text-[10px] text-muted-foreground mt-1">{t("scopeOfWorkDoc.field.poHelp")}</p>}
-              </div>
-              <div>
-                <label htmlFor="sow-quotationNumber" className="text-xs text-muted-foreground block mb-1">{t("scopeOfWorkDoc.field.quotationNumber")}</label>
-                {/* แถวแรกคือใบเสนอราคาต้นทางที่ผูกกันอยู่ (`quotationId`) ระบบเติมให้ แก้เองไม่ได้ ·
-                    แถวถัดไปคือใบเสนอราคาใบอื่นของงานเดียวกัน พิมพ์เอง เพิ่มได้เฉพาะตอนเป็นร่าง */}
-                <DocumentNumberListEditor
-                  idPrefix="sow-quotationNumber"
-                  disabled={!editable}
-                  firstReadOnly
-                  values={[scope.quotationNumber, ...scope.additionalQuotationNumbers]}
-                  onChange={(next) => updateField("additionalQuotationNumbers", next.slice(1))}
-                  addLabel={t("scopeOfWorkDoc.addQuotationNumber")}
-                  removeLabel={t("scopeOfWorkDoc.removeQuotationNumber")}
-                  placeholder={t("scopeOfWorkDoc.quotationNumberPlaceholder")}
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed pt-2">
-                {t("scopeOfWorkDoc.field.autoFillNote")}
-              </p>
-            </div>
-          </div>
-        </div>
 
-        <div data-tour="sowdoc-checklist" className="bg-card border border-border rounded-xl p-5 print:hidden">
-          <h2 className="text-sm font-semibold text-foreground mb-3">{t("scopeOfWorkDoc.checklistTitle")}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {scope.checklistGroups.map((group, idx) => (
-              <ChecklistGroupCard
-                key={group.key}
-                group={group}
-                disabled={!editable}
-                required={(MANDATORY_CHECKLIST_GROUP_KEYS as readonly string[]).includes(group.key)}
-                error={checklistValidation.groupErrors[group.key]}
-                onChange={(next) => {
-                  const groups = [...scope.checklistGroups];
-                  groups[idx] = next;
-                  updateField("checklistGroups", groups);
-                }}
-              />
-            ))}
-          </div>
-        </div>
+                <RailCard title={t("sowdo.sourceTitle")}>
+                  <SourceDocRow icon={FileText} kind={t("scopeOfWorkDoc.field.quotationNumber")} number={scope.quotationNumber || "—"} />
+                  <ExtraQuotationNumbers
+                    values={scope.additionalQuotationNumbers}
+                    onChange={(next) => updateField("additionalQuotationNumbers", next)}
+                    disabled={!editable}
+                  />
+                  <SourceNote
+                    action={editable ? (
+                      <button type="button" onClick={() => setConfirmAction("refresh")} className={railTextBtn}>
+                        <RotateCw size={14} /> {t("scopeOfWorkDoc.refreshFromQuotation")}
+                      </button>
+                    ) : undefined}
+                  >
+                    {t("scopeOfWorkDoc.sourceNote")}
+                  </SourceNote>
+                </RailCard>
 
-        <DocumentRecipientsPicker
-          documentsToSendGroup={documentsToSendGroup}
-          users={users}
-          value={scope.documentRecipients}
-          onChange={(next) => updateField("documentRecipients", next)}
-          message={scope.documentRecipientMessage ?? ""}
-          onMessageChange={(next) => updateField("documentRecipientMessage", next)}
-          disabled={!canEdit}
-          attachments={scope.attachments ?? []}
-          uploading={uploadingAttachment}
-          onUploadAttachment={handleUploadAttachment}
-          onDeleteAttachment={handleDeleteAttachment}
-        />
-        {canEdit && documentsToSendGroup && (
-          <div className="flex flex-col items-end gap-1.5 print:hidden -mt-2">
-            {/* บอกให้เห็นก่อนกดส่งว่ามีใบต้นทุนไปด้วยไหม — ผู้รับเห็นใบนี้ในรายการของตัวเองทันที
-                ที่ถูกเลือกเป็นผู้รับ ไม่ได้รอปุ่มส่ง แต่คนกดควรรู้ว่ากำลังแจกอะไรออกไปบ้าง */}
-            {canViewCostControl && existingCostControl && (
-              <button
-                type="button"
-                onClick={() => onOpenCostControl(existingCostControl.id)}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Calculator size={12} className="text-[#c9a84c]" />
-                {t("scopeOfWorkDoc.costControlGoesAlong")}: {existingCostControl.documentNumber}
-              </button>
-            )}
-            <button
-              onClick={handleSendDocuments}
-              disabled={!hasDocumentRecipientsToSend || sendingDocs}
-              title={!hasDocumentRecipientsToSend ? t("scopeOfWorkDoc.sendDocumentsNeedRecipient") : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all ${!hasDocumentRecipientsToSend || sendingDocs ? "opacity-40 cursor-not-allowed" : ""}`}
-            >
-              {sendingDocs ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {t("scopeOfWorkDoc.sendDocuments")}
-            </button>
-          </div>
-        )}
-
-        {noSourceItems && (
-          <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-3 print:hidden">
-            <AlertTriangle size={16} className="text-[#e08a3c] flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-xs text-foreground font-medium">{t("scopeOfWorkDoc.noSourceItems.message")}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <button onClick={() => requestLeave(onBack)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("scopeOfWorkDoc.noSourceItems.backToQuotation")}</button>
-                {editable && (
-                  <button onClick={() => updateField("items", [blankScopeOfWorkItem()])} className="px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
-                    {t("scopeOfWorkDoc.noSourceItems.addManually")}
-                  </button>
+                {showRelated && (
+                  <RailCard title={t("sowdo.relatedTitle")}>
+                    {canViewDeliveryOrder && (
+                      <RelatedDocRow
+                        icon={Truck}
+                        kind={t("deliveryOrder.pageTitle")}
+                        value={existingDeliveryOrder ? statusLabel(existingDeliveryOrder.status) : "—"}
+                        action={(existingDeliveryOrder || canCreateDeliveryOrder) && (
+                          <button type="button" onClick={() => void handleDeliveryOrderClick()} disabled={deliveryOrderBusy} className={railLink}>
+                            {busyIcon(deliveryOrderBusy)}
+                            {existingDeliveryOrder ? t("scopeOfWorkDoc.openDeliveryOrder") : t("scopeOfWorkDoc.createDeliveryOrder")}
+                          </button>
+                        )}
+                      />
+                    )}
+                    {canViewDeliveryOrder && (canViewCostControl || canViewProject) && <div className="h-px bg-[#eef1f6]" />}
+                    {canViewCostControl && (
+                      <RelatedDocRow
+                        icon={Calculator}
+                        kind={t("scopeOfWorkDoc.costControlLabel")}
+                        value={existingCostControl ? <span className="font-mono text-[13px]">{existingCostControl.documentNumber}</span> : "—"}
+                        action={(existingCostControl || canCreateCostControl) && (
+                          <button type="button" onClick={() => void handleCostControlClick()} disabled={costControlBusy} className={railLink}>
+                            {busyIcon(costControlBusy)}
+                            {existingCostControl ? t("scopeOfWorkDoc.openCostControl") : t("scopeOfWorkDoc.createCostControl")}
+                          </button>
+                        )}
+                      />
+                    )}
+                    {canViewCostControl && canViewProject && <div className="h-px bg-[#eef1f6]" />}
+                    {canViewProject && (
+                      <RelatedDocRow
+                        icon={Briefcase}
+                        kind={t("scopeOfWorkDoc.projectLabel")}
+                        value={existingProject ? t(PROJECT_STATUS_KEY[existingProject.status]) : "—"}
+                        // เปิดโครงการใหม่ได้เฉพาะงานที่อนุมัติแล้ว (Final) — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน handleCreate()
+                        // ถ้ามีโครงการอยู่แล้ว ปุ่มนี้เป็นแค่ทางลัด "เปิดโครงการ" จึงกดได้เสมอไม่ว่าสถานะใด
+                        note={!existingProject && canCreateProject && scope.status !== "Final" ? t("scopeOfWorkDoc.createProjectNeedsFinal") : undefined}
+                        action={(existingProject || canCreateProject) && (
+                          <button
+                            type="button"
+                            onClick={() => void handleProjectClick()}
+                            disabled={projectBusy || (!existingProject && scope.status !== "Final")}
+                            title={!existingProject && scope.status !== "Final" ? t("scopeOfWorkDoc.createProjectNeedsFinal") : undefined}
+                            className={railLink}
+                          >
+                            {busyIcon(projectBusy)}
+                            {existingProject ? t("scopeOfWorkDoc.openProject") : t("scopeOfWorkDoc.createProject")}
+                          </button>
+                        )}
+                      />
+                    )}
+                  </RailCard>
                 )}
+
+                <RailCard title={t("scopeOfWorkDoc.signatoriesTitle")}>
+                  <div className="flex flex-col gap-4">
+                    <SignatoryField label={t("scopeOfWorkDoc.sellerLabel")} value={scope.seller} onChange={(v) => updateField("seller", v)} users={users} disabled={!editable} required error={fe["seller.name"]} />
+                    <SignatoryField label={t("scopeOfWorkDoc.approverLabel")} value={scope.approver} onChange={(v) => updateField("approver", v)} users={users} disabled={!editable} required error={fe["approver.name"]} />
+                    {editable && <span className={field.help}>{t("scopeOfWorkDoc.signatoriesHelp")}</span>}
+                  </div>
+                </RailCard>
+
+                <NextStepHint title={t("sowdo.nextStep")}>{nextStepHint}</NextStepHint>
+              </>
+            }
+          />
+
+          <ScopeOfWorkItemsEditor
+            items={scope.items}
+            onChange={(items) => updateField("items", items)}
+            disabled={!editable}
+            itemErrors={itemErrors}
+            noItemsError={fe.items}
+          />
+
+          <SectionCard title={t("scopeOfWorkDoc.paymentTitle")}>
+            <div className="flex flex-col gap-4">
+              <PaymentInstallmentsEditor
+                installments={scope.paymentConditions.installments}
+                onChange={(installments) => updateField("paymentConditions", { ...scope.paymentConditions, installments })}
+                disabled={!editable}
+              />
+              <FieldError message={fe["paymentConditions.percentTotal"]} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <Field label={t("scopeOfWorkDoc.paymentDescription")} htmlFor="sow-paymentDescription" required error={fe["paymentConditions.description"]}>
+                  <textarea id="sow-paymentDescription" disabled={!editable} rows={3} className={`${field.textarea} w-full resize-y`} value={scope.paymentConditions.description} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, description: e.target.value })} />
+                </Field>
+                <Field label={t("scopeOfWorkDoc.paymentNotes")} htmlFor="sow-paymentNotes">
+                  <textarea id="sow-paymentNotes" disabled={!editable} rows={3} className={`${field.textarea} w-full resize-y`} value={scope.paymentConditions.notes} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, notes: e.target.value })} />
+                </Field>
               </div>
             </div>
-          </div>
-        )}
+          </SectionCard>
 
-        <ScopeOfWorkItemsEditor
-          items={scope.items}
-          onChange={(items) => updateField("items", items)}
-          disabled={!editable}
-          itemErrors={itemErrors}
-          noItemsError={finalizeValidation.fieldErrors.items}
-        />
+          {revisionPredecessorScopeNumber && (
+            <SectionCard
+              title={<span id="sow-revisionNote-heading">{t("scopeOfWorkDoc.revisionNoteTitle")}</span>}
+              subtitle={t("scopeOfWorkDoc.revisionNoteHelp").replace("{predecessor}", revisionPredecessorScopeNumber)}
+              actions={
+                <button type="button" onClick={handleGenerateRevisionNote} disabled={!editable || generatingRevisionNote} className={btn.secondarySm}>
+                  {generatingRevisionNote ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} {t("scopeOfWorkDoc.generateRevisionNote")}
+                </button>
+              }
+            >
+              <textarea
+                rows={6}
+                disabled={!editable}
+                aria-labelledby="sow-revisionNote-heading"
+                className={`${field.textarea} w-full resize-y font-mono`}
+                value={scope.revisionNote ?? ""}
+                onChange={(e) => updateField("revisionNote", e.target.value)}
+                placeholder={t("scopeOfWorkDoc.revisionNotePlaceholder")}
+              />
+            </SectionCard>
+          )}
 
-        <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-          <h2 className="text-sm font-semibold text-foreground mb-3">{t("scopeOfWorkDoc.paymentTitle")}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <PaymentInstallmentsEditor
-              installments={scope.paymentConditions.installments}
-              onChange={(installments) => updateField("paymentConditions", { ...scope.paymentConditions, installments })}
-              disabled={!editable}
-            />
-            <div className="sm:col-span-2">
-              <RequiredFieldLabel htmlFor="sow-paymentDescription">{t("scopeOfWorkDoc.paymentDescription")}</RequiredFieldLabel>
-              <textarea id="sow-paymentDescription" disabled={!editable} rows={3} className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60" value={scope.paymentConditions.description} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, description: e.target.value })} />
-              <FieldError message={finalizeValidation.fieldErrors["paymentConditions.description"]} />
-            </div>
-            {finalizeValidation.fieldErrors["paymentConditions.percentTotal"] && (
-              <div className="sm:col-span-2">
-                <FieldError message={finalizeValidation.fieldErrors["paymentConditions.percentTotal"]} />
-              </div>
-            )}
-            <div className="sm:col-span-2">
-              <label htmlFor="sow-paymentNotes" className="text-xs text-muted-foreground block mb-1">{t("scopeOfWorkDoc.paymentNotes")}</label>
-              <textarea id="sow-paymentNotes" disabled={!editable} rows={2} className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60" value={scope.paymentConditions.notes} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, notes: e.target.value })} />
-            </div>
+          <div data-tour="sowdoc-checklist">
+            <SectionCard
+              title={t("scopeOfWorkDoc.checklistTitle")}
+              actions={<span className="text-[13px] text-muted-foreground">{t("scopeOfWorkDoc.checklistRequiredNote")}</span>}
+              bodyClassName="px-6 py-1.5"
+            >
+              {scope.checklistGroups.map((group, idx) => (
+                <ChecklistGroupCard
+                  key={group.key}
+                  variant="row"
+                  group={group}
+                  disabled={!editable}
+                  required={(MANDATORY_CHECKLIST_GROUP_KEYS as readonly string[]).includes(group.key)}
+                  error={checklistValidation.groupErrors[group.key]}
+                  onChange={(next) => {
+                    const groups = [...scope.checklistGroups];
+                    groups[idx] = next;
+                    updateField("checklistGroups", groups);
+                  }}
+                />
+              ))}
+            </SectionCard>
           </div>
-        </div>
 
-        {revisionPredecessorScopeNumber && (
-          <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-              <h2 id="sow-revisionNote-heading" className="text-sm font-semibold text-foreground">
-                {t("scopeOfWorkDoc.revisionNoteTitle")}
-              </h2>
-              <button
-                type="button"
-                onClick={handleGenerateRevisionNote}
-                disabled={!editable || generatingRevisionNote}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {generatingRevisionNote ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} {t("scopeOfWorkDoc.generateRevisionNote")}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground mb-2">
-              {t("scopeOfWorkDoc.revisionNoteHelp").replace("{predecessor}", revisionPredecessorScopeNumber)}
-            </p>
-            <textarea
-              rows={6}
-              disabled={!editable}
-              aria-labelledby="sow-revisionNote-heading"
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
-              value={scope.revisionNote ?? ""}
-              onChange={(e) => updateField("revisionNote", e.target.value)}
-              placeholder="เช่น • วันที่ส่งของ: &quot;2026-07-20&quot; → &quot;2026-07-25&quot;"
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 id="sow-remarks-heading" className="text-xs font-semibold text-foreground mb-3">{t("scopeOfWorkDoc.remarksTitle")}</h2>
-            <textarea disabled={!editable} rows={5} aria-labelledby="sow-remarks-heading" className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60" value={scope.remarks} onChange={(e) => updateField("remarks", e.target.value)} />
-          </div>
-          <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-xs font-semibold text-foreground">{t("scopeOfWorkDoc.signatoriesTitle")}</h2>
-            <SignatoryEditor label={t("scopeOfWorkDoc.sellerLabel")} value={scope.seller} onChange={(v) => updateField("seller", v)} users={users} disabled={!editable} required error={finalizeValidation.fieldErrors["seller.name"]} />
-            <SignatoryEditor label={t("scopeOfWorkDoc.approverLabel")} value={scope.approver} onChange={(v) => updateField("approver", v)} users={users} disabled={!editable} required error={finalizeValidation.fieldErrors["approver.name"]} />
-          </div>
+          <DocumentRecipientsPicker
+            documentsToSendGroup={documentsToSendGroup}
+            users={users}
+            value={scope.documentRecipients}
+            onChange={(next) => updateField("documentRecipients", next)}
+            message={scope.documentRecipientMessage ?? ""}
+            onMessageChange={(next) => updateField("documentRecipientMessage", next)}
+            disabled={!canEdit}
+            attachments={scope.attachments ?? []}
+            uploading={uploadingAttachment}
+            onUploadAttachment={handleUploadAttachment}
+            onDeleteAttachment={handleDeleteAttachment}
+            footer={canEdit ? (
+              <>
+                {/* บอกให้เห็นก่อนกดส่งว่ามีใบต้นทุนไปด้วยไหม — ผู้รับเห็นใบนี้ในรายการของตัวเองทันที
+                    ที่ถูกเลือกเป็นผู้รับ ไม่ได้รอปุ่มส่ง แต่คนกดควรรู้ว่ากำลังแจกอะไรออกไปบ้าง */}
+                {canViewCostControl && existingCostControl ? (
+                  <button type="button" onClick={() => onOpenCostControl(existingCostControl.id)} className="flex-1 min-w-0 text-left text-[13px] text-[#3d5173] hover:underline inline-flex items-center gap-2">
+                    <Calculator size={15} className="text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">{t("scopeOfWorkDoc.costControlGoesAlong")}: <span className="font-mono font-medium">{existingCostControl.documentNumber}</span></span>
+                  </button>
+                ) : <span className="flex-1" />}
+                <button
+                  type="button"
+                  onClick={handleSendDocuments}
+                  disabled={!hasDocumentRecipientsToSend || sendingDocs}
+                  title={!hasDocumentRecipientsToSend ? t("scopeOfWorkDoc.sendDocumentsNeedRecipient") : undefined}
+                  className={btn.secondary}
+                >
+                  {sendingDocs ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("scopeOfWorkDoc.sendDocuments")}
+                </button>
+              </>
+            ) : undefined}
+          />
         </div>
 
         <ScopeOfWorkPrintDocument
@@ -1292,7 +1353,6 @@ export function ScopeOfWorkDocument({
         title={t("scopeOfWorkDoc.confirmRefresh.title")}
         message={t("scopeOfWorkDoc.confirmRefresh.message")}
         confirmLabel={t("scopeOfWorkDoc.confirmRefresh.confirmLabel")}
-        danger
         busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}

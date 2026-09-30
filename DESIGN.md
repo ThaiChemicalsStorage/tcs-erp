@@ -51,6 +51,14 @@ typography:
     fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
     fontSize: "18px"
     fontWeight: 600
+  document-number:
+    fontFamily: "'JetBrains Mono', 'Noto Sans Thai', monospace"
+    fontSize: "22px"
+    fontWeight: 500
+  total-amount:
+    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
+    fontSize: "26px"
+    fontWeight: 600
   panel-title:
     fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
     fontSize: "15px"

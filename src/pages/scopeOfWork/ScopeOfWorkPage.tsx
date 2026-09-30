@@ -7,6 +7,7 @@ import { ScopeOfWorkDocument } from "../quotation/ScopeOfWorkDocument";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { btn } from "../../components/ui/styles";
 
 // หน้าจัดการ Scope of Work แบบแยกต่างหาก แสดงรายการและรายละเอียดของเอกสารที่มีอยู่แล้ว
 // Standalone Scope of Work page managing list/detail view state for existing records.
@@ -156,7 +157,7 @@ export function ScopeOfWorkPage({
         <p className="text-sm text-muted-foreground">{t("scopeOfWork.loadError")}</p>
         <button
           onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
+          className={btn.secondary}
         >
           {t("scopeOfWork.retry")}
         </button>

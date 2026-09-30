@@ -1,8 +1,14 @@
 import { Fragment, useRef, useState } from "react";
-import { Plus, Trash2, Copy, GripVertical, StickyNote, ChevronUp, ChevronDown, ClipboardList } from "lucide-react";
+import { Plus, Trash2, Copy, GripVertical, StickyNote, ChevronUp, ChevronDown } from "lucide-react";
 import { type ScopeOfWorkItem, newScopeItemId, newScopeSpecLineId, blankScopeOfWorkItem } from "../../lib/scopeOfWork";
 import { FieldError } from "../../components/FieldError";
-import { EmptyState } from "../../components/EmptyState";
+import { btn, field, surface, table } from "../../components/ui/styles";
+import { useI18n } from "../../lib/i18n";
+
+const iconBtn = "w-8 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#f4f6fa] hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none";
+const iconBtnGold = iconBtn.replace("text-[#8a97ad]", "text-[#7d6420]");
+const thRight = table.th.replace("text-left", "text-right");
+const deleteBtn = "w-8 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors";
 
 // ตารางแก้ไขรายการ Scope of Work: เพิ่ม/ลบ/ทำสำเนา/จัดลำดับ และแก้ไขข้อกำหนดย่อย โดยไม่มีคอลัมน์ราคา
 // Editable table for Scope of Work items: add/remove/duplicate/reorder and edit spec lines, with no pricing columns
@@ -19,6 +25,7 @@ export function ScopeOfWorkItemsEditor({
   itemErrors?: Record<string, string>;
   noItemsError?: string;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const dragIndex = useRef<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -71,62 +78,82 @@ export function ScopeOfWorkItemsEditor({
 
   let runningNumber = 0;
   const itemNumbers = items.map((it) => (it.isSectionHeader ? null : ++runningNumber));
+  const itemCount = runningNumber;
+  const sectionCount = items.length - itemCount;
+
+  const dragProps = (idx: number) => ({
+    draggable: !disabled,
+    onDragStart: () => { dragIndex.current = idx; },
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setOverIndex(idx); },
+    onDragEnd: () => { setOverIndex(null); dragIndex.current = null; },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      if (dragIndex.current !== null && dragIndex.current !== idx) reorder(dragIndex.current, idx);
+      setOverIndex(null);
+      dragIndex.current = null;
+    },
+  });
+
+  // ปุ่มขึ้น/ลงคือทางจัดลำดับด้วยคีย์บอร์ด (ลากวางใช้เมาส์ได้อย่างเดียว) — ซ่อนไว้จนชี้หรือโฟกัสแถว
+  const moveButtons = (idx: number) => (
+    <>
+      <button type="button" onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title={t("scopeOfWorkItems.moveUp")} aria-label={t("scopeOfWorkItems.moveUp")} className={`${iconBtn} opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}><ChevronUp size={15} /></button>
+      <button type="button" onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title={t("scopeOfWorkItems.moveDown")} aria-label={t("scopeOfWorkItems.moveDown")} className={`${iconBtn} opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}><ChevronDown size={15} /></button>
+    </>
+  );
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
-      <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <h2 className="text-sm font-semibold text-foreground">รายการ Scope of Work</h2>
+    <section className={`${surface.card} print:hidden`}>
+      <div className={surface.cardHead}>
+        <h2 className={surface.cardTitle}>{t("scopeOfWorkItems.title")}</h2>
+        <span className="flex-1 text-[13px] text-muted-foreground">
+          {t("scopeOfWorkItems.count").replace("{items}", String(itemCount)).replace("{sections}", String(sectionCount))}
+        </span>
         {!disabled && (
-          <div className="flex items-center gap-2">
-            <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all font-medium">
-              <Plus size={12} /> เพิ่มหัวข้อ
-            </button>
-            <button onClick={addItem} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
-              <Plus size={12} /> เพิ่มรายการ
-            </button>
-          </div>
+          <button type="button" onClick={addSectionHeader} className={btn.secondarySm}>
+            <Plus size={15} /> {t("scopeOfWorkItems.addSection")}
+          </button>
         )}
       </div>
-      {noItemsError && <div className="px-5 pt-3"><FieldError message={noItemsError} /></div>}
+      {noItemsError && <div className="px-6 pt-3"><FieldError message={noItemsError} /></div>}
 
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[640px]">
           <thead>
-            <tr className="border-b border-border bg-muted/20">
-              {["ลำดับ", "ชื่อรายการ", "จำนวน", "หน่วย", ""].map((h, i) => (
-                <th key={i} className={`px-4 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 ? "w-10 text-center" : i === 2 || i === 3 ? "w-24 text-right" : i === 4 ? "w-24" : "text-left"}`}>{h}</th>
-              ))}
+            <tr className={table.head}>
+              <th className={`${table.th} w-[76px]`}>#</th>
+              <th className={table.th}>{t("scopeOfWorkItems.col.name")}</th>
+              <th className={`${thRight} w-28`}>{t("scopeOfWorkItems.col.qty")}</th>
+              <th className={`${table.th} w-28`}>{t("scopeOfWorkItems.col.unit")}</th>
+              <th className={`${table.th} w-[184px]`} aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
             {items.map((item, idx) => {
               if (item.isSectionHeader) {
                 return (
-                  <tr
-                    key={item.id}
-                    draggable={!disabled}
-                    onDragStart={() => { dragIndex.current = idx; }}
-                    onDragOver={(e) => { e.preventDefault(); setOverIndex(idx); }}
-                    onDragEnd={() => { setOverIndex(null); dragIndex.current = null; }}
-                    onDrop={(e) => { e.preventDefault(); if (dragIndex.current !== null && dragIndex.current !== idx) reorder(dragIndex.current, idx); setOverIndex(null); dragIndex.current = null; }}
-                    className={`border-b border-border/50 bg-muted/20 group ${overIndex === idx ? "bg-[#c9a84c]/10" : ""}`}
-                  >
-                    <td className="px-4 py-2.5 text-center text-muted-foreground align-top cursor-grab"><GripVertical size={13} /></td>
-                    <td colSpan={3} className="px-4 py-2.5 align-top">
+                  <tr key={item.id} {...dragProps(idx)} className={`group border-b border-[#eef1f6] ${overIndex === idx ? "bg-[#e8f0fb]" : "bg-[#fbf7ea]"}`}>
+                    <td className="pl-5 pr-3 py-2.5 align-middle">
+                      <span className="flex items-center gap-2">
+                        <GripVertical size={15} className={`text-[#a3aec2] ${disabled ? "" : "cursor-grab"}`} aria-hidden="true" />
+                        <span className="text-xs font-bold text-[#7d6420]">§</span>
+                      </span>
+                    </td>
+                    <td colSpan={3} className="px-3 py-2.5 align-middle">
                       <input
                         disabled={disabled}
-                        className="w-full text-sm font-semibold text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors disabled:opacity-60"
+                        aria-label={t("scopeOfWorkItems.sectionPlaceholder")}
+                        className={`${field.cell} w-full font-semibold`}
                         value={item.name}
                         onChange={(e) => updateItem(item.id, "name", e.target.value)}
-                        placeholder="ชื่อหัวข้อ"
+                        placeholder={t("scopeOfWorkItems.sectionPlaceholder")}
                       />
                     </td>
-                    <td className="px-4 py-2.5 align-top">
+                    <td className="pl-3 pr-5 py-2.5 align-middle">
                       {!disabled && (
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title="ย้ายขึ้น" aria-label="ย้ายขึ้น" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronUp size={13} /></button>
-                          <button onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title="ย้ายลง" aria-label="ย้ายลง" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronDown size={13} /></button>
-                          <button onClick={() => removeItem(item.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
+                        <div className="flex items-center justify-end gap-0.5">
+                          {moveButtons(idx)}
+                          <button type="button" onClick={() => removeItem(item.id)} title={t("scopeOfWorkItems.removeSection")} aria-label={t("scopeOfWorkItems.removeSection")} className={deleteBtn}><Trash2 size={15} /></button>
                         </div>
                       )}
                     </td>
@@ -139,44 +166,41 @@ export function ScopeOfWorkItemsEditor({
               const itemError = itemErrors?.[item.id];
               return (
                 <Fragment key={item.id}>
-                  <tr
-                    draggable={!disabled}
-                    onDragStart={() => { dragIndex.current = idx; }}
-                    onDragOver={(e) => { e.preventDefault(); setOverIndex(idx); }}
-                    onDragEnd={() => { setOverIndex(null); dragIndex.current = null; }}
-                    onDrop={(e) => { e.preventDefault(); if (dragIndex.current !== null && dragIndex.current !== idx) reorder(dragIndex.current, idx); setOverIndex(null); dragIndex.current = null; }}
-                    className={`border-b border-border/50 hover:bg-secondary/30 transition-colors group ${overIndex === idx ? "bg-[#c9a84c]/10" : itemError ? "bg-[#e05252]/5" : ""}`}
-                  >
-                    <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top cursor-grab flex items-center justify-center gap-1">
-                      <GripVertical size={12} className="text-muted-foreground/60" /> {itemNumbers[idx]}
+                  <tr {...dragProps(idx)} className={`group border-b border-[#eef1f6] transition-colors ${overIndex === idx ? "bg-[#e8f0fb]" : itemError ? "bg-[#fcebeb]/60" : "bg-white hover:bg-[#f8f9fc]"}`}>
+                    <td className="pl-5 pr-3 py-2 align-top">
+                      <span className="h-9 flex items-center gap-2">
+                        <GripVertical size={15} className={`text-[#a3aec2] ${disabled ? "" : "cursor-grab"}`} aria-hidden="true" />
+                        <span className="text-[13px] text-muted-foreground tabular-nums">{itemNumbers[idx]}</span>
+                      </span>
                     </td>
-                    <td className="px-4 py-3 align-top">
-                      <input disabled={disabled} className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors disabled:opacity-60" value={item.name} onChange={(e) => updateItem(item.id, "name", e.target.value)} placeholder="ชื่อรายการ" />
+                    <td className="px-3 py-2 align-top">
+                      <input disabled={disabled} aria-label={t("scopeOfWorkItems.col.name")} className={`${field.cell} w-full`} value={item.name} onChange={(e) => updateItem(item.id, "name", e.target.value)} placeholder={t("scopeOfWorkItems.namePlaceholder")} />
                       <FieldError message={itemError} />
                     </td>
-                    <td className="px-4 py-3 align-top">
-                      <input disabled={disabled} type="number" className="w-20 text-xs text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors disabled:opacity-60" value={item.quantity ?? ""} onChange={(e) => updateItem(item.id, "quantity", e.target.value === "" ? null : parseFloat(e.target.value) || 0)} min={0} />
+                    <td className="px-3 py-2 align-top">
+                      <input disabled={disabled} type="number" inputMode="decimal" aria-label={t("scopeOfWorkItems.col.qty")} className={`${field.cell} w-full text-right tabular-nums`} value={item.quantity ?? ""} onChange={(e) => updateItem(item.id, "quantity", e.target.value === "" ? null : parseFloat(e.target.value) || 0)} min={0} />
                     </td>
-                    <td className="px-4 py-3 align-top">
-                      <input disabled={disabled} className="w-20 text-xs text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors disabled:opacity-60" value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)} />
+                    <td className="px-3 py-2 align-top">
+                      <input disabled={disabled} aria-label={t("scopeOfWorkItems.col.unit")} className={`${field.cell} w-full`} value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)} />
                     </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="pl-3 pr-5 py-2 align-top">
+                      <div className="flex items-center justify-end gap-0.5">
+                        {!disabled && moveButtons(idx)}
                         <button
+                          type="button"
                           onClick={() => toggleExpand(item.id)}
-                          title="รายละเอียด/ข้อกำหนด"
-                          aria-label="รายละเอียด/ข้อกำหนด"
-                          className={`transition-colors relative ${hasSpecs ? "text-[#c9a84c]" : "text-muted-foreground opacity-50 group-hover:opacity-100 focus-visible:opacity-100"} hover:text-[#c9a84c]`}
+                          title={t("scopeOfWorkItems.details")}
+                          aria-label={t("scopeOfWorkItems.details")}
+                          aria-expanded={isExpanded}
+                          className={`${hasSpecs ? iconBtnGold : iconBtn} relative`}
                         >
-                          <StickyNote size={13} />
-                          {hasSpecs && !isExpanded && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
+                          <StickyNote size={15} />
+                          {hasSpecs && !isExpanded && <span aria-hidden="true" className="absolute top-2 right-1.5 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
                         </button>
                         {!disabled && (
                           <>
-                            <button onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title="ย้ายขึ้น" aria-label="ย้ายขึ้น" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronUp size={13} /></button>
-                            <button onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title="ย้ายลง" aria-label="ย้ายลง" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronDown size={13} /></button>
-                            <button onClick={() => duplicateItem(item.id)} title="ทำสำเนารายการ" aria-label="ทำสำเนารายการ" className="text-muted-foreground hover:text-foreground transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Copy size={13} /></button>
-                            <button onClick={() => removeItem(item.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
+                            <button type="button" onClick={() => duplicateItem(item.id)} title={t("scopeOfWorkItems.duplicate")} aria-label={t("scopeOfWorkItems.duplicate")} className={iconBtn}><Copy size={15} /></button>
+                            <button type="button" onClick={() => removeItem(item.id)} title={t("scopeOfWorkItems.removeItem")} aria-label={t("scopeOfWorkItems.removeItem")} className={deleteBtn}><Trash2 size={15} /></button>
                           </>
                         )}
                       </div>
@@ -184,42 +208,42 @@ export function ScopeOfWorkItemsEditor({
                   </tr>
 
                   {isExpanded && (
-                    <tr className="border-b border-border/50 bg-muted/10">
+                    <tr className="border-b border-[#eef1f6] bg-[#f8f9fc]">
                       <td />
-                      <td colSpan={4} className="px-4 pb-4 pt-1">
-                        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">ข้อกำหนด / รายละเอียดย่อย (แสดงเป็นบรรทัดย่อหน้าใต้ชื่อรายการ)</p>
-                            <div className="space-y-1">
-                              {item.specifications.map((sl) => (
-                                <div key={sl.id} className="flex items-center gap-1.5">
-                                  <input
-                                    disabled={disabled}
-                                    value={sl.text}
-                                    onChange={(e) => updateSpecLine(item.id, sl.id, e.target.value)}
-                                    placeholder="เช่น พื้นที่ : กว้าง 5 เมตร x ยาว 20 เมตร"
-                                    className="flex-1 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
-                                  />
-                                  {!disabled && (
-                                    <button onClick={() => removeSpecLine(item.id, sl.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={12} /></button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
+                      <td colSpan={4} className="pl-3 pr-5 pb-4 pt-2">
+                        <div className="bg-card border border-border rounded-lg p-4 flex flex-col gap-4">
+                          <div className="flex flex-col gap-1.5">
+                            <p className={field.label}>{t("scopeOfWorkItems.specsLabel")}</p>
+                            {item.specifications.map((sl) => (
+                              <div key={sl.id} className="flex items-center gap-1.5">
+                                <input
+                                  disabled={disabled}
+                                  value={sl.text}
+                                  aria-label={t("scopeOfWorkItems.specsLabel")}
+                                  onChange={(e) => updateSpecLine(item.id, sl.id, e.target.value)}
+                                  placeholder={t("scopeOfWorkItems.specPlaceholder")}
+                                  className={`${field.cell} flex-1 min-w-0`}
+                                />
+                                {!disabled && (
+                                  <button type="button" onClick={() => removeSpecLine(item.id, sl.id)} title={t("scopeOfWorkItems.removeSpec")} aria-label={t("scopeOfWorkItems.removeSpec")} className={deleteBtn}><Trash2 size={14} /></button>
+                                )}
+                              </div>
+                            ))}
                             {!disabled && (
-                              <button onClick={() => addSpecLine(item.id)} className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
-                                <Plus size={11} /> เพิ่มข้อกำหนด
+                              <button type="button" onClick={() => addSpecLine(item.id)} className={`${btn.text} self-start`}>
+                                <Plus size={15} /> {t("scopeOfWorkItems.addSpec")}
                               </button>
                             )}
                           </div>
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">หมายเหตุรายการ</p>
+                          <div className="flex flex-col gap-1.5">
+                            <label htmlFor={`sow-item-remark-${item.id}`} className={field.label}>{t("scopeOfWorkItems.remarkLabel")}</label>
                             <textarea
+                              id={`sow-item-remark-${item.id}`}
                               disabled={disabled}
                               rows={2}
                               value={item.remark}
                               onChange={(e) => updateItem(item.id, "remark", e.target.value)}
-                              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60"
+                              className={`${field.textarea} w-full resize-y`}
                             />
                           </div>
                         </div>
@@ -231,14 +255,22 @@ export function ScopeOfWorkItemsEditor({
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5}>
-                  <EmptyState icon={ClipboardList} title="ยังไม่มีรายการ Scope of Work" description="เพิ่มรายการด้วยปุ่ม “เพิ่มรายการ” ด้านบน" compact />
+                <td colSpan={5} className="py-12 px-6 text-center">
+                  <p className="text-sm font-medium text-foreground">{t("scopeOfWorkItems.emptyTitle")}</p>
+                  {!disabled && <p className="text-[13px] text-muted-foreground mt-1">{t("scopeOfWorkItems.emptyHint")}</p>}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-    </div>
+      {!disabled && (
+        <div className="px-6 py-2.5">
+          <button type="button" onClick={addItem} className={btn.text}>
+            <Plus size={16} /> {t("scopeOfWorkItems.addItem")}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

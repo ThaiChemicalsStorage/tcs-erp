@@ -71,6 +71,17 @@ describe("computeQuotePermissions — the client-side mirror of the server's own
     expect(p.canSubmit).toBe(true);
   });
 
+  it("content is editable only while Draft (2026-09-30 lock) — follow-up edits (canEdit) stay open afterwards", () => {
+    expect(computeQuotePermissions(makeQuote("ร่าง", sales.id), false, sales, defaultRoles).canEditContent).toBe(true);
+    expect(computeQuotePermissions(undefined, true, sales, defaultRoles).canEditContent).toBe(true);
+    for (const status of ["รออนุมัติ", "อนุมัติแล้ว", "ส่งให้ลูกค้าแล้ว", "ลูกค้ายอมรับ", "ปิดการขายสำเร็จ", "ลูกค้าปฏิเสธ", "เสียโอกาส", "ยกเลิก"] as QuoteStatus[]) {
+      const p = computeQuotePermissions(makeQuote(status, sales.id), false, sales, defaultRoles);
+      expect(p.canEditContent, status).toBe(false);
+      expect(p.canEdit, status).toBe(true);
+    }
+    expect(computeQuotePermissions(makeQuote("ร่าง", otherSales.id), false, sales, defaultRoles).canEditContent).toBe(false);
+  });
+
   it("Rewrite/Duplicate follow quotations:create, detail-view only", () => {
     const p = computeQuotePermissions(makeQuote("ปิดการขายสำเร็จ", sales.id), false, sales, defaultRoles);
     expect(p.canDuplicate).toBe(true);

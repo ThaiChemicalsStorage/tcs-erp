@@ -1,25 +1,23 @@
 import { useState } from "react";
-import { ClipboardList, Search, X, HelpCircle } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import type { DriveStep } from "driver.js";
-import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar, FilterSelect } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import { scopePoNumbers, scopeQuotationNumbers, type ScopeOfWorkListItem, type ScopeOfWorkStatus } from "../../lib/scopeOfWork";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
-import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
+import { ApprovalStatusPill, ListDateRangeSelect } from "./sowDoShared";
 
 const FILTER_ALL = "all";
+const PAGE_SIZE = 25;
 
-const statusStyle: Record<ScopeOfWorkStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
-const statusLabel: Record<ScopeOfWorkStatus, string> = { Draft: "Draft", PendingApproval: "รออนุมัติ", Final: "Final" };
+type ListTabKey = "all" | ScopeOfWorkStatus | "noPo";
 
-// แสดงตารางรายการ Scope of Work พร้อมตัวกรองและช่องค้นหา
-// Renders the Scope of Work list table with filters and search.
+// แสดงตารางรายการ Scope of Work พร้อมแท็บสถานะ ตัวกรอง และช่องค้นหา (ดีไซน์ใหม่ 2026-09-30)
+// Renders the Scope of Work list: status tabs (incl. "no PO yet"), filters, search, and a paged table.
 export function ScopeOfWorkList({
   scopeOfWorks,
   currentUserId,
@@ -30,21 +28,22 @@ export function ScopeOfWorkList({
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
+  // ตัวกรอง "ยังไม่มี PO" กลายเป็นแท็บสุดท้าย — ขั้นทัวร์ของมันจึงชี้ไปที่แท็บนั้นตรง ๆ
   const tourSteps: DriveStep[] = [
-    { element: '[data-tour="sow-summary"]', popover: { title: t("tour.sow.summary.title"), description: t("tour.sow.summary.desc"), side: "bottom" } },
-    { element: '[data-tour="sow-filters"]', popover: { title: t("tour.sow.filters.title"), description: t("tour.sow.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="sow-nopo"]', popover: { title: t("tour.sow.nopo.title"), description: t("tour.sow.nopo.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-summary"]', popover: { title: t("tour.sow.tabs.title"), description: t("tour.sow.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-summary"] [role="tab"]:last-child', popover: { title: t("tour.sow.nopo.title"), description: t("tour.sow.nopoTab.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-filters"]', popover: { title: t("tour.sow.filters.title"), description: t("tour.sow.toolbar.desc"), side: "bottom" } },
     { element: '[data-tour="sow-table"]', popover: { title: t("tour.sow.table.title"), description: t("tour.sow.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("scopeOfWork", currentUserId, tourSteps);
 
-  const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  const [tab, setTab] = useState<ListTabKey>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
-  const [filterNoPo, setFilterNoPo] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
   const items = scopeOfWorks.map((s) => ({
@@ -64,197 +63,171 @@ export function ScopeOfWorkList({
   const jobTypesInList = [...new Set(items.map((s) => s.jobTypeCode).filter((c) => c.trim()))].sort();
   const salespeopleInList = [...new Set(items.map((s) => s.quotationSalesperson).filter((n) => n.trim()))].sort();
 
-  const noPoCount = items.filter((s) => !s.customerPoNumber.trim()).length;
+  // ตัวนับ/แท็บ "ยังไม่มี PO" ตัดสินจากเลขหลักเหมือนเดิม — หน้าจอแก้ไขเขียนเลขแรกลงช่องนั้นเสมอ
+  const matchesTab = (s: (typeof items)[number], key: ListTabKey) =>
+    key === "all" ? true : key === "noPo" ? !s.customerPoNumber.trim() : s.status === key;
+
+  const tabs: { key: ListTabKey; label: string; count: number }[] = [
+    { key: "all", label: t("quotation.filterAll"), count: items.filter((s) => matchesTab(s, "all")).length },
+    { key: "Draft", label: "Draft", count: items.filter((s) => matchesTab(s, "Draft")).length },
+    { key: "PendingApproval", label: t("approval.step.pending"), count: items.filter((s) => matchesTab(s, "PendingApproval")).length },
+    { key: "Final", label: "Final", count: items.filter((s) => matchesTab(s, "Final")).length },
+    { key: "noPo", label: t("scopeOfWork.noPoBadge"), count: items.filter((s) => matchesTab(s, "noPo")).length },
+  ];
 
   const dateRangeResolved = resolveRange(dateRange);
   const filtered = items
     .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
-    .filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus)
+    .filter((s) => matchesTab(s, tab))
     .filter((s) => filterJobType === FILTER_ALL || s.jobTypeCode === filterJobType)
     .filter((s) => filterSalesperson === FILTER_ALL || s.quotationSalesperson === filterSalesperson)
-    .filter((s) => !filterNoPo || !s.customerPoNumber.trim())
     .filter((s) => !normalizedSearch || [s.scopeNumber, s.customerName, s.quotationNumbersText, s.poNumbersText, s.jobTypeCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // เปลี่ยนตัวกรองแล้วกลับไปหน้าแรกเสมอ ไม่งั้นค้างอยู่หน้าที่ไม่มีข้อมูล
+  const resetPage = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPage(1); };
+
+  const headers = [
+    t("scopeOfWork.col.scopeNumber"),
+    t("scopeOfWork.col.customer"),
+    t("scopeOfWork.col.jobType"),
+    t("scopeOfWork.col.po"),
+    t("scopeOfWork.col.deliveryDate"),
+    t("scopeOfWork.col.status"),
+    t("scopeOfWork.col.updatedAt"),
+  ];
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">Scope of Work</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("scopeOfWork.pageSubtitle")}</p>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.sales")}
+        title="Scope of Work"
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={
+          <p className="max-w-[460px] text-[13px] leading-relaxed text-muted-foreground flex items-start gap-2 sm:text-right">
+            <Info size={16} className="text-[#1a5fb4] flex-shrink-0 mt-0.5" />
+            <span>{t("scopeOfWork.empty.description")}</span>
+          </p>
+        }
+      />
+
+      <ListCard>
+        <div data-tour="sow-summary">
+          <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("scopeOfWork.tabsAria")} />
         </div>
-        <button
-          onClick={tour.start}
-          title={t("tour.replay")}
-          aria-label={t("tour.replay")}
-          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
-        >
-          <HelpCircle size={15} />
-        </button>
-      </div>
-
-      <div data-tour="sow-summary" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-        {[
-          { label: t("quotation.filterAll"), count: scopeOfWorks.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: "Draft", count: scopeOfWorks.filter((s) => s.status === "Draft").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: "รออนุมัติ", count: scopeOfWorks.filter((s) => s.status === "PendingApproval").length, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
-          { label: "Final", count: scopeOfWorks.filter((s) => s.status === "Final").length, color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: t("scopeOfWork.noPoBadge"), count: noPoCount, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
-        ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
-              <ClipboardList size={15} style={{ color: s.color }} />
-            </div>
-            <p className="text-xl font-bold text-foreground font-mono">{s.count}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div data-tour="sow-filters" className="space-y-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <DateRangeFilter value={dateRange} onChange={setDateRange} />
-          <div className="relative h-9 w-72">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("scopeOfWork.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+        <div data-tour="sow-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={resetPage(setSearchQuery)}
+            searchPlaceholder={t("scopeOfWork.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+            <FilterSelect
+              label={t("scopeOfWork.filterJobType")}
+              value={filterJobType}
+              options={[{ value: FILTER_ALL, label: t("quotation.filterAll") }, ...jobTypesInList.map((code) => ({ value: code, label: code }))]}
+              onChange={resetPage(setFilterJobType)}
             />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X size={13} />
-              </button>
-            )}
-          </div>
-          <select
-            value={filterJobType}
-            onChange={(e) => setFilterJobType(e.target.value)}
-            className="h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          >
-            <option value={FILTER_ALL}>{t("scopeOfWork.filterJobTypeAll")}</option>
-            {jobTypesInList.map((code) => (
-              <option key={code} value={code}>{code}</option>
-            ))}
-          </select>
-          <select
-            value={filterSalesperson}
-            onChange={(e) => setFilterSalesperson(e.target.value)}
-            className="h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          >
-            <option value={FILTER_ALL}>{t("scopeOfWork.filterSalespersonAll")}</option>
-            {salespeopleInList.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
+            <FilterSelect
+              label={t("scopeOfWork.filterSalesperson")}
+              value={filterSalesperson}
+              options={[{ value: FILTER_ALL, label: t("quotation.filterAll") }, ...salespeopleInList.map((name) => ({ value: name, label: name }))]}
+              onChange={resetPage(setFilterSalesperson)}
+            />
+          </ListToolbar>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-            {[FILTER_ALL, "Draft", "PendingApproval", "Final"].map((s) => (
-              <button key={s} onClick={() => setFilterStatus(s)}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-                {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as ScopeOfWorkStatus] ?? s}
-              </button>
-            ))}
-          </div>
-          <button
-            data-tour="sow-nopo"
-            onClick={() => setFilterNoPo((v) => !v)}
-            className={`h-9 px-3 text-xs rounded-xl font-medium border transition-all ${filterNoPo ? "bg-[#e08a3c] text-white border-[#e08a3c]" : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-[#e08a3c]/40"}`}
-          >
-            {t("scopeOfWork.noPoFilter")} {noPoCount > 0 && `(${noPoCount})`}
-          </button>
-        </div>
-      </div>
 
-      <div data-tour="sow-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        {scopeOfWorks.length === 0 ? (
-          <EmptyState
-            icon={ClipboardList}
-            title={t("scopeOfWork.empty.title")}
-            description={t("scopeOfWork.empty.description")}
-            compact
-          />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <ClipboardList size={20} className="text-muted-foreground" />
+        <div data-tour="sow-table" className="min-w-0">
+          {scopeOfWorks.length === 0 ? (
+            <ListEmpty title={t("scopeOfWork.empty.title")} hint={t("scopeOfWork.empty.description")} />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("scopeOfWork.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px]">
+                <thead>
+                  <tr className={table.head}>
+                    {headers.map((h) => <th key={h} className={table.th}>{h}</th>)}
+                    <th className={`${table.th} w-10`} aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((s) => (
+                    <tr
+                      key={s.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${t("scopeOfWork.openRow")} ${s.scopeNumber}`}
+                      onClick={() => onOpen(s.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onOpen(s.id);
+                        }
+                      }}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} max-w-[240px]`}>
+                        <span className="flex flex-col min-w-0 leading-snug">
+                          <span className={`${table.code} truncate`}>{s.scopeNumber}</span>
+                          {s.quotationNumbersText && (
+                            <span className="text-xs text-muted-foreground truncate" title={s.quotationNumbersText}>
+                              {t("scopeOfWork.fromQuotation")} <span className="font-mono">{s.quotationNumbersText}</span>
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className={`${table.td} max-w-[300px]`}>
+                        <span className="flex flex-col min-w-0 leading-snug">
+                          <span className="text-sm font-medium text-foreground truncate" title={s.customerName}>{s.customerName}</span>
+                          {s.quotationSalesperson && <span className="text-xs text-muted-foreground truncate">{s.quotationSalesperson}</span>}
+                        </span>
+                      </td>
+                      <td className={table.td}>
+                        {s.jobTypeCode ? (
+                          <span className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center">{s.jobTypeCode}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className={`${table.td} max-w-[180px]`}>
+                        {s.poNumbersText ? (
+                          <span className="font-mono text-[13px] text-[#3d5173] truncate block" title={s.poNumbersText}>{s.poNumbersText}</span>
+                        ) : (
+                          <span className="h-[22px] px-2 rounded-md bg-[#fdf3e0] text-[#8a5a00] text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#d89614]" />
+                            {t("scopeOfWork.noPoBadge")}
+                          </span>
+                        )}
+                      </td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(s.deliveryDate)}</td>
+                      <td className={table.td}><ApprovalStatusPill status={s.status} /></td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(s.updatedAt)}</td>
+                      <td className={table.td}>
+                        <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <p className="text-sm text-muted-foreground">{t("scopeOfWork.noFilterResults")}</p>
-          </div>
-        ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {[
-                t("scopeOfWork.col.scopeNumber"),
-                t("scopeOfWork.col.customer"),
-                t("scopeOfWork.col.salesperson"),
-                t("scopeOfWork.col.jobType"),
-                t("scopeOfWork.col.quotation"),
-                t("scopeOfWork.col.po"),
-                t("scopeOfWork.col.deliveryDate"),
-                t("scopeOfWork.col.status"),
-                t("scopeOfWork.col.updatedAt"),
-              ].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((s) => (
-              <tr
-                key={s.id}
-                tabIndex={0}
-                role="button"
-                aria-label={`${t("scopeOfWork.openRow")} ${s.scopeNumber}`}
-                onClick={() => onOpen(s.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onOpen(s.id);
-                  }
-                }}
-                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-              >
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{s.scopeNumber}</td>
-                <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[220px] truncate" title={s.customerName}>{s.customerName}</td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{s.quotationSalesperson || "—"}</td>
-                <td className="px-4 py-3.5 text-xs">
-                  {s.jobTypeCode ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-mono text-[10px]">
-                      {s.jobTypeCode}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{s.quotationNumbersText}</td>
-                <td className="px-4 py-3.5 text-xs whitespace-nowrap">
-                  {/* ตัวนับ/ตัวกรอง "ยังไม่มี PO" ยังตัดสินจากเลขหลักเหมือนเดิม — หน้าจอแก้ไขเขียน
-                      เลขแรกลงช่องนั้นเสมอ ใบที่มีเลขอยู่จริงจึงไม่มีทางขึ้นแบดจ์นี้ */}
-                  {s.poNumbersText ? (
-                    <span className="font-mono text-muted-foreground">{s.poNumbersText}</span>
-                  ) : (
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/25">{t("scopeOfWork.noPoBadge")}</span>
-                  )}
-                </td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(s.deliveryDate)}</td>
-                <td className="px-4 py-3.5">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[s.status]}`}>
-                    {statusLabel[s.status] ?? s.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(s.updatedAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          )}
         </div>
+
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
         )}
-      </div>
+      </ListCard>
     </div>
   );
 }

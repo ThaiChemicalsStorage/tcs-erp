@@ -228,6 +228,12 @@ export const workflowTransitions: Record<ApprovalAction, { from: QuoteStatus[]; 
 
 export interface QuotePermissions {
   canEdit: boolean;
+  /**
+   * แก้เนื้อหาได้ไหม (ลูกค้า รายการ ราคา เงื่อนไข) — เฉพาะใบใหม่และใบร่าง · พ้นร่างแล้วล็อก (2026-09-30)
+   * ส่วน `canEdit` บนใบที่พ้นร่างหมายถึงแก้ช่องติดตามการขายได้ (ความสนใจ เลข PO วันที่ติดตาม โอกาสในการขาย)
+   * Mirrors `lockedContentKeys()` in api/_lib/quoteWorkflow.ts, which is what actually enforces it.
+   */
+  canEditContent: boolean;
   canSubmit: boolean;
   canApprove: boolean;
   canReject: boolean;
@@ -256,6 +262,7 @@ export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean
 
   return {
     canEdit: isNew ? hasCreate : editableByOwnerOrApprover,
+    canEditContent: isNew ? hasCreate : editableByOwnerOrApprover && status === "ร่าง",
     canSubmit: !isNew && status === "ร่าง" && (hasCreate || hasEdit) && isOwner,
     canApprove: !isNew && status === "รออนุมัติ" && hasApprove,
     canReject: !isNew && status === "รออนุมัติ" && hasReject,

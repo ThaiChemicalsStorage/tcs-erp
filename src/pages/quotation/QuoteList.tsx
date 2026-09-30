@@ -1,25 +1,18 @@
-import { useState } from "react";
-import { Plus, FileText, Target, X, Search, GitBranch, HelpCircle } from "lucide-react";
+import { useState, type KeyboardEvent } from "react";
+import { Plus, Target, X, ChevronRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
-import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
-import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusLabelKey, isRevisionQuote } from "../../lib/quotes";
-import { statusIcon } from "./statusIcons";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, FilterSelect, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { btn, table } from "../../components/ui/styles";
+import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusLabelKey, isRevisionQuote, fmt } from "../../lib/quotes";
+import { QuoteStatusPill } from "./statusIcons";
 import type { JobType } from "../../lib/jobTypes";
-import { initials } from "../../lib/users";
 import { InterestButtons } from "./InterestButtons";
 import { useI18n } from "../../lib/i18n";
 
-const AVATAR_COLORS = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252"];
 const FILTER_ALL = "all";
-
-// เลือกสีอวาตาร์ตัวย่อชื่อแบบคงที่ตามชื่อพนักงานขาย (ชื่อเดียวกันได้สีเดียวกันเสมอ)
-// Picks a deterministic avatar color for a salesperson's initials, based on their name
-function avatarColorFor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
+const PAGE_SIZE = 20;
 
 const statuses: QuoteStatus[] = [
   "ร่าง",
@@ -33,8 +26,22 @@ const statuses: QuoteStatus[] = [
   "ยกเลิก",
 ];
 
-// หน้ารายการใบเสนอราคาทั้งหมด พร้อมค้นหา กรอง และการ์ดสรุปยอด
-// Lists all quotations, with search, filters, and summary stat cards
+/**
+ * แท็บของหน้ารายการ (ดีไซน์ใหม่ 2026-09-30) — แทนการ์ดสรุป 6 ใบเดิม (ทั้งหมด/รออนุมัติ/อนุมัติแล้ว/น่าสนใจ/
+ * โอกาสในการขาย/ใบแก้ไข) ด้วยชุดเดียวกันแต่กดกรองได้ · สถานะอื่นทั้ง 9 ค่ายังกรองได้จากตัวเลือก "สถานะ" ในแถบค้นหา
+ */
+type ListTabKey = "all" | "pending" | "approved" | "interested" | "opportunity" | "revisions";
+const TAB_MATCH: Record<ListTabKey, (q: Quote) => boolean> = {
+  all: () => true,
+  pending: (q) => q.status === "รออนุมัติ",
+  approved: (q) => q.status === "อนุมัติแล้ว",
+  interested: (q) => q.interest === "น่าสนใจ",
+  opportunity: (q) => q.isPotentialOpportunity,
+  revisions: (q) => isRevisionQuote(q.id),
+};
+
+// หน้ารายการใบเสนอราคาทั้งหมด: แท็บพร้อมจำนวน ค้นหา ตัวกรอง และตาราง (ทั้งแถวกดเปิดเอกสาร)
+// Lists all quotations: count tabs, search, filters, and a table whose whole row opens the document
 export function QuoteList({
   quotes,
   jobTypes,
@@ -56,206 +63,193 @@ export function QuoteList({
 
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="quotation-create"]', popover: { title: t("tour.quotation.create.title"), description: t("tour.quotation.create.desc"), side: "bottom" } },
-    { element: '[data-tour="quotation-summary"]', popover: { title: t("tour.quotation.summary.title"), description: t("tour.quotation.summary.desc"), side: "bottom" } },
-    { element: '[data-tour="quotation-filters"]', popover: { title: t("tour.quotation.filters.title"), description: t("tour.quotation.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-summary"]', popover: { title: t("tour.quotation.tabs.title"), description: t("tour.quotation.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-filters"]', popover: { title: t("tour.quotation.filters.title"), description: t("tour.quotation.toolbar.desc"), side: "bottom" } },
     { element: '[data-tour="quotation-table"]', popover: { title: t("tour.quotation.table.title"), description: t("tour.quotation.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("quotation", currentUserId, tourSteps);
-  const [filterStatus, setFilterStatus] = useState<string>(initialFilter?.status ?? FILTER_ALL);
+  // ลิงก์จากแดชบอร์ดที่ขอ "รออนุมัติ"/"อนุมัติแล้ว" เปิดแท็บนั้นเลย สถานะอื่นไปอยู่ที่ตัวกรองสถานะ
+  const initialStatus = initialFilter?.status;
+  const [tab, setTab] = useState<ListTabKey>(initialStatus === "รออนุมัติ" ? "pending" : initialStatus === "อนุมัติแล้ว" ? "approved" : "all");
+  const [filterStatus, setFilterStatus] = useState<string>(
+    initialStatus && initialStatus !== "รออนุมัติ" && initialStatus !== "อนุมัติแล้ว" ? initialStatus : FILTER_ALL,
+  );
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
   const [clientFilter, setClientFilter] = useState<string>(initialFilter?.client ?? "");
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const salespeopleInList = [...new Set(quotes.map((q) => q.salesperson).filter((s) => s.trim()))].sort();
-  const filtered = quotes
+
+  // ตัวกรองในแถบค้นหากรองก่อน แล้วแท็บนับ/กรองต่อจากผลนั้น — ตัวเลขบนแท็บจึงตรงกับสิ่งที่จะเห็นเมื่อกด
+  const toolbarFiltered = quotes
     .filter((q) => filterStatus === FILTER_ALL || q.status === filterStatus)
     .filter((q) => filterJobType === FILTER_ALL || q.jobTypeCode === filterJobType)
     .filter((q) => filterSalesperson === FILTER_ALL || q.salesperson === filterSalesperson)
     .filter((q) => !clientFilter || q.client === clientFilter)
     .filter((q) => !normalizedSearch || [q.id, q.client, q.salesperson, q.poRef].some((v) => v.toLowerCase().includes(normalizedSearch)));
+  const filtered = toolbarFiltered.filter(TAB_MATCH[tab]);
 
-  const columns = [
-    t("quotation.col.id"), t("quotation.col.client"), t("quotation.col.jobType"), t("quotation.col.salesperson"),
-    t("quotation.col.date"), t("quotation.col.amount"), t("quotation.col.status"), t("quotation.col.interest"),
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // เปลี่ยนตัวกรองใด ๆ แล้วกลับไปหน้าแรกเสมอ ไม่งั้นอาจค้างอยู่หน้าที่ไม่มีแถวแล้ว
+  const withReset = <V,>(set: (v: V) => void) => (v: V) => { set(v); setPage(1); };
+
+  const tabs = ([
+    { key: "all", label: t("quotation.filterAll") },
+    { key: "pending", label: t("quotation.status.pendingApproval") },
+    { key: "approved", label: t("quotation.status.approved") },
+    { key: "interested", label: t("quotation.interest.interested") },
+    { key: "opportunity", label: t("quotation.tab.opportunity") },
+    { key: "revisions", label: t("quotation.revisionCount") },
+  ] as { key: ListTabKey; label: string }[]).map((tb) => ({ ...tb, count: toolbarFiltered.filter(TAB_MATCH[tb.key]).length }));
+
+  const openOnKey = (e: KeyboardEvent<HTMLTableRowElement>, id: string) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(id); }
+  };
+
+  const columns: { label: string; right?: boolean }[] = [
+    { label: t("quotation.col.id") },
+    { label: t("quotation.col.client") },
+    { label: t("quotation.col.jobType") },
+    { label: t("quotation.col.salesperson") },
+    { label: t("quotation.col.date") },
+    { label: t("quotation.col.amount"), right: true },
+    { label: t("quotation.col.status") },
+    { label: t("quotation.col.interest") },
+    { label: "" },
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("quotation.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("quotation.pageSubtitle")}</p>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.sales")}
+        title={t("quotation.pageTitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={
+          <button type="button" data-tour="quotation-create" onClick={onCreateNew} className={btn.primary}>
+            <Plus size={16} /> {t("quotation.createNew")}
+          </button>
+        }
+      />
+
+      <ListCard>
+        <div data-tour="quotation-summary">
+          <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("quotation.tab.ariaLabel")} />
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={tour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
+        <div data-tour="quotation-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={withReset(setSearchQuery)}
+            searchPlaceholder={t("quotation.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
           >
-            <HelpCircle size={15} />
-          </button>
-          <button data-tour="quotation-create" onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-            <Plus size={15} /> {t("quotation.createNew")}
-          </button>
-        </div>
-      </div>
-
-      <div data-tour="quotation-summary" className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {[
-          { label: t("quotation.filterAll"), count: quotes.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: t("quotation.status.pendingApproval"), count: quotes.filter((q) => q.status === "รออนุมัติ").length, color: "#c9a84c", bg: "from-[#c9a84c]/15 to-[#c9a84c]/5" },
-          { label: t("quotation.status.approved"), count: quotes.filter((q) => q.status === "อนุมัติแล้ว").length, color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: t("quotation.interest.interested"), count: quotes.filter((q) => q.interest === "น่าสนใจ").length, color: "#c9a84c", bg: "from-[#c9a84c]/15 to-[#c9a84c]/5" },
-          { label: t("quotation.field.potentialOpportunity"), count: quotes.filter((q) => q.isPotentialOpportunity).length, color: "#1a5fb4", bg: "from-[#1a5fb4]/15 to-[#1a5fb4]/5", icon: Target },
-          { label: t("quotation.revisionCount"), count: quotes.filter((q) => isRevisionQuote(q.id)).length, color: "#7c4dbb", bg: "from-[#7c4dbb]/15 to-[#7c4dbb]/5", icon: GitBranch },
-        ].map((s) => {
-          const Icon = s.icon ?? FileText;
-          return (
-            <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
-              <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
-                <Icon size={15} style={{ color: s.color }} />
-              </div>
-              <p className="text-xl font-bold text-foreground font-mono">{s.count}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <div data-tour="quotation-filters" className="space-y-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative h-9 w-72">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("quotation.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+            <FilterSelect
+              label={t("quotation.field.jobType")}
+              value={filterJobType}
+              onChange={withReset(setFilterJobType)}
+              options={[{ value: FILTER_ALL, label: t("quotation.filterAll") }, ...jobTypes.map((jt) => ({ value: jt.code, label: `${jt.code} — ${jt.name}` }))]}
             />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X size={13} />
+            <FilterSelect
+              label={t("quotation.col.salesperson")}
+              value={filterSalesperson}
+              onChange={withReset(setFilterSalesperson)}
+              options={[{ value: FILTER_ALL, label: t("quotation.filterAll") }, ...salespeopleInList.map((name) => ({ value: name, label: name }))]}
+            />
+            <FilterSelect
+              label={t("quotation.col.status")}
+              value={filterStatus}
+              onChange={withReset(setFilterStatus)}
+              options={[{ value: FILTER_ALL, label: t("quotation.filterAll") }, ...statuses.map((s) => ({ value: s, label: t(statusLabelKey[s]) }))]}
+            />
+            {clientFilter && (
+              <button
+                type="button"
+                onClick={() => { setClientFilter(""); setPage(1); }}
+                className="h-10 px-3 inline-flex items-center gap-1.5 rounded-lg bg-[#e8f0fb] text-[#1a5fb4] text-sm font-medium hover:bg-[#dbe7f8] transition-colors"
+              >
+                {t("quotation.col.client")}: {clientFilter} <X size={14} />
               </button>
             )}
-          </div>
-          <select
-            value={filterJobType}
-            onChange={(e) => setFilterJobType(e.target.value)}
-            className="h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          >
-            <option value={FILTER_ALL}>{t("quotation.field.jobType")}: {t("quotation.filterAll")}</option>
-            {jobTypes.map((jt) => (
-              <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
-            ))}
-          </select>
-          <select
-            value={filterSalesperson}
-            onChange={(e) => setFilterSalesperson(e.target.value)}
-            className="h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          >
-            <option value={FILTER_ALL}>{t("quotation.col.salesperson")}: {t("quotation.filterAll")}</option>
-            {salespeopleInList.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-          {clientFilter && (
-            <button onClick={() => setClientFilter("")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[#1a5fb4]/10 text-[#1a5fb4] border border-[#1a5fb4]/20 hover:bg-[#1a5fb4]/15 transition-colors">
-              {t("quotation.col.client")}: {clientFilter} <X size={12} />
-            </button>
+          </ListToolbar>
+        </div>
+
+        <div data-tour="quotation-table">
+          {quotes.length === 0 ? (
+            <ListEmpty
+              title={t("empty.quotations.title")}
+              hint={t("empty.quotations.sub")}
+              action={<button type="button" onClick={onCreateNew} className={btn.primary}><Plus size={16} /> {t("empty.quotations.action")}</button>}
+            />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("quotation.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1040px]">
+                <thead>
+                  <tr className={table.head}>
+                    {columns.map((c, i) => (
+                      <th key={i} className={c.right ? table.th.replace("text-left", "text-right") : table.th}>{c.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((q) => (
+                    <tr
+                      key={q.id}
+                      tabIndex={0}
+                      onClick={() => onOpen(q.id)}
+                      onKeyDown={(e) => openOnKey(e, q.id)}
+                      aria-label={`${q.id} — ${q.client}`}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} ${table.code} whitespace-nowrap`}>{q.id}</td>
+                      <td className={`${table.td} max-w-[280px]`}>
+                        <div className="flex flex-col min-w-0 leading-snug">
+                          <span className="text-sm font-medium text-foreground truncate" title={q.client}>{q.client}</span>
+                          {q.project && <span className="text-xs text-muted-foreground truncate" title={q.project}>{q.project}</span>}
+                        </div>
+                      </td>
+                      <td className={`${table.td} whitespace-nowrap`}>
+                        {q.jobTypeCode ? (
+                          <span className="inline-flex items-center h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono">{q.jobTypeCode}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        {q.isPotentialOpportunity && (
+                          <Target size={13} className="inline-block ml-1.5 text-[#1a5fb4] align-middle" aria-label={t("quotation.tab.opportunity")} />
+                        )}
+                      </td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{q.salesperson || "—"}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{q.date}</td>
+                      <td className={`${table.td} ${table.money} text-sm whitespace-nowrap`}>฿{fmt(q.amount)}</td>
+                      <td className={table.td}><QuoteStatusPill status={q.status} label={t(statusLabelKey[q.status])} /></td>
+                      <td className={table.td}>
+                        <InterestButtons compact value={q.interest} onChange={(v) => onInterestChange(q.id, v)} />
+                      </td>
+                      <td className={`${table.td} w-10`}>
+                        <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          <button onClick={() => setFilterStatus(FILTER_ALL)}
-            className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === FILTER_ALL ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-            {t("quotation.filterAll")}
-          </button>
-          {statuses.map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {t(statusLabelKey[s])}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div data-tour="quotation-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        {quotes.length === 0 ? (
-          <EmptyState icon={FileText} title={t("empty.quotations.title")} description={t("empty.quotations.sub")} actionLabel={t("empty.quotations.action")} onAction={onCreateNew} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <FileText size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("quotation.noFilterResults")}</p>
-          </div>
-        ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {columns.map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((q) => (
-              <tr key={q.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold cursor-pointer whitespace-nowrap" onClick={() => onOpen(q.id)}>
-                  {q.id}
-                </td>
-                <td className="px-4 py-3.5 text-sm text-foreground font-medium cursor-pointer max-w-[220px] truncate" onClick={() => onOpen(q.id)} title={q.client}>
-                  {q.client}
-                </td>
-                <td className="px-4 py-3.5 text-xs">
-                  {q.jobTypeCode ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-mono text-[10px]">
-                      {q.jobTypeCode}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                  {q.isPotentialOpportunity && (
-                    <Target size={11} className="inline-block ml-1.5 text-[#1a5fb4] align-middle" />
-                  )}
-                </td>
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2">
-                    {q.salesperson ? (
-                      <>
-                        <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                          style={{ background: avatarColorFor(q.salesperson) }}
-                        >
-                          {initials(q.salesperson)}
-                        </div>
-                        <span className="text-xs text-foreground">{q.salesperson.split(" ")[0]}</span>
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono">{q.date}</td>
-                <td className="px-4 py-3.5 text-sm font-mono text-foreground font-semibold">฿{q.amount.toLocaleString()}</td>
-                <td className="px-4 py-3.5">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[q.status]}`}>
-                    {statusIcon[q.status]} {t(statusLabelKey[q.status])}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5">
-                  <InterestButtons value={q.interest} onChange={(v) => onInterestChange(q.id, v)} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
         )}
-      </div>
+      </ListCard>
     </div>
   );
 }

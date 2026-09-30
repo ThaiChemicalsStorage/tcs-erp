@@ -6,6 +6,7 @@ import { DeliveryOrderDocument } from "../quotation/DeliveryOrderDocument";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { btn } from "../../components/ui/styles";
 
 // หน้าจัดการใบส่งมอบสินค้าแบบแยกอิสระ สลับระหว่างมุมมองรายการและรายละเอียดของแต่ละใบ
 // Standalone delivery order management page, switching between the list view and a per-order detail view
@@ -114,7 +115,7 @@ export function DeliveryOrderPage({
         <p className="text-sm text-muted-foreground">{t("deliveryOrder.loadError")}</p>
         <button
           onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
+          className={btn.secondary}
         >
           {t("deliveryOrder.retry")}
         </button>

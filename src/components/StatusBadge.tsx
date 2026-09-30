@@ -4,7 +4,7 @@ export type StatusBadgeStatus = "archived" | "active" | "inactive";
 const STATUS_STYLES: Record<StatusBadgeStatus, { pill: string; dot: string }> = {
   archived: { pill: "bg-[#eef1f6] text-[#3d5173]", dot: "bg-[#8a97ad]" },
   active: { pill: "bg-[#e6f4ec] text-[#1b7f4f]", dot: "bg-[#1b7f4f]" },
-  inactive: { pill: "bg-[#fdf3e0] text-[#8a5a00]", dot: "bg-[#d89614]" },
+  inactive: { pill: "bg-[#eef1f6] text-[#3d5173]", dot: "bg-[#b0bacb]" },
 };
 
 // ป้ายแสดงสถานะ (เก็บถาวร/ใช้งาน/ไม่ใช้งาน) พร้อมสีตามสถานะ

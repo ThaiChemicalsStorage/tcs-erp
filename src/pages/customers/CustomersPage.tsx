@@ -1,29 +1,28 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import { Plus, Search, Pencil, Power, Archive, ArchiveRestore, Contact, X, HelpCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Contact, ChevronRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import {
-  type Customer, type CustomerDraft, emptyCustomerDraft,
+  type Customer, type CustomerDraft,
   createCustomer, updateCustomer, setCustomerArchived,
 } from "../../lib/customers";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { btn, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
-import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useI18n } from "../../lib/i18n";
+import { CustomerDrawer } from "./CustomerDrawer";
+import { customerStatus, fmtCustomerDate } from "./customerDisplay";
 
-type StatusFilter = "all" | "active" | "inactive";
+type StatusTab = "all" | "active" | "inactive";
+const PAGE_SIZE = 20;
 
-// จัดรูปแบบวันที่เป็นสไตล์ไทย
-// Formats an ISO date string in Thai locale style
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
-}
-
-// หน้าจัดการข้อมูลหลักลูกค้า แสดงรายการ สร้าง แก้ไข และเก็บถาวรลูกค้า
-// Customer master data page — list, create, edit, and archive customers
+// หน้าจัดการข้อมูลหลักลูกค้า — รายการแบบแท็บสถานะ คลิกแถวเปิดแผงข้อมูลด้านขวา (สร้าง/แก้ไข/ดู)
+// Customer master data page — status-tabbed list; a row opens the right-side drawer (create/edit/view)
 export function CustomersPage({
   customers,
   onCustomersChange,
@@ -58,9 +57,11 @@ export function CustomersPage({
   const tour = useModuleTour("customers", currentUserId, tourSteps);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [showArchived, setShowArchived] = useState(false);
-  const [formTarget, setFormTarget] = useState<Customer | "new" | null>(null);
+  const [page, setPage] = useState(1);
+  /** id ของลูกค้าที่เปิดในแผง หรือ "new" — เก็บเป็น id เพื่อให้แผงเห็นสถานะล่าสุดหลังปิด/เปิดใช้งานจากเมนู */
+  const [formTarget, setFormTarget] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Customer | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Customer | null>(null);
 
@@ -70,11 +71,12 @@ export function CustomersPage({
     const target = customers.find((c) => c.id === initialEditId);
     if (target) {
       if (canEdit) {
-        setFormTarget(target);
+        setFormTarget(target.id);
       } else {
         setSearch(target.companyName);
-        setStatusFilter("all");
+        setStatusTab("all");
         setShowArchived(true);
+        setPage(1);
       }
     }
   }
@@ -91,13 +93,23 @@ export function CustomersPage({
     if (autoCreateSeq != null) onAutoActionConsumed?.();
   }, [autoCreateSeq, onAutoActionConsumed]);
 
+  const visible = useMemo(() => customers.filter((c) => (showArchived ? true : !c.isDeleted)), [customers, showArchived]);
+  const counts = useMemo(() => ({
+    all: visible.length,
+    active: visible.filter((c) => c.isActive).length,
+    inactive: visible.filter((c) => !c.isActive).length,
+  }), [visible]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return customers
-      .filter((c) => (showArchived ? true : !c.isDeleted))
-      .filter((c) => (statusFilter === "all" ? true : statusFilter === "active" ? c.isActive : !c.isActive))
+    return visible
+      .filter((c) => (statusTab === "all" ? true : statusTab === "active" ? c.isActive : !c.isActive))
       .filter((c) => (q ? [c.companyName, c.contactName, c.phone, c.email, c.taxId].some((f) => f.toLowerCase().includes(q)) : true));
-  }, [customers, search, statusFilter, showArchived]);
+  }, [visible, search, statusTab]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // สลับสถานะเปิด/ปิดใช้งานของลูกค้าตาม id
   // Toggles a customer's active/inactive status by id
@@ -136,8 +148,8 @@ export function CustomersPage({
         onCustomersChange([...customers, created]);
         show(t("customers.toast.created"));
       } else if (formTarget) {
-        const updated = await updateCustomer(formTarget.id, draft);
-        onCustomersChange(customers.map((c) => (c.id === formTarget.id ? updated : c)));
+        const updated = await updateCustomer(formTarget, draft);
+        onCustomersChange(customers.map((c) => (c.id === formTarget ? updated : c)));
         show(t("customers.toast.updated"));
       }
       setFormTarget(null);
@@ -147,129 +159,131 @@ export function CustomersPage({
     }
   };
 
+  const drawerCustomer = formTarget && formTarget !== "new" ? customers.find((c) => c.id === formTarget) ?? null : null;
+  const drawerOpen = formTarget === "new" ? canCreate : drawerCustomer !== null;
+
+  const tabs = [
+    { key: "all" as const, label: t("customers.filter.all"), count: counts.all },
+    { key: "active" as const, label: t("customers.filter.active"), count: counts.active },
+    { key: "inactive" as const, label: t("customers.filter.inactive"), count: counts.inactive },
+  ];
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("customers.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("customers.pageSubtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={tour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
-          >
-            <HelpCircle size={15} />
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.sales")}
+        title={t("customers.pageTitle")}
+        description={t("customers.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={canCreate && (
+          <button data-tour="customers-create" onClick={() => setFormTarget("new")} className={btn.primary}>
+            <Plus size={16} /> {t("customers.addNew")}
           </button>
-          {canCreate && (
-            <button data-tour="customers-create" onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-              <Plus size={15} /> {t("customers.addNew")}
-            </button>
-          )}
-        </div>
-      </div>
+        )}
+      />
 
-      {customers.length > 0 && (
-        <div data-tour="customers-toolbar" className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
-            <Search size={14} className="text-muted-foreground flex-shrink-0" />
-            <input
-              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("customers.searchPlaceholder")}
-              className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
-            />
-          </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
-            <option value="all">{t("customers.filter.all")}</option>
-            <option value="active">{t("customers.filter.active")}</option>
-            <option value="inactive">{t("customers.filter.inactive")}</option>
-          </select>
-          <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-muted-foreground ml-auto">
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="w-4 h-4 rounded border-border accent-[#c9a84c]" />
-            {t("customers.showArchived")}
-          </label>
-        </div>
-      )}
-
-      <div data-tour="customers-table" className="bg-card border border-border rounded-xl overflow-hidden">
+      <ListCard>
         {customers.length === 0 ? (
-          <EmptyState icon={Contact} title={t("empty.customers.title")} description={t("empty.customers.sub")} actionLabel={canCreate ? t("empty.customers.action") : undefined} onAction={canCreate ? () => setFormTarget("new") : undefined} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Contact size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("customers.noFilterResults")}</p>
+          <div data-tour="customers-table">
+            <EmptyState icon={Contact} title={t("empty.customers.title")} description={t("empty.customers.sub")} actionLabel={canCreate ? t("empty.customers.action") : undefined} onAction={canCreate ? () => setFormTarget("new") : undefined} compact />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.companyName")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.contactName")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.phone")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.email")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.taxId")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.status")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("customers.col.updatedAt")}</th>
-                  <th className="px-4 py-3 w-32" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.id} className={`border-b border-border/50 hover:bg-secondary/30 transition-colors group ${c.isDeleted ? "opacity-60" : ""}`}>
-                    <td className="px-4 py-3 text-sm text-foreground font-medium max-w-[220px] truncate" title={c.companyName}>{c.companyName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{c.contactName || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{c.phone || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[160px] truncate" title={c.email}>{c.email || "—"}</td>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{c.taxId || "—"}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge
-                        status={c.isDeleted ? "archived" : c.isActive ? "active" : "inactive"}
-                        label={c.isDeleted ? t("common.status.archived") : c.isActive ? t("common.status.active") : t("customers.status.inactive")}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDate(c.updatedAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        {canEdit && (
-                          <button onClick={() => setFormTarget(c)} title={t("common.edit")} aria-label={`${t("common.edit")} ${c.companyName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
-                            <Pencil size={14} />
-                          </button>
-                        )}
-                        {canEdit && !c.isDeleted && (
-                          <button
-                            onClick={() => (c.isActive ? setDeactivateTarget(c) : handleToggleActive(c.id))}
-                            title={c.isActive ? t("customers.action.deactivate") : t("customers.action.activate")}
-                            aria-label={`${c.isActive ? t("customers.action.deactivate") : t("customers.action.activate")} ${c.companyName}`}
-                            className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"
-                          >
-                            <Power size={14} />
-                          </button>
-                        )}
-                        {canArchive && (
-                          <button onClick={() => setArchiveTarget(c)} title={c.isDeleted ? t("common.unarchive") : t("common.archive")} aria-label={`${c.isDeleted ? t("common.unarchive") : t("common.archive")} ${c.companyName}`} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
-                            {c.isDeleted ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+          <>
+            <div data-tour="customers-toolbar">
+              <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); setPage(1); }} ariaLabel={t("customers.col.status")} />
+              <ListToolbar
+                search={search}
+                onSearch={(v) => { setSearch(v); setPage(1); }}
+                searchPlaceholder={t("customers.searchPlaceholder")}
+                count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+              >
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173]">
+                  <input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }} className="w-[18px] h-[18px] rounded accent-[#0b1d3a]" />
+                  {t("customers.showArchived")}
+                </label>
+              </ListToolbar>
+            </div>
 
-      {formTarget && (
-        <CustomerFormModal
-          initial={formTarget === "new" ? emptyCustomerDraft : formTarget}
+            <div data-tour="customers-table">
+              {filtered.length === 0 ? (
+                <ListEmpty title={t("customers.noFilterResults")} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[820px] table-fixed">
+                    <thead>
+                      <tr className={table.head}>
+                        <th className={table.th}>{t("customers.col.companyName")}</th>
+                        <th className={`${table.th} w-[260px]`}>{t("customers.col.contactName")}</th>
+                        <th className={`${table.th} w-[150px]`}>{t("customers.col.phone")}</th>
+                        <th className={`${table.th} w-[130px]`}>{t("customers.col.status")}</th>
+                        <th className={`${table.th} w-[130px]`}>{t("customers.col.updatedAt")}</th>
+                        <th className={`${table.th} w-12`}><span className="sr-only">{t("common.edit")}</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageRows.map((c) => {
+                        const st = customerStatus(c, t);
+                        return (
+                          <tr key={c.id} onClick={() => setFormTarget(c.id)} className={`${table.row} group cursor-pointer text-sm ${c.isDeleted ? "opacity-60" : ""}`}>
+                            <td className={table.td}>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setFormTarget(c.id); }}
+                                title={c.companyName}
+                                className="block max-w-full text-left font-medium text-foreground truncate rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40"
+                              >
+                                {c.companyName}
+                              </button>
+                              {c.taxId && (
+                                <span className="block text-xs text-muted-foreground truncate">
+                                  {t("customers.taxIdLine").split("{taxId}")[0]}<span className="font-mono">{c.taxId}</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className={table.td}>
+                              <span className={`block truncate ${c.contactName ? "text-foreground" : "text-[#8a97ad]"}`}>{c.contactName || "—"}</span>
+                              <span className={`block text-xs truncate ${c.email ? "text-muted-foreground" : "text-[#8a97ad]"}`} title={c.email || undefined}>{c.email || t("customers.noEmail")}</span>
+                            </td>
+                            <td className={`${table.td} text-[#3d5173] tabular-nums whitespace-nowrap`}>{c.phone || "—"}</td>
+                            <td className={table.td}><StatusBadge status={st.status} label={st.label} /></td>
+                            <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{fmtCustomerDate(c.updatedAt)}</td>
+                            <td className={`${table.td} text-right`}>
+                              <ChevronRight size={18} aria-hidden="true" className="inline text-[#a3aec2] group-hover:text-foreground transition-colors" />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {filtered.length > 0 && (
+              <ListPagination
+                page={currentPage}
+                pageCount={pageCount}
+                from={(currentPage - 1) * PAGE_SIZE + 1}
+                to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+                total={filtered.length}
+                onPage={setPage}
+              />
+            )}
+          </>
+        )}
+      </ListCard>
+
+      {drawerOpen && (
+        <CustomerDrawer
+          key={formTarget ?? ""}
+          customer={drawerCustomer}
+          canEdit={formTarget === "new" ? canCreate : canEdit}
+          canArchive={canArchive}
+          locked={deactivateTarget !== null || archiveTarget !== null}
           onSave={handleSave}
-          onCancel={() => setFormTarget(null)}
+          onClose={() => setFormTarget(null)}
+          onToggleActive={(c) => (c.isActive ? setDeactivateTarget(c) : void handleToggleActive(c.id))}
+          onArchiveToggle={setArchiveTarget}
         />
       )}
 
@@ -279,7 +293,7 @@ export function CustomersPage({
         message={t("customers.action.confirmDeactivateMessage")}
         confirmLabel={t("customers.action.deactivate")}
         onCancel={() => setDeactivateTarget(null)}
-        onConfirm={() => { if (deactivateTarget) handleToggleActive(deactivateTarget.id); setDeactivateTarget(null); }}
+        onConfirm={() => { if (deactivateTarget) void handleToggleActive(deactivateTarget.id); setDeactivateTarget(null); }}
       />
       <ConfirmDialog
         open={archiveTarget !== null}
@@ -288,117 +302,16 @@ export function CustomersPage({
         confirmLabel={archiveTarget?.isDeleted ? t("common.unarchive") : t("common.archive")}
         danger={!archiveTarget?.isDeleted}
         onCancel={() => setArchiveTarget(null)}
-        onConfirm={() => { if (archiveTarget) handleArchiveToggle(archiveTarget.id); setArchiveTarget(null); }}
+        onConfirm={() => {
+          if (archiveTarget) {
+            void handleArchiveToggle(archiveTarget.id);
+            if (!archiveTarget.isDeleted && !showArchived) setFormTarget(null);
+          }
+          setArchiveTarget(null);
+        }}
       />
 
       <Toast message={message} />
-    </div>
-  );
-}
-
-// กล่องโต้ตอบฟอร์มสร้าง/แก้ไขข้อมูลลูกค้า
-// Modal form dialog for creating or editing a customer
-function CustomerFormModal({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial: CustomerDraft;
-  onSave: (draft: CustomerDraft) => Promise<string | null>;
-  onCancel: () => void;
-}) {
-  const { t } = useI18n();
-  const [draft, setDraft] = useState<CustomerDraft>(initial);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const panelRef = useDialogA11y(onCancel);
-  const titleId = useId();
-
-  const field = (key: keyof CustomerDraft) => ({
-    id: `customer-${key}`,
-    value: draft[key] as string,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft((d) => ({ ...d, [key]: e.target.value })),
-  });
-
-  const handleSubmit = async () => {
-    if (!draft.companyName.trim()) { setError(t("customers.form.error.companyName")); return; }
-    setSaving(true);
-    const err = await onSave(draft);
-    setSaving(false);
-    if (err) setError(err);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground">
-            {t("customers.form.title")}
-          </h2>
-          <button onClick={onCancel} disabled={saving} className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"><X size={16} /></button>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label htmlFor="customer-companyName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
-            <input {...field("companyName")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label htmlFor="customer-contactName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
-              <input {...field("contactName")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-            </div>
-            <div>
-              <label htmlFor="customer-phone" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
-              <input {...field("phone")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="customer-email" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
-            <input {...field("email")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-          </div>
-          <div>
-            <label htmlFor="customer-address" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
-            <input {...field("address")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-          </div>
-          <div>
-            <label htmlFor="customer-taxId" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
-            <input {...field("taxId")} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label htmlFor="customer-deliveryMethod" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
-              <input {...field("deliveryMethod")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-            </div>
-            <div>
-              <label htmlFor="customer-projectName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
-              <input {...field("projectName")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="customer-deliveryAddress" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
-            <input {...field("deliveryAddress")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
-            <input type="checkbox" checked={draft.isActive} onChange={(e) => setDraft((d) => ({ ...d, isActive: e.target.checked }))} className="w-4 h-4 rounded border-border accent-[#c9a84c]" />
-            {t("customers.form.active")}
-          </label>
-        </div>
-
-        {error && <p className="text-xs text-[#e05252] mt-3">{error}</p>}
-
-        <div className="flex items-center justify-end gap-2 mt-5">
-          <button onClick={onCancel} disabled={saving} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">{t("common.cancel")}</button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-60"
-          >
-            {t("customers.form.save")}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

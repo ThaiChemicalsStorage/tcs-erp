@@ -1,39 +1,40 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
-  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2,
+  Printer, Copy, Save, Send, CheckCircle2, ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, ClipboardList, GitBranch, Wand2,
+  Lock, ChevronRight, Building2, type LucideIcon,
 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { PromptDialog } from "../../components/PromptDialog";
 import { Combobox } from "../../components/Combobox";
-import { useDialogA11y } from "../../hooks/useDialogA11y";
+import { DocumentHeader, DocumentTabs, DocumentStepper, DocumentColumns, RailTotalCard, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { btn, field } from "../../components/ui/styles";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
-import type { User } from "../../lib/users";
+import { type User, initials } from "../../lib/users";
 import {
-  type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
-  type DiscountMode, type QuoteContact,
-  statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
-  printQuote, isRevisionQuote,
+  type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type QuoteUpdateFields, type ApprovalAction,
+  type QuotePermissions, type DiscountMode, type QuoteContact,
+  statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
+  printQuote, isRevisionQuote, fmt, VAT_RATE,
   quoteContactsOf, normalizeContacts, primaryContactFields, blankContact,
 } from "../../lib/quotes";
 import { getRevisionPredecessorId, getRevisionNumber, generateQuoteRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import type { Customer } from "../../lib/customers";
 import { fetchScopeOfWorksByQuotation, createScopeOfWorkFromQuotation, type ScopeOfWorkSummary } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
-import { statusIcon } from "./statusIcons";
+import { QuoteStatusPill } from "./statusIcons";
 import { InterestButtons } from "./InterestButtons";
-import { LineItemsEditor } from "./LineItemsEditor";
-import { CustomerSelector } from "./CustomerSelector";
+import { LineItemsEditor, ReadonlyLineItems } from "./LineItemsEditor";
+import { QuoteCustomerField } from "./QuoteCustomerField";
 import { QuoteContactsEditor } from "./QuoteContactsEditor";
+import { QuoteActionDialog } from "./QuoteActionDialog";
 import { PrintDocument } from "./PrintDocument";
 import type { QuotationWizardResult } from "./QuotationTemplateWizard";
-import { BrandMark } from "../../components/BrandMark";
-import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
-import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -44,10 +45,12 @@ import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { validateQuotationForFinalization, quotationRequiredFields } from "../../lib/validation/quotationValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
-import { useI18n } from "../../lib/i18n";
+import { useI18n, type TranslationKey } from "../../lib/i18n";
 
-const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
 const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
+
+/** ช่องที่ยังแก้ได้หลังส่งขออนุมัติ (ความสนใจบันทึกทันทีผ่าน onInterestChange จึงไม่อยู่ในนี้) — ตรงกับ POST_SUBMIT_EDITABLE_FIELDS ฝั่งเซิร์ฟเวอร์ */
+export type QuoteFollowUpFields = Pick<Quote, "poRef" | "followUpDate" | "isPotentialOpportunity">;
 
 // ทุกช่องที่ผู้ใช้แก้เองได้ ตัด status ออก เพราะสถานะมาจาก workflow ไม่ใช่การพิมพ์ ใช้เทียบหา "การแก้ไขที่ยังไม่ได้บันทึก"
 // Everything the user can actually change, minus `status`, which moves through the approval
@@ -73,20 +76,79 @@ function singleLine(text: string): string {
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
 
-const ACTION_ICON: Record<ApprovalAction, React.ReactNode> = {
-  submitted: <Send size={13} />,
-  approved: <ThumbsUp size={13} />,
-  rejected: <ThumbsDown size={13} />,
-  sent_to_customer: <Send size={13} />,
-  customer_accepted: <CheckCircle2 size={13} />,
-  customer_rejected: <XCircle size={13} />,
-  marked_won: <Trophy size={13} />,
-  marked_lost: <Frown size={13} />,
-  cancelled: <Ban size={13} />,
+// หน้าตากล่องยืนยันของแต่ละขั้น (ดีไซน์ใหม่ 2026-09-30) — ปุ่มยืนยันใช้ชื่อการกระทำจริง
+const ACTION_DIALOG: Record<ApprovalAction, {
+  icon: LucideIcon; tone: "info" | "success" | "danger"; title?: TranslationKey; desc: TranslationKey; help: TranslationKey;
+  confirm?: TranslationKey; danger?: boolean; closeLabel?: boolean;
+}> = {
+  submitted: { icon: Send, tone: "info", desc: "quotation.dialog.submitted.desc", help: "quotation.dialog.helpApprover" },
+  approved: { icon: CheckCircle2, tone: "success", title: "quotation.dialog.approved.title", desc: "quotation.dialog.approved.desc", help: "quotation.dialog.helpPreparer" },
+  rejected: { icon: ThumbsDown, tone: "danger", desc: "quotation.dialog.rejected.desc", help: "quotation.dialog.rejected.help", confirm: "quotation.action.rejectBtn", danger: true },
+  sent_to_customer: { icon: Send, tone: "info", desc: "quotation.dialog.sent.desc", help: "quotation.dialog.helpHistory" },
+  customer_accepted: { icon: CheckCircle2, tone: "success", desc: "quotation.dialog.accepted.desc", help: "quotation.dialog.helpHistory" },
+  customer_rejected: { icon: XCircle, tone: "danger", desc: "quotation.dialog.customerRejected.desc", help: "quotation.dialog.reasonRequired", danger: true },
+  marked_won: { icon: Trophy, tone: "success", desc: "quotation.dialog.won.desc", help: "quotation.dialog.helpHistory" },
+  marked_lost: { icon: Frown, tone: "danger", desc: "quotation.dialog.lost.desc", help: "quotation.dialog.helpHistory" },
+  cancelled: { icon: Ban, tone: "danger", desc: "quotation.dialog.cancelled.desc", help: "quotation.dialog.reasonRequired", danger: true, closeLabel: true },
 };
 
+const ACTION_ICON: Record<ApprovalAction, LucideIcon> = {
+  submitted: Send, approved: ThumbsUp, rejected: ThumbsDown, sent_to_customer: Send, customer_accepted: CheckCircle2,
+  customer_rejected: XCircle, marked_won: Trophy, marked_lost: Frown, cancelled: Ban,
+};
+const NEGATIVE_ACTIONS = new Set<ApprovalAction>(["rejected", "customer_rejected", "marked_lost", "cancelled"]);
+
+// ขั้นของแถบขั้นตอน — ลูกค้าปฏิเสธ/เสียโอกาสแตกออกจากขั้นที่ 5 · ยกเลิกไม่มีแถบ
+function stepsFor(status: QuoteStatus, t: (k: TranslationKey) => string): { steps: { label: string }[]; current: number } | null {
+  const base = [t("quotation.status.draft"), t("quotation.status.pendingApproval"), t("quotation.status.approved"), t("quotation.status.sentToCustomer")];
+  if (status === "ยกเลิก") return null;
+  if (status === "ลูกค้าปฏิเสธ" || status === "เสียโอกาส") {
+    return { steps: [...base, t("quotation.status.customerRejected"), t("quotation.status.lost")].map((label) => ({ label })), current: status === "เสียโอกาส" ? 6 : 4 };
+  }
+  const order: QuoteStatus[] = ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว", "ส่งให้ลูกค้าแล้ว", "ลูกค้ายอมรับ", "ปิดการขายสำเร็จ"];
+  const idx = order.indexOf(status);
+  return {
+    steps: [...base, t("quotation.status.customerAccepted"), t("quotation.step.closed")].map((label) => ({ label })),
+    current: status === "ปิดการขายสำเร็จ" ? 6 : Math.max(idx, 0),
+  };
+}
+
+// จำนวนวันจากวันนี้ (หรือวันที่กำหนด) ถึงวันที่ ISO — null เมื่อวันที่ว่าง/ไม่ถูกต้อง
+function daysBetween(fromIso: string, toIso: string): number | null {
+  if (!fromIso || !toIso) return null;
+  const a = Date.parse(`${fromIso}T00:00:00`);
+  const b = Date.parse(`${toIso}T00:00:00`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+// กล่องบอกสถานะ/ขั้นต่อไปของใบที่ล็อกแล้ว — สีตามสถานะ (เหลือง = รออนุมัติ, เขียว = อนุมัติ/ลูกค้ายอมรับ)
+function StatusHint({ tone, children }: { tone: "amber" | "green" | "blue" | "grey"; children: ReactNode }) {
+  const cls = {
+    amber: "bg-[#fdf3e0] border-[#efd3a0] text-[#6b4600]",
+    green: "bg-[#e6f4ec] border-[#b5dcc6] text-[#14603b]",
+    blue: "bg-[#e8f0fb] border-[#b9d0f0] text-[#16407a]",
+    grey: "bg-[#f4f6fa] border-border text-[#3d5173]",
+  }[tone];
+  return (
+    <div className={`rounded-xl border p-4 flex gap-2.5 ${cls}`}>
+      <Lock size={16} className="flex-shrink-0 mt-0.5" />
+      <p className="text-[13px] leading-relaxed">{children}</p>
+    </div>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <span aria-hidden="true" className="w-[34px] h-[34px] rounded-full bg-[#e8edf7] text-[#1a3a6b] text-[13px] font-semibold flex items-center justify-center flex-shrink-0">
+      {initials(name) || "—"}
+    </span>
+  );
+}
+
 // แบบฟอร์มใบเสนอราคาแบบเต็ม รวมข้อมูลลูกค้า รายการสินค้า ขั้นตอนอนุมัติ และมุมมองสำหรับพิมพ์
-// Full quotation document form, covering customer info, line items, approval workflow, and print view
+// Full quotation document: an editable form while Draft, a read-only record from Pending onward
+// (2026-09-30 lock — only the sales follow-up fields stay editable), plus print preview and history.
 export function QuoteDocument({
   mode,
   quote,
@@ -106,6 +168,7 @@ export function QuoteDocument({
   onOpenScopeOfWork,
   onBack,
   onSave,
+  onSaveFollowUp,
   onAutoSave,
   onDuplicate,
   onRewrite,
@@ -131,12 +194,14 @@ export function QuoteDocument({
   onOpenScopeOfWork: (scopeOfWorkId: string) => void;
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => Promise<void>;
+  /** บันทึกช่องติดตามการขายของใบที่ล็อกแล้ว (เลข PO วันที่ติดตาม โอกาสในการขาย) */
+  onSaveFollowUp: (data: QuoteFollowUpFields) => Promise<void>;
   /** บันทึกอัตโนมัติเบื้องหลัง — มีเฉพาะเอกสารที่มีอยู่จริงบนเซิร์ฟเวอร์แล้วเท่านั้น */
   onAutoSave: (data: QuoteDraftFields) => Promise<void>;
   onDuplicate: () => void;
   onRewrite: () => Promise<void>;
   onInterestChange: (v: QuoteInterest) => void;
-  onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => Promise<void>;
+  onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteUpdateFields) => Promise<void>;
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -160,11 +225,8 @@ export function QuoteDocument({
   // which is what the business actually asked for.
   const [discountMode, setDiscountMode] = useState<DiscountMode>(quote?.discountMode ?? (mode === "new" ? "amount" : "percent"));
   // หน่วยเริ่มต้นของส่วนลด "ระดับรายการ" — ตั้งครั้งเดียวตอนเปิดเอกสารและไม่ผูกกับปุ่มสลับของส่วนลดพิเศษ
-  // ทั้งสองระดับสลับหน่วยได้อิสระต่อกัน (เช่น ลดรายบรรทัดเป็น % แต่ลดท้ายเอกสารเป็นบาท)
   // The line-level default, fixed once when the document opens. Deliberately not tied to the
-  // special-discount toggle: the two levels switch units independently, so flipping one must not
-  // silently re-label the other. LineItemsEditor only falls back to this when no line has recorded
-  // a unit of its own yet.
+  // special-discount toggle: the two levels switch units independently.
   const [defaultLineDiscountMode] = useState<DiscountMode>(mode === "new" ? "amount" : "percent");
   const [salesperson, setSalesperson] = useState(quote?.salesperson ?? currentUser.fullName);
   // ผู้ติดต่อหลายคน (2026-09-07) — ใบที่มี `contacts` ใช้เลย · ใบเก่าที่มีแค่สามช่องเดิมได้คนเดียวตาม
@@ -193,12 +255,18 @@ export function QuoteDocument({
   const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? wizardResult?.jobTypeName ?? "");
   const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
   const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
-  const disabled = !permissions.canEdit;
+
+  // ── ล็อกหลังส่งขออนุมัติ (2026-09-30) ──────────────────────────────────────────────────────
+  // `contentEditable` = ใบใหม่ หรือใบร่างที่ผู้ใช้แก้ได้ → ฟอร์มเต็ม · นอกนั้นเป็นหน้าอ่านอย่างเดียว
+  // `followUpEditable` = ใบที่พ้นร่างแล้วแต่ผู้ใช้ยังดูแลการติดตามการขายได้ (เลข PO วันที่ติดตาม โอกาส ความสนใจ)
+  const contentEditable = permissions.canEditContent;
+  const locked = isDetail && quoteStatus !== "ร่าง";
+  const followUpEditable = locked && permissions.canEdit;
 
   const originalCustomerId = quote?.customerId ?? "";
   const [customerId, setCustomerId] = useState(originalCustomerId);
   const customerChanged = customerId !== originalCustomerId;
-  const canChangeCustomer = !disabled && (mode === "new" || quoteStatus === "ร่าง");
+  const canChangeCustomer = contentEditable;
 
   // เติมข้อมูลลูกค้าทั้งหมดในแบบฟอร์มจากลูกค้าที่เลือก รวมถึงช่องที่ว่างเปล่าด้วย
   // Fills in all customer fields on the form from the selected customer, including blank ones
@@ -222,6 +290,7 @@ export function QuoteDocument({
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
 
+  const [tab, setTab] = useState<"details" | "preview" | "history">("details");
   const [pendingAction, setPendingAction] = useState<ApprovalAction | null>(null);
   const [actionComment, setActionComment] = useState("");
   const [actionError, setActionError] = useState("");
@@ -241,6 +310,7 @@ export function QuoteDocument({
   const [existingScopeOfWork, setExistingScopeOfWork] = useState<ScopeOfWorkSummary | null>(null);
   const [scopeOfWorkBusy, setScopeOfWorkBusy] = useState(false);
   const [scopeOfWorkPromptOpen, setScopeOfWorkPromptOpen] = useState(false);
+  const [scopeOfWorkNumber, setScopeOfWorkNumber] = useState("");
   const [scopeOfWorkPromptError, setScopeOfWorkPromptError] = useState("");
   useEffect(() => {
     if (!isDetail || !canViewScopeOfWork) return;
@@ -251,8 +321,8 @@ export function QuoteDocument({
     return () => { cancelled = true; };
   }, [isDetail, quote, canViewScopeOfWork]);
 
-  // เปิด Scope of Work ที่มีอยู่แล้ว หรือเปิด modal ให้กรอกเลขที่เอกสารเพื่อสร้างใหม่
-  // Opens the existing Scope of Work, or opens the prompt to create one with a document number
+  // เปิด Scope of Work ที่มีอยู่แล้ว หรือเปิดกล่องให้กรอกเลขที่เอกสารเพื่อสร้างใหม่
+  // Opens the existing Scope of Work, or opens the dialog to create one with a document number
   const handleScopeOfWorkClick = () => {
     if (!quote) return;
     if (existingScopeOfWork) {
@@ -260,22 +330,23 @@ export function QuoteDocument({
       return;
     }
     setScopeOfWorkPromptError("");
+    setScopeOfWorkNumber("");
     setScopeOfWorkPromptOpen(true);
   };
 
   // สร้าง Scope of Work ใหม่จากใบเสนอราคานี้ด้วยเลขที่เอกสารที่กรอก แล้วเปิดขึ้นมา
   // Creates a new Scope of Work from this quote with the entered document number, then opens it
-  const confirmCreateScopeOfWork = async (scopeOfWorkNumber: string) => {
-    if (!quote) return;
+  const confirmCreateScopeOfWork = async () => {
+    if (!quote || scopeOfWorkBusy) return;
     const scopeNumber = scopeOfWorkNumber.trim();
-    if (!scopeNumber) { setScopeOfWorkPromptError("กรุณาระบุเลขที่เอกสาร"); return; }
+    if (!scopeNumber) { setScopeOfWorkPromptError(t("quotation.sow.numberRequired")); return; }
     setScopeOfWorkBusy(true);
     try {
       const created = await createScopeOfWorkFromQuotation(quote.id, scopeNumber);
       setScopeOfWorkPromptOpen(false);
       onOpenScopeOfWork(created.id);
     } catch (err) {
-      setScopeOfWorkPromptError(err instanceof ApiError ? err.message : "ไม่สามารถสร้าง Scope of Work ได้");
+      setScopeOfWorkPromptError(err instanceof ApiError ? err.message : t("quotation.sow.createError"));
     } finally {
       setScopeOfWorkBusy(false);
     }
@@ -288,8 +359,10 @@ export function QuoteDocument({
   ];
   const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps, { autoStart: isDetail });
 
-  const { total } = computeTotals(lines, discount, discountMode);
+  const totals = computeTotals(lines, discount, discountMode);
+  const { total } = totals;
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
+  const itemCount = lines.filter((l) => !l.isSectionHeader).length;
 
   // เปลี่ยนประเภทงานที่เลือก แล้วอัปเดตชื่อประเภทงานที่แสดงให้ตรงกัน
   // Changes the selected job type and syncs its display name
@@ -312,29 +385,41 @@ export function QuoteDocument({
     ...(customerChanged ? { customerId } : {}),
     ...(mode === "new" && quotationTemplateId ? { quotationTemplateId } : {}),
   });
+  const followUpPayload: QuoteFollowUpFields = { poRef, followUpDate, isPotentialOpportunity };
 
   // ── บันทึกอัตโนมัติ (2026-08-25) ───────────────────────────────────────
   // สองชั้น: สำเนาในเครื่องกันร่างหาย (ใช้ได้แม้ยังไม่เคยกดบันทึกเลย) และบันทึกขึ้นเซิร์ฟเวอร์เงียบ ๆ
   // สำหรับใบที่มีอยู่แล้วและยังเป็นฉบับร่าง — ดู src/hooks/useAutoSave.ts
   //
-  // Two layers. The local snapshot is what answers the original complaint: a brand-new quotation
-  // has no server record to save into, so `mode === "new"` gets the local layer only and is offered
-  // its work back when the form is reopened. A quotation that already exists AND is still a Draft
-  // also auto-saves for real. Anything past ร่าง is deliberately excluded — an approved/sent
-  // quotation must only change when someone presses Save, with the audit entry that comes with it.
+  // Two layers. The local snapshot protects a brand-new quotation (no server record yet); an
+  // existing Draft also auto-saves for real. Anything past ร่าง is locked (2026-09-30): only its
+  // follow-up fields can change, through the follow-up card's Save button (with an audit entry),
+  // and they keep their own local snapshot under a separate key.
   const draftSnapshot = currentDraft();
-  const canAutoSaveToServer = !disabled && isDetail && quoteStatus === "ร่าง";
-  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
+  const canAutoSaveToServer = contentEditable && isDetail;
   // ตัด status ออกจากการเทียบ เพราะสถานะเปลี่ยนจาก workflow (อนุมัติ/ส่งให้ลูกค้า) ไม่ใช่จากการพิมพ์ของผู้ใช้
-  // ถ้านับรวม พออนุมัติเสร็จเอกสารจะค้างสถานะ "ยังไม่บันทึก" แล้วเด้งถามทุกครั้งที่เปลี่ยนหน้า
-  //
-  // `status` is excluded from the comparison: it changes through the approval workflow, not through
-  // anything the user typed. Counting it would leave every approved quotation permanently "dirty".
-  const dirty = useDirtyTracker(disabled ? null : toGuardPayload(draftSnapshot));
+  const guardPayload: object | null = contentEditable ? toGuardPayload(draftSnapshot) : followUpEditable ? followUpPayload : null;
+  const dirty = useDirtyTracker<object>(guardPayload);
+  // ส่งขออนุมัติ/ถูกปฏิเสธกลับ บนหน้าเดิม = สิ่งที่ติดตามเปลี่ยนรูปทั้งก้อน (ฟอร์มเต็ม ↔ ช่องติดตามการขาย) —
+  // ต้องตั้งฐานเทียบใหม่ ไม่งั้นการออกจากหน้าครั้งถัดไปจะถามว่า "ยังไม่ได้บันทึก" ทั้งที่ไม่มีอะไรค้าง
+  const editScope = contentEditable ? "content" : followUpEditable ? "followUp" : "none";
+  const editScopeRef = useRef(editScope);
+  const guardPayloadRef = useRef(guardPayload);
+  useEffect(() => { guardPayloadRef.current = guardPayload; });
+  useEffect(() => {
+    if (editScopeRef.current === editScope) return;
+    editScopeRef.current = editScope;
+    dirty.markSaved(guardPayloadRef.current ?? undefined);
+  }, [editScope, dirty]);
   const draftBackup = useDraftBackup<QuoteDraftFields>({
     storageKey: isDetail ? `quotation:${quote!.id}` : "quotation:new",
     data: draftSnapshot,
-    enabled: !disabled,
+    enabled: contentEditable,
+  });
+  const followUpBackup = useDraftBackup<QuoteFollowUpFields>({
+    storageKey: isDetail ? `quotation:${quote!.id}:followUp` : null,
+    data: followUpPayload,
+    enabled: followUpEditable,
   });
   const autoSave = useAutoSave<QuoteDraftFields>({
     data: draftSnapshot,
@@ -381,6 +466,13 @@ export function QuoteDocument({
     draftBackup.clear();
     showToast(t("common.draftRecovery.restoredToast"));
   };
+  const applyRecoveredFollowUp = (d: QuoteFollowUpFields) => {
+    setPoRef(d.poRef);
+    setFollowUpDate(d.followUpDate);
+    setIsPotentialOpportunity(d.isPotentialOpportunity);
+    followUpBackup.clear();
+    showToast(t("common.draftRecovery.restoredToast"));
+  };
 
   const revisionPredecessorId = isDetail && quote ? getRevisionPredecessorId(quote.id) : null;
   // สร้างสรุปการแก้ไขอัตโนมัติโดยเทียบใบต้นฉบับกับร่างปัจจุบัน
@@ -389,12 +481,12 @@ export function QuoteDocument({
     if (!revisionPredecessorId || !quote) return;
     const predecessor = allQuotes.find((q) => q.id === revisionPredecessorId);
     if (!predecessor) {
-      showToast("ไม่พบข้อมูลต้นฉบับสำหรับเปรียบเทียบ (อาจเป็นเพราะสิทธิ์การเข้าถึง)");
+      showToast(t("quotation.revisionNote.noPredecessor"));
       return;
     }
     const summary = generateQuoteRevisionSummary(predecessor, currentDraft());
     setRevisionNote(appendRevisionNoteEntry(predecessor.revisionNote, getRevisionNumber(quote.id), summary));
-    showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
+    showToast(t("quotation.revisionNote.generatedToast"));
   };
 
   const clientValidation = useMemo(
@@ -412,13 +504,19 @@ export function QuoteDocument({
   const validationSummaryMessages = [...Object.values(validation.fieldErrors), ...Object.values(validation.groupErrors).flat()];
   const totalRequiredChecks = Object.values(quotationRequiredFields).filter((f) => f.required).length;
   const summaryRef = useRef<HTMLDivElement>(null);
+  const blockedTooltip = t("quotation.blockedTooltip");
+
+  const scrollToSummary = () => {
+    setTab("details");
+    summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // เรียกใช้ workflow action ก็ต่อเมื่อเอกสารผ่านการตรวจสอบครบถ้วนแล้ว (ยกเว้นบาง action)
   // Runs a workflow action only when the document passes validation (except exempt actions)
   const guardedWorkflowAction = (action: ApprovalAction) => {
     if (!VALIDATION_EXEMPT_ACTIONS.has(action) && !validation.valid) {
-      showToast(BLOCKED_TOOLTIP);
-      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      showToast(blockedTooltip);
+      scrollToSummary();
       return;
     }
     openAction(action);
@@ -428,8 +526,8 @@ export function QuoteDocument({
   // Validates completeness, records the print on the server, then opens the browser print dialog
   const handlePrintClick = async () => {
     if (!validation.valid) {
-      showToast(BLOCKED_TOOLTIP);
-      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      showToast(blockedTooltip);
+      scrollToSummary();
       return;
     }
     setServerValidationErrors(null);
@@ -437,28 +535,24 @@ export function QuoteDocument({
       await printQuote(quote!.id);
       window.print();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ไม่สามารถพิมพ์ได้");
+      showToast(err instanceof ApiError ? err.message : t("quotation.printError"));
       if (err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
         setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
-        summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollToSummary();
       }
     }
   };
 
-  // คำเตือนตอนรีเฟรช/ปิดแท็บ — เดิมใช้ฐานเทียบที่จับไว้ตอนเปิดหน้าครั้งเดียวและไม่เคยตั้งใหม่หลังบันทึก จึงเตือน
-  // แม้เอกสารจะบันทึกเรียบร้อยแล้ว ซึ่งสอนให้ผู้ใช้กดข้ามคำเตือนไปเฉย ๆ ตอนนี้อ่านสัญญาณเดียวกับกล่องในแอป
-  // จึงพูดเฉพาะตอนที่งานเสี่ยงหายจริง (เบราว์เซอร์ไม่ให้ใส่ปุ่มเองได้ ทางนี้จึงยังเป็นกล่องมาตรฐานของเบราว์เซอร์)
-  //
-  // The refresh/close warning. Its old baseline was captured once at mount and never re-seeded, so
-  // it fired even on a saved, untouched quotation — which teaches people to click straight through
-  // it. It now reads the same signal as the in-app dialog and speaks up only when work is really at
-  // risk. The browser owns this dialog's buttons, so Save/Don't-save cannot be offered here.
+  // คำเตือนตอนรีเฟรช/ปิดแท็บ — อ่านสัญญาณเดียวกับกล่องในแอป จึงพูดเฉพาะตอนที่งานเสี่ยงหายจริง
+  // The refresh/close warning reads the same signal as the in-app dialog and speaks up only when
+  // work is really at risk. The browser owns this dialog's buttons, so Save/Don't-save cannot be offered.
   const guardRiskRef = useRef(guardRisk);
   useEffect(() => {
     guardRiskRef.current = guardRisk;
   });
+  const anythingEditable = contentEditable || followUpEditable;
   useEffect(() => {
-    if (disabled) return;
+    if (!anythingEditable) return;
     const handler = (e: BeforeUnloadEvent) => {
       if (guardRiskRef.current() === "none") return;
       e.preventDefault();
@@ -466,23 +560,37 @@ export function QuoteDocument({
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [disabled]);
+  }, [anythingEditable]);
 
   // บันทึกใบเสนอราคาหลังตรวจข้อมูลจำเป็นเบื้องต้น พร้อมกันบันทึกซ้ำระหว่างกำลังส่งคำขอ
-  // Saves the quote after basic required-field checks, guarding against a concurrent duplicate save
+  // Saves the quote after basic required-field checks, guarding against a concurrent duplicate save.
+  // On a locked quotation it saves only the follow-up fields (the server rejects anything else).
   const [savingBusy, setSavingBusy] = useState(false);
   const save = async (message: string): Promise<boolean> => {
+    if (savingBusy) return false;
+    if (!contentEditable) {
+      if (!followUpEditable) return false;
+      setSavingBusy(true);
+      try {
+        const saved = followUpPayload;
+        await onSaveFollowUp(saved);
+        followUpBackup.clear();
+        dirty.markSaved(saved);
+        showToast(message);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setSavingBusy(false);
+      }
+    }
     if (!client.trim()) { showToast(t("quotation.errorClientRequired")); return false; }
     if (mode === "new" && !jobTypeCode) { showToast(t("quotation.errorJobTypeRequired")); return false; }
-    if (savingBusy) return false;
     setSavingBusy(true);
     try {
       const saved = currentDraft();
       await onSave(saved);
       // สำเนาในเครื่องหมดหน้าที่แล้ว — โดยเฉพาะคีย์ "quotation:new" ที่ต้องลบทิ้งทันทีที่สร้างเอกสารสำเร็จ
-      // The local snapshot has served its purpose. This matters most for the "quotation:new" key:
-      // once the record actually exists, leaving it behind would greet the next brand-new
-      // quotation with a recovery offer for work that is already saved.
       draftBackup.clear();
       // ส่ง payload ที่บันทึกไปจริง ไม่ใช่สิ่งที่อยู่บนจอตอนนี้ — ถ้าผู้ใช้พิมพ์ต่อระหว่างรอผลบันทึก
       // ตัวอักษรที่พิมพ์เพิ่มยังไม่เคยขึ้นเซิร์ฟเวอร์ และต้องถูกบันทึกอัตโนมัติต่อไป
@@ -497,38 +605,44 @@ export function QuoteDocument({
       setSavingBusy(false);
     }
   };
+  const saveMessage = mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast");
 
   // การ์ด "ยังไม่ได้บันทึก" — ปุ่ม "บันทึก" ในกล่องคือปุ่มบันทึกจริงของหน้านี้ ผ่าน validation เดิมทุกข้อ
   // สำหรับใบใหม่ การ "บันทึก" คือการ "สร้าง" เอกสาร (onSave → createQuote) ไม่ใช่การ PATCH
   const { requestLeave } = useUnsavedChangesGuard(
-    disabled
-      ? null
-      : {
+    anythingEditable
+      ? {
           getRisk: guardRisk,
           documentLabel: isDetail && quote ? quote.id : client.trim(),
-          save: () => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast")),
-          discard: draftBackup.clear,
-        },
+          save: () => save(saveMessage),
+          discard: contentEditable ? draftBackup.clear : followUpBackup.clear,
+        }
+      : null,
   );
 
   const commentRequired = pendingAction === "rejected" || pendingAction === "customer_rejected" || pendingAction === "cancelled";
   const openAction = (a: ApprovalAction) => { setPendingAction(a); setActionComment(""); setActionError(""); };
   const [actionBusy, setActionBusy] = useState(false);
   // ยืนยันและดำเนินการ workflow action ที่ค้างอยู่ พร้อมตรวจสอบความครบถ้วน/ความคิดเห็นก่อนส่ง
-  // Confirms and runs the pending workflow action, re-checking completeness and comment requirements first
+  // Confirms and runs the pending workflow action. Only a Draft carries its on-screen content along
+  // (the Submit click bundling the last edits); a locked quotation sends an empty draft — the server
+  // refuses content changes past ร่าง with 409 (2026-09-30).
   const confirmAction = async () => {
     if (!pendingAction || actionBusy) return;
-    if (!VALIDATION_EXEMPT_ACTIONS.has(pendingAction) && !validation.valid) { setActionError(BLOCKED_TOOLTIP); return; }
+    if (!VALIDATION_EXEMPT_ACTIONS.has(pendingAction) && !validation.valid) { setActionError(blockedTooltip); return; }
     if (commentRequired && !actionComment.trim()) { setActionError(t("quotation.errorCommentRequired")); return; }
     setServerValidationErrors(null);
     setActionBusy(true);
     try {
-      await onWorkflowAction(pendingAction, actionComment.trim(), currentDraft());
+      await onWorkflowAction(pendingAction, actionComment.trim(), contentEditable ? currentDraft() : {});
       setPendingAction(null);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
         setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
-        summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        setPendingAction(null);
+        scrollToSummary();
+      } else if (err instanceof ApiError) {
+        setActionError(err.message);
       }
     } finally {
       setActionBusy(false);
@@ -540,129 +654,467 @@ export function QuoteDocument({
     : currentUser;
   const reversedApprovalHistory = isDetail ? [...quote!.approvalHistory].reverse() : [];
   const lastApprovalEntry = reversedApprovalHistory.find((e) => e.action === "approved");
+  const lastSubmitEntry = reversedApprovalHistory.find((e) => e.action === "submitted");
   const approverUser = lastApprovalEntry ? users.find((u) => u.id === lastApprovalEntry.userId) : undefined;
+  const preparerName = preparerUser?.fullName ?? salesperson;
   const preparerDate = isDetail ? quote!.date : formatQuoteDateThai(todayIso());
   const approverDate = lastApprovalEntry ? formatQuoteDateThai(lastApprovalEntry.createdAt) : "";
+  const dateTime = (iso: string) => new Date(iso).toLocaleString("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-  const signatureRoles = [
-    { key: "preparer" as const, label: t("quotation.role.preparer") },
-    { key: "approver" as const, label: t("quotation.role.approver") },
+  // ── ปุ่มบนหัวเอกสาร ─────────────────────────────────────────────────────────────────────
+  // ปุ่มหลักหนึ่งปุ่ม = ขั้นต่อไปของงาน · ปุ่มรองของขั้นเดียวกัน (ปฏิเสธ/ลูกค้าปฏิเสธ) อยู่ข้าง ๆ ·
+  // คำสั่งที่ใช้ไม่บ่อย (คัดลอก Scope of Work แก้ไข ยกเลิก) อยู่ใน "เพิ่มเติม ▾"
+  const primaryAction: ApprovalAction | null =
+    permissions.canSubmit ? "submitted"
+    : permissions.canApprove ? "approved"
+    : permissions.canSendToCustomer ? "sent_to_customer"
+    : permissions.canMarkCustomerAccepted ? "customer_accepted"
+    : permissions.canMarkWon ? "marked_won"
+    : permissions.canMarkLost ? "marked_lost"
+    : null;
+  const secondaryAction: ApprovalAction | null =
+    permissions.canReject ? "rejected" : permissions.canMarkCustomerRejected ? "customer_rejected" : null;
+  const PrimaryIcon = primaryAction ? ACTION_ICON[primaryAction] : null;
+  const actionButtonLabel = (a: ApprovalAction) => (a === "rejected" ? t("quotation.action.rejectBtn") : t(approvalActionLabelKey[a]));
+  const runAction = (a: ApprovalAction) => (VALIDATION_EXEMPT_ACTIONS.has(a) ? openAction(a) : guardedWorkflowAction(a));
+  const actionBlocked = (a: ApprovalAction) => !VALIDATION_EXEMPT_ACTIONS.has(a) && !validation.valid;
+
+  const moreItems = [
+    isDetail && permissions.canDuplicate && { key: "duplicate", label: t("quotation.menu.duplicate"), icon: Copy, onSelect: onDuplicate },
+    isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && {
+      key: "sow", icon: ClipboardList, onSelect: handleScopeOfWorkClick, disabled: scopeOfWorkBusy,
+      label: existingScopeOfWork ? t("quotation.menu.openScopeOfWork") : t("quotation.sow.create"),
+    },
+    isDetail && permissions.canRewrite && {
+      key: "rewrite", icon: GitBranch, onSelect: () => { void handleRewriteClick(); }, disabled: rewriteBusy,
+      label: t("quotation.menu.rewrite"), hint: t("quotation.menu.rewriteHint"),
+    },
+    permissions.canCancel && { key: "cancel", icon: Ban, danger: true, label: t("quotation.action.cancelled"), onSelect: () => openAction("cancelled") },
   ];
+
+  const headerMeta = contentEditable ? (
+    <>
+      {canAutoSaveToServer && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
+      {!isDetail && <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />}
+      <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
+    </>
+  ) : isDetail ? (
+    <span className="inline-flex items-center gap-1.5">
+      <Lock size={14} />
+      {!locked ? t("quotation.lock.readonly") : permissions.canApprove ? t("quotation.lock.awaitingYou") : t("quotation.lock.locked")}
+    </span>
+  ) : null;
+
+  const headerActions = (
+    <div data-tour="qdoc-actions" className="flex items-center gap-2.5 flex-wrap">
+      <TourReplayButton variant="title" onClick={docTour.start} />
+      {permissions.canExport && (
+        <button type="button" onClick={handlePrintClick} disabled={!validation.valid} title={!validation.valid ? blockedTooltip : undefined} className={btn.secondary}>
+          <Printer size={16} /> {t("quotation.printPdf")}
+        </button>
+      )}
+      {contentEditable && (
+        <button type="button" onClick={() => { void save(saveMessage); }} disabled={savingBusy} className={btn.secondary}>
+          <Save size={16} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
+        </button>
+      )}
+      <MoreMenu items={moreItems} />
+      {secondaryAction && (
+        <button type="button" onClick={() => runAction(secondaryAction)} disabled={actionBlocked(secondaryAction)} title={actionBlocked(secondaryAction) ? blockedTooltip : undefined} className={btn.secondary}>
+          <XCircle size={16} className="text-[#b93636]" /> {actionButtonLabel(secondaryAction)}
+        </button>
+      )}
+      {primaryAction && PrimaryIcon && (
+        <button type="button" onClick={() => runAction(primaryAction)} disabled={actionBlocked(primaryAction)} title={actionBlocked(primaryAction) ? blockedTooltip : undefined} className={btn.primary}>
+          <PrimaryIcon size={16} /> {actionButtonLabel(primaryAction)}
+        </button>
+      )}
+    </div>
+  );
+
+  const stepper = stepsFor(quoteStatus, t);
+  const expiryFromIssue = daysBetween(issueDate, expiryDate);
+  const expiryRemaining = daysBetween(todayIso(), expiryDate);
+  const normalizedContacts = normalizeContacts(contacts);
+  const input = `${field.input} w-full`;
+
+  // ── การ์ด "ติดตามการขาย" (คอลัมน์ขวา) — แก้ได้ทั้งตอนร่างและหลังล็อก ─────────────────────────
+  const followUpCard = (
+    <RailCard
+      title={t("quotation.followUp.title")}
+      actions={followUpEditable ? (
+        <button type="button" onClick={() => { void save(t("quotation.savedToast")); }} disabled={savingBusy} className={btn.secondarySm}>
+          <Save size={14} /> {t("common.save")}
+        </button>
+      ) : undefined}
+    >
+      {contentEditable || followUpEditable ? (
+        <>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={isPotentialOpportunity}
+              onChange={(e) => setIsPotentialOpportunity(e.target.checked)}
+              className="peer sr-only"
+            />
+            <span aria-hidden="true" className={`relative mt-0.5 w-10 h-[22px] rounded-full flex-shrink-0 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#1a5fb4]/40 ${isPotentialOpportunity ? "bg-[#0b1d3a]" : "bg-[#c3ccda]"}`}>
+              <span className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-all ${isPotentialOpportunity ? "left-[21px]" : "left-[3px]"}`} />
+            </span>
+            <span className="flex flex-col leading-snug">
+              <span className="text-sm font-medium text-foreground">{t("quotation.tab.opportunity")}</span>
+              <span className="text-xs text-muted-foreground">{t("quotation.followUp.opportunityHelp")}</span>
+            </span>
+          </label>
+          {isDetail && (
+            <div className="flex flex-col gap-1.5">
+              <span className={field.label}>{t("quotation.field.customerInterestLevel")}</span>
+              <InterestButtons value={quote!.interest} onChange={onInterestChange} />
+            </div>
+          )}
+          <Field label={t("quotation.field.followUpDate")} htmlFor="quote-followUpDate">
+            <input id="quote-followUpDate" type="date" className={input} value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
+          </Field>
+          {followUpEditable && (
+            <Field label={t("quotation.field.poRef")} htmlFor="quote-poRef" help={t("quotation.followUp.editableHelp")}>
+              <input id="quote-poRef" className={`${input} font-mono`} value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
+            </Field>
+          )}
+        </>
+      ) : (
+        <>
+          <ReadonlyField label={t("quotation.tab.opportunity")} value={isPotentialOpportunity ? t("quotation.followUp.opportunityYes") : t("quotation.followUp.opportunityNo")} />
+          <div className="grid grid-cols-2 gap-3">
+            <ReadonlyField label={t("quotation.col.interest")} value={quote?.interest ? t(quote.interest === "น่าสนใจ" ? "quotation.interest.interested" : "quotation.interest.notInterested") : t("quotation.interest.notEvaluated")} />
+            <ReadonlyField label={t("quotation.field.followUpDate")} value={formatQuoteDateThai(followUpDate)} />
+          </div>
+        </>
+      )}
+    </RailCard>
+  );
+
+  const signatureImg = (user: User | undefined, alt: string) =>
+    user?.signatureDataUrl ? <img src={user.signatureDataUrl} alt={alt} className="h-9 max-w-[180px] object-contain object-left" /> : null;
+
+  const approvalCard = locked && (quoteStatus === "รออนุมัติ" ? (
+    <RailCard title={t("quotation.approvalCard.requestTitle")}>
+      <div className="flex items-center gap-2.5">
+        <Avatar name={preparerName} />
+        <ReadonlyField label={t("quotation.role.preparer")} value={lastSubmitEntry?.roleName ? `${preparerName} · ${lastSubmitEntry.roleName}` : preparerName} />
+      </div>
+      {signatureImg(preparerUser, preparerName)}
+      <ReadonlyField label={t("quotation.approvalCard.submittedAt")} value={lastSubmitEntry ? dateTime(lastSubmitEntry.createdAt) : ""} />
+    </RailCard>
+  ) : (
+    <RailCard title={t("quotation.approvalCard.title")}>
+      {lastApprovalEntry ? (
+        <>
+          <div className="flex items-center gap-2.5">
+            <Avatar name={approverUser?.fullName ?? lastApprovalEntry.userName} />
+            <ReadonlyField label={t("quotation.role.approver")} value={approverUser?.fullName ?? lastApprovalEntry.userName} />
+          </div>
+          {signatureImg(approverUser, approverUser?.fullName ?? lastApprovalEntry.userName)}
+          <ReadonlyField label={t("quotation.approvalCard.approvedAt")} value={dateTime(lastApprovalEntry.createdAt)} />
+          {lastApprovalEntry.comment && <ReadonlyField label={t("quotation.modal.commentLabel")} value={lastApprovalEntry.comment} />}
+          <div className="h-px bg-[#eef1f6]" />
+        </>
+      ) : null}
+      <ReadonlyField label={t("quotation.role.preparer")} value={`${preparerName} · ${preparerDate}`} />
+      {signatureImg(preparerUser, preparerName)}
+      {isDetail && quote!.approvalHistory.length > 0 && (
+        <button type="button" onClick={() => setTab("history")} className={`${btn.text} self-start`}>
+          {t("quotation.approvalCard.viewHistory")} <ChevronRight size={16} />
+        </button>
+      )}
+    </RailCard>
+  ));
+
+  const lockedHint = (() => {
+    if (!isDetail || contentEditable) return null;
+    if (!locked) return <StatusHint tone="grey">{t("quotation.hint.readonlyDraft")}</StatusHint>;
+    switch (quoteStatus) {
+      case "รออนุมัติ":
+        return <StatusHint tone="amber">{permissions.canApprove ? t("quotation.hint.pendingApprover") : t("quotation.hint.pending")}</StatusHint>;
+      case "อนุมัติแล้ว":
+        return <StatusHint tone="green">{t("quotation.hint.approved")}</StatusHint>;
+      case "ส่งให้ลูกค้าแล้ว":
+        return <StatusHint tone="blue">{t("quotation.hint.sent")}</StatusHint>;
+      case "ลูกค้ายอมรับ":
+        return <StatusHint tone="green">{t("quotation.hint.accepted")}</StatusHint>;
+      case "ลูกค้าปฏิเสธ":
+        return <StatusHint tone="amber">{t("quotation.hint.customerRejected")}</StatusHint>;
+      default:
+        return <StatusHint tone="grey">{t("quotation.hint.closed")}</StatusHint>;
+    }
+  })();
+
+  const historyList = (
+    <ol className="m-0 p-0 list-none flex flex-col">
+      {reversedApprovalHistory.map((entry, i) => {
+        const Icon = ACTION_ICON[entry.action];
+        const negative = NEGATIVE_ACTIONS.has(entry.action);
+        return (
+          <li key={entry.id} className="flex gap-3.5">
+            <span className="flex flex-col items-center flex-shrink-0">
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center ${negative ? "bg-[#fcebeb] text-[#b93636]" : "bg-[#e8f0fb] text-[#1a5fb4]"}`}>
+                <Icon size={14} />
+              </span>
+              <span aria-hidden="true" className={`w-0.5 flex-1 min-h-3 ${i === reversedApprovalHistory.length - 1 ? "bg-transparent" : "bg-border"}`} />
+            </span>
+            <div className="flex-1 min-w-0 pb-4 flex flex-col gap-1">
+              <div className="flex items-baseline gap-2.5 flex-wrap">
+                <span className="text-sm font-semibold text-foreground">{entry.userName}</span>
+                <span className="text-[13px] text-muted-foreground">{entry.roleName}</span>
+                <span className={`text-[13px] font-semibold ${negative ? "text-[#b93636]" : "text-[#1a5fb4]"}`}>{t(approvalActionLabelKey[entry.action])}</span>
+                <span className="flex-1" />
+                <span className="text-xs text-muted-foreground tabular-nums">{dateTime(entry.createdAt)}</span>
+              </div>
+              {entry.comment && <p className="px-3 py-2 bg-[#f8f9fc] border border-[#eef1f6] rounded-lg text-[13.5px] text-[#3d5173] break-words">{entry.comment}</p>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+
+  const historyCard = isDetail && (
+    <SectionCard
+      title={t("quotation.section.approvalHistory")}
+      actions={<span className="text-[13px] text-muted-foreground">{t("ui.itemCount").replace("{n}", String(quote!.approvalHistory.length))}</span>}
+    >
+      {quote!.approvalHistory.length > 0 ? historyList : <p className="text-sm text-muted-foreground">{t("quotation.history.empty")}</p>}
+    </SectionCard>
+  );
+
+  const revisionCard = isDetail && quote && isRevisionQuote(quote.id) && (contentEditable || revisionNote.trim()) && (
+    <SectionCard
+      title={t("quotation.revisionNote.title")}
+      actions={contentEditable ? (
+        <button type="button" onClick={handleGenerateRevisionNote} disabled={!revisionPredecessorId} className={btn.secondarySm}>
+          <Wand2 size={14} /> {t("quotation.revisionNote.generate")}
+        </button>
+      ) : undefined}
+      className="print:hidden"
+    >
+      {contentEditable ? (
+        <Field label={t("quotation.revisionNote.title")} htmlFor="quote-revisionNote" help={t("quotation.revisionNote.help").replace("{id}", revisionPredecessorId || "-")}>
+          <textarea
+            id="quote-revisionNote"
+            rows={6}
+            className={`${field.textarea} w-full resize-y font-mono text-[13px]`}
+            value={revisionNote}
+            onChange={(e) => setRevisionNote(e.target.value)}
+            placeholder={t("quotation.revisionNote.placeholder")}
+          />
+        </Field>
+      ) : (
+        <p className="text-[13px] font-mono leading-relaxed whitespace-pre-line break-words text-foreground">{revisionNote}</p>
+      )}
+    </SectionCard>
+  );
+
+  const printProps = {
+    isDetail, quote, nextId, companyHeader, client, contacts: normalizedContacts, address, taxId, deliveryMethod, deliveryAddress,
+    project, poRef, paymentTerms, issueDate, expiryDate, jobTypeName: jobTypeDisplay, lines, discount, discountMode, remarks,
+    preparerUser, approverUser, preparerName, preparerDate, approverName: approverUser?.fullName ?? "", approverDate,
+  };
+
+  // ── เนื้อหาแท็บ "รายละเอียด" ───────────────────────────────────────────────────────────────
+  const editableMain = (
+    <>
+      <SectionCard title={t("quotation.section.customer")} className="print:hidden">
+        <div data-tour="qdoc-customer" className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+          <div className="sm:col-span-2">
+            <QuoteCustomerField
+              inputId="quote-client"
+              customers={customers}
+              customerId={customerId}
+              onSelect={handleSelectCustomer}
+              onClear={handleClearCustomer}
+              client={client}
+              onClientChange={setClient}
+              canChangeCustomer={canChangeCustomer}
+              error={validation.fieldErrors.client}
+            />
+          </div>
+          <Field label={t("quotation.field.address")} htmlFor="quote-address" className="sm:col-span-2">
+            <input id="quote-address" className={input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
+          </Field>
+          <Field label={t("quotation.field.taxId")} htmlFor="quote-taxId">
+            <input id="quote-taxId" className={`${input} font-mono`} value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
+          </Field>
+          <div className="sm:col-span-2 pt-4 border-t border-[#eef1f6]">
+            {/* ผู้ติดต่อได้หลายคน (2026-09-07) — โครงเดียวกับปุ่ม "เพิ่มเลข PO" ของ Scope of Work ตามที่เจ้าของขอ */}
+            <QuoteContactsEditor contacts={contacts} onChange={setContacts} disabled={false} />
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("quotation.section.docInfo")} className="print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4">
+          <Field label={t("quotation.field.project")} htmlFor="quote-project" className="sm:col-span-2">
+            <input id="quote-project" className={input} value={project} onChange={(e) => setProject(e.target.value)} />
+          </Field>
+          <Field label={t("quotation.field.jobType")} htmlFor="quote-jobType" required={mode === "new"}>
+            <select id="quote-jobType" className={input} value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
+              {mode === "new"
+                ? <option value="" disabled>{t("quotation.field.jobTypeSelectPrompt")}</option>
+                : <option value="">{t("quotation.field.jobTypeUnclassified")}</option>}
+              {jobTypes.filter((jt) => jt.isActive || jt.code === jobTypeCode).map((jt) => (
+                <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t("quotation.field.issueDate")} htmlFor="quote-issueDate" error={validation.fieldErrors.issueDate}>
+            <input id="quote-issueDate" type="date" className={input} value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+          </Field>
+          <Field
+            label={t("quotation.field.expiryDate")}
+            htmlFor="quote-expiryDate"
+            error={validation.fieldErrors.expiryDate}
+            help={expiryFromIssue !== null && expiryFromIssue >= 0 ? t("quotation.expiry.fromIssue").replace("{n}", String(expiryFromIssue)) : undefined}
+          >
+            <input id="quote-expiryDate" type="date" className={input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+          </Field>
+          <Field label={t("quotation.field.poRef")} htmlFor="quote-poRef">
+            <input id="quote-poRef" className={`${input} font-mono`} value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
+          </Field>
+          <Field label={t("quotation.field.salesperson")} htmlFor="quote-salesperson">
+            <input id="quote-salesperson" className={input} value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
+          </Field>
+          <Field label={t("quotation.field.deliveryMethod")} htmlFor="quote-deliveryMethod">
+            <input id="quote-deliveryMethod" className={input} value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
+          </Field>
+          <Field label={t("quotation.field.paymentTerms")} htmlFor="quote-paymentTerms" className="sm:col-span-2 lg:col-span-3">
+            {/* พิมพ์เงื่อนไขเองได้ทั้งหมด รายการที่ขึ้นมาเป็นแค่ทางลัด ไม่ใช่ค่าที่บังคับ */}
+            <Combobox
+              id="quote-paymentTerms"
+              className={input}
+              value={paymentTerms}
+              onChange={setPaymentTerms}
+              options={paymentTermsSuggestions}
+              maxLength={300}
+              ariaLabel={t("quotation.field.paymentTerms")}
+              placeholder={t("quotation.field.paymentTermsPlaceholder")}
+            />
+          </Field>
+          <Field label={t("quotation.field.deliveryAddress")} htmlFor="quote-deliveryAddress" className="sm:col-span-2 lg:col-span-3">
+            <input id="quote-deliveryAddress" className={input} value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
+          </Field>
+        </div>
+      </SectionCard>
+    </>
+  );
+
+  const readonlyMain = (
+    <>
+      <SectionCard title={t("quotation.section.customer")} className="print:hidden">
+        <div data-tour="qdoc-customer" className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
+          <div className="sm:col-span-2 flex items-center gap-3 min-w-0">
+            <span className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0"><Building2 size={18} /></span>
+            <ReadonlyField label={t("quotation.field.clientName")} value={client} />
+          </div>
+          <ReadonlyField label={t("quotation.field.taxId")} value={taxId} mono />
+          <ReadonlyField label={t("quotation.field.address")} value={address} className="sm:col-span-3" />
+          {(normalizedContacts.length > 0 ? normalizedContacts : [blankContact()]).map((c) => (
+            <div key={c.id} className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
+              <ReadonlyField label={t("quotation.field.contactName")} value={c.name ? <>{c.name}{c.position && <span className="block text-xs font-normal text-muted-foreground">{c.position}</span>}</> : ""} />
+              <ReadonlyField label={t("quotation.field.contactPhone")} value={c.phone} />
+              <ReadonlyField label={t("quotation.field.contactEmail")} value={c.email} />
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("quotation.section.docInfo")} className="print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
+          <ReadonlyField label={t("quotation.field.project")} value={project} className="sm:col-span-2" />
+          <ReadonlyField label={t("quotation.field.jobType")} value={jobTypeDisplay} />
+          <ReadonlyField label={t("quotation.field.issueDate")} value={formatQuoteDateThai(issueDate)} />
+          <ReadonlyField
+            label={t("quotation.field.expiryDate")}
+            value={expiryDate ? (
+              <>
+                {formatQuoteDateThai(expiryDate)}
+                {expiryRemaining !== null && (
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {expiryRemaining >= 0 ? t("quotation.expiry.remaining").replace("{n}", String(expiryRemaining)) : t("quotation.expiry.expired")}
+                  </span>
+                )}
+              </>
+            ) : ""}
+          />
+          {!followUpEditable && <ReadonlyField label={t("quotation.field.poRef")} value={poRef} mono />}
+          <ReadonlyField label={t("quotation.field.salesperson")} value={salesperson} />
+          <ReadonlyField label={t("quotation.field.deliveryMethod")} value={deliveryMethod} />
+          <ReadonlyField label={t("quotation.field.deliveryAddress")} value={deliveryAddress} />
+          <ReadonlyField label={t("quotation.field.paymentTerms")} value={paymentTerms} className="sm:col-span-2" />
+          {quotationTemplateId && <ReadonlyField label={t("quotation.field.appliedTemplate")} value={`${quotationTemplateName} (v${quotationTemplateVersion})`} />}
+        </div>
+      </SectionCard>
+
+      {quoteStatus === "รออนุมัติ" && historyCard}
+    </>
+  );
+
+  const rail = (
+    <>
+      <RailTotalCard
+        label={t("quotation.totals.grandTotal")}
+        amount={`฿${fmt(total)}`}
+        rows={[
+          ...(totals.discountAmt > 0 ? [{ label: t("quotation.totals.discount"), value: `−฿${fmt(totals.discountAmt)}` }] : []),
+          { label: t("quotation.totals.afterDiscount"), value: `฿${fmt(totals.afterDiscount)}` },
+          { label: t("quotation.totals.vat").replace("{rate}", String(VAT_RATE)), value: `฿${fmt(totals.vatAmt)}` },
+          { label: t("quotation.rail.items"), value: t("ui.itemCount").replace("{n}", String(itemCount)) },
+        ]}
+      />
+      {approvalCard}
+      {followUpCard}
+      {contentEditable && (
+        <RailCard title={t("quotation.rail.otherInfo")}>
+          {quotationTemplateId && <ReadonlyField label={t("quotation.field.appliedTemplate")} value={`${quotationTemplateName} (v${quotationTemplateVersion})`} />}
+          <ReadonlyField label={t("quotation.rail.createdBy")} value={`${preparerName} · ${preparerDate}`} />
+        </RailCard>
+      )}
+      {contentEditable && (
+        <NextStepHint title={t("quotation.hint.nextTitle")}>
+          {mode === "new" ? t("quotation.hint.new") : t("quotation.hint.draft")}
+        </NextStepHint>
+      )}
+      {lockedHint}
+    </>
+  );
+
+  const dialogCfg = pendingAction ? ACTION_DIALOG[pendingAction] : null;
+  const summaryLine = [client, project].filter((s) => s.trim()).join(" · ");
 
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">
-          {isDetail ? quote!.id : t("quotation.newDoc")}
-        </span>
-
-        {isDetail && (
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[quoteStatus]}`}>
-            {statusIcon[quoteStatus]} {t(statusLabelKey[quoteStatus])}
-          </span>
-        )}
-
-        {isDetail && permissions.canEdit && (
-          <div className="flex items-center gap-2 ml-1 pl-3 border-l border-border">
-            <span className="text-xs text-muted-foreground">{t("quotation.interestLabel")}</span>
-            <InterestButtons value={quote!.interest} onChange={onInterestChange} />
-          </div>
-        )}
-
-        <div data-tour="qdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <TourReplayButton onClick={docTour.start} />
-          {/* ป้าย "เก็บร่างไว้ในเครื่อง" ใช้ได้เฉพาะใบที่ยังไม่มีอยู่จริงในระบบเท่านั้น — ใบที่บันทึกแล้วแต่
-              พ้นสถานะร่างไปแล้ว (อนุมัติ/ส่งลูกค้า/ปิดการขาย) ยังแก้ไขได้ แต่ข้อความนั้นจะกลายเป็นคำโกหก
-              The localOnly chip means "no server record exists yet", so it belongs to `mode === "new"`
-              alone. `permissions.canEdit` is status-independent, so an approved/sent/won quotation is
-              still editable — showing it there would claim the document does not exist in the system. */}
-          {!disabled && canAutoSaveToServer && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-          {!disabled && !isDetail && <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />}
-          <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
-          {permissions.canExport && (
-            <button
-              onClick={handlePrintClick}
-              disabled={!validation.valid}
-              title={!validation.valid ? BLOCKED_TOOLTIP : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all ${!validation.valid ? "opacity-40 cursor-not-allowed hover:border-border hover:text-muted-foreground" : ""}`}
- >
- <Printer size={13} /> {t("quotation.printPdf")}
- </button>
- )}
- {isDetail && permissions.canDuplicate && (
- <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- <Copy size={13} /> {t("quotation.duplicateAction")}
- </button>
- )}
- {isDetail && permissions.canRewrite && (
- <button onClick={handleRewriteClick} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <GitBranch size={13} /> {t("quotation.rewriteAction")}
- </button>
- )}
- {isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && (
- <button onClick={handleScopeOfWorkClick} disabled={scopeOfWorkBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <ClipboardList size={13} /> {existingScopeOfWork ? "เปิด / แก้ไข Scope of Work" : "สร้าง Scope of Work"}
- </button>
- )}
- {!disabled && (
- <button onClick={() => { void save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast")); }} disabled={savingBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <Save size={13} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
- </button>
- )}
-
- {permissions.canSubmit && (
- <button onClick={() => guardedWorkflowAction("submitted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <Send size={13} /> {t("quotation.action.submitted")}
-            </button>
-          )}
-          {permissions.canApprove && (
-            <button onClick={() => guardedWorkflowAction("approved")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <ThumbsUp size={13} /> {t("quotation.action.approved")}
-            </button>
-          )}
-          {permissions.canReject && (
-            <button onClick={() => openAction("rejected")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors">
-              <ThumbsDown size={13} /> {t("quotation.action.rejectBtn")}
-            </button>
-          )}
-          {permissions.canSendToCustomer && (
-            <button onClick={() => guardedWorkflowAction("sent_to_customer")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#3b6fc9] text-white rounded-lg font-semibold hover:bg-[#2f5aa3] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <Send size={13} /> {t("quotation.action.sentToCustomer")}
-            </button>
-          )}
-          {permissions.canMarkCustomerAccepted && (
-            <button onClick={() => guardedWorkflowAction("customer_accepted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#1f9d8a] text-white rounded-lg font-semibold hover:bg-[#188577] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <CheckCircle2 size={13} /> {t("quotation.action.customerAccepted")}
-            </button>
-          )}
-          {permissions.canMarkCustomerRejected && (
-            <button onClick={() => guardedWorkflowAction("customer_rejected")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#e08a3c] text-white rounded-lg font-semibold hover:bg-[#c97627] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <XCircle size={13} /> {t("quotation.action.customerRejected")}
-            </button>
-          )}
-          {permissions.canMarkWon && (
-            <button onClick={() => guardedWorkflowAction("marked_won")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#157347] text-white rounded-lg font-semibold hover:bg-[#125f3b] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <Trophy size={13} /> {t("quotation.action.markedWon")}
-            </button>
-          )}
-          {permissions.canMarkLost && (
-            <button onClick={() => guardedWorkflowAction("marked_lost")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#8a94a6] text-white rounded-lg font-semibold hover:bg-[#767f90] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
-              <Frown size={13} /> {t("quotation.action.markedLost")}
-            </button>
-          )}
-          {permissions.canCancel && (
-            <button onClick={() => openAction("cancelled")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Ban size={13} /> {t("common.cancel")}
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20 print:hidden">
+        <DocumentHeader
+          backLabel={t("quotation.backToList")}
+          onBack={() => requestLeave(onBack)}
+          number={isDetail ? quote!.id : t("quotation.newDoc")}
+          status={isDetail ? <QuoteStatusPill status={quoteStatus} label={t(statusLabelKey[quoteStatus])} /> : undefined}
+          meta={headerMeta}
+          actions={headerActions}
+          tabs={
+            <DocumentTabs
+              ariaLabel={t("quotation.docTabs.ariaLabel")}
+              active={tab}
+              onChange={setTab}
+              tabs={[
+                { key: "details", label: t("quotation.docTabs.details") },
+                { key: "preview", label: t("quotation.docTabs.preview") },
+                ...(isDetail ? [{ key: "history" as const, label: t("quotation.docTabs.history") }] : []),
+              ]}
+            />
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+      <div className="px-4 md:px-8 py-6 flex flex-col gap-5 print:block print:p-0">
         {draftBackup.recovered && draftBackup.recoveredAt !== null && (
           <DraftRecoveryBanner
             savedAt={draftBackup.recoveredAt}
@@ -670,411 +1122,128 @@ export function QuoteDocument({
             onDiscard={draftBackup.dismiss}
           />
         )}
+        {followUpBackup.recovered && followUpBackup.recoveredAt !== null && (
+          <DraftRecoveryBanner
+            savedAt={followUpBackup.recoveredAt}
+            onRestore={() => applyRecoveredFollowUp(followUpBackup.recovered!)}
+            onDiscard={followUpBackup.dismiss}
+          />
+        )}
 
-        <div ref={summaryRef}>
+        <div ref={summaryRef} className="print:hidden">
           <ValidationSummary missingCount={validation.missingCount} messages={validationSummaryMessages} />
         </div>
 
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {/* หัวเอกสาร: ที่อยู่บริษัทซ้าย ชื่อเอกสารขวา — ห้ามใช้ flex-wrap ตรงนี้ (บั๊กที่แก้ 2026-09-07)
-              flex-wrap ตัดสินใจขึ้นบรรทัดใหม่จากความกว้าง max-content ของแต่ละก้อน ที่อยู่จริงของบริษัท
-              ยาวเกินความกว้างการ์ดทั้งใบเมื่ออยู่บรรทัดเดียว ก้อนซ้ายจึงกินทั้งแถวและดันชื่อเอกสารตกลง
-              มาบรรทัดล่าง กลายเป็นก้อนแคบ ๆ ชิดซ้ายที่ยังจัดข้อความชิดขวาอยู่ข้างใน อ่านแล้วเหมือนย่อหน้าเบี้ยว
-              ทางที่ถูกคือซ้อนกันบนจอเล็ก แล้วเรียงสองคอลัมน์ตั้งแต่ sm ขึ้นไปโดยให้ก้อนซ้ายยืดหยุ่นแทน */}
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between print:hidden">
-            <div className="min-w-0 sm:flex-1">
-              <div className="flex items-center gap-2.5 mb-1">
-                {companyHeader.logoDataUrl ? (
-                  <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="h-8 max-w-[140px] object-contain" />
-                ) : (
-                  <BrandMark size={28} variant="full" theme="dark" />
-                )}
-              </div>
-              <p className="text-[#a8bed8] text-sm mt-1">{companyHeader.name} · {companyHeader.address}</p>
-              <p className="text-[#a8bed8] text-sm">{t("quotation.field.contactPhone")}: {companyHeader.phone} · {t("settings.company.emailLabel")}: {companyHeader.email}</p>
+        {tab === "details" && (
+          <>
+            {stepper && <DocumentStepper ariaLabel={t("quotation.stepper.ariaLabel")} steps={stepper.steps} current={stepper.current} />}
+            <DocumentColumns main={contentEditable ? editableMain : readonlyMain} rail={rail} />
+            <div data-tour="qdoc-items" className="print:hidden">
+              {contentEditable ? (
+                <LineItemsEditor
+                  lines={lines}
+                  onChange={setLines}
+                  discount={discount}
+                  onDiscountChange={setDiscount}
+                  discountMode={discountMode}
+                  onDiscountModeChange={setDiscountMode}
+                  defaultLineDiscountMode={defaultLineDiscountMode}
+                  products={products}
+                  categories={categories}
+                  documentLabel={isDetail ? quote!.id : t("quotation.newDoc")}
+                />
+              ) : (
+                <ReadonlyLineItems lines={lines} discount={discount} discountMode={discountMode} remarks={remarks} />
+              )}
             </div>
-            <div className="sm:text-right sm:shrink-0">
-              <h1 className="text-[#c9a84c] text-xl font-bold">{t("quotation.pageTitle")}</h1>
-              <p className="text-[#a8bed8] text-xs font-mono mt-1">QUOTATION</p>
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
-                {statusIcon[quoteStatus]}
-                {t(statusLabelKey[quoteStatus])}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border print:hidden">
-            <div data-tour="qdoc-customer" className="p-6 border-b sm:border-b-0 sm:border-r border-border">
-              <h2 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</h2>
-              <div className="space-y-2.5">
-                <div>
-                  <label htmlFor="quote-customerSelector" className="text-xs text-muted-foreground block mb-1">{t("quotation.customerSelector.label")}</label>
-                  <CustomerSelector
-                    inputId="quote-customerSelector"
-                    customers={customers}
-                    selectedId={customerId}
-                    onSelect={handleSelectCustomer}
-                    onClear={handleClearCustomer}
-                    disabled={!canChangeCustomer}
-                  />
-                  {!canChangeCustomer && !disabled && (
-                    <p className="text-xs text-muted-foreground mt-1">{t("quotation.customerSelector.lockedNotDraft")}</p>
-                  )}
-                </div>
-                <div>
-                  <RequiredFieldLabel htmlFor="quote-client">{t("quotation.field.clientName")}</RequiredFieldLabel>
-                  <input id="quote-client" disabled={disabled} className="w-full text-sm font-medium text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
-                  <FieldError message={validation.fieldErrors.client} />
-                </div>
-                <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-contact-0-name">{t("quotation.field.contactName")}</RequiredFieldLabel>
-                  {/* ผู้ติดต่อได้หลายคน (2026-09-07) — โครงเดียวกับปุ่ม "เพิ่มเลข PO" ของ Scope of Work ตามที่เจ้าของขอ */}
-                  <QuoteContactsEditor contacts={contacts} onChange={setContacts} disabled={disabled} />
-                </div>
-                <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-address">{t("quotation.field.address")}</RequiredFieldLabel>
-                  <input id="quote-address" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
-                </div>
-                <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-taxId">{t("quotation.field.taxId")}</RequiredFieldLabel>
-                  <input id="quote-taxId" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-deliveryMethod">{t("quotation.field.deliveryMethod")}</RequiredFieldLabel>
-                    <input id="quote-deliveryMethod" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
-                  </div>
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-project">{t("quotation.field.project")}</RequiredFieldLabel>
-                    <input id="quote-project" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
-                  </div>
-                </div>
-                <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-deliveryAddress">{t("quotation.field.deliveryAddress")}</RequiredFieldLabel>
-                  <input id="quote-deliveryAddress" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
-                </div>
-              </div>
-            </div>
-            <div className="p-6">
-              <h2 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><Hash size={10} /> {t("quotation.section.docDetails")}</h2>
-              <div className="space-y-2.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor="quote-number" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
-                    <input id="quote-number" readOnly className="w-full text-sm font-mono text-[#c9a84c] font-medium bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
-                  </div>
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-poRef">{t("quotation.field.poRef")}</RequiredFieldLabel>
-                    <input id="quote-poRef" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-issueDate" className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
-                    <input id="quote-issueDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-                    <FieldError message={validation.fieldErrors.issueDate} />
-                  </div>
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-expiryDate" className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
-                    <input id="quote-expiryDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-                    <FieldError message={validation.fieldErrors.expiryDate} />
-                  </div>
-                </div>
-                <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-salesperson">{t("quotation.field.salesperson")}</RequiredFieldLabel>
-                  <input id="quote-salesperson" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
-                </div>
-                <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-paymentTerms">{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
-                  {/* พิมพ์เงื่อนไขเองได้ทั้งหมด รายการที่ขึ้นมาเป็นแค่ทางลัด ไม่ใช่ค่าที่บังคับ */}
-                  <Combobox
-                    id="quote-paymentTerms"
-                    disabled={disabled}
-                    className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
-                    value={paymentTerms}
-                    onChange={setPaymentTerms}
-                    options={paymentTermsSuggestions}
-                    maxLength={300}
-                    ariaLabel={t("quotation.field.paymentTerms")}
-                    placeholder={t("quotation.field.paymentTermsPlaceholder")}
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-jobType">{t("quotation.field.jobType")}</RequiredFieldLabel>
-                    <select id="quote-jobType" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
-                      {mode === "new"
-                        ? <option value="" disabled>{t("quotation.field.jobTypeSelectPrompt")}</option>
-                        : <option value="">{t("quotation.field.jobTypeUnclassified")}</option>}
-                      {jobTypes.filter((jt) => jt.isActive || jt.code === jobTypeCode).map((jt) => (
-                        <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="quote-followUpDate" className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
-                    <input id="quote-followUpDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
-                  </div>
-                </div>
-                {quotationTemplateId && (
-                  <p className="text-xs text-muted-foreground -mt-1">
-                    {t("quotation.field.appliedTemplate")}: {quotationTemplateName} (v{quotationTemplateVersion})
-                  </p>
-                )}
-                <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
-                  <input
-                    type="checkbox"
-                    disabled={disabled}
-                    checked={isPotentialOpportunity}
-                    onChange={(e) => setIsPotentialOpportunity(e.target.checked)}
-                    className="w-4 h-4 rounded border-border accent-[#c9a84c] disabled:opacity-60"
-                  />
-                  {t("quotation.field.potentialOpportunity")}
-                </label>
-                {isDetail && permissions.canEdit && (
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.customerInterestLevel")}</label>
-                    <InterestButtons value={quote!.interest} onChange={onInterestChange} />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <div data-tour="qdoc-items" className="print:hidden">
-          <LineItemsEditor
-            lines={lines}
-            onChange={setLines}
-            discount={discount}
-            onDiscountChange={setDiscount}
-            discountMode={discountMode}
-            onDiscountModeChange={setDiscountMode}
-            defaultLineDiscountMode={defaultLineDiscountMode}
-            products={products}
-            categories={categories}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 id="quote-remarks-heading" className="text-sm font-semibold text-foreground mb-3">{t("quotation.section.remarks")}</h2>
-            <textarea rows={5} disabled={disabled} aria-labelledby="quote-remarks-heading" className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60"
-              value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-          </div>
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-3">{t("quotation.section.signatures")}</h2>
-            <div className="space-y-3">
-              {signatureRoles.map(({ key, label }) => {
-                const isPreparer = key === "preparer";
-                const signatureUser = isPreparer ? preparerUser : approverUser;
-                const printedName = isPreparer ? (preparerUser?.fullName ?? salesperson) : (approverUser?.fullName ?? "");
-                const printedDate = isPreparer ? preparerDate : approverDate;
-                return (
-                  <div key={key}>
-                    <p className="text-xs text-muted-foreground font-mono mb-1">{label}</p>
-                    <div className="h-14 border border-dashed border-border rounded-lg bg-muted/30 flex items-end justify-between px-3 pb-2 relative">
-                      {signatureUser?.signatureDataUrl ? (
-                        <img src={signatureUser.signatureDataUrl} alt={printedName} className="absolute left-2 bottom-2 h-9 max-w-[65%] object-contain pointer-events-none" />
-                      ) : (
-                        <div className="w-full border-b border-border/60" />
-                      )}
-                      {!isPreparer && companyHeader.stampDataUrl && (
-                        <img src={companyHeader.stampDataUrl} alt="" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
-                      )}
-                    </div>
-                    <div className="flex justify-between mt-1">
-                      <p className="text-xs text-muted-foreground font-mono">{t("quotation.nameLabel")} {printedName || "................................"}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{t("quotation.dateLabel")} {printedDate || "..............."}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {isDetail && quote && isRevisionQuote(quote.id) && (
-          <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-              <h2 id="quote-revisionNote-heading" className="text-sm font-semibold text-foreground">
-                หมายเหตุการแก้ไข (Revision Note)
-              </h2>
-              <button
-                type="button"
-                onClick={handleGenerateRevisionNote}
-                disabled={disabled || !revisionPredecessorId}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Wand2 size={13} /> สร้างสรุปการแก้ไขอัตโนมัติ
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground mb-2">
-              กดปุ่มด้านบนเพื่อให้ระบบตรวจสอบและสรุปว่าใบนี้แก้ไขอะไรไปจากต้นฉบับ ({revisionPredecessorId || "-"}) เป็นข้อความอัตโนมัติ — แก้ไข/เพิ่มเติมข้อความเองได้ตามต้องการก่อนบันทึก
-            </p>
-            <textarea
-              rows={6}
-              disabled={disabled}
-              aria-labelledby="quote-revisionNote-heading"
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
-              value={revisionNote}
-              onChange={(e) => setRevisionNote(e.target.value)}
-              placeholder="เช่น • ลูกค้า: &quot;บริษัท A&quot; → &quot;บริษัท B&quot;"
-            />
-          </div>
+            {contentEditable && (
+              <SectionCard title={t("quotation.section.remarks")} className="print:hidden">
+                <Field label={t("quotation.remarks.printedLabel")} htmlFor="quote-remarks">
+                  <textarea id="quote-remarks" rows={5} className={`${field.textarea} w-full resize-y`} value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                </Field>
+              </SectionCard>
+            )}
+            {revisionCard}
+            <p className="text-xs text-muted-foreground leading-relaxed print:hidden">{t("quotation.footerNote")}</p>
+          </>
         )}
 
-        {isDetail && quote!.approvalHistory.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
-              <History size={13} /> {t("quotation.section.approvalHistory")}
-            </h2>
-            <div className="space-y-2.5">
-              {reversedApprovalHistory.map((entry) => (
-                <div key={entry.id} className="flex items-start gap-3 text-sm">
-                  <div className="w-6 h-6 rounded-lg bg-[#c9a84c]/10 text-[#c9a84c] flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {ACTION_ICON[entry.action]}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-foreground">
-                      <span className="font-semibold">{entry.userName}</span>
-                      <span className="text-muted-foreground"> ({entry.roleName}) — {t(approvalActionLabelKey[entry.action])}</span>
-                    </p>
-                    {entry.comment && <p className="text-muted-foreground mt-0.5">"{entry.comment}"</p>}
-                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{new Date(entry.createdAt).toLocaleString("th-TH")}</p>
-                  </div>
-                </div>
-              ))}
+        {tab === "preview" && (
+          <div className="print:hidden overflow-x-auto">
+            {/* ใบพิมพ์ตัวจริง (PrintDocument) ซ่อนตัวเองบนจอด้วย `hidden print:block` — ตรงนี้บังคับให้โชว์ภายในกรอบกระดาษ
+                เพื่อดูก่อนพิมพ์เท่านั้น ใบที่พิมพ์ออกจริงคือตัวล่างสุดของหน้าเสมอ */}
+            <div className="mx-auto w-[210mm] bg-white border border-border rounded-xl py-[12mm] [&>div]:block">
+              <PrintDocument {...printProps} />
             </div>
           </div>
         )}
 
-        <div className="bg-[#0b1d3a]/5 border border-[#0b1d3a]/10 rounded-xl p-4 flex items-start gap-3 print:hidden">
-          <div className="w-5 h-5 rounded-full bg-[#c9a84c]/20 flex items-center justify-center flex-shrink-0 mt-0.5"><CheckCircle2 size={11} className="text-[#c9a84c]" /></div>
-          <p className="text-xs text-muted-foreground leading-relaxed">{t("quotation.footerNote")}</p>
-        </div>
+        {tab === "history" && historyCard}
 
-        <PrintDocument
-          isDetail={isDetail}
-          quote={quote}
-          nextId={nextId}
-          companyHeader={companyHeader}
-          client={client}
-          contacts={normalizeContacts(contacts)}
-          address={address}
-          taxId={taxId}
-          deliveryMethod={deliveryMethod}
-          deliveryAddress={deliveryAddress}
-          project={project}
-          poRef={poRef}
-          paymentTerms={paymentTerms}
-          issueDate={issueDate}
-          expiryDate={expiryDate}
-          jobTypeName={jobTypeDisplay}
-          lines={lines}
-          discount={discount}
-          discountMode={discountMode}
-          remarks={remarks}
-          preparerUser={preparerUser}
-          approverUser={approverUser}
-          preparerName={preparerUser?.fullName ?? salesperson}
-          preparerDate={preparerDate}
-          approverName={approverUser?.fullName ?? ""}
-          approverDate={approverDate}
-        />
+        <PrintDocument {...printProps} />
       </div>
 
-      {pendingAction && (
-        <WorkflowActionDialog
-          actionLabel={t(approvalActionLabelKey[pendingAction])}
-          forQuoteMessage={t("quotation.modal.forQuote").replace("{id}", isDetail ? quote!.id : "").replace("{client}", client)}
-          commentLabel={t("quotation.modal.commentLabel")}
-          commentRequiredLabel={t("quotation.modal.commentRequired")}
-          commentOptionalLabel={t("quotation.modal.commentOptional")}
-          commentRequired={commentRequired}
-          actionComment={actionComment}
-          onActionCommentChange={setActionComment}
-          actionError={actionError}
-          confirmLabel={t("quotation.modal.confirm")}
-          cancelLabel={t("common.cancel")}
+      {pendingAction && dialogCfg && (
+        <QuoteActionDialog
+          icon={dialogCfg.icon}
+          tone={dialogCfg.tone}
+          title={t(dialogCfg.title ?? approvalActionLabelKey[pendingAction])}
+          description={t(dialogCfg.desc)}
+          summary={{ id: isDetail ? quote!.id : "", line: client, amount: `฿${fmt(total)}` }}
+          error={actionError}
+          cancelLabel={dialogCfg.closeLabel ? t("common.close") : undefined}
+          confirmLabel={t(dialogCfg.confirm ?? approvalActionLabelKey[pendingAction])}
+          confirmIcon={dialogCfg.danger ? undefined : dialogCfg.icon}
+          confirmTone={dialogCfg.danger ? "danger" : "primary"}
           busy={actionBusy}
           onConfirm={confirmAction}
           onCancel={() => setPendingAction(null)}
-        />
+        >
+          <Field
+            label={<>{t("quotation.modal.commentLabel")} {commentRequired ? <span className="text-[#b93636]">*</span> : <span className="font-normal text-muted-foreground">{t("quotation.modal.commentOptional")}</span>}</>}
+            htmlFor="quote-action-comment"
+            help={t(dialogCfg.help)}
+          >
+            <textarea
+              id="quote-action-comment"
+              autoFocus
+              rows={3}
+              className={`${field.textarea} w-full h-24 resize-none`}
+              value={actionComment}
+              onChange={(e) => setActionComment(e.target.value)}
+              placeholder={commentRequired ? t("quotation.dialog.reasonPlaceholder") : undefined}
+            />
+          </Field>
+        </QuoteActionDialog>
       )}
 
-      <PromptDialog
-        open={scopeOfWorkPromptOpen}
-        title="สร้าง Scope of Work"
-        message="กรุณาพิมพ์เลขที่เอกสาร Scope of Work ด้วยตนเอง (ระบบไม่สร้างเลขอัตโนมัติแล้ว) — กำหนดรูปแบบได้อิสระ ระบบจะตรวจสอบให้ว่าเลขไม่ซ้ำกับใบอื่น"
-        label="เลขที่เอกสาร"
-        placeholder="เช่น PQ202607-15-LI-SK"
-        confirmLabel="สร้าง Scope of Work"
-        cancelLabel={t("common.cancel")}
-        requiredMessage="กรุณาระบุเลขที่เอกสาร"
-        error={scopeOfWorkPromptError}
-        mono
-        busy={scopeOfWorkBusy}
-        onConfirm={confirmCreateScopeOfWork}
-        onCancel={() => setScopeOfWorkPromptOpen(false)}
-      />
-    </div>
-  );
-}
-
-// โมดัลยืนยัน workflow action (ส่งอนุมัติ/อนุมัติ/ตีกลับ/ส่งลูกค้า ฯลฯ) พร้อมช่องความคิดเห็นและการดักโฟกัสสำหรับผู้ใช้คีย์บอร์ด
-// Confirm modal for workflow actions (submit/approve/reject/send-to-customer/etc.), with a comment field and keyboard focus trapping
-function WorkflowActionDialog({
-  actionLabel, forQuoteMessage, commentLabel, commentRequiredLabel, commentOptionalLabel,
-  commentRequired, actionComment, onActionCommentChange, actionError, confirmLabel, cancelLabel,
-  busy, onConfirm, onCancel,
-}: {
-  actionLabel: string;
-  forQuoteMessage: string;
-  commentLabel: string;
-  commentRequiredLabel: string;
-  commentOptionalLabel: string;
-  commentRequired: boolean;
-  actionComment: string;
-  onActionCommentChange: (value: string) => void;
-  actionError: string;
-  confirmLabel: string;
-  cancelLabel: string;
-  busy: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const panelRef = useDialogA11y(onCancel);
-  const titleId = useId();
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1">{actionLabel}</h2>
-        <p className="text-xs text-muted-foreground mb-4">{forQuoteMessage}</p>
-        <label className="text-xs text-muted-foreground block mb-1.5">
-          {commentLabel} {commentRequired ? commentRequiredLabel : commentOptionalLabel}
-        </label>
-        <textarea
-          autoFocus
-          rows={3}
-          className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none"
-          value={actionComment}
-          onChange={(e) => onActionCommentChange(e.target.value)}
-        />
-        {actionError && <p className="text-xs text-[#e05252] mt-1.5">{actionError}</p>}
-        <div className="flex items-center justify-end gap-2 mt-4">
-          <button onClick={onCancel} disabled={busy} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">{cancelLabel}</button>
-          <button
-            onClick={onConfirm}
-            disabled={busy}
-            className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors disabled:opacity-60 ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#0b1d3a] text-white hover:bg-[#1a2f55]"}`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
+      {scopeOfWorkPromptOpen && isDetail && (
+        <QuoteActionDialog
+          icon={ClipboardList}
+          tone="info"
+          title={t("quotation.sow.create")}
+          description={t("quotation.sow.desc")}
+          summary={{ id: quote!.id, line: summaryLine }}
+          error={scopeOfWorkPromptError}
+          confirmLabel={t("quotation.sow.create")}
+          confirmIcon={ClipboardList}
+          busy={scopeOfWorkBusy}
+          onConfirm={() => { void confirmCreateScopeOfWork(); }}
+          onCancel={() => setScopeOfWorkPromptOpen(false)}
+        >
+          <Field label={t("quotation.sow.numberLabel")} required htmlFor="quote-sow-number" help={t("quotation.sow.numberHelp")}>
+            <input
+              id="quote-sow-number"
+              autoFocus
+              className={`${input} font-mono`}
+              value={scopeOfWorkNumber}
+              onChange={(e) => setScopeOfWorkNumber(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void confirmCreateScopeOfWork(); } }}
+              placeholder={t("quotation.sow.numberPlaceholder")}
+            />
+          </Field>
+        </QuoteActionDialog>
+      )}
     </div>
   );
 }

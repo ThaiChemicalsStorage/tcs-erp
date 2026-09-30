@@ -4,7 +4,33 @@
 
 ---
 
-## 2026-09-30 (absolute latest) — REDESIGN เฟส 1: ฐานดีไซน์ใหม่ทั้งแอป + แถบเมนู/แถบบนแบบใหม่
+## 2026-09-30b (absolute latest) — REDESIGN เฟส 2: งานขาย + ชุดคอมโพเนนต์กลาง (`src/components/ui/`)
+
+- **ชุดกลางใหม่** `src/components/ui/`: `styles.ts` (สูตรคลาส btn/field/surface/table) · `ListPage.tsx` (ListPageHeader, ListCard,
+  ListTabs พร้อมจำนวน, ListToolbar, FilterSelect, ListPagination, ListEmpty) · `DocumentLayout.tsx` (DocumentHeader, DocumentTabs,
+  DocumentStepper, DocumentColumns, RailTotalCard, RailCard, NextStepHint) · `Overlays.tsx` (Drawer 560/880, PickerDialog 880) ·
+  `MoreMenu.tsx` (เมนู "เพิ่มเติม ▾" ลอยแบบ fixed ไม่โดนการ์ดตัด เปิดขึ้นบนเองเมื่อที่ไม่พอ) · `Field.tsx` (Field, ReadonlyField, SelectBox)
+  · `SectionCard.tsx` · `ConfirmDialog` เพิ่ม `tone="warning"` + `summary` · `TourReplayButton variant="title"` · StatusBadge "inactive" สีเทา
+- **ใบเสนอราคา**: รายการเป็นแท็บพร้อมจำนวน (ทั้งหมด/รออนุมัติ/อนุมัติแล้ว/น่าสนใจ/โอกาส/ใบแก้ไข) + ตัวกรองเดิมครบ + สถานะ 9 แบบ ·
+  หน้าเอกสาร: หัวเอกสาร แท็บ (รายละเอียด/ตัวอย่างก่อนพิมพ์/ประวัติ) แถบ 6 ขั้น คอลัมน์ขวา (ยอดรวม ติดตามการขาย ข้อมูลอื่น ขั้นต่อไป) ·
+  หน้าตาอ่านอย่างเดียวหลังส่งขออนุมัติ · กล่องขั้นตอนอนุมัติรวมเป็น `QuoteActionDialog` · เลือกสินค้าหลายรายการ (`QuoteProductPicker`) ·
+  ช่องลูกค้ารวมกับการค้นหา (`QuoteCustomerField`) · ตัวช่วยสร้างใบ 3 ขั้นหน้าตาใหม่
+- **ล็อกใบเสนอราคาหลังส่งขออนุมัติ (การตัดสินใจของเจ้าของ 2026-09-30)**: `PATCH /api/quotes/:id` และ `POST /api/quotes/:id/workflow`
+  ตอบ **409 `QUOTE_LOCKED`** เมื่อใบไม่ใช่ "ร่าง" และมีการแก้เนื้อหา (`QUOTE_CONTENT_FIELDS` ใน `api/_lib/quoteWorkflow.ts`) ·
+  หลังส่งยังแก้ได้เฉพาะ `interest` `poRef` `followUpDate` `isPotentialOpportunity` · ฝั่งหน้าจอใช้ `canEditContent` · เทสต์ `tests/api/quoteLock.test.ts`
+- **ลูกค้า**: รายการแบบแท็บ + แผงด้านข้าง (`CustomerDrawer`) · ปิดใช้งาน/เก็บถาวรอยู่ในเมนูเพิ่มเติมของแผง · สร้างใหม่เปิดใช้งานเสมอ
+- **Template**: รายการแบบแท็บ (ใช้งาน/ปิดใช้งาน/เก็บถาวร) + เมนู ⋮ ต่อแถว · หน้าแก้ Template หัวเอกสารแบบใหม่ (คงลูกศรขึ้น/ลง ไม่ใช้ลาก) ·
+  เลือกสินค้าหลายรายการ (`TemplateProductPicker`) · กล่องตัวอย่าง 880 · กล่องทำสำเนา 480
+- **Scope of Work / ใบส่งมอบ**: รายการแบบแท็บ (+ "ยังไม่มี PO") · หัวเอกสาร + เมนูเพิ่มเติม (อัปเดตจากใบเสนอราคา ทวง PO ทำสำเนา
+  แก้ไข ถอน ลบ) · การ์ด "เอกสารที่เกี่ยวข้อง" ด้านขวา · ผู้ขาย/ผู้อนุมัติเป็นช่องเลือก+พิมพ์ช่องเดียว (พิมพ์ชื่อไม่ตรงผู้ใช้ = ไม่ผูกลายเซ็น) ·
+  ใบส่งมอบ: การ์ดงวดวางคู่กัน · **ปุ่มบันทึก/บันทึกร่างคงไว้ทุกหน้า** (การตัดสินใจของเจ้าของ)
+- ตรวจ: worktree ที่มีเฉพาะไฟล์เฟสนี้ — tsc 0 · lint 0 error · vitest 981/981 · build ผ่าน · เปิดจริง 1440: รายการใบเสนอราคา
+  เอกสารร่าง (หัว แถบขั้น การ์ด ตารางรายการ) ลูกค้า+แผงข้าง Template+เมนู ⋮ แถวท้าย SOW รายการ+ใบ Final ใบส่งมอบ รายการ+ใบ Final
+- ยังไม่ได้ดูบนจอ: หน้าตาอ่านอย่างเดียวของใบเสนอราคาที่ส่งแล้ว (ฐานข้อมูลในเครื่องไม่มีใบที่ส่งแล้ว — กฎฝั่งเซิร์ฟเวอร์มีเทสต์)
+
+---
+
+## 2026-09-30 — REDESIGN เฟส 1: ฐานดีไซน์ใหม่ทั้งแอป + แถบเมนู/แถบบนแบบใหม่
 
 เจ้าของสั่ง *"เริ่มเอาใน canvas เข้ามาทำได้เลย ทำเป็นเฟสก็ได้"* — นำดีไซน์จาก canvas REDESIGN (claude.ai artifact
 UhcwgfQyazG8KybzzGLnL9) เข้าระบบจริงเป็นเฟส เฟส 1 คือฐานที่ทุกหน้าใช้ร่วมกัน · ก่อนเริ่มถามเจ้าของ 4 ข้อ

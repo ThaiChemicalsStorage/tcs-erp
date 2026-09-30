@@ -159,6 +159,11 @@ normally, no backfill needed.
 
 ## Approval Workflow (added 2026-07-08 — see [RBAC.md](../RBAC.md) for the full model)
 
+**Locked after submit (2026-09-30, owner decision during the redesign):** a quotation is read-only from รออนุมัติ onward. The
+server rejects content edits with 409 `QUOTE_LOCKED`; interest, PO reference, follow-up date and the potential-opportunity
+flag stay editable. To change content: reject back to ร่าง, or Rewrite (-R). The page renders the read-only layout for every
+status after ร่าง.
+
 `QuoteStatus` has 9 values: **Draft** (ร่าง) → **Pending Approval** (รออนุมัติ) → **Approved** (อนุมัติแล้ว) → **Sent to Customer** (ส่งให้ลูกค้าแล้ว) → **Customer Accepted** (ลูกค้ายอมรับ) → **Won** (ปิดการขายสำเร็จ), or **Customer Rejected** (ลูกค้าปฏิเสธ) → **Lost** (เสียโอกาส); plus a standalone **Cancelled** (ยกเลิก) reachable from Draft/Pending/Approved. Toolbar action buttons (Submit/Approve/Reject/Send to Customer/Customer Accepted/Customer Rejected/Won/Lost/Cancel) are rendered only when `computeQuotePermissions()` grants them — combining the signed-in user's RBAC permission (`quotations:create/edit/approve/reject/delete`) with **ownership** (`quote.createdByUserId === currentUser.id`, with approvers/admins able to act on quotes they don't own). Reject/Customer-Reject/Cancel open a modal requiring a comment; other transitions allow an optional one — **as of 2026-07-10 (fifth pass) this is also enforced server-side** (`COMMENT_REQUIRED_ACTIONS` in `api/_lib/quoteWorkflow.ts`, checked in `handleWorkflow`), not just by the modal's own client-side check, since a direct API call previously bypassed it. Every transition appends an `ApprovalHistoryEntry` (never removed) rendered as "ประวัติการอนุมัติ" beneath the document, and fires the relevant role-based notification (see [Notifications.md](./Notifications.md); as of 2026-07-10 fifth pass, `marked_won`/`marked_lost`/`cancelled` notify the creator too, previously silently didn't). **Known simplification**: Approver Level 1 and Level 2 are not sequenced — either can approve/reject independently from Pending Approval; there is no enforced two-stage gate.
 
 ## Required-Field Validation (added 2026-07-16, relaxed back to a minimal set later the same day)

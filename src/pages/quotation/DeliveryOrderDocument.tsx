@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch } from "lucide-react";
+import { ArrowLeft, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch, Undo2, ClipboardList, Building2 } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
   type DeliveryOrder, type DeliveryOrderUpdateFields, type DeliveryOrderInstallment,
@@ -8,6 +8,7 @@ import {
   submitDeliveryOrderApproval, rejectDeliveryOrder, withdrawDeliveryOrderApproval, rewriteDeliveryOrder,
   uploadDeliveryOrderAttachment, deleteDeliveryOrderAttachment,
 } from "../../lib/deliveryOrder";
+import { MAX_ATTACHMENTS_PER_DOCUMENT } from "../../lib/documentAttachments";
 import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -18,7 +19,13 @@ import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field, surface } from "../../components/ui/styles";
+import { ApprovalStatusPill, SourceTag, SourceDocRow, SourceNote, RailSummaryCard, railTextBtn } from "../scopeOfWork/sowDoShared";
+import { useApprovalSteps, useApprovalHint } from "../scopeOfWork/sowDoStatus";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -30,18 +37,12 @@ function toUpdateFields(d: DeliveryOrder): DeliveryOrderUpdateFields {
   return { installments: d.installments };
 }
 
-// สร้างข้อความหัวข้อของงวดชำระเงินหนึ่งงวด (เปอร์เซ็นต์ ชื่องวด และวิธีชำระ)
-// Builds the display title for one payment installment (percentage, label, and payment method).
-function installmentTitle(inst: DeliveryOrderInstallment): string {
-  const pctPart = inst.pct !== null ? `${inst.pct}% ` : "";
-  const methodPart = inst.paymentType ? ` (${inst.paymentType}${inst.days !== null ? ` ${inst.days} Days` : ""})` : "";
-  return `${pctPart}${inst.label || "งวดชำระเงิน"}${methodPart}`;
-}
-
-// การ์ดแก้ไขข้อมูลงวดชำระเงินหนึ่งงวด: เลขที่ วันที่ รายการสินค้าที่ส่งมอบ และ Remark
-// Editor card for one payment installment: document number, date, delivered items, and remark.
-function InstallmentEditor({ installment, items, onChange, disabled, numbersDisabled, onPrint }: {
+// การ์ดงวดชำระเงินหนึ่งงวด: เลขที่ วันที่ รายการสินค้าที่ส่งมอบ และ Remark (ดีไซน์ใหม่ 2026-09-30 — วางสองใบเคียงกัน)
+// One payment-installment card: document number, date, delivered items, and remark (shown two per row).
+function InstallmentCard({ installment, index, total, items, onChange, disabled, numbersDisabled, onPrint }: {
   installment: DeliveryOrderInstallment;
+  index: number;
+  total: number;
   items: DeliveryOrder["items"];
   onChange: (next: DeliveryOrderInstallment) => void;
   disabled: boolean;
@@ -52,6 +53,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
   numbersDisabled: boolean;
   onPrint: (() => void) | null;
 }) {
+  const { t } = useI18n();
   // สลับว่ารายการสินค้าใดถูกรวมอยู่ในงวดนี้
   // Toggles whether an item is included in this installment.
   const toggleItem = (itemId: string) => {
@@ -62,86 +64,103 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
     onChange({ ...installment, itemIds });
   };
 
+  const pctPart = installment.pct !== null ? `${installment.pct}% ` : "";
+  const methodPart = installment.paymentType ? ` (${installment.paymentType}${installment.days !== null ? ` ${installment.days} Days` : ""})` : "";
+  const title = `${pctPart}${installment.label || t("deliveryOrderDoc.installmentFallback")}${methodPart}`;
+  const pickedCount = items.filter((it) => installment.itemIds.includes(it.id)).length;
+
   const documentNumberId = `do-installment-${installment.id}-documentNumber`;
   const issueDateId = `do-installment-${installment.id}-issueDate`;
   const itemsHeadingId = `do-installment-${installment.id}-items`;
   const remarkId = `do-installment-${installment.id}-remark`;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <h2 className="text-sm font-semibold text-foreground">
-          {installmentTitle(installment)}
-        </h2>
+    <section className={`${surface.card} min-w-0`}>
+      <div className={surface.cardHead}>
+        <div className="flex-1 min-w-0 flex flex-col leading-snug">
+          <span className="text-xs text-muted-foreground">{t("deliveryOrderDoc.installmentOf").replace("{n}", String(index + 1)).replace("{total}", String(total))}</span>
+          <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
+        </div>
         {onPrint && (
-          <button onClick={onPrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all flex-shrink-0">
-            <Printer size={13} /> พิมพ์ใบส่งมอบงวดนี้
+          <button type="button" onClick={onPrint} className={`${btn.secondarySm} flex-shrink-0`}>
+            <Printer size={15} /> {t("deliveryOrderDoc.printInstallment")}
           </button>
         )}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        <div>
-          <label htmlFor={documentNumberId} className="text-xs text-muted-foreground block mb-1">เลขที่</label>
-          <input
-            id={documentNumberId}
-            disabled={numbersDisabled}
-            value={installment.documentNumber}
-            onChange={(e) => onChange({ ...installment, documentNumber: e.target.value })}
-            className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
-          />
+      <div className="px-6 pt-5 pb-6 flex flex-col gap-[18px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label={t("deliveryOrderDoc.documentNumber")} htmlFor={documentNumberId}>
+            <input
+              id={documentNumberId}
+              disabled={numbersDisabled}
+              value={installment.documentNumber}
+              onChange={(e) => onChange({ ...installment, documentNumber: e.target.value })}
+              className={`${field.input} w-full font-mono`}
+            />
+          </Field>
+          <Field label={t("deliveryOrderDoc.issueDate")} htmlFor={issueDateId}>
+            <input
+              id={issueDateId}
+              disabled={numbersDisabled}
+              type="date"
+              value={installment.issueDate}
+              onChange={(e) => onChange({ ...installment, issueDate: e.target.value })}
+              className={`${field.input} w-full`}
+            />
+          </Field>
         </div>
-        <div>
-          <label htmlFor={issueDateId} className="text-xs text-muted-foreground block mb-1">วันที่</label>
-          <input
-            id={issueDateId}
-            disabled={numbersDisabled}
-            type="date"
-            value={installment.issueDate}
-            onChange={(e) => onChange({ ...installment, issueDate: e.target.value })}
-            className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
-          />
+
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-2">
+            <span id={itemsHeadingId} className={`${field.label} flex-1`}>{t("deliveryOrderDoc.itemsInInstallment")}</span>
+            {items.length > 0 && (
+              <span className="text-xs text-muted-foreground">{t("deliveryOrderDoc.pickedCount").replace("{n}", String(pickedCount)).replace("{total}", String(items.length))}</span>
+            )}
+          </div>
+          {items.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">{t("deliveryOrderDoc.noItems")}</p>
+          ) : (
+            <div role="group" aria-labelledby={itemsHeadingId} className="border border-border rounded-lg overflow-hidden">
+              <div className="grid grid-cols-[28px_minmax(0,1fr)_96px] gap-2 items-center px-3 h-9 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]">
+                <span />
+                <span>{t("deliveryOrderDoc.colItem")}</span>
+                <span className="text-right">{t("deliveryOrderDoc.colQty")}</span>
+              </div>
+              {items.map((item) => {
+                const checked = installment.itemIds.includes(item.id);
+                return (
+                  <label
+                    key={item.id}
+                    className={`grid grid-cols-[28px_minmax(0,1fr)_96px] gap-2 items-center px-3 min-h-11 py-1.5 border-b border-[#eef1f6] last:border-b-0 transition-colors ${disabled ? "" : "cursor-pointer hover:bg-[#f8f9fc]"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => toggleItem(item.id)}
+                      className="w-4 h-4 m-0 accent-[#1a5fb4]"
+                    />
+                    <span className={`text-sm truncate ${checked ? "font-medium text-foreground" : "text-muted-foreground"}`} title={item.name}>{item.name || t("deliveryOrderDoc.unnamedItem")}</span>
+                    <span className={`text-sm text-right tabular-nums ${checked ? "text-foreground" : "text-[#8a97ad]"}`}>{item.quantity ?? "-"} {item.unit}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
+
+        <Field label={t("deliveryOrderDoc.remark")} htmlFor={remarkId}>
+          <textarea
+            id={remarkId}
+            disabled={disabled}
+            rows={2}
+            value={installment.remark}
+            onChange={(e) => onChange({ ...installment, remark: e.target.value })}
+            className={`${field.textarea} w-full resize-y`}
+          />
+        </Field>
       </div>
-
-      <p id={itemsHeadingId} className="text-xs text-muted-foreground block mb-1.5">รายการที่ส่งมอบในงวดนี้</p>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic mb-3">Scope of Work นี้ยังไม่มีรายการสินค้า</p>
-      ) : (
-        <div role="group" aria-labelledby={itemsHeadingId} className="border border-[#c3ccda] bg-white/70 rounded-lg divide-y divide-border/60 mb-3">
-          {items.map((item) => {
-            const checked = installment.itemIds.includes(item.id);
-            return (
-              <label
-                key={item.id}
-                className={`flex items-start gap-2.5 px-3 py-2 text-xs ${disabled ? "" : "cursor-pointer hover:bg-secondary/40"} transition-colors`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={() => toggleItem(item.id)}
-                  className="w-3.5 h-3.5 mt-0.5 rounded border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0"
-                />
-                <span className="flex-1">
-                  <span className={checked ? "font-medium text-foreground" : "text-muted-foreground"}>{item.name || "(ไม่มีชื่อ)"}</span>
-                  <span className="text-muted-foreground font-mono ml-2">{item.quantity ?? "-"} {item.unit}</span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      )}
-
-      <label htmlFor={remarkId} className="text-xs text-muted-foreground block mb-1">Remark</label>
-      <textarea
-        id={remarkId}
-        disabled={disabled}
-        rows={2}
-        value={installment.remark}
-        onChange={(e) => onChange({ ...installment, remark: e.target.value })}
-        className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60"
-      />
-    </div>
+    </section>
   );
 }
 
@@ -158,7 +177,7 @@ export function DeliveryOrderDocument({
   canCreate,
   onBack,
   onRewritten,
-  backLabel = "กลับไปรายการใบส่งมอบสินค้า",
+  backLabel,
   showToast,
 }: {
   deliveryOrderId: string;
@@ -175,8 +194,9 @@ export function DeliveryOrderDocument({
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
+  const resolvedBackLabel = backLabel ?? t("deliveryOrderDoc.backToList");
   const [deliveryOrder, setDeliveryOrder] = useState<DeliveryOrder | null>(null);
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "rewrite" | "refresh" | "delete" | null>(null);
@@ -205,13 +225,13 @@ export function DeliveryOrderDocument({
       .then((d) => { if (!cancelled) { setDeliveryOrder(d); dirty.markSaved(toUpdateFields(d)); } })
       .catch((err) => {
         if (cancelled) return;
-        setLoadError(err instanceof ApiError ? err.message : "ไม่สามารถโหลดข้อมูลใบส่งมอบสินค้าได้");
+        setLoadError(err instanceof ApiError ? err.message : "");
       });
     return () => { cancelled = true; };
   }, [deliveryOrderId, reloadKey, dirty]);
 
   const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions2.desc"), side: "bottom" } },
     { element: '[data-tour="dodoc-installments"]', popover: { title: t("tour.dodoc.installments.title"), description: t("tour.dodoc.installments.desc"), side: "top" } },
   ];
   const docTour = useModuleTour("deliveryOrderDoc", currentUserId, docTourSteps, {
@@ -236,6 +256,9 @@ export function DeliveryOrderDocument({
     onSave: async (fields) => { await updateDeliveryOrder(deliveryOrderId, fields, { autoSave: true }); },
   });
 
+  const steps = useApprovalSteps(deliveryOrder?.status ?? "Draft");
+  const nextStepHint = useApprovalHint({ status: deliveryOrder?.status ?? "Draft", approverLabel: t("deliveryOrderDoc.approverLabel") });
+
   // บันทึกใบส่งมอบสินค้าฉบับร่างไปยังเซิร์ฟเวอร์
   // Saves the draft delivery order to the server.
   const save = async (): Promise<boolean> => {
@@ -249,10 +272,10 @@ export function DeliveryOrderDocument({
       autoSave.markSaved(toUpdateFields(updated));
       dirty.markSaved(toUpdateFields(updated));
       draftBackup.clear();
-      showToast("บันทึกร่างแล้ว");
+      showToast(t("sowdo.toast.savedDraft"));
       return true;
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.saveFailed"));
       return false;
     } finally {
       setSaving(false);
@@ -273,10 +296,10 @@ export function DeliveryOrderDocument({
       );
       setDeliveryOrder(updated);
       dirty.markSaved(toUpdateFields(updated));
-      showToast("บันทึกเลขที่และวันที่แล้ว");
+      showToast(t("deliveryOrderDoc.toast.numbersSaved"));
       return true;
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.saveFailed"));
       return false;
     } finally {
       setSaving(false);
@@ -301,42 +324,35 @@ export function DeliveryOrderDocument({
       : null,
   );
 
-  if (loadError) {
+  if (loadError !== null || !deliveryOrder) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {backLabel}
+        <div className="bg-card border-b border-border px-4 md:px-8 py-3.5">
+          <button type="button" onClick={() => requestLeave(onBack)} className="text-[13px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+            <ArrowLeft size={14} /> {resolvedBackLabel}
           </button>
         </div>
-        <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <AlertTriangle size={20} className="text-[#e05252]" />
-          <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            <RotateCw size={12} /> ลองใหม่
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (!deliveryOrder) {
-    return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {backLabel}
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-2.5 p-6">
-          <Loader2 size={20} className="text-muted-foreground animate-spin" />
-          <p className="text-xs text-muted-foreground">กำลังโหลดใบส่งมอบสินค้า...</p>
-        </div>
+        {loadError !== null ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center" role="alert">
+            <AlertTriangle size={20} className="text-[#b93636]" />
+            <p className="text-sm text-muted-foreground">{loadError || t("deliveryOrder.loadError")}</p>
+            <button type="button" onClick={() => { setLoadError(null); setReloadKey((k) => k + 1); }} className={btn.secondary}>
+              <RotateCw size={15} /> {t("deliveryOrder.retry")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2.5 p-10" role="status">
+            <Loader2 size={20} className="text-muted-foreground animate-spin" />
+            <p className="text-[13px] text-muted-foreground">{t("deliveryOrder.loading")}</p>
+          </div>
+        )}
       </div>
     );
   }
 
   const isDraft = deliveryOrder.status === "Draft";
   const editable = canEdit && isDraft;
+  const pendingApproval = deliveryOrder.status === "PendingApproval";
 
   // แทนที่ข้อมูลงวดชำระเงินหนึ่งงวดในรายการงวดทั้งหมด
   // Replaces one installment's data within the full installments list.
@@ -348,7 +364,7 @@ export function DeliveryOrderDocument({
   // Prepares to print the delivery note for one installment; requires at least one selected item.
   const handlePrintInstallment = (installment: DeliveryOrderInstallment) => {
     if (installment.itemIds.length === 0) {
-      showToast("กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการในงวดนี้ก่อนพิมพ์");
+      showToast(t("deliveryOrderDoc.toast.printNeedsItem"));
       return;
     }
     setPrintInstallmentId(installment.id);
@@ -363,9 +379,9 @@ export function DeliveryOrderDocument({
       const updated = await rejectDeliveryOrder(deliveryOrder.id, comment);
       setDeliveryOrder(updated);
       dirty.markSaved(toUpdateFields(updated));
-      showToast("ตีกลับเป็นฉบับร่างแล้ว");
+      showToast(t("sowdo.toast.rejected"));
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ปฏิเสธไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.rejectFailed"));
     }
   };
 
@@ -379,34 +395,34 @@ export function DeliveryOrderDocument({
         const updated = await submitDeliveryOrderApproval(deliveryOrder.id);
         setDeliveryOrder(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("ส่งขออนุมัติแล้ว");
+        showToast(t("sowdo.toast.submitted"));
       } else if (confirmAction === "finalize") {
         const updated = await finalizeDeliveryOrder(deliveryOrder.id);
         setDeliveryOrder(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("อนุมัติแล้ว (Final)");
+        showToast(t("sowdo.toast.finalized"));
       } else if (confirmAction === "withdraw") {
         const updated = await withdrawDeliveryOrderApproval(deliveryOrder.id);
         setDeliveryOrder(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("ถอนคำขออนุมัติแล้ว กลับเป็นฉบับร่าง");
+        showToast(t("sowdo.toast.withdrawn"));
       } else if (confirmAction === "rewrite") {
         const created = await rewriteDeliveryOrder(deliveryOrder.id);
-        showToast("สร้างฉบับแก้ไขแล้ว");
+        showToast(t("deliveryOrderDoc.toast.rewritten"));
         onRewritten(created.id);
       } else if (confirmAction === "refresh") {
         setRefreshing(true);
         const updated = await refreshDeliveryOrderFromScope(deliveryOrder.id);
         setDeliveryOrder(updated);
         dirty.markSaved(toUpdateFields(updated));
-        showToast("อัปเดตข้อมูลจาก Scope of Work แล้ว");
+        showToast(t("deliveryOrderDoc.toast.refreshed"));
       } else if (confirmAction === "delete") {
         await deleteDeliveryOrder(deliveryOrder.id);
-        showToast("ลบใบส่งมอบสินค้าแล้ว");
+        showToast(t("deliveryOrderDoc.toast.deleted"));
         onBack();
       }
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ดำเนินการไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("sowdo.toast.actionFailed"));
     } finally {
       setRefreshing(false);
       setConfirmAction(null);
@@ -420,158 +436,170 @@ export function DeliveryOrderDocument({
     facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
+  const installmentCount = deliveryOrder.installments.length;
+  const attachmentCount = (deliveryOrder.attachments ?? []).length;
 
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {backLabel}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">{deliveryOrder.scopeNumber}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-          isDraft ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
-          : deliveryOrder.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
-          : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"
-        }`}>
-          {isDraft ? "Draft" : deliveryOrder.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
-        </span>
-
-        <div data-tour="dodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <TourReplayButton onClick={docTour.start} />
-          {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-          {editable && (
-            <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              <RotateCw size={13} /> อัปเดตข้อมูลจาก Scope of Work
-            </button>
-          )}
-          {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              <Save size={13} /> บันทึกร่าง
-            </button>
-          )}
-          {canEdit && !isDraft && (
-            <button onClick={saveNumbers} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              <Save size={13} /> บันทึกเลขที่/วันที่
-            </button>
-          )}
-          {canEdit && isDraft && (
-            <button onClick={() => setConfirmAction("submit")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-              <Send size={13} /> ส่งขออนุมัติ
-            </button>
-          )}
-          {deliveryOrder.status === "PendingApproval" && canFinalize && (
-            <>
-              <button onClick={() => setConfirmAction("finalize")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
-                <CheckCircle2 size={13} /> อนุมัติ
-              </button>
-              <button onClick={() => setRejectPromptOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-                ปฏิเสธ
-              </button>
-            </>
-          )}
-          {deliveryOrder.status === "PendingApproval" && canEdit && (
-            <button onClick={() => setConfirmAction("withdraw")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground transition-colors">
-              ถอนคำขอ
-            </button>
-          )}
-          {deliveryOrder.status === "Final" && canCreate && (
-            <button onClick={() => setConfirmAction("rewrite")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-              <GitBranch size={13} /> แก้ไข (สร้างฉบับใหม่)
-            </button>
-          )}
-          {canDelete && (
-            <button onClick={() => setConfirmAction("delete")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Trash2 size={13} /> ลบ
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20 print:hidden">
+        <DocumentHeader
+          backLabel={resolvedBackLabel}
+          onBack={() => requestLeave(onBack)}
+          number={deliveryOrder.scopeNumber || "—"}
+          status={<ApprovalStatusPill status={deliveryOrder.status} />}
+          meta={autoSaveEditable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
+          actions={
+            <div data-tour="dodoc-actions" className="flex items-center gap-2.5 flex-wrap">
+              <TourReplayButton variant="title" onClick={docTour.start} />
+              {editable && (
+                <button type="button" onClick={save} disabled={saving} className={btn.secondary}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("deliveryOrderDoc.saveDraft")}
+                </button>
+              )}
+              {canEdit && !isDraft && (
+                <button type="button" onClick={saveNumbers} disabled={saving} className={btn.secondary}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("deliveryOrderDoc.saveNumbers")}
+                </button>
+              )}
+              <MoreMenu
+                items={[
+                  editable && { key: "refresh", label: t("deliveryOrderDoc.refreshFromScope"), icon: RotateCw, hint: t("deliveryOrderDoc.refreshMenuHint").replace("{number}", deliveryOrder.scopeNumber), disabled: refreshing, onSelect: () => setConfirmAction("refresh") },
+                  canEdit && { key: "withdraw", label: t("deliveryOrderDoc.withdraw"), icon: Undo2, disabled: !pendingApproval, hint: pendingApproval ? undefined : t("deliveryOrderDoc.withdrawHint"), onSelect: () => setConfirmAction("withdraw") },
+                  canCreate && { key: "rewrite", label: t("deliveryOrderDoc.rewrite"), icon: GitBranch, disabled: deliveryOrder.status !== "Final", hint: deliveryOrder.status === "Final" ? undefined : t("deliveryOrderDoc.rewriteHint"), onSelect: () => setConfirmAction("rewrite") },
+                  canDelete && { key: "delete", label: t("deliveryOrderDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmAction("delete") },
+                ]}
+              />
+              {pendingApproval && canFinalize && (
+                <>
+                  <button type="button" onClick={() => setRejectPromptOpen(true)} className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-lg border border-[#e5b8b8] bg-white text-[#b93636] text-sm font-medium hover:bg-[#fcebeb] transition-colors whitespace-nowrap">
+                    {t("deliveryOrderDoc.reject")}
+                  </button>
+                  <button type="button" onClick={() => setConfirmAction("finalize")} className={btn.primary}>
+                    <CheckCircle2 size={16} /> {t("deliveryOrderDoc.approve")}
+                  </button>
+                </>
+              )}
+              {canEdit && isDraft && (
+                <button type="button" onClick={() => setConfirmAction("submit")} className={btn.primary}>
+                  <Send size={16} /> {t("deliveryOrderDoc.submit")}
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
-        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
-          <DraftRecoveryBanner
-            savedAt={draftBackup.recoveredAt}
-            onRestore={() => {
-              const recovered = draftBackup.recovered!;
-              setDeliveryOrder((prev) => (prev ? { ...prev, ...recovered } : prev));
-              draftBackup.clear();
-              showToast(t("common.draftRecovery.restoredToast"));
-            }}
-            onDiscard={draftBackup.dismiss}
-          />
-        )}
-
-        <DocumentStatusStepper status={deliveryOrder.status} approverLabel={t("deliveryOrderDoc.approverLabel")} />
-
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden print:hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold">ใบส่งมอบสินค้าและบริการ</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">Scope of Work {deliveryOrder.scopeNumber}</p>
-          </div>
-          <div className="p-6 space-y-2.5">
-            <div>
-              <label htmlFor="do-customerCompanyName" className="text-xs text-muted-foreground block mb-1">เรียน (จากใบเสนอราคา)</label>
-              <input id="do-customerCompanyName" readOnly className="w-full text-sm font-medium text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none opacity-80" value={deliveryOrder.customerCompanyName} />
-            </div>
-            {deliveryOrder.customerAddress.trim() && (
-              <p className="text-xs text-muted-foreground whitespace-pre-line pl-1">{deliveryOrder.customerAddress}</p>
-            )}
-            <p className="text-xs text-muted-foreground leading-relaxed pt-2">
-              ข้อมูลลูกค้าและรายการสินค้าถูกดึงมาจาก Scope of Work นี้โดยอัตโนมัติเมื่อสร้างครั้งแรก
-              หาก Scope of Work มีการแก้ไขภายหลัง ใช้ปุ่ม "อัปเดตข้อมูลจาก Scope of Work" เพื่อดึงข้อมูลล่าสุดมาแทนที่
-            </p>
-          </div>
-        </div>
-
-        {/* ส่งเอกสารถึงแผนก — ไม่ผูกกับล็อก Draft เพราะเซลล์มักส่งต่อหลังเอกสารอนุมัติแล้ว */}
-        <DeliveryOrderDepartmentRouting
-          deliveryOrder={deliveryOrder}
-          canEdit={canEdit}
-          onUpdated={(updated) => { setDeliveryOrder(updated); dirty.markSaved(toUpdateFields(updated)); }}
-          showToast={showToast}
-        />
-
-        <div data-tour={deliveryOrder.installments.length > 0 ? "dodoc-installments" : undefined} className="space-y-5 print:hidden">
-          {deliveryOrder.installments.length === 0 ? (
-            <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-3 print:hidden">
-              <AlertTriangle size={16} className="text-[#e08a3c] flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-foreground font-medium">
-                Scope of Work นี้ยังไม่มีงวดชำระเงิน — เพิ่มงวดชำระเงินในหน้า Scope of Work ก่อน แล้วกด "อัปเดตข้อมูลจาก Scope of Work"
-              </p>
-            </div>
-          ) : (
-            deliveryOrder.installments.map((installment) => (
-              <InstallmentEditor
-                key={installment.id}
-                installment={installment}
-                items={deliveryOrder.items}
-                onChange={(next) => updateInstallment(installment.id, next)}
-                disabled={!editable}
-                numbersDisabled={!canEdit}
-                onPrint={canPrint ? () => handlePrintInstallment(installment) : null}
-              />
-            ))
+      <div className="px-4 md:px-8 py-6 print:p-0">
+        <div className="flex flex-col gap-5 print:hidden">
+          {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+            <DraftRecoveryBanner
+              savedAt={draftBackup.recoveredAt}
+              onRestore={() => {
+                const recovered = draftBackup.recovered!;
+                setDeliveryOrder((prev) => (prev ? { ...prev, ...recovered } : prev));
+                draftBackup.clear();
+                showToast(t("common.draftRecovery.restoredToast"));
+              }}
+              onDiscard={draftBackup.dismiss}
+            />
           )}
-        </div>
 
-        {/* ไฟล์แนบ — เจ้าของสั่ง 2026-09-03 ให้แนบใบส่งของที่ลูกค้าเซ็นกลับมาได้ "เหมือนกับ cost control"
-            ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะใบเซ็นกลับมักมาหลังเอกสารอนุมัติแล้ว */}
-        <div className="print:hidden">
-          <DocumentAttachmentsCard
-            attachments={deliveryOrder.attachments ?? []}
-            disabled={!canEdit}
-            onUpload={async (file) => {
-              const updated = await uploadDeliveryOrderAttachment(deliveryOrder.id, file);
-              // รับกลับมาเฉพาะ `attachments` ไม่เขียนทับทั้งก้อน — งวดชำระเงินที่กำลังพิมพ์ค้างอยู่บนจอ
-              // (ยังไม่บันทึก) จะหายทันทีถ้าแทนที่ทั้งเอกสารด้วยฉบับจากเซิร์ฟเวอร์
-              setDeliveryOrder((prev) => (prev ? { ...prev, attachments: updated.attachments } : updated));
-            }}
-            onDelete={async (attachmentId) => {
-              const updated = await deleteDeliveryOrderAttachment(deliveryOrder.id, attachmentId);
-              setDeliveryOrder((prev) => (prev ? { ...prev, attachments: updated.attachments } : updated));
-            }}
+          <DocumentStepper steps={steps.steps} current={steps.current} ariaLabel={t("sowdo.stepsAria")} />
+
+          <DocumentColumns
+            main={
+              <>
+                <SectionCard title={t("deliveryOrderDoc.customerTitle")} actions={<SourceTag icon={ClipboardList}>{t("sowdo.fromScope")}</SourceTag>}>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0"><Building2 size={18} /></span>
+                      <ReadonlyField label={t("deliveryOrderDoc.customerTo")} value={deliveryOrder.customerCompanyName} />
+                    </div>
+                    {deliveryOrder.customerAddress.trim() && (
+                      <ReadonlyField label={t("deliveryOrderDoc.address")} value={<span className="whitespace-pre-line">{deliveryOrder.customerAddress}</span>} />
+                    )}
+                  </div>
+                </SectionCard>
+
+                {/* ส่งเอกสารถึงแผนก — ไม่ผูกกับล็อก Draft เพราะเซลล์มักส่งต่อหลังเอกสารอนุมัติแล้ว */}
+                <DeliveryOrderDepartmentRouting
+                  deliveryOrder={deliveryOrder}
+                  canEdit={canEdit}
+                  onUpdated={(updated) => { setDeliveryOrder(updated); dirty.markSaved(toUpdateFields(updated)); }}
+                  showToast={showToast}
+                />
+
+                {/* ไฟล์แนบ — เจ้าของสั่ง 2026-09-03 ให้แนบใบส่งของที่ลูกค้าเซ็นกลับมาได้ "เหมือนกับ cost control"
+                    ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะใบเซ็นกลับมักมาหลังเอกสารอนุมัติแล้ว */}
+                <DocumentAttachmentsCard
+                  attachments={deliveryOrder.attachments ?? []}
+                  disabled={!canEdit}
+                  onUpload={async (file) => {
+                    const updated = await uploadDeliveryOrderAttachment(deliveryOrder.id, file);
+                    // รับกลับมาเฉพาะ `attachments` ไม่เขียนทับทั้งก้อน — งวดชำระเงินที่กำลังพิมพ์ค้างอยู่บนจอ
+                    // (ยังไม่บันทึก) จะหายทันทีถ้าแทนที่ทั้งเอกสารด้วยฉบับจากเซิร์ฟเวอร์
+                    setDeliveryOrder((prev) => (prev ? { ...prev, attachments: updated.attachments } : updated));
+                  }}
+                  onDelete={async (attachmentId) => {
+                    const updated = await deleteDeliveryOrderAttachment(deliveryOrder.id, attachmentId);
+                    setDeliveryOrder((prev) => (prev ? { ...prev, attachments: updated.attachments } : updated));
+                  }}
+                />
+              </>
+            }
+            rail={
+              <>
+                <RailSummaryCard
+                  label={t("deliveryOrderDoc.installmentCountLabel")}
+                  value={t("deliveryOrderDoc.installmentCountValue").replace("{n}", String(installmentCount))}
+                  rows={[
+                    { label: t("deliveryOrderDoc.railItems"), value: t("ui.itemCount").replace("{n}", String(deliveryOrder.items.length)) },
+                    { label: t("deliveryOrderDoc.railAttachments"), value: `${attachmentCount} / ${MAX_ATTACHMENTS_PER_DOCUMENT}` },
+                  ]}
+                />
+
+                <RailCard title={t("sowdo.sourceTitle")}>
+                  <SourceDocRow icon={ClipboardList} kind="Scope of Work" number={deliveryOrder.scopeNumber || "—"} />
+                  <SourceNote
+                    action={editable ? (
+                      <button type="button" onClick={() => setConfirmAction("refresh")} disabled={refreshing} className={railTextBtn}>
+                        <RotateCw size={14} /> {t("deliveryOrderDoc.refreshFromScope")}
+                      </button>
+                    ) : undefined}
+                  >
+                    {t("deliveryOrderDoc.sourceNote")}
+                  </SourceNote>
+                </RailCard>
+
+                <NextStepHint title={t("sowdo.nextStep")}>{nextStepHint}</NextStepHint>
+              </>
+            }
           />
+
+          <div data-tour={installmentCount > 0 ? "dodoc-installments" : undefined}>
+            {installmentCount === 0 ? (
+              <div className="rounded-xl bg-[#fdf3e0] border border-[#f1d8a3] px-4 py-3.5 flex items-start gap-3">
+                <AlertTriangle size={18} className="text-[#8a5a00] flex-shrink-0 mt-0.5" />
+                <p className="text-sm font-medium text-foreground">{t("deliveryOrderDoc.noInstallments")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                {deliveryOrder.installments.map((installment, index) => (
+                  <InstallmentCard
+                    key={installment.id}
+                    installment={installment}
+                    index={index}
+                    total={installmentCount}
+                    items={deliveryOrder.items}
+                    onChange={(next) => updateInstallment(installment.id, next)}
+                    disabled={!editable}
+                    numbersDisabled={!canEdit}
+                    onPrint={canPrint ? () => handlePrintInstallment(installment) : null}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <DeliveryOrderPrintDocument deliveryOrder={deliveryOrder} companyHeader={companyHeader} onlyInstallmentId={printInstallmentId} />
@@ -579,55 +607,54 @@ export function DeliveryOrderDocument({
 
       <ConfirmDialog
         open={confirmAction === "submit"}
-        title="ส่งขออนุมัติ"
-        message="เมื่อส่งแล้วใบส่งมอบสินค้านี้จะถูกล็อกระหว่างรออนุมัติ (ถอนคำขอได้หากต้องการกลับมาแก้ไข) ส่งขออนุมัติหรือไม่?"
-        confirmLabel="ส่งขออนุมัติ"
+        title={t("deliveryOrderDoc.confirmSubmit.title")}
+        message={t("deliveryOrderDoc.confirmSubmit.message")}
+        confirmLabel={t("deliveryOrderDoc.submit")}
         busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
       <ConfirmDialog
         open={confirmAction === "withdraw"}
-        title="ถอนคำขออนุมัติ"
-        message="เอกสารจะกลับเป็นฉบับร่างและแก้ไขได้อีกครั้ง ถอนคำขอหรือไม่?"
-        confirmLabel="ถอนคำขอ"
+        title={t("deliveryOrderDoc.confirmWithdraw.title")}
+        message={t("deliveryOrderDoc.confirmWithdraw.message")}
+        confirmLabel={t("deliveryOrderDoc.withdraw")}
         busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
       <ConfirmDialog
         open={confirmAction === "rewrite"}
-        title="สร้างฉบับแก้ไข"
-        message="ระบบจะสร้างใบส่งมอบสินค้าฉบับร่างใหม่จากฉบับอนุมัติแล้วนี้ (ข้อมูลงวด/รายการที่ติ๊กถูกคัดลอกมาทั้งหมด) โดยฉบับเดิมคงอยู่ตามเดิม ดำเนินการหรือไม่?"
-        confirmLabel="สร้างฉบับแก้ไข"
+        title={t("deliveryOrderDoc.confirmRewrite.title")}
+        message={t("deliveryOrderDoc.confirmRewrite.message")}
+        confirmLabel={t("deliveryOrderDoc.confirmRewrite.title")}
         busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
       <ConfirmDialog
         open={confirmAction === "finalize"}
-        title="อนุมัติใบส่งมอบสินค้า"
-        message="เมื่ออนุมัติแล้วเอกสารจะเป็นสถานะ Final ถาวร แก้ไขไม่ได้อีก (ต้องใช้ แก้ไข/สร้างฉบับใหม่ เท่านั้น) ยืนยันหรือไม่?"
-        confirmLabel="อนุมัติ"
+        title={t("deliveryOrderDoc.confirmFinalize.title")}
+        message={t("deliveryOrderDoc.confirmFinalize.message")}
+        confirmLabel={t("deliveryOrderDoc.approve")}
         busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
       <ConfirmDialog
         open={confirmAction === "refresh"}
-        title="อัปเดตข้อมูลจาก Scope of Work"
-        message="การอัปเดตจะเขียนทับข้อมูลลูกค้าและรายการสินค้าด้วยข้อมูลล่าสุดจาก Scope of Work — รายการที่เลือกไว้ในแต่ละงวด, เลขที่, วันที่ และ Remark จะยังคงอยู่ (ยกเว้นรายการที่ถูกลบไปแล้ว) ยืนยันหรือไม่?"
-        confirmLabel="อัปเดตข้อมูล"
-        danger
+        title={t("deliveryOrderDoc.refreshFromScope")}
+        message={t("deliveryOrderDoc.confirmRefresh.message")}
+        confirmLabel={t("deliveryOrderDoc.confirmRefresh.confirmLabel")}
         busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
       <ConfirmDialog
         open={confirmAction === "delete"}
-        title="ลบใบส่งมอบสินค้า"
-        message="ยืนยันการลบใบส่งมอบสินค้านี้? รายการนี้จะถูกซ่อนจากหน้ารายการ ปัจจุบันยังไม่มีช่องทางกู้คืนผ่านหน้าจอ"
-        confirmLabel="ลบ"
+        title={t("deliveryOrderDoc.confirmDelete.title")}
+        message={t("deliveryOrderDoc.confirmDelete.message")}
+        confirmLabel={t("deliveryOrderDoc.delete")}
         danger
         busy={actionRunning}
         onConfirm={runConfirmedAction}
@@ -635,12 +662,12 @@ export function DeliveryOrderDocument({
       />
       <PromptDialog
         open={rejectPromptOpen}
-        title="ปฏิเสธการอนุมัติ"
-        message="ใบส่งมอบสินค้านี้จะถูกตีกลับเป็นฉบับร่างให้ผู้จัดทำแก้ไข พร้อมเหตุผลที่ระบุ"
-        label="เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข"
-        placeholder="เช่น รายการสินค้าในงวดที่ 2 ไม่ครบ"
-        confirmLabel="ปฏิเสธและตีกลับ"
-        requiredMessage="กรุณาระบุเหตุผลการปฏิเสธ"
+        title={t("deliveryOrderDoc.promptReject.title")}
+        message={t("deliveryOrderDoc.promptReject.message")}
+        label={t("deliveryOrderDoc.promptReject.label")}
+        placeholder={t("deliveryOrderDoc.promptReject.placeholder")}
+        confirmLabel={t("deliveryOrderDoc.promptReject.confirmLabel")}
+        requiredMessage={t("deliveryOrderDoc.promptReject.requiredMessage")}
         multiline
         onConfirm={confirmReject}
         onCancel={() => setRejectPromptOpen(false)}

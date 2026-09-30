@@ -15,6 +15,8 @@ pre-redesign look.
 - **Dialogs:** `ConfirmDialog` / `PromptDialog` (480px, icon circle, footer under a divider).
 - **Navigation:** `NAV_GROUPS` + `NAV_GROUP_ICONS` in `App.tsx` — every group needs an icon; new items need only a label.
 - **Topbar user menu:** `components/UserMenu.tsx` (What's New lives here).
+- **Screen kit (phase 2, 2026-09-30):** build list pages, document pages, side panels and pickers from `src/components/ui/`
+  (`ListPage`, `DocumentLayout`, `Overlays`, `MoreMenu`, `Field`, `SectionCard`, `styles`) — see CHANGELOG 2026-09-30b for the pieces.
 
 ## Design Tokens (`src/styles/theme.css`)
 

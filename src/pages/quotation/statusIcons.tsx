@@ -28,3 +28,30 @@ export const statusIcon: Record<QuoteStatus, React.ReactNode> = {
   "เสียโอกาส": <Frown size={10} />,
   "ยกเลิก": <Ban size={10} />,
 };
+
+/**
+ * ป้ายสถานะใบเสนอราคาแบบดีไซน์ใหม่ (2026-09-30) — พื้นอ่อน + จุดสี + ตัวหนา 12.5px ตาม DESIGN.md "Status Pills"
+ * ร่าง/ยกเลิก เทา · รออนุมัติ เหลือง · อนุมัติแล้ว/ส่งให้ลูกค้าแล้ว น้ำเงิน · ลูกค้ายอมรับ/ปิดการขายสำเร็จ เขียว ·
+ * ลูกค้าปฏิเสธ/เสียโอกาส แดง · ยกเลิกขีดฆ่า · คำบนป้ายยังเป็นคำเดิมของแอป (`statusLabelKey`)
+ */
+const PILL_TONE: Record<QuoteStatus, { pill: string; dot: string }> = {
+  "ร่าง": { pill: "bg-[#eef1f6] text-[#3d5173]", dot: "bg-[#8a97ad]" },
+  "รออนุมัติ": { pill: "bg-[#fdf3e0] text-[#8a5a00]", dot: "bg-[#d89614]" },
+  "อนุมัติแล้ว": { pill: "bg-[#e8f0fb] text-[#1a5fb4]", dot: "bg-[#1a5fb4]" },
+  "ส่งให้ลูกค้าแล้ว": { pill: "bg-[#e8f0fb] text-[#1a5fb4]", dot: "bg-[#1a5fb4]" },
+  "ลูกค้ายอมรับ": { pill: "bg-[#e6f4ec] text-[#1b7f4f]", dot: "bg-[#1b7f4f]" },
+  "ปิดการขายสำเร็จ": { pill: "bg-[#e6f4ec] text-[#1b7f4f]", dot: "bg-[#1b7f4f]" },
+  "ลูกค้าปฏิเสธ": { pill: "bg-[#fcebeb] text-[#b93636]", dot: "bg-[#b93636]" },
+  "เสียโอกาส": { pill: "bg-[#fcebeb] text-[#b93636]", dot: "bg-[#b93636]" },
+  "ยกเลิก": { pill: "bg-[#eef1f6] text-[#5f7293] line-through", dot: "bg-[#8a97ad]" },
+};
+
+export function QuoteStatusPill({ status, label }: { status: QuoteStatus; label: string }) {
+  const tone = PILL_TONE[status];
+  return (
+    <span className={`inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[12.5px] font-semibold whitespace-nowrap ${tone.pill}`}>
+      <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tone.dot}`} />
+      {label}
+    </span>
+  );
+}

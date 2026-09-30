@@ -1,17 +1,17 @@
-import { Fragment, useRef, useState } from "react";
-import {
-  Plus, Trash2, Percent, PackageSearch, Layers,
-  GripVertical, StickyNote, Pin, X, ChevronUp, ChevronDown,
-} from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { Plus, Trash2, PackageSearch, Layers, GripVertical, X, ChevronUp, ChevronDown, Tag } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { type QuoteLine, type SubDetail, type DiscountMode, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
-import { ProductPickerModal } from "../products/ProductPickerModal";
+import {
+  type QuoteLine, type SubDetail, type DiscountMode, blankLine, newSubDetailId, lineSubtotal, lineDiscountAmount, computeTotals, fmt, VAT_RATE,
+} from "../../lib/quotes";
+import { QuoteProductPicker } from "./QuoteProductPicker";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { btn, field, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
 
-// ปุ่มสลับหน่วยของส่วนลดระหว่างเปอร์เซ็นต์ (%) กับจำนวนเงิน (฿) — เพิ่ม 2026-08-25
-// Compact segmented control switching a discount between percent (%) and a straight baht amount (฿).
-// The number the user typed is kept as-is; only how it is interpreted changes, and the totals right
-// underneath recompute immediately, so the effect of flipping the unit is never hidden.
+// ช่องย่อยใต้รายการ (รายละเอียดย่อย แท็ก) — เตี้ยกว่าช่องในตารางหนึ่งขั้น
+const compactCell = field.cell.replace("h-9", "h-8").replace("text-sm", "text-[13px]");
+
 /**
  * ตัวเลขส่วนลดที่ใช้ได้จริงในหน่วยที่เลือก — สลับกลับมาเป็น % ต้องไม่เกิน 100
  *
@@ -25,11 +25,11 @@ function clampForMode(discount: number, mode: DiscountMode): number {
   return mode === "percent" ? Math.min(discount, 100) : discount;
 }
 
-function DiscountModeToggle({
-  value,
-  onChange,
-  label,
-}: {
+// ปุ่มสลับหน่วยของส่วนลดระหว่างเปอร์เซ็นต์ (%) กับจำนวนเงิน (฿) — เพิ่ม 2026-08-25
+// Segmented control switching a discount between percent (%) and a straight baht amount (฿).
+// The number the user typed is kept as-is; only how it is interpreted changes, and the totals right
+// underneath recompute immediately, so the effect of flipping the unit is never hidden.
+function DiscountModeToggle({ value, onChange, label }: {
   value: DiscountMode;
   onChange: (mode: DiscountMode) => void;
   label: string;
@@ -39,7 +39,7 @@ function DiscountModeToggle({
     { mode: "amount", text: "฿" },
   ];
   return (
-    <span role="group" aria-label={label} className="inline-flex items-center rounded border border-border overflow-hidden bg-card align-middle">
+    <span role="group" aria-label={label} className="inline-flex items-center gap-0.5 rounded-md bg-[#eef1f6] p-0.5 flex-shrink-0">
       {options.map((o) => (
         <button
           key={o.mode}
@@ -47,8 +47,8 @@ function DiscountModeToggle({
           onClick={() => onChange(o.mode)}
           aria-pressed={value === o.mode}
           title={label}
-          className={`px-1.5 py-0.5 text-xs font-mono leading-none transition-colors ${
-            value === o.mode ? "bg-[#c9a84c]/15 text-[#c9a84c] font-semibold" : "text-muted-foreground hover:text-foreground"
+          className={`h-[26px] min-w-6 px-1 rounded-[5px] text-xs transition-colors ${
+            value === o.mode ? "bg-white text-foreground font-semibold shadow-[0_1px_2px_rgba(11,29,58,0.12)]" : "text-muted-foreground hover:text-foreground"
           }`}
         >
           {o.text}
@@ -58,16 +58,9 @@ function DiscountModeToggle({
   );
 }
 
-// แสดงรายการรายละเอียดย่อยแบบ "ปักหมุด" ใต้แถวรายการหลักในตาราง พร้อมลากสลับลำดับได้
-// Renders each sub-detail as a "pinned" row under its parent line item, with drag-to-reorder support
-function PinnedSubDetailRows({
-  lineId,
-  subDetails,
-  focusId,
-  onUpdate,
-  onRemove,
-  onReorder,
-}: {
+// รายละเอียดย่อยใต้รายการหลัก — ลากสลับลำดับได้ และมีปุ่มขึ้น/ลงให้ใช้คีย์บอร์ดได้
+// Sub-detail rows under a line item: native drag to reorder, plus up/down buttons for keyboard users
+function SubDetailRows({ lineId, subDetails, focusId, onUpdate, onRemove, onReorder }: {
   lineId: number;
   subDetails: SubDetail[];
   focusId: string | null;
@@ -78,11 +71,12 @@ function PinnedSubDetailRows({
   const { t } = useI18n();
   const dragIndex = useRef<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const iconBtn = "w-8 h-8 rounded-md inline-flex items-center justify-center text-[#8a97ad] hover:text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-30 disabled:pointer-events-none flex-shrink-0";
 
   return (
     <>
       {subDetails.map((sd, idx) => (
-        <tr
+        <div
           key={sd.id}
           draggable
           onDragStart={() => { dragIndex.current = idx; }}
@@ -94,55 +88,31 @@ function PinnedSubDetailRows({
             setOverIndex(null);
             dragIndex.current = null;
           }}
-          className={`border-b border-border/50 bg-[#c9a84c]/10 group/pin transition-colors ${overIndex === idx ? "bg-[#c9a84c]/20" : ""}`}
+          className={`flex items-center gap-1.5 pl-3.5 rounded-md transition-colors ${overIndex === idx ? "bg-[#fbf7ea]" : ""}`}
         >
-          <td className="px-4 py-1.5 align-top">
-            <span className="text-muted-foreground/50 cursor-grab active:cursor-grabbing" title={t("quotation.lineItems.subDetailsDragTitle")}>
-              <GripVertical size={12} />
-            </span>
-          </td>
-          <td colSpan={7} className="px-4 py-1.5">
-            <div className="flex items-center gap-2">
-              <Pin size={12} className="text-[#c9a84c]/70 flex-shrink-0" />
-              <input
-                key={`${lineId}-${sd.id}`}
-                autoFocus={sd.id === focusId}
-                value={sd.text}
-                onChange={(e) => onUpdate(sd.id, e.target.value)}
-                placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
-                className="flex-1 text-sm text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
-              />
-              <button
-                type="button"
-                onClick={() => onReorder(idx, idx - 1)}
-                disabled={idx === 0}
-                title={t("quotation.lineItems.moveUp")}
-                aria-label={t("quotation.lineItems.moveUp")}
-                className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover/pin:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none flex-shrink-0"
-              >
-                <ChevronUp size={12} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onReorder(idx, idx + 1)}
-                disabled={idx === subDetails.length - 1}
-                title={t("quotation.lineItems.moveDown")}
-                aria-label={t("quotation.lineItems.moveDown")}
-                className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover/pin:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none flex-shrink-0"
-              >
-                <ChevronDown size={12} />
-              </button>
-              <button
-                onClick={() => onRemove(sd.id)}
-                title={t("common.delete")}
-                aria-label={t("common.delete")}
-                className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover/pin:opacity-100 focus-visible:opacity-100 flex-shrink-0"
-              >
-                <Trash2 size={12} />
-              </button>
-            </div>
-          </td>
-        </tr>
+          <span className="text-[#a3aec2] cursor-grab active:cursor-grabbing flex" title={t("quotation.lineItems.subDetailsDragTitle")} aria-hidden="true">
+            <GripVertical size={14} />
+          </span>
+          <span aria-hidden="true" className="text-[13px] text-[#7d6420]">–</span>
+          <input
+            key={`${lineId}-${sd.id}`}
+            autoFocus={sd.id === focusId}
+            value={sd.text}
+            onChange={(e) => onUpdate(sd.id, e.target.value)}
+            placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
+            aria-label={t("quotation.lineItems.subDetailsTitle")}
+            className={`${compactCell.replace("text-foreground", "text-[#26395a]")} flex-1 min-w-0`}
+          />
+          <button type="button" onClick={() => onReorder(idx, idx - 1)} disabled={idx === 0} title={t("quotation.lineItems.moveUp")} aria-label={t("quotation.lineItems.moveUp")} className={iconBtn}>
+            <ChevronUp size={14} />
+          </button>
+          <button type="button" onClick={() => onReorder(idx, idx + 1)} disabled={idx === subDetails.length - 1} title={t("quotation.lineItems.moveDown")} aria-label={t("quotation.lineItems.moveDown")} className={iconBtn}>
+            <ChevronDown size={14} />
+          </button>
+          <button type="button" onClick={() => onRemove(sd.id)} title={t("common.delete")} aria-label={t("common.delete")} className={`${iconBtn} hover:text-[#b93636] hover:bg-[#fcebeb]`}>
+            <Trash2 size={14} />
+          </button>
+        </div>
       ))}
     </>
   );
@@ -154,8 +124,6 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
 
-  // เพิ่มแท็กใหม่จากข้อความที่พิมพ์ไว้ ถ้ายังไม่มีแท็กนี้อยู่แล้ว
-  // Adds a new tag from the typed draft text, if not already present
   const addTag = () => {
     const tag = draft.trim();
     if (tag && !tags.includes(tag)) onChange([...tags, tag]);
@@ -163,32 +131,88 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
   };
 
   return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.tagsTitle")}</p>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {tags.map((tag) => (
-          <span key={tag} className="flex items-center gap-1 px-2 py-1 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">
-            {tag}
-            <button onClick={() => onChange(tags.filter((x) => x !== tag))} className="hover:text-[#e05252] transition-colors">
-              <X size={10} />
-            </button>
-          </span>
-        ))}
-      </div>
+    <div className="pl-3.5 flex flex-col gap-2">
       <input
+        autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
         onBlur={addTag}
         placeholder={t("quotation.lineItems.tagsPlaceholder")}
-        className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+        aria-label={t("quotation.lineItems.tagsTitle")}
+        className={`${compactCell} w-full`}
       />
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <span key={tag} className="h-6 pl-2 pr-1 inline-flex items-center gap-1 rounded-md bg-[#fbf6e7] border border-[#ecdcaa] text-[#7d6420] text-xs font-medium">
+              {tag}
+              <button type="button" onClick={() => onChange(tags.filter((x) => x !== tag))} aria-label={`${t("common.delete")} ${tag}`} className="w-4 h-4 inline-flex items-center justify-center rounded hover:text-[#b93636]">
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// ตารางแก้ไขรายการสินค้า/บริการในใบเสนอราคา รวมส่วนลด ยอดรวม และตัวเลือกจากแคตตาล็อก
-// Editable table of quote line items, with discount, totals, and catalog picker
+function TagChips({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((tag) => (
+        <span key={tag} className="h-6 px-2 inline-flex items-center rounded-md bg-[#fbf6e7] border border-[#ecdcaa] text-[#7d6420] text-xs font-medium">{tag}</span>
+      ))}
+    </div>
+  );
+}
+
+// ตัวเลขส่วนลดของรายการแบบอ่านอย่างเดียว: % แสดงเป็นเปอร์เซ็นต์ บาทแสดงเป็นจำนวนเงิน ว่างเมื่อไม่มีส่วนลด
+function lineDiscountLabel(l: QuoteLine): string {
+  if (lineDiscountAmount(l) <= 0) return "—";
+  return l.discountMode === "amount" ? fmt(l.discount) : `${l.discount}%`;
+}
+
+// ส่วนสรุปยอดท้ายตาราง — ใช้ทั้งหน้าแก้ไขและหน้าอ่านอย่างเดียว
+function TotalsBlock({ lines, discount, discountMode, discountControl }: {
+  lines: QuoteLine[];
+  discount: number;
+  discountMode: DiscountMode;
+  discountControl?: ReactNode;
+}) {
+  const { t } = useI18n();
+  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
+  const row = "flex justify-between gap-3 text-sm text-[#3d5173]";
+  return (
+    <div className="w-full sm:w-[440px] flex flex-col gap-2.5">
+      <div className={row}><span>{t("quotation.totals.subtotal")}</span><span className="tabular-nums text-foreground">{fmt(subtotal)}</span></div>
+      {(discountControl || discountAmt > 0) && (
+        <div className="flex items-center gap-3 text-sm text-[#3d5173]">
+          <span className="flex-1">{t("quotation.totals.discount")}</span>
+          {discountControl}
+          <span className="w-28 text-right tabular-nums text-[#b93636]">−{fmt(discountAmt)}</span>
+        </div>
+      )}
+      <div className={row}><span>{t("quotation.totals.afterDiscount")}</span><span className="tabular-nums text-foreground">{fmt(afterDiscount)}</span></div>
+      <div className={row}><span>{t("quotation.totals.vat").replace("{rate}", String(VAT_RATE))}</span><span className="tabular-nums text-foreground">{fmt(vatAmt)}</span></div>
+      <div className="h-px bg-border my-1" />
+      <div className="flex justify-between items-baseline gap-3">
+        <span className="text-sm font-semibold text-foreground">{t("quotation.totals.grandTotal")}</span>
+        <span className="text-[22px] font-bold tabular-nums text-foreground">฿{fmt(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+function itemNumbersOf(lines: QuoteLine[]): (number | null)[] {
+  let n = 0;
+  return lines.map((l) => (l.isSectionHeader ? null : ++n));
+}
+
+// ตารางแก้ไขรายการสินค้า/บริการในใบเสนอราคา รวมส่วนลด ยอดรวม และตัวเลือกจากแคตตาล็อก (เฉพาะใบร่าง/ใบใหม่)
+// Editable table of quote line items, with discount, totals, and catalog picker — Draft/new only
 export function LineItemsEditor({
   lines,
   onChange,
@@ -199,6 +223,7 @@ export function LineItemsEditor({
   defaultLineDiscountMode,
   products,
   categories,
+  documentLabel,
 }: {
   lines: QuoteLine[];
   onChange: (lines: QuoteLine[]) => void;
@@ -210,14 +235,14 @@ export function LineItemsEditor({
   defaultLineDiscountMode: DiscountMode;
   products: Product[];
   categories: ProductCategory[];
+  /** เลขที่ใบ (หรือ "ใบใหม่") สำหรับคำอธิบายในหน้าต่างเลือกสินค้า */
+  documentLabel: string;
 }) {
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
 
-  // เปิด/ปิดการแสดงการ์ดรายละเอียดเพิ่มเติม (แท็ก) ของรายการนั้น
-  // Toggles the expanded tags-detail card for a given line
   const toggleExpand = (id: number) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -225,8 +250,8 @@ export function LineItemsEditor({
       return next;
     });
 
-  const updateLine = <K extends keyof QuoteLine>(id: number, field: K, value: QuoteLine[K]) =>
-    onChange(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
+  const updateLine = <K extends keyof QuoteLine>(id: number, key: K, value: QuoteLine[K]) =>
+    onChange(lines.map((l) => (l.id === id ? { ...l, [key]: value } : l)));
 
   // หน่วยส่วนลดระดับรายการ — อ่านจากรายการที่มีอยู่ก่อน ถ้ายังไม่มีเลยจึงใช้ค่าเริ่มต้นของเอกสาร
   // The line-level discount unit. Read off the existing lines first — each line stores its own
@@ -244,22 +269,26 @@ export function LineItemsEditor({
 
   const addLine = () => onChange([...lines, newLine()]);
   const addSectionHeader = () => onChange([...lines, { ...newLine(), isSectionHeader: true }]);
-  // เพิ่มรายการใหม่โดยดึงชื่อ หน่วย ราคา และสเปกจากสินค้าที่เลือกในแคตตาล็อก
-  // Adds a new line pre-filled from a picked catalog product (name, unit, price, spec)
-  const addLineFromProduct = (product: Product) => {
-    const spec = product.specifications.trim();
-    onChange([...lines, {
-      ...newLine(),
-      description: product.name,
-      unit: product.unit,
-      unitPrice: product.defaultPrice,
-      subDetails: spec ? [{ id: newSubDetailId(), text: spec }] : [],
-    }]);
+  // เพิ่มหลายรายการจากสินค้าที่ติ๊กในคลัง — ชื่อ หน่วย ราคาเริ่มต้น และสเปกเป็นรายละเอียดย่อย ตามลำดับที่เลือก
+  // Appends one line per picked product (name, unit, default price, spec as a sub-detail), in pick order
+  const addLinesFromProducts = (picked: Product[]) => {
+    onChange([
+      ...lines,
+      ...picked.map((product) => {
+        const spec = product.specifications.trim();
+        return {
+          ...newLine(),
+          description: product.name,
+          unit: product.unit,
+          unitPrice: product.defaultPrice,
+          subDetails: spec ? [{ id: newSubDetailId(), text: spec }] : [],
+        };
+      }),
+    ]);
+    setPickerOpen(false);
   };
   const removeLine = (id: number) => onChange(lines.filter((l) => l.id !== id));
 
-  // เพิ่มรายละเอียดย่อยใหม่ให้กับรายการ แล้วตั้งโฟกัสไปที่ช่องที่เพิ่ง
-  // Adds a new sub-detail to a line and focuses the newly created input
   const addSubDetail = (lineId: number) => {
     const newId = newSubDetailId();
     updateLine(lineId, "subDetails", [...(lines.find((l) => l.id === lineId)?.subDetails ?? []), { id: newId, text: "" }]);
@@ -269,8 +298,6 @@ export function LineItemsEditor({
     updateLine(lineId, "subDetails", (lines.find((l) => l.id === lineId)?.subDetails ?? []).map((sd) => (sd.id === subId ? { ...sd, text } : sd)));
   const removeSubDetail = (lineId: number, subId: string) =>
     updateLine(lineId, "subDetails", (lines.find((l) => l.id === lineId)?.subDetails ?? []).filter((sd) => sd.id !== subId));
-  // ย้ายตำแหน่งรายละเอียดย่อยในรายการเดียวกันจากตำแหน่งหนึ่งไปอีกตำแหน่ง
-  // Moves a sub-detail within a line from one index to another
   const reorderSubDetails = (lineId: number, from: number, to: number) => {
     const current = [...(lines.find((l) => l.id === lineId)?.subDetails ?? [])];
     const [moved] = current.splice(from, 1);
@@ -278,227 +305,281 @@ export function LineItemsEditor({
     updateLine(lineId, "subDetails", current);
   };
 
-  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
-
-  let itemNumber = 0;
-  const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++itemNumber));
-
-  const columns: React.ReactNode[] = [
-    t("quotation.lineItems.col.no"), t("quotation.lineItems.col.description"), t("quotation.lineItems.col.unit"),
-    t("quotation.lineItems.col.qty"), t("quotation.lineItems.col.unitPrice"),
-    (
-      <span className="inline-flex items-center gap-1.5 justify-end normal-case">
-        {t("quotation.lineItems.col.discount")}
-        <DiscountModeToggle value={lineDiscountMode} onChange={setLineDiscountMode} label={t("quotation.discountMode.lineLabel")} />
-      </span>
-    ),
-    t("quotation.lineItems.col.amount"), "",
-  ];
+  const itemNumbers = itemNumbersOf(lines);
+  const itemCount = itemNumbers.filter((n) => n !== null).length;
+  const num = `${field.cell} w-full min-w-0 text-right tabular-nums`;
+  const thRight = table.th.replace("text-left", "text-right");
+  const delBtn = "w-9 h-9 rounded-lg inline-flex items-center justify-center text-[#8a97ad] hover:text-[#b93636] hover:bg-[#fcebeb] transition-colors";
+  const textBtn = "h-7 px-2 rounded-md inline-flex items-center gap-1.5 text-[13px] font-medium text-[#1a5fb4] hover:bg-[#e8f0fb] transition-colors";
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
-      <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <h2 className="text-sm font-semibold text-foreground">{t("quotation.lineItems.title")}</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all font-medium">
-            <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
+    <SectionCard
+      title={
+        <span className="flex items-center gap-2.5">
+          {t("quotation.lineItems.title")}
+          <span className="text-[13px] font-normal text-muted-foreground">{t("ui.itemCount").replace("{n}", String(itemCount))}</span>
+        </span>
+      }
+      actions={
+        <>
+          <button type="button" onClick={addSectionHeader} className={btn.secondarySm}>
+            <Layers size={14} /> {t("quotation.lineItems.addSection")}
           </button>
-          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all font-medium">
-            <Layers size={12} /> {t("quotation.lineItems.addSection")}
+          <button type="button" onClick={() => setPickerOpen(true)} className={btn.secondarySm}>
+            <PackageSearch size={14} /> {t("quotation.lineItems.pickFromCatalog")}
           </button>
-          <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
-            <Plus size={12} /> {t("quotation.lineItems.addManual")}
-          </button>
-        </div>
-      </div>
+        </>
+      }
+      bodyClassName=""
+      className="print:hidden"
+    >
       {/* ก่อน 2026-09-09 ที่นี่กรองหมวดคลัง 4 หมวดของใบเบิกออกจากตัวเลือก โดยเดาจาก "ชื่อหมวด" —
           สินค้าที่สโตร์ตั้งรหัสลงหมวดคลังจึงหายไปจากใบเสนอราคาอย่างถาวรและกลับกัน ตอนนี้ตัวเลือกแสดง
-          ทั้งคลังแล้ว และให้คนเลือกหมวดเองในช่องกรองที่มองเห็น ดู ProductPickerModal */}
-      <ProductPickerModal open={pickerOpen} products={products} categories={categories} onSelect={addLineFromProduct} onClose={() => setPickerOpen(false)} />
+          ทั้งคลังแล้ว และให้คนเลือกหมวดเองในช่องกรองที่มองเห็น */}
+      <QuoteProductPicker
+        open={pickerOpen}
+        products={products}
+        categories={categories}
+        documentLabel={documentLabel}
+        onConfirm={addLinesFromProducts}
+        onClose={() => setPickerOpen(false)}
+      />
 
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[920px]">
           <thead>
-            <tr className="border-b border-border bg-muted/20">
-              {columns.map((h, i) => (
-                <th key={i} className={`px-4 py-2.5 text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 || i === 2 ? "text-center" : i === 1 ? "text-left" : "text-right"} ${i === 0 ? "w-10" : ""} ${i === 7 ? "w-10" : ""}`}>{h}</th>
-              ))}
+            <tr className={table.head}>
+              <th className={`${table.th} w-10`}>{t("quotation.lineItems.col.no")}</th>
+              <th className={table.th}>{t("quotation.lineItems.col.description")}</th>
+              <th className={`${table.th} w-24`}>{t("quotation.lineItems.col.unit")}</th>
+              <th className={`${thRight} w-24`}>{t("quotation.lineItems.col.qty")}</th>
+              <th className={`${thRight} w-36`}>{t("quotation.lineItems.col.unitPrice")}</th>
+              <th className={`${thRight} w-36`}>
+                <span className="inline-flex items-center gap-1.5">
+                  {t("quotation.lineItems.col.discount")}
+                  <DiscountModeToggle value={lineDiscountMode} onChange={setLineDiscountMode} label={t("quotation.discountMode.lineLabel")} />
+                </span>
+              </th>
+              <th className={`${thRight} w-36`}>{t("quotation.lineItems.col.amount")}</th>
+              <th className={`${table.th} w-12`}><span className="sr-only">{t("common.delete")}</span></th>
             </tr>
           </thead>
           <tbody>
+            {lines.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("quotation.lineItems.empty")}</td>
+              </tr>
+            )}
             {lines.map((line, idx) => {
               if (line.isSectionHeader) {
                 return (
-                  <tr key={line.id} className="border-b border-border/50 bg-muted/20 group">
-                    <td className="px-4 py-2.5 text-center text-sm font-mono text-muted-foreground align-top">§</td>
-                    <td colSpan={6} className="px-4 py-2.5 align-top">
+                  <tr key={line.id} className="bg-[#fbf7ea] border-b border-[#eef1f6]">
+                    <td className={`${table.td} py-2.5 text-xs font-bold text-[#7d6420]`}>§</td>
+                    <td colSpan={6} className={`${table.td} py-2.5`}>
                       <input
-                        className="w-full text-sm font-semibold text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors"
+                        className={`${field.cell} w-full font-semibold`}
                         value={line.description}
                         onChange={(e) => updateLine(line.id, "description", e.target.value)}
                         placeholder={t("quotation.lineItems.sectionHeaderPlaceholder")}
+                        aria-label={t("quotation.lineItems.sectionHeaderPlaceholder")}
                       />
                     </td>
-                    <td className="px-4 py-2.5 align-top">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => removeLine(line.id)} title={t("common.delete")} aria-label={t("common.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
-                      </div>
+                    <td className={`${table.td} py-2.5`}>
+                      <button type="button" onClick={() => removeLine(line.id)} title={t("common.delete")} aria-label={t("common.delete")} className={delBtn}><Trash2 size={15} /></button>
                     </td>
                   </tr>
                 );
               }
 
               const isExpanded = expanded.has(line.id);
-              const hasSubDetails = line.subDetails.some((sd) => sd.text.trim() !== "");
-              const hasCardDetails = line.tags.length > 0;
               return (
-                <Fragment key={line.id}>
-                  <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
-                    <td className="px-4 py-3 text-center text-sm font-mono text-muted-foreground align-top">{itemNumbers[idx]}</td>
-                    <td className="px-4 py-3 align-top">
-                      <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder={t("quotation.lineItems.descriptionPlaceholder")} />
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex items-center justify-center">
-                        <input className="w-20 text-sm text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex items-center justify-end">
-                        <input type="number" className="w-20 text-sm text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex items-center justify-end">
-                        <input type="number" className="w-32 text-sm text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unitPrice} onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)} min={0} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <input
-                          type="number"
-                          className="w-16 text-sm text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors"
-                          value={line.discount}
-                          // ประทับ discountMode ลงบรรทัดที่แก้ด้วยเสมอ ไม่งั้นบรรทัดจากเทมเพลต (ที่ยังไม่มีหน่วย)
-                          // จะแสดงเป็น ฿ แต่คำนวณเป็น % — ตัวเลขที่พิมพ์ต้องหมายถึงหน่วยที่เห็นบนหัวคอลัมน์เสมอ
-                          // Stamps the unit onto the line being edited. Without it, a line that
-                          // carries no `discountMode` yet (a fresh template line, or any pre-
-                          // 2026-08-25 line) would render under a "฿" header while still computing
-                          // as a percentage. The number typed must always mean the unit shown.
-                          onChange={(e) => onChange(lines.map((l) => (
-                            l.id === line.id
-                              ? { ...l, discount: parseFloat(e.target.value) || 0, discountMode: lineDiscountMode }
-                              : l
-                          )))}
-                          min={0}
-                          max={lineDiscountMode === "percent" ? 100 : undefined}
-                          aria-label={lineDiscountMode === "percent" ? t("quotation.discountMode.percentLabel") : t("quotation.discountMode.amountLabel")}
-                        />
-                        {lineDiscountMode === "percent"
-                          ? <Percent size={10} className="text-muted-foreground flex-shrink-0" />
-                          : <span className="text-xs font-mono text-muted-foreground flex-shrink-0">฿</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-mono text-right font-semibold text-foreground align-top">{fmt(lineSubtotal(line))}</td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => addSubDetail(line.id)}
-                          title={t("quotation.lineItems.addSubDetail")}
-                          aria-label={t("quotation.lineItems.addSubDetail")}
-                          className={`transition-colors relative ${hasSubDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-50 group-hover:opacity-100 focus-visible:opacity-100"} hover:text-[#c9a84c]`}
-                        >
-                          <Pin size={13} />
+                <tr key={line.id} className="border-b border-[#eef1f6] align-top">
+                  <td className={`${table.td} py-2 align-top`}><span className="block pt-2 text-[13px] text-muted-foreground tabular-nums">{itemNumbers[idx]}</span></td>
+                  <td className={`${table.td} py-2 align-top`}>
+                    <div className="flex flex-col gap-1.5 min-w-0">
+                      <input
+                        className={`${field.cell} w-full min-w-0`}
+                        value={line.description}
+                        onChange={(e) => updateLine(line.id, "description", e.target.value)}
+                        placeholder={t("quotation.lineItems.descriptionPlaceholder")}
+                        aria-label={t("quotation.lineItems.col.description")}
+                      />
+                      <SubDetailRows
+                        lineId={line.id}
+                        subDetails={line.subDetails}
+                        focusId={pendingFocusId}
+                        onUpdate={(subId, text) => updateSubDetail(line.id, subId, text)}
+                        onRemove={(subId) => removeSubDetail(line.id, subId)}
+                        onReorder={(from, to) => reorderSubDetails(line.id, from, to)}
+                      />
+                      {isExpanded
+                        ? <TagsEditor tags={line.tags} onChange={(tags) => updateLine(line.id, "tags", tags)} />
+                        : <div className="pl-3.5"><TagChips tags={line.tags} /></div>}
+                      <div className="flex gap-0.5 pl-1">
+                        <button type="button" onClick={() => addSubDetail(line.id)} className={textBtn}>
+                          <Plus size={14} /> {t("quotation.lineItems.addSubDetail")}
                         </button>
-                        <button
-                          onClick={() => toggleExpand(line.id)}
-                          title={t("quotation.lineItems.tagsTitle")}
-                          aria-label={t("quotation.lineItems.tagsTitle")}
-                          className={`transition-colors relative ${hasCardDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-50 group-hover:opacity-100 focus-visible:opacity-100"} hover:text-[#c9a84c]`}
-                        >
-                          <StickyNote size={13} />
-                          {hasCardDetails && !isExpanded && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
+                        <button type="button" onClick={() => toggleExpand(line.id)} aria-expanded={isExpanded} className={textBtn}>
+                          <Tag size={14} /> {t("quotation.lineItems.tagsTitle")}
                         </button>
-                        <button onClick={() => removeLine(line.id)} title={t("common.delete")} aria-label={t("common.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
                       </div>
-                    </td>
-                  </tr>
-
-                  <PinnedSubDetailRows
-                    lineId={line.id}
-                    subDetails={line.subDetails}
-                    focusId={pendingFocusId}
-                    onUpdate={(subId, text) => updateSubDetail(line.id, subId, text)}
-                    onRemove={(subId) => removeSubDetail(line.id, subId)}
-                    onReorder={(from, to) => reorderSubDetails(line.id, from, to)}
-                  />
-
-                  {isExpanded && (
-                    <tr className="border-b border-border/50 bg-muted/10">
-                      <td />
-                      <td colSpan={7} className="px-4 pb-4 pt-1">
-                        <div className="bg-card border border-border rounded-lg p-4">
-                          <TagsEditor tags={line.tags} onChange={(tags) => updateLine(line.id, "tags", tags)} />
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-
-                </Fragment>
+                    </div>
+                  </td>
+                  <td className={`${table.td} py-2 align-top`}>
+                    <input className={`${field.cell} w-full min-w-0`} value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} aria-label={t("quotation.lineItems.col.unit")} />
+                  </td>
+                  <td className={`${table.td} py-2 align-top`}>
+                    <input type="number" className={num} value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} aria-label={t("quotation.lineItems.col.qty")} />
+                  </td>
+                  <td className={`${table.td} py-2 align-top`}>
+                    <input type="number" className={num} value={line.unitPrice} onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)} min={0} aria-label={t("quotation.lineItems.col.unitPrice")} />
+                  </td>
+                  <td className={`${table.td} py-2 align-top`}>
+                    <div data-field-box="" className="h-9 pl-2.5 pr-2 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-1 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+                      <input
+                        type="number"
+                        className="flex-1 min-w-0 bg-transparent text-sm text-right tabular-nums text-foreground outline-none"
+                        value={line.discount}
+                        // ประทับ discountMode ลงบรรทัดที่แก้ด้วยเสมอ ไม่งั้นบรรทัดจากเทมเพลต (ที่ยังไม่มีหน่วย)
+                        // จะแสดงเป็น ฿ แต่คำนวณเป็น % — ตัวเลขที่พิมพ์ต้องหมายถึงหน่วยที่เห็นบนหัวคอลัมน์เสมอ
+                        // Stamps the unit onto the line being edited. Without it, a line that
+                        // carries no `discountMode` yet (a fresh template line, or any pre-
+                        // 2026-08-25 line) would render under a "฿" header while still computing
+                        // as a percentage. The number typed must always mean the unit shown.
+                        onChange={(e) => onChange(lines.map((l) => (
+                          l.id === line.id
+                            ? { ...l, discount: parseFloat(e.target.value) || 0, discountMode: lineDiscountMode }
+                            : l
+                        )))}
+                        min={0}
+                        max={lineDiscountMode === "percent" ? 100 : undefined}
+                        aria-label={lineDiscountMode === "percent" ? t("quotation.discountMode.percentLabel") : t("quotation.discountMode.amountLabel")}
+                      />
+                      <span className="text-xs text-muted-foreground flex-shrink-0">{lineDiscountMode === "percent" ? "%" : "฿"}</span>
+                    </div>
+                  </td>
+                  <td className={`${table.td} py-2 align-top text-right`}>
+                    <span className="block pt-2 text-sm font-semibold tabular-nums text-foreground">{fmt(lineSubtotal(line))}</span>
+                  </td>
+                  <td className={`${table.td} py-2 align-top`}>
+                    <button type="button" onClick={() => removeLine(line.id)} title={t("common.delete")} aria-label={t("common.delete")} className={delBtn}><Trash2 size={15} /></button>
+                  </td>
+                </tr>
               );
             })}
           </tbody>
         </table>
       </div>
 
-      <div className="flex justify-end p-5 border-t border-border">
-        {/* กว้างขึ้นจาก w-72 เป็น w-80 เพราะแถวส่วนลดพิเศษมีปุ่มสลับหน่วย % / ฿ เพิ่มเข้ามา (2026-08-25)
-            Widened from w-72 to fit the % / ฿ unit toggle the special-discount row gained on
-            2026-08-25 — at the old width the label and the amount both wrapped. */}
-        <div className="w-80 space-y-2">
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>{t("quotation.totals.subtotal")}</span>
-            <span className="font-mono">฿{fmt(subtotal)}</span>
-          </div>
-          <div className="flex justify-between gap-2 text-sm text-muted-foreground items-center">
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
-              {t("quotation.totals.discount")}
-              <span className="flex items-center gap-1 bg-secondary border border-border rounded px-2 py-0.5">
-                <input
-                  type="number"
-                  className={`${discountMode === "percent" ? "w-10" : "w-16"} text-sm font-mono text-foreground bg-transparent outline-none text-right`}
-                  value={discount}
-                  onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)}
-                  min={0}
-                  max={discountMode === "percent" ? 100 : undefined}
-                  aria-label={discountMode === "percent" ? t("quotation.discountMode.percentLabel") : t("quotation.discountMode.amountLabel")}
-                />
-                {discountMode === "percent"
-                  ? <Percent size={10} className="text-muted-foreground" />
-                  : <span className="text-xs font-mono text-muted-foreground">฿</span>}
-              </span>
+      <div className="px-6 py-2.5 border-b border-[#eef1f6]">
+        <button type="button" onClick={addLine} className={btn.text}>
+          <Plus size={16} /> {t("quotation.lineItems.addManual")}
+        </button>
+      </div>
+
+      <div className="flex justify-end px-6 pt-5 pb-6">
+        <TotalsBlock
+          lines={lines}
+          discount={discount}
+          discountMode={discountMode}
+          discountControl={
+            <div data-field-box="" className="w-44 h-9 pl-2.5 pr-1 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-1 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+              <input
+                type="number"
+                className="flex-1 min-w-0 bg-transparent text-sm text-right tabular-nums text-foreground outline-none"
+                value={discount}
+                onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)}
+                min={0}
+                max={discountMode === "percent" ? 100 : undefined}
+                aria-label={discountMode === "percent" ? t("quotation.discountMode.percentLabel") : t("quotation.discountMode.amountLabel")}
+              />
               <DiscountModeToggle
                 value={discountMode}
                 onChange={(mode) => { onDiscountModeChange(mode); onDiscountChange(clampForMode(discount, mode)); }}
                 label={t("quotation.discountMode.totalLabel")}
               />
-            </span>
-            <span className="font-mono text-[#e05252] whitespace-nowrap">-฿{fmt(discountAmt)}</span>
-          </div>
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>{t("quotation.totals.afterDiscount")}</span>
-            <span className="font-mono">฿{fmt(afterDiscount)}</span>
-          </div>
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>{t("quotation.totals.vat").replace("{rate}", String(VAT_RATE))}</span>
-            <span className="font-mono">฿{fmt(vatAmt)}</span>
-          </div>
-          <div className="flex justify-between text-base font-bold text-foreground pt-2 border-t border-border">
-            <span>{t("quotation.totals.grandTotal")}</span>
-            <span className="font-mono text-[#c9a84c] text-lg">฿{fmt(total)}</span>
-          </div>
-        </div>
+            </div>
+          }
+        />
       </div>
-    </div>
+    </SectionCard>
+  );
+}
+
+// ตารางรายการแบบอ่านอย่างเดียว (ใบที่ส่งขออนุมัติแล้ว — ดีไซน์ใหม่ QuoteDocument-Approved) + หมายเหตุซ้าย ยอดรวมขวา
+// Read-only line items for a submitted quotation, with the remarks on the left and totals on the right
+export function ReadonlyLineItems({ lines, discount, discountMode, remarks }: {
+  lines: QuoteLine[];
+  discount: number;
+  discountMode: DiscountMode;
+  remarks: string;
+}) {
+  const { t } = useI18n();
+  const itemNumbers = itemNumbersOf(lines);
+  const itemCount = itemNumbers.filter((n) => n !== null).length;
+  const thRight = table.th.replace("text-left", "text-right");
+  return (
+    <SectionCard
+      title={
+        <span className="flex items-center gap-2.5">
+          {t("quotation.lineItems.title")}
+          <span className="text-[13px] font-normal text-muted-foreground">{t("ui.itemCount").replace("{n}", String(itemCount))}</span>
+        </span>
+      }
+      bodyClassName=""
+      className="print:hidden"
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px]">
+          <thead>
+            <tr className={table.head}>
+              <th className={`${table.th} w-10`}>{t("quotation.lineItems.col.no")}</th>
+              <th className={table.th}>{t("quotation.lineItems.col.description")}</th>
+              <th className={`${table.th} w-20`}>{t("quotation.lineItems.col.unit")}</th>
+              <th className={`${thRight} w-20`}>{t("quotation.lineItems.col.qty")}</th>
+              <th className={`${thRight} w-36`}>{t("quotation.lineItems.col.unitPrice")}</th>
+              <th className={`${thRight} w-28`}>{t("quotation.lineItems.col.discount")}</th>
+              <th className={`${thRight} w-36`}>{t("quotation.lineItems.col.amount")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.length === 0 && (
+              <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("quotation.lineItems.empty")}</td></tr>
+            )}
+            {lines.map((line, idx) => line.isSectionHeader ? (
+              <tr key={line.id} className="bg-[#fbf7ea] border-b border-[#eef1f6]">
+                <td className={`${table.td} py-2.5 text-xs font-bold text-[#7d6420]`}>§</td>
+                <td colSpan={6} className={`${table.td} py-2.5 text-sm font-semibold text-foreground`}>{line.description || "—"}</td>
+              </tr>
+            ) : (
+              <tr key={line.id} className="border-b border-[#eef1f6] align-baseline">
+                <td className={`${table.td} py-3 text-[13px] text-muted-foreground tabular-nums`}>{itemNumbers[idx]}</td>
+                <td className={`${table.td} py-3`}>
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-sm text-foreground break-words">{line.description || "—"}</span>
+                    {line.subDetails.filter((sd) => sd.text.trim()).map((sd) => (
+                      <span key={sd.id} className="text-[12.5px] text-muted-foreground break-words">– {sd.text}</span>
+                    ))}
+                    <TagChips tags={line.tags} />
+                  </div>
+                </td>
+                <td className={`${table.td} py-3 text-sm text-[#3d5173]`}>{line.unit}</td>
+                <td className={`${table.td} py-3 text-sm text-right tabular-nums`}>{line.qty.toLocaleString("th-TH")}</td>
+                <td className={`${table.td} py-3 text-sm text-right tabular-nums`}>{fmt(line.unitPrice)}</td>
+                <td className={`${table.td} py-3 text-sm text-right tabular-nums ${lineDiscountAmount(line) > 0 ? "text-foreground" : "text-[#8a97ad]"}`}>{lineDiscountLabel(line)}</td>
+                <td className={`${table.td} py-3 text-sm text-right font-semibold tabular-nums`}>{fmt(lineSubtotal(line))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 px-6 pt-5 pb-6">
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          <span className="text-xs text-muted-foreground">{t("quotation.section.remarks")}</span>
+          <p className={`text-sm leading-relaxed whitespace-pre-line break-words ${remarks.trim() ? "text-foreground" : "text-[#8a97ad]"}`}>{remarks.trim() || "—"}</p>
+        </div>
+        <TotalsBlock lines={lines} discount={discount} discountMode={discountMode} />
+      </div>
+    </SectionCard>
   );
 }
