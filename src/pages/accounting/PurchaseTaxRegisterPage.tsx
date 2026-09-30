@@ -8,6 +8,7 @@ import { btn, surface } from "../../components/ui/styles";
 import { MonthField, TotalsStrip } from "./accountingUi";
 import { currentMonthLocal, money, thaiMonthLabel } from "./accountingFormat";
 import { REPORT } from "./reportTable";
+import { PurchaseTaxRegisterPrint } from "./legacyReportPrint";
 
 /**
  * ทะเบียนภาษีซื้อ (2026-09-03) — เจ้าของสั่งไว้ท้ายรายการงานสโตร์ว่าการรับของต้อง *"ได้ทะเบียน
@@ -20,8 +21,9 @@ import { REPORT } from "./reportTable";
  * ทุกแถวมาจากการรับของในใบรับสินค้า — บัญชีไม่ได้คีย์เอง ตัวเลขจึงกระทบยอดกับสต๊อกได้เสมอ
  * เดือนที่กรองคือเดือนของ **ใบกำกับภาษี** ไม่ใช่วันที่บันทึก (ดู `monthRange()` ใน apHandler.ts)
  *
- * ดีไซน์ใหม่ 2026-09-30: บนจอรวมชื่อผู้ขายกับเลขประจำตัวผู้เสียภาษีไว้ในช่องเดียว (สองบรรทัด) แต่บนกระดาษ
- * ยังพิมพ์เป็นสองคอลัมน์แยกเหมือนเดิม (คอลัมน์เลขผู้เสียภาษี `hidden print:table-cell`)
+ * ดีไซน์ใหม่ 2026-09-30: บนจอรวมชื่อผู้ขายกับเลขประจำตัวผู้เสียภาษีไว้ในช่องเดียว (สองบรรทัด)
+ * **ใบพิมพ์ไม่ได้พิมพ์หน้าจอนี้แล้ว** — เจ้าของสั่งให้กระดาษคงแบบเดิม จึงพิมพ์จาก `PurchaseTaxRegisterPrint`
+ * (legacyReportPrint.tsx) ส่วนเนื้อหาบนจอห่อด้วย `print:hidden`
  */
 export function PurchaseTaxRegisterPage() {
   const { t } = useI18n();
@@ -65,8 +67,10 @@ export function PurchaseTaxRegisterPage() {
         />
       </div>
 
-      <p className="hidden print:block text-lg font-semibold">{t("purchaseTaxRegister.printHeadingPrefix")} {thaiMonthLabel(month)}</p>
+      {/* กระดาษพิมพ์แบบเดิม (ก่อนเฟส 3) — ดู legacyReportPrint.tsx · เนื้อหาบนจอด้านล่างไม่ขึ้นบนกระดาษ */}
+      {!loading && !loadError && <PurchaseTaxRegisterPrint month={month} entries={entries} />}
 
+      <div className="space-y-5 print:hidden">
       {loading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}</div>
       ) : loadError ? (
@@ -154,6 +158,7 @@ export function PurchaseTaxRegisterPage() {
           </section>
         </>
       )}
+      </div>
     </div>
   );
 }

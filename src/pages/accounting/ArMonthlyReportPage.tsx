@@ -8,13 +8,15 @@ import { btn, surface } from "../../components/ui/styles";
 import { MonthField, Pill, TotalsStrip } from "./accountingUi";
 import { currentMonthLocal, money, thaiMonthLabel } from "./accountingFormat";
 import { REPORT } from "./reportTable";
+import { MonthlyReportPrint } from "./legacyReportPrint";
 
 // หน้าสรุปเอกสารบัญชีประจำเดือน — ตอบโจทย์ที่บัญชีขอไว้ (2026-08-18) ว่าต้อง "ดึงข้อมูลได้ว่าเดือนนี้
 // เราออกเอกสารเลขที่อะไรไปแล้วบ้าง บริษัทอะไร วันที่เท่าไหร่ รวมทั้งหมดเท่าไหร่ ยอดรวมเท่าไหร่
 // เพื่อในการตรวจเช็คเวลาส่งยื่นภาษี" — จัดกลุ่มตามประเภทเอกสาร พร้อมยอดรวมต่อประเภทและยอดรวมใบกำกับภาษี
 // Monthly accounting-document summary for tax-filing checks — grouped per document type with
 // per-type counts/totals and a tax-invoice (AR+IV) grand total for the VAT return.
-// พิมพ์แบบ Pattern B (พิมพ์หน้าจอตัวเอง) — class `print:*` ในไฟล์นี้คุมหน้าตาบนกระดาษ ห้ามตัดทิ้งตอนแต่งหน้าจอ
+// ใบพิมพ์ไม่ได้พิมพ์หน้าจอนี้แล้ว — เจ้าของสั่งให้กระดาษคงแบบเดิม (2026-09-30) จึงพิมพ์จาก
+// `MonthlyReportPrint` (legacyReportPrint.tsx) ส่วนเนื้อหาบนจอห่อด้วย `print:hidden` แต่งได้อิสระ
 const SECTION_ORDER: ArDocumentType[] = ["AR", "IV", "BI", "RE"];
 
 export function ArMonthlyReportPage() {
@@ -66,8 +68,10 @@ export function ArMonthlyReportPage() {
         />
       </div>
 
-      <p className="hidden print:block text-lg font-semibold">{t("accounting.monthly.printHeadingPrefix")} {thaiMonthLabel(month)}</p>
+      {/* กระดาษพิมพ์แบบเดิม (ก่อนเฟส 3) — ดู legacyReportPrint.tsx · เนื้อหาบนจอด้านล่างไม่ขึ้นบนกระดาษ */}
+      {!loading && !loadError && <MonthlyReportPrint month={month} documents={documents} />}
 
+      <div className="space-y-5 print:hidden">
       {loading ? (
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}
@@ -160,6 +164,7 @@ export function ArMonthlyReportPage() {
           })}
         </>
       )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Toast } from "../../components/Toast";
+import { btn } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
@@ -70,7 +71,9 @@ export function PurchaseOrderPage({
     if (initialPurchaseOrderId) onPurchaseOrderIdConsumed?.();
   }, [initialPurchaseOrderId, onPurchaseOrderIdConsumed]);
 
+  const [creating, setCreating] = useState(false);
   const createFrom = async (purchaseRequestId?: string) => {
+    setCreating(true);
     try {
       const created = await createPurchaseOrder(purchaseRequestId);
       setPickerOpen(false);
@@ -79,6 +82,8 @@ export function PurchaseOrderPage({
       toast.show(t("purchaseOrder.createdToast"));
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -106,7 +111,7 @@ export function PurchaseOrderPage({
 
   if (loading) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
         <span className="sr-only">{t("purchaseOrder.loading")}</span>
         <div className="h-8 w-56 bg-muted rounded animate-pulse mb-4" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
@@ -118,7 +123,7 @@ export function PurchaseOrderPage({
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("purchaseOrder.loadError")}</p>
-        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("purchaseOrder.retry")}
         </button>
       </div>
@@ -132,10 +137,12 @@ export function PurchaseOrderPage({
         onOpen={open}
         headerAction={canCreate ? (
           <button
+            type="button"
             onClick={() => (canViewPurchaseRequest ? setPickerOpen(true) : void createFrom())}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors"
+            disabled={creating}
+            className={btn.primary}
           >
-            <Plus size={14} /> {t("purchaseOrder.createBtn")}
+            <Plus size={16} /> {t("purchaseOrder.createBtn")}
           </button>
         ) : undefined}
       />
@@ -144,6 +151,7 @@ export function PurchaseOrderPage({
           onCancel={() => setPickerOpen(false)}
           onPick={(prId) => void createFrom(prId)}
           onBlank={() => void createFrom()}
+          busy={creating}
         />
       )}
       <Toast message={toast.message} />

@@ -8,6 +8,7 @@ import { CostControlImportDialog } from "./CostControlImportDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { btn } from "../../components/ui/styles";
 
 /**
  * Cost Control (แผนก BD) — list/detail container.
@@ -113,8 +114,8 @@ export function CostControlPage({
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
-        <div className="space-y-3 w-full max-w-3xl">
+      <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
+        <div className="space-y-3 w-full">
           <span className="sr-only">{t("costControl.loading")}</span>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" aria-hidden="true" />
@@ -128,8 +129,7 @@ export function CostControlPage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{t("costControl.loadError")}</p>
-        <button onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("costControl.retry")}
         </button>
       </div>
@@ -141,22 +141,16 @@ export function CostControlPage({
       <CostControlList
         costControls={costControls}
         onOpen={openCostControl}
+        // "สร้างจากไฟล์ Excel" เป็นปุ่มหลัก — ทางหลักของการสร้างใบนี้ (ดีไซน์ใหม่ 2026-09-30) · ใบเปล่าเป็นปุ่มรอง
         headerAction={canCreate ? (
-          <div className="flex items-center gap-2">
-          <button
-            onClick={() => void handleCreateBlank()}
-            disabled={creating}
-            className="flex items-center gap-2 px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60"
-          >
-            <Plus size={15} /> {t("costControl.createBlankBtn")}
-          </button>
-          <button
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-          >
-            <Upload size={15} /> {t("costControl.createBtn")}
-          </button>
-          </div>
+          <>
+            <button type="button" onClick={() => void handleCreateBlank()} disabled={creating} className={btn.secondary}>
+              <Plus size={16} /> {t("costControl.createBlankBtn")}
+            </button>
+            <button type="button" onClick={() => setImportOpen(true)} className={btn.primary}>
+              <Upload size={16} /> {t("costControl.createBtn")}
+            </button>
+          </>
         ) : undefined}
       />
       {importOpen && (

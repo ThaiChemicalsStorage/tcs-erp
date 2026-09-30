@@ -1,12 +1,17 @@
-import { useEffect, useState } from "react";
-import { FileText, Loader2, Search, X } from "lucide-react";
-import { useDialogA11y } from "../../hooks/useDialogA11y";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { AlertTriangle, FilePlus2, Loader2, Search } from "lucide-react";
+import { PickerDialog } from "../../components/ui/Overlays";
+import { btn } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
 import { fetchAllPurchaseRequests, type PurchaseRequestSummary } from "../../lib/purchaseRequest";
 import { formatQuoteDateThai } from "../../lib/quotes";
 
 /**
  * เลือกใบขอซื้อต้นทางก่อนสร้างใบสั่งซื้อ
+ *
+ * **ดีไซน์ใหม่ 2026-09-30:** เดิมคลิกแถวแล้วสร้างใบสั่งซื้อทันที — ตอนนี้คลิกแถว = เลือก (วงกลมแบบ radio)
+ * แล้วต้องกดปุ่ม "สร้างใบสั่งซื้อจาก …" ท้ายกล่องเพื่อยืนยัน (เจ้าของอนุมัติ select-then-confirm ทั้งแอป)
+ * · ทางเปิดใบเปล่าย้ายไปเป็นปุ่มข้อความมุมซ้ายล่าง ยังกดได้ทันทีเหมือนเดิม
  *
  * แสดงเฉพาะใบที่ **อนุมัติแล้ว (Final)** และ**ผ่านสโตร์มาแล้ว** เพราะเซิร์ฟเวอร์ปฏิเสธทั้งสองกรณีอยู่แล้ว
  * — กรองตรงนี้ไม่ใช่การบังคับสิทธิ์ แต่เพื่อไม่ให้ผู้ใช้เลือกสิ่งที่จะโดนปฏิเสธทีหลัง
@@ -29,17 +34,19 @@ import { formatQuoteDateThai } from "../../lib/quotes";
  * เจอตอนไล่ flow จริงในเบราว์เซอร์ทั้งสาย (สร้าง → อนุมัติ → สโตร์ → จัดซื้อ)
  */
 export function PurchaseRequestPickerDialog({
-  onPick, onBlank, onCancel,
+  onPick, onBlank, onCancel, busy = false,
 }: {
   onPick: (purchaseRequestId: string) => void;
   onBlank: () => void;
   onCancel: () => void;
+  /** กำลังสร้างใบสั่งซื้อ — กันกดซ้ำ */
+  busy?: boolean;
 }) {
   const { t } = useI18n();
-  const panelRef = useDialogA11y(onCancel);
   const [rows, setRows] = useState<PurchaseRequestSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,85 +63,108 @@ export function PurchaseRequestPickerDialog({
   const q = query.trim().toLowerCase();
   const filtered = rows.filter((r) => !q || [r.id, r.jobCode].some((v) => (v ?? "").toLowerCase().includes(q)));
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} aria-hidden="true" />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("purchaseOrder.picker.title")}
-        className="relative w-full max-w-2xl max-h-[80vh] flex flex-col bg-card border border-border rounded-xl shadow-xl overflow-hidden"
-      >
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground">{t("purchaseOrder.picker.title")}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseOrder.picker.subtitle")}</p>
-          </div>
-          <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X size={18} />
-          </button>
-        </div>
+  const selectOnKey = (e: KeyboardEvent<HTMLDivElement>, id: string) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(id); }
+  };
 
-        <div className="px-5 py-3 border-b border-border">
-          <div className="relative h-9">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+  // ป้ายบอกว่าใบนี้ออกใบสั่งซื้อไปแค่ไหนแล้ว (2026-09-21) — ใบที่ครบแล้วยังเลือกได้
+  // เพราะเซิร์ฟเวอร์เป็นคนตอบว่าไม่เหลืออะไรให้ซื้อ ไม่ใช่ซ่อนไปเฉย ๆ ให้งง
+  const tag = (r: PurchaseRequestSummary) =>
+    r.purchasingStage === "review" ? { label: t("purchaseOrder.picker.needsPurchasingApproval"), cls: "bg-[#fdf3e0] text-[#8a5a00]" }
+      : r.purchaseState === "full" ? { label: t("purchaseOrder.picker.orderedFull"), cls: "bg-[#e6f4ec] text-[#1b7f4f]" }
+      : r.purchaseState === "partial" ? { label: t("purchaseOrder.picker.orderedPartial"), cls: "bg-[#e8f0fb] text-[#1a5fb4]" }
+      : null;
+
+  return (
+    <PickerDialog
+      open
+      title={t("purchaseOrder.picker.title")}
+      subtitle={t("purchaseOrder.picker.subtitle")}
+      onClose={onCancel}
+      busy={busy}
+      toolbar={
+        <>
+          <label className="flex-1 min-w-[240px] h-10 px-3 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+            <Search size={16} className="text-muted-foreground flex-shrink-0" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("purchaseOrder.picker.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
+              aria-label={t("purchaseOrder.picker.searchPlaceholder")}
+              className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-[#8a97ad] outline-none"
             />
+          </label>
+          {!loading && <span className="text-[13px] text-muted-foreground whitespace-nowrap">{t("purchaseOrder.picker.count").replace("{n}", String(filtered.length))}</span>}
+        </>
+      }
+      // จัดซื้อบางครั้งซื้อโดยไม่มีใบขอซื้อ — ไม่บังคับให้ต้องมีต้นทางเสมอ
+      footerNote={
+        <button type="button" onClick={onBlank} disabled={busy} title={t("purchaseOrder.picker.blankHint")} className={btn.text}>
+          <FilePlus2 size={16} /> {t("purchaseOrder.picker.blank")}
+        </button>
+      }
+      confirmLabel={
+        <>
+          {busy && <Loader2 size={16} className="animate-spin" />}
+          {selectedId ? t("purchaseOrder.picker.confirmFrom").replace("{id}", selectedId) : t("purchaseOrder.createBtn")}
+        </>
+      }
+      confirmDisabled={!selectedId}
+      onConfirm={() => { if (selectedId) onPick(selectedId); }}
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
+      ) : filtered.length === 0 ? (
+        <p className="text-center text-sm text-muted-foreground py-12 px-6">{t("purchaseOrder.picker.empty")}</p>
+      ) : (
+        <>
+          <div className="hidden sm:grid grid-cols-[20px_170px_minmax(0,1fr)_190px_120px] gap-x-3.5 items-center px-6 h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173] sticky top-0 z-[1]">
+            <span />
+            <span>{t("purchaseOrder.picker.col.request")}</span>
+            <span>{t("purchaseOrder.picker.col.job")}</span>
+            <span>{t("purchaseOrder.picker.col.ordered")}</span>
+            <span>{t("purchaseOrder.col.updatedAt")}</span>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
-          ) : filtered.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-12 px-5">{t("purchaseOrder.picker.empty")}</p>
-          ) : (
-            filtered.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => onPick(r.id)}
-                className="w-full text-left px-5 py-3 border-b border-border/50 hover:bg-secondary/40 transition-colors"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-mono font-semibold text-[#c9a84c]">{r.id}</span>
-                  <span className="flex items-center gap-2">
-                    {/* ป้ายบอกว่าใบนี้ออกใบสั่งซื้อไปแค่ไหนแล้ว (2026-09-21) — ใบที่ครบแล้วยังกดได้
-                        เพราะเซิร์ฟเวอร์เป็นคนตอบว่าไม่เหลืออะไรให้ซื้อ ไม่ใช่ซ่อนไปเฉย ๆ ให้งง */}
-                    {r.purchasingStage === "review" ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#e08a3c]/15 text-[#a75d1a] whitespace-nowrap">{t("purchaseOrder.picker.needsPurchasingApproval")}</span>
-                    ) : r.purchaseState === "full" ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#2aa36b]/15 text-[#1c7a4e] whitespace-nowrap">{t("purchaseOrder.picker.orderedFull")}</span>
-                    ) : r.purchaseState === "partial" ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#3c7de0]/15 text-[#1a4fa7] whitespace-nowrap">{t("purchaseOrder.picker.orderedPartial")}</span>
-                    ) : null}
-                    <span className="text-xs font-mono text-muted-foreground">{formatQuoteDateThai(r.updatedAt)}</span>
+          <div role="radiogroup" aria-label={t("purchaseOrder.picker.title")}>
+            {filtered.map((r) => {
+              const on = r.id === selectedId;
+              const tg = tag(r);
+              return (
+                <div
+                  key={r.id}
+                  role="radio"
+                  aria-checked={on}
+                  tabIndex={0}
+                  onClick={() => setSelectedId(r.id)}
+                  onKeyDown={(e) => selectOnKey(e, r.id)}
+                  className={`grid grid-cols-[20px_minmax(0,1fr)] sm:grid-cols-[20px_170px_minmax(0,1fr)_190px_120px] gap-x-3.5 gap-y-1 items-center px-6 py-3.5 border-b border-[#eef1f6] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 transition-colors ${on ? "bg-[#eef4fc] hover:bg-[#e3edfa]" : "bg-white hover:bg-[#f8f9fc]"}`}
+                >
+                  <span aria-hidden="true" className={`w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center ${on ? "border-[#0b1d3a]" : "border-[#a3aec2]"}`}>
+                    {on && <span className="w-2 h-2 rounded-full bg-[#0b1d3a]" />}
                   </span>
+                  <span className="font-mono text-[13px] font-medium text-foreground">{r.id}</span>
+                  <span className={`font-mono text-[13px] truncate col-start-2 sm:col-start-auto ${r.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{r.jobCode || "—"}</span>
+                  <span className="col-start-2 sm:col-start-auto">
+                    {tg ? (
+                      <span className={`h-[22px] px-2 rounded-md text-xs font-semibold inline-flex items-center whitespace-nowrap ${tg.cls}`}>{tg.label}</span>
+                    ) : (
+                      <span className="text-[#8a97ad]">—</span>
+                    )}
+                  </span>
+                  <span className="text-sm text-[#3d5173] col-start-2 sm:col-start-auto">{formatQuoteDateThai(r.updatedAt)}</span>
+                  {r.purchasingStage === "review" && (
+                    <span className="col-start-2 sm:col-span-4 text-[12.5px] text-[#8a5a00] flex items-center gap-1.5">
+                      <AlertTriangle size={14} className="flex-shrink-0" />
+                      {t("purchaseOrder.picker.needsPurchasingApprovalHint")}
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{r.jobCode || "—"}</p>
-                {r.purchasingStage === "review" && (
-                  <p className="text-xs text-[#a75d1a] mt-1">{t("purchaseOrder.picker.needsPurchasingApprovalHint")}</p>
-                )}
-              </button>
-            ))
-          )}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
-          {/* จัดซื้อบางครั้งซื้อโดยไม่มีใบขอซื้อ — ไม่บังคับให้ต้องมีต้นทางเสมอ */}
-          <button onClick={onBlank} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
-            <FileText size={13} /> {t("purchaseOrder.picker.blank")}
-          </button>
-          <button onClick={onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            {t("common.cancel")}
-          </button>
-        </div>
-      </div>
-    </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </PickerDialog>
   );
 }

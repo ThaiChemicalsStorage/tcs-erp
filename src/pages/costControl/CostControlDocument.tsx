@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileSpreadsheet, Loader2, Plus, Printer, Save, Trash2, PenLine } from "lucide-react";
+import { CheckCircle2, ChevronDown, CornerDownRight, FileSpreadsheet, Loader2, PenLine, Plus, Printer, Save, Send, Trash2, Undo2, XCircle } from "lucide-react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
-import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
+import { useUserDirectory } from "../../lib/userDirectory";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -13,7 +18,7 @@ import { ApiError } from "../../lib/apiClient";
 import { Combobox } from "../../components/Combobox";
 import { type ScopeOfWorkListItem, fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
 import { newId } from "../../lib/products";
-import { fmt } from "../../lib/quotes";
+import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import type { Company } from "../../lib/storage";
 import {
@@ -23,6 +28,8 @@ import {
   submitCostControlApproval, approveCostControl, rejectCostControl, withdrawCostControlApproval,
 } from "../../lib/costControl";
 import { CostControlPrintDocument } from "./CostControlPrintDocument";
+import { CostControlStatusPill } from "./costControlUi";
+import { useCostControlApproval } from "./costControlHooks";
 
 /** payload ที่ทั้งปุ่มบันทึกและ auto-save ส่ง — ต้องเป็นชุดเดียวกันเป๊ะ ไม่งั้นตัวจับการแก้ไขเพี้ยน */
 function toUpdateFields(d: CostControl): CostControlUpdateFields {
@@ -166,6 +173,19 @@ export function CostControlDocument({
       : null,
   );
 
+  const { byId } = useUserDirectory();
+  // ขั้นตอนอนุมัติ — hook อยู่เหนือ early return · id ของเอกสารคือ costControlId เสมอ (โหลดด้วย id นี้)
+  const approval = useCostControlApproval<CostControl>({
+    onSubmit: () => submitCostControlApproval(costControlId),
+    onApprove: () => approveCostControl(costControlId),
+    onReject: (comment) => rejectCostControl(costControlId, comment),
+    onWithdraw: () => withdrawCostControlApproval(costControlId),
+    // markSaved ด้วยเสมอ — การอนุมัติเปลี่ยนเอกสารฝั่งเซิร์ฟเวอร์ ถ้าไม่รีเซ็ตฐาน ตัวจับการแก้ไข
+    // จะค้างว่า "ยังไม่บันทึก" แล้วเด้งกล่องเตือนตอนออกจากหน้าทั้งที่ไม่มีอะไรค้าง
+    onUpdated: (d) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); },
+    showToast,
+  });
+
   useEffect(() => {
     if (!showPrint) return;
     const reset = () => setShowPrint(false);
@@ -176,7 +196,7 @@ export function CostControlDocument({
 
   if (loading) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
         <span className="sr-only">{t("costControl.loading")}</span>
         <div className="h-8 w-64 bg-muted rounded animate-pulse mb-4" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
@@ -187,7 +207,7 @@ export function CostControlDocument({
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("costControl.loadError")}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("costControlDoc.backToList")}</button>
+        <button type="button" onClick={onBack} className={btn.secondary}>{t("costControlDoc.backToList")}</button>
       </div>
     );
   }
@@ -199,63 +219,110 @@ export function CostControlDocument({
     setDraft((p) => (p ? { ...p, lines: [...p.lines, blankCostControlLine(newId("ccline"), kind)] } : p));
   const removeLine = (id: string) =>
     setDraft((p) => (p ? { ...p, lines: p.lines.filter((l) => l.id !== id) } : p));
-  const inputCls = "w-full px-2.5 py-1.5 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
-  const numCls = `${inputCls} text-right font-mono`;
+
+  const documentLabel = draft.documentNumber || draft.id;
+  const kindCount = (kind: CostControlLineKind) => draft.lines.filter((l) => l.kind === kind).length;
+  const kindLabel: Record<CostControlLineKind, string> = {
+    group: t("costControlDoc.line.kind.group"),
+    item: t("costControlDoc.line.kind.item"),
+    sub: t("costControlDoc.line.kind.sub"),
+  };
+
+  const steps = [
+    { label: t("approval.step.draft") },
+    { label: t("approval.step.pending") },
+    { label: t("approval.step.final") },
+  ];
+  const currentStep = draft.status === "Draft" ? 0 : draft.status === "PendingApproval" ? 1 : steps.length;
+  // ข้อความ "ขั้นต่อไป" ชุดเดียวกับ DocumentStatusStepper เดิม (ชื่อผู้อนุมัติ: ช่องบนฟอร์มก่อน แล้วค่อยทะเบียนผู้ใช้)
+  const approverName = draft.approvedBy.trim() || byId(draft.approvedByUserId)?.fullName || "";
+  const nextStepHint =
+    draft.status === "Final"
+      ? t("approval.step.hint.final")
+          .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
+          .replace("{at}", draft.approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(draft.approvedAt)) : "")
+      : draft.status === "PendingApproval"
+      ? t("approval.step.hint.pending").replace("{approver}", t("costControlDoc.approverLabel"))
+      : draft.rejectionComment?.trim()
+      ? t("approval.step.hint.draftRejected")
+      : t("approval.step.hint.draft");
+
+  const approvalBusy = approval.busy !== null;
+  const cellCls = `${field.cell} w-full min-w-0`;
+  const numCellCls = `${cellCls} text-right tabular-nums`;
+  const td = "px-[3px] py-2 first:pl-6 last:pr-6 align-middle";
+  const th = "px-[3px] first:pl-6 last:pr-6 text-left font-semibold whitespace-nowrap";
+
+  /** ช่องข้อความบนหัวใบ — แก้ได้ = กล่องกรอก · อ่านอย่างเดียว = ค่าเปล่า ๆ ไม่มีกรอบ */
+  const textField = (label: string, key: "documentNumber" | "jobName" | "workType" | "jobOrder" | "submittedBy" | "approvedBy", opts: { mono?: boolean; className?: string } = {}) =>
+    editable ? (
+      <Field label={label} htmlFor={`cc-${key}`} className={opts.className}>
+        <input id={`cc-${key}`} className={`${field.input} w-full ${opts.mono ? "font-mono" : ""}`} value={draft[key]}
+          onChange={(e) => set(key, e.target.value)} />
+      </Field>
+    ) : (
+      <ReadonlyField label={label} value={draft[key]} mono={opts.mono} className={opts.className} />
+    );
 
   return (
     <>
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
-        <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={15} /> {t("costControlDoc.backToList")}
-          </button>
-          <span className="font-mono text-sm text-[#866d28] font-semibold">{draft.documentNumber || draft.id}</span>
-
-          <div className="ml-auto flex items-center gap-2">
-            {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-
-            <DocumentApprovalActions
-              status={draft.status}
-              canEdit={canEdit}
-              canApprove={canApprove}
-              onSubmit={() => submitCostControlApproval(draft.id)}
-              onApprove={() => approveCostControl(draft.id)}
-              onReject={(comment) => rejectCostControl(draft.id, comment)}
-              onWithdraw={() => withdrawCostControlApproval(draft.id)}
-              // markSaved ด้วยเสมอ — การอนุมัติเปลี่ยนเอกสารฝั่งเซิร์ฟเวอร์ ถ้าไม่รีเซ็ตฐาน ตัวจับการแก้ไข
-              // จะค้างว่า "ยังไม่บันทึก" แล้วเด้งกล่องเตือนตอนออกจากหน้าทั้งที่ไม่มีอะไรค้าง
-              onUpdated={(d) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); }}
-              showToast={showToast}
-            />
-
-            {editable && (
-              <button onClick={save} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("costControlDoc.saveDraft")}
-              </button>
-            )}
-            {canCreate && draft.status === "Final" && (
-              <button onClick={() => setConfirmRewrite(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all">
-                <PenLine size={13} /> {t("costControlDoc.rewrite")}
-              </button>
-            )}
-            {canPrint && (
-              <button onClick={() => { void logCostControlPrinted(draft.id).catch(() => {}); setShowPrint(true); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all">
-                <Printer size={13} /> {t("costControlDoc.print")}
-              </button>
-            )}
-            {canDelete && (
-              <button onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#d22626]/30 rounded-lg text-[#d22626] hover:bg-[#d22626]/10 transition-all">
-                <Trash2 size={13} /> {t("costControlDoc.delete")}
-              </button>
-            )}
-          </div>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader
+            backLabel={t("costControlDoc.backToList")}
+            onBack={onBack}
+            number={documentLabel}
+            status={<CostControlStatusPill status={draft.status} />}
+            meta={editable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
+            actions={
+              <>
+                {canPrint && (
+                  <button type="button" onClick={() => { void logCostControlPrinted(draft.id).catch(() => {}); setShowPrint(true); }} className={btn.secondary}>
+                    <Printer size={16} /> {t("costControlDoc.print")}
+                  </button>
+                )}
+                {/* ปุ่มบันทึกคงไว้ตามที่เจ้าของสั่ง (2026-09-30) แม้มีบันทึกอัตโนมัติ */}
+                {editable && (
+                  <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("costControlDoc.saveDraft")}
+                  </button>
+                )}
+                <MoreMenu
+                  items={[
+                    canCreate && {
+                      key: "rewrite", label: t("costControlDoc.rewrite"), icon: PenLine,
+                      disabled: draft.status !== "Final",
+                      hint: draft.status !== "Final" ? t("costControlDoc.rewriteHint") : undefined,
+                      onSelect: () => setConfirmRewrite(true),
+                    },
+                    draft.status === "PendingApproval" && canEdit && {
+                      key: "withdraw", label: t("approval.withdraw"), icon: Undo2, disabled: approvalBusy, onSelect: approval.withdraw,
+                    },
+                    canDelete && { key: "delete", label: t("costControlDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+                  ]}
+                />
+                {draft.status === "PendingApproval" && canApprove && (
+                  <>
+                    <button type="button" onClick={approval.openReject} disabled={approvalBusy}
+                      className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-lg border border-[#e5b8b8] bg-white text-[#b93636] text-sm font-medium hover:bg-[#fcebeb] transition-colors whitespace-nowrap disabled:opacity-60">
+                      <XCircle size={16} /> {t("approval.reject")}
+                    </button>
+                    <button type="button" onClick={approval.openApprove} disabled={approvalBusy} className={btn.primary}>
+                      <CheckCircle2 size={16} /> {t("approval.approve")}
+                    </button>
+                  </>
+                )}
+                {draft.status === "Draft" && canEdit && (
+                  <button type="button" onClick={approval.submit} disabled={approvalBusy} className={btn.primary}>
+                    {approval.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
+                  </button>
+                )}
+              </>
+            }
+          />
         </div>
 
-        <div className="p-6 space-y-5 max-w-6xl">
+        <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
           {draftBackup.recovered && draftBackup.recoveredAt !== null && (
             <DraftRecoveryBanner
               savedAt={draftBackup.recoveredAt}
@@ -268,202 +335,281 @@ export function CostControlDocument({
               onDiscard={draftBackup.dismiss}
             />
           )}
-          <DocumentStatusStepper
-            status={draft.status}
-            rejectionComment={draft.rejectionComment ?? ""}
-            approverLabel={t("costControlDoc.approverLabel")}
-            approvedByUserId={draft.approvedByUserId}
-            approvedByName={draft.approvedBy}
-            approvedAt={draft.approvedAt}
-          />
+          <DocumentStepper steps={steps} current={currentStep} ariaLabel={t("costControlDoc.stepsAria")} />
           {draft.rejectionComment ? <RejectionNotice comment={draft.rejectionComment} /> : null}
 
-          <section className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-4">{t("costControlDoc.section.header")}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <label className="text-xs text-muted-foreground space-y-1 block">
-                <span>{t("costControlDoc.field.documentNumber")}</span>
-                <input className={inputCls} disabled={!editable} value={draft.documentNumber}
-                  onChange={(e) => set("documentNumber", e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground space-y-1 block">
-                <span>{t("costControlDoc.field.docDate")}</span>
-                <input type="date" className={inputCls} disabled={!editable} value={draft.docDate}
-                  onChange={(e) => set("docDate", e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground space-y-1 block">
-                <span>{t("costControlDoc.field.jobOrder")}</span>
-                <input className={inputCls} disabled={!editable} value={draft.jobOrder}
-                  onChange={(e) => set("jobOrder", e.target.value)} />
-              </label>
-              {canViewScopeOfWork && (
-                <label className="text-xs text-muted-foreground space-y-1 block">
-                  <span>{t("costControlDoc.field.scopeOfWork")}</span>
-                  <Combobox
-                    className={inputCls}
-                    disabled={!editable}
-                    value={scopeQuery}
-                    options={scopeOptions}
-                    placeholder={t("costControlDoc.field.scopeOfWorkPlaceholder")}
-                    ariaLabel={t("costControlDoc.field.scopeOfWork")}
-                    onChange={(next) => {
-                      setScopeTyped(next);
-                      set("scopeOfWorkId", scopeIdByNumber.get(next.trim().toLowerCase()) ?? "");
-                    }}
-                  />
-                  <span className="block text-xs leading-snug text-muted-foreground/80">
-                    {draft.scopeOfWorkId
-                      ? t("costControlDoc.field.scopeOfWorkLinked")
-                      : t("costControlDoc.field.scopeOfWorkHint")}
-                  </span>
-                </label>
-              )}
-              <label className="text-xs text-muted-foreground space-y-1 block sm:col-span-2">
-                <span>{t("costControlDoc.field.jobName")}</span>
-                <input className={inputCls} disabled={!editable} value={draft.jobName}
-                  onChange={(e) => set("jobName", e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground space-y-1 block">
-                <span>{t("costControlDoc.field.workType")}</span>
-                <input className={inputCls} disabled={!editable} value={draft.workType}
-                  onChange={(e) => set("workType", e.target.value)} />
-              </label>
-            </div>
-            {draft.sourceFileName && (
-              <p className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground">
-                <FileSpreadsheet size={13} /> {t("costControlDoc.field.sourceFile")}: {draft.sourceFileName}
-              </p>
-            )}
-          </section>
-
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex flex-wrap items-center gap-2 px-5 py-4">
-              <h2 className="text-sm font-semibold text-foreground">{t("costControlDoc.section.lines")}</h2>
-              {editable && (
-                <div className="ml-auto flex items-center gap-2">
-                  <button onClick={() => addLine("group")}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all">
-                    <Plus size={12} /> {t("costControlDoc.addGroup")}
-                  </button>
-                  <button onClick={() => addLine("item")}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all">
-                    <Plus size={12} /> {t("costControlDoc.addItem")}
-                  </button>
-                  <button onClick={() => addLine("sub")}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all">
-                    <Plus size={12} /> {t("costControlDoc.addSub")}
-                  </button>
+          <DocumentColumns
+            main={
+              <SectionCard title={t("costControlDoc.section.header")}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+                  {textField(t("costControlDoc.field.jobName"), "jobName", { className: "sm:col-span-3" })}
+                  {textField(t("costControlDoc.field.documentNumber"), "documentNumber", { mono: true })}
+                  {editable ? (
+                    <Field label={t("costControlDoc.field.docDate")} htmlFor="cc-docDate">
+                      <input id="cc-docDate" type="date" className={`${field.input} w-full`} value={draft.docDate}
+                        onChange={(e) => set("docDate", e.target.value)} />
+                    </Field>
+                  ) : (
+                    <ReadonlyField label={t("costControlDoc.field.docDate")} value={draft.docDate ? formatQuoteDateThai(draft.docDate) : ""} />
+                  )}
+                  {textField(t("costControlDoc.field.workType"), "workType")}
+                  {textField(t("costControlDoc.field.jobOrder"), "jobOrder", { mono: true })}
+                  {canViewScopeOfWork && (
+                    editable ? (
+                      <Field
+                        label={t("costControlDoc.field.scopeOfWork")}
+                        className="sm:col-span-2"
+                        help={draft.scopeOfWorkId ? t("costControlDoc.field.scopeOfWorkLinked") : t("costControlDoc.field.scopeOfWorkHint")}
+                      >
+                        <Combobox
+                          className={`${field.input} w-full font-mono`}
+                          value={scopeQuery}
+                          options={scopeOptions}
+                          placeholder={t("costControlDoc.field.scopeOfWorkPlaceholder")}
+                          ariaLabel={t("costControlDoc.field.scopeOfWork")}
+                          onChange={(next) => {
+                            setScopeTyped(next);
+                            set("scopeOfWorkId", scopeIdByNumber.get(next.trim().toLowerCase()) ?? "");
+                          }}
+                        />
+                      </Field>
+                    ) : (
+                      <div className="sm:col-span-2 flex flex-col gap-1">
+                        <ReadonlyField label={t("costControlDoc.field.scopeOfWork")} value={scopeQuery} mono />
+                        <p className={field.help}>
+                          {draft.scopeOfWorkId ? t("costControlDoc.field.scopeOfWorkLinked") : t("costControlDoc.field.scopeOfWorkHint")}
+                        </p>
+                      </div>
+                    )
+                  )}
+                  {draft.sourceFileName && (
+                    <p className="sm:col-span-3 px-3 py-2.5 rounded-lg bg-[#f8f9fc] border border-[#eef1f6] text-[13px] text-[#3d5173] flex items-center gap-2 min-w-0">
+                      <FileSpreadsheet size={16} className="text-[#1b7f4f] flex-shrink-0" />
+                      <span className="text-muted-foreground flex-shrink-0">{t("costControlDoc.field.sourceFile")}:</span>
+                      <span className="font-medium text-foreground truncate" title={draft.sourceFileName}>{draft.sourceFileName}</span>
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
+              </SectionCard>
+            }
+            rail={
+              <>
+                {/* ไม่มียอดต้นทุนรวมทั้งใบ — เจ้าของสั่งเอาออก 2026-08-31 และยืนยันอีกครั้ง 2026-09-30 ("เอาตามระบบเดิม") */}
+                <RailCard title={t("costControlDoc.section.lines")}>
+                  {(["group", "item", "sub"] as const).map((kind) => (
+                    <div key={kind} className="flex items-center justify-between gap-3 text-[13px]">
+                      <span className="text-muted-foreground">{kindLabel[kind]}</span>
+                      <span className="tabular-nums font-medium text-foreground">{kindCount(kind)}</span>
+                    </div>
+                  ))}
+                </RailCard>
+                <RailCard title={t("costControlDoc.signersTitle")}>
+                  {textField(t("costControlDoc.field.submittedBy"), "submittedBy")}
+                  {textField(t("costControlDoc.field.approvedBy"), "approvedBy")}
+                </RailCard>
+                <NextStepHint title={t("costControlDoc.nextStep")}>{nextStepHint}</NextStepHint>
+              </>
+            }
+          />
+
+          <SectionCard
+            title={
+              <span className="flex items-baseline gap-2.5">
+                {t("costControlDoc.section.lines")}
+                <span className="text-[13px] font-normal text-muted-foreground">
+                  {t("costControlDoc.lineCount").replace("{n}", String(draft.lines.length))}
+                </span>
+              </span>
+            }
+            bodyClassName=""
+          >
             {draft.lines.length === 0 ? (
-              <p className="px-5 pb-6 text-xs text-muted-foreground">{t("costControlDoc.noLines")}</p>
+              <p className="px-6 py-6 text-sm text-muted-foreground">{t("costControlDoc.noLines")}</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[1040px] table-fixed">
+                  <colgroup>
+                    <col className="w-[148px]" />
+                    <col className="w-[62px]" />
+                    <col />
+                    <col className="w-[100px]" />
+                    <col className="w-[150px]" />
+                    <col className="w-[84px]" />
+                    <col className="w-[76px]" />
+                    <col className="w-[112px]" />
+                    <col className="w-[124px]" />
+                    <col className="w-[62px]" />
+                  </colgroup>
                   <thead>
-                    <tr className="border-y border-border bg-muted/40">
-                      {[t("costControlDoc.line.kind"), t("costControlDoc.line.seq"), t("costControlDoc.line.description"), t("costControlDoc.line.model"),
-                        t("costControlDoc.line.supplier"), t("costControlDoc.line.qty"), t("costControlDoc.line.unit"),
-                        t("costControlDoc.line.unitCost"), t("costControlDoc.line.total"), ""].map((h, i) => (
-                        // หัวคอลัมน์ชิดตามข้อมูลในแถว (เจ้าของแจ้ง 2026-09-24 ว่าหัวไม่ตรงกับช่อง) — ลำดับที่อยู่กลาง ·
-                        // จำนวน / ต้นทุน / ต้นทุนรวม เป็นตัวเลขชิดขวา
-                        <th key={i} className={`px-3 py-2 ${i === 1 ? "text-center" : i === 5 || i === 7 || i === 8 ? "text-right" : "text-left"} text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
-                      ))}
+                    <tr className={table.head}>
+                      {/* หัวคอลัมน์ชิดตามข้อมูลในแถว (เจ้าของแจ้ง 2026-09-24 ว่าหัวไม่ตรงกับช่อง) — ลำดับที่อยู่กลาง ·
+                          จำนวน / ต้นทุน / ต้นทุนรวม เป็นตัวเลขชิดขวา */}
+                      <th className={th}>{t("costControlDoc.line.kind")}</th>
+                      <th className={`${th} text-center`}>{t("costControlDoc.line.seq")}</th>
+                      <th className={th}>{t("costControlDoc.line.description")}</th>
+                      <th className={th}>{t("costControlDoc.line.model")}</th>
+                      <th className={th}>{t("costControlDoc.line.supplier")}</th>
+                      <th className={`${th} text-right`}>{t("costControlDoc.line.qty")}</th>
+                      <th className={th}>{t("costControlDoc.line.unit")}</th>
+                      <th className={`${th} text-right`}>{t("costControlDoc.line.unitCost")}</th>
+                      <th className={`${th} text-right`}>{t("costControlDoc.line.total")}</th>
+                      <th className={th} aria-hidden="true" />
                     </tr>
                   </thead>
                   <tbody>
-                    {draft.lines.map((l) => (
-                      <tr key={l.id} className={`border-b border-border/50 ${l.kind === "group" ? "bg-muted/30" : ""}`}>
-                        {/* w-36 — ที่ w-28 ตัวเลือก "รายละเอียด" ถูกตัดเหลือ "รายละเอีย" */}
-                        <td className="px-3 py-1.5 w-36 min-w-36">
-                          {/* แก้ชนิดแถวได้ — ตัวแกะไฟล์เดาจากสีพื้นหลังในชีต ซึ่งไฟล์บางไฟล์อาจไม่ได้ทาสีไว้ */}
-                          <select className={inputCls} disabled={!editable} value={l.kind}
-                            onChange={(e) => setLine(l.id, { kind: e.target.value as CostControlLineKind })}>
-                            <option value="group">{t("costControlDoc.line.kind.group")}</option>
-                            <option value="item">{t("costControlDoc.line.kind.item")}</option>
-                            <option value="sub">{t("costControlDoc.line.kind.sub")}</option>
-                          </select>
-                        </td>
-                        <td className="px-3 py-1.5 w-16">
-                          <input className={`${inputCls} text-center`} disabled={!editable || l.kind !== "item"} value={l.seq}
-                            onChange={(e) => setLine(l.id, { seq: e.target.value })} />
-                        </td>
-                        <td className="px-3 py-1.5 min-w-[240px]">
-                          <input className={`${inputCls} ${l.kind === "group" ? "font-semibold" : ""} ${l.kind === "sub" ? "ml-3 w-[calc(100%-0.75rem)]" : ""}`}
-                            disabled={!editable} value={l.description}
-                            onChange={(e) => setLine(l.id, { description: e.target.value })} />
-                        </td>
-                        <td className="px-3 py-1.5 w-24">
-                          <input className={inputCls} disabled={!editable || l.kind === "group"} value={l.model}
-                            onChange={(e) => setLine(l.id, { model: e.target.value })} />
-                        </td>
-                        <td className="px-3 py-1.5 w-28">
-                          <input className={inputCls} disabled={!editable || l.kind === "group"} value={l.supplierName}
-                            onChange={(e) => setLine(l.id, { supplierName: e.target.value })} />
-                        </td>
-                        <td className="px-3 py-1.5 w-24">
-                          <input type="number" className={numCls} disabled={!editable || l.kind === "group"} value={l.qty ?? ""}
-                            onChange={(e) => setLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })} />
-                        </td>
-                        <td className="px-3 py-1.5 w-20">
-                          <input className={inputCls} disabled={!editable || l.kind === "group"} value={l.unit}
-                            onChange={(e) => setLine(l.id, { unit: e.target.value })} />
-                        </td>
-                        <td className="px-3 py-1.5 w-32">
-                          <input type="number" className={numCls} disabled={!editable || l.kind === "group"} value={l.unitCost ?? ""}
-                            onChange={(e) => setLine(l.id, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} />
-                        </td>
-                        <td className="px-3 py-1.5 text-xs font-mono text-right text-foreground whitespace-nowrap">
-                          {l.kind === "group" ? "—" : fmt(lineTotalCost(l))}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          {editable && (
-                            <button onClick={() => removeLine(l.id)} aria-label={t("costControlImport.removeLine")}
-                              className="text-muted-foreground hover:text-[#d22626] transition-colors">
-                              <Trash2 size={13} />
-                            </button>
+                    {draft.lines.map((l) => {
+                      const isGroup = l.kind === "group";
+                      const isSub = l.kind === "sub";
+                      const hasTotal = !isGroup && l.unitCost !== null;
+                      return (
+                        <tr key={l.id} className={`border-b border-[#eef1f6] ${isGroup ? "bg-[#f8f9fc]" : "bg-white"}`}>
+                          <td className={td}>
+                            {editable ? (
+                              // แก้ชนิดแถวได้ — ตัวแกะไฟล์เดาจากสีพื้นหลังในชีต ซึ่งไฟล์บางไฟล์อาจไม่ได้ทาสีไว้
+                              <span className="relative block">
+                                <select className={`${cellCls} pr-7 appearance-none cursor-pointer text-[13px]`} value={l.kind}
+                                  aria-label={t("costControlDoc.line.kind")}
+                                  onChange={(e) => setLine(l.id, { kind: e.target.value as CostControlLineKind })}>
+                                  <option value="group">{kindLabel.group}</option>
+                                  <option value="item">{kindLabel.item}</option>
+                                  <option value="sub">{kindLabel.sub}</option>
+                                </select>
+                                <ChevronDown size={14} aria-hidden="true" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                              </span>
+                            ) : (
+                              <span className="text-[13px] text-[#3d5173]">{kindLabel[l.kind]}</span>
+                            )}
+                          </td>
+                          <td className={`${td} text-center`}>
+                            {l.kind === "item" && (editable ? (
+                              <input className={`${cellCls} text-center tabular-nums px-1.5`} value={l.seq} aria-label={t("costControlDoc.line.seq")}
+                                onChange={(e) => setLine(l.id, { seq: e.target.value })} />
+                            ) : (
+                              <span className="text-sm tabular-nums">{l.seq}</span>
+                            ))}
+                          </td>
+                          {isGroup ? (
+                            <td className={td} colSpan={7}>
+                              {editable ? (
+                                <input className={`${cellCls} font-semibold`} value={l.description} aria-label={t("costControlDoc.line.groupName")}
+                                  onChange={(e) => setLine(l.id, { description: e.target.value })} />
+                              ) : (
+                                <span className="text-sm font-semibold text-foreground">{l.description}</span>
+                              )}
+                            </td>
+                          ) : (
+                            <>
+                              <td className={td}>
+                                <span className={`flex items-center gap-1.5 min-w-0 ${isSub ? "pl-2.5" : ""}`}>
+                                  {isSub && <CornerDownRight size={14} aria-hidden="true" className="text-[#8a97ad] flex-shrink-0" />}
+                                  {editable ? (
+                                    <input className={`${cellCls} ${isSub ? "text-[#3d5173]" : ""}`} value={l.description} aria-label={t("costControlDoc.line.description")}
+                                      onChange={(e) => setLine(l.id, { description: e.target.value })} />
+                                  ) : (
+                                    <span className={`text-sm break-words min-w-0 ${isSub ? "text-[#3d5173]" : "text-foreground"}`}>{l.description}</span>
+                                  )}
+                                </span>
+                              </td>
+                              <td className={td}>
+                                {editable ? (
+                                  <input className={`${cellCls} font-mono text-[13px]`} value={l.model} aria-label={t("costControlDoc.line.model")}
+                                    onChange={(e) => setLine(l.id, { model: e.target.value })} />
+                                ) : <span className="font-mono text-[13px] break-words">{l.model}</span>}
+                              </td>
+                              <td className={td}>
+                                {editable ? (
+                                  <input className={`${cellCls} text-[13px]`} value={l.supplierName} aria-label={t("costControlDoc.line.supplier")}
+                                    onChange={(e) => setLine(l.id, { supplierName: e.target.value })} />
+                                ) : <span className="text-[13px] break-words">{l.supplierName}</span>}
+                              </td>
+                              <td className={`${td} text-right`}>
+                                {editable ? (
+                                  <input type="number" className={numCellCls} value={l.qty ?? ""} aria-label={t("costControlDoc.line.qty")}
+                                    onChange={(e) => setLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })} />
+                                ) : <span className="text-sm tabular-nums">{l.qty ?? ""}</span>}
+                              </td>
+                              <td className={td}>
+                                {editable ? (
+                                  <input className={cellCls} value={l.unit} aria-label={t("costControlDoc.line.unit")}
+                                    onChange={(e) => setLine(l.id, { unit: e.target.value })} />
+                                ) : <span className="text-sm">{l.unit}</span>}
+                              </td>
+                              <td className={`${td} text-right`}>
+                                {editable ? (
+                                  <input type="number" className={numCellCls} value={l.unitCost ?? ""} aria-label={t("costControlDoc.line.unitCost")}
+                                    onChange={(e) => setLine(l.id, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} />
+                                ) : <span className="text-sm tabular-nums">{l.unitCost === null ? "" : fmt(l.unitCost)}</span>}
+                              </td>
+                              {/* ยังไม่กรอกต้นทุน = ยังไม่มียอด แสดง — แทน 0.00 (กติกาเดียวกับหน้าตรวจก่อนสร้างและใบพิมพ์) */}
+                              <td className={`${td} text-right text-sm tabular-nums whitespace-nowrap ${hasTotal ? "font-semibold text-foreground" : "text-[#8a97ad]"}`}>
+                                {hasTotal ? fmt(lineTotalCost(l)) : "—"}
+                              </td>
+                            </>
                           )}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className={`${td} text-right`}>
+                            {editable && (
+                              <button type="button" onClick={() => removeLine(l.id)} aria-label={t("costControlImport.removeLine")} title={t("costControlImport.removeLine")}
+                                className="w-8 h-9 inline-flex items-center justify-center rounded-lg text-[#8a97ad] hover:text-[#b93636] hover:bg-[#fcebeb] transition-colors">
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
-          </section>
 
-          <section className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-4">{t("costControlDoc.section.summary")}</h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="text-xs text-muted-foreground space-y-1 block sm:col-span-2">
-                <span>{t("costControlDoc.field.remarks")}</span>
-                <textarea rows={2} className={inputCls} disabled={!editable} value={draft.remarks}
-                  onChange={(e) => set("remarks", e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground space-y-1 block">
-                <span>{t("costControlDoc.field.submittedBy")}</span>
-                <input className={inputCls} disabled={!editable} value={draft.submittedBy}
-                  onChange={(e) => set("submittedBy", e.target.value)} />
-              </label>
-              <label className="text-xs text-muted-foreground space-y-1 block">
-                <span>{t("costControlDoc.field.approvedBy")}</span>
-                <input className={inputCls} disabled={!editable} value={draft.approvedBy}
-                  onChange={(e) => set("approvedBy", e.target.value)} />
-              </label>
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 pt-3 pb-5">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-2.5">
+                {editable && (
+                  <>
+                    <button type="button" onClick={() => addLine("group")} className={btn.text}>
+                      <Plus size={16} /> {t("costControlDoc.addGroup")}
+                    </button>
+                    <button type="button" onClick={() => addLine("item")} className={btn.text}>
+                      <Plus size={16} /> {t("costControlDoc.addItem")}
+                    </button>
+                    <button type="button" onClick={() => addLine("sub")} className={btn.text}>
+                      <Plus size={16} /> {t("costControlDoc.addSub")}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          </section>
+          </SectionCard>
+
+          <SectionCard title={t("costControlDoc.section.remarks")}>
+            {editable ? (
+              <textarea rows={3} className={`${field.textarea} w-full resize-y`} value={draft.remarks}
+                aria-label={t("costControlDoc.field.remarks")}
+                onChange={(e) => set("remarks", e.target.value)} />
+            ) : (
+              <p className={`text-sm whitespace-pre-wrap ${draft.remarks.trim() ? "text-foreground" : "text-[#8a97ad]"}`}>{draft.remarks.trim() || "—"}</p>
+            )}
+          </SectionCard>
         </div>
       </div>
 
       <CostControlPrintDocument costControl={draft} company={company} />
 
+      {approval.dialogs}
       <ConfirmDialog
         open={confirmDelete}
         title={t("costControlDoc.confirmDelete.title")}
         message={t("costControlDoc.confirmDelete.message")}
+        confirmLabel={t("costControlDoc.delete")}
         danger
+        summary={
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <span className="font-mono text-[13px] font-medium text-foreground">{documentLabel}</span>
+              {draft.jobName && <span className="text-[13px] text-[#3d5173] truncate" title={draft.jobName}>{draft.jobName}</span>}
+            </div>
+          </div>
+        }
         onCancel={() => setConfirmDelete(false)}
         onConfirm={async () => {
           try { await deleteCostControl(draft.id); onDeleted(); }

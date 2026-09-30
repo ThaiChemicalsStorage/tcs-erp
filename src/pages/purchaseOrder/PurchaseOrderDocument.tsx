@@ -1,17 +1,24 @@
-import { useEffect, useState } from "react";
-import { ArrowLeft, Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2, Undo2, Ban } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2, Undo2, Ban, Send, CheckCircle2, XCircle, Lock,
+  Info, Store, ArrowRight, ChevronDown, AlertTriangle,
+} from "lucide-react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
-import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailTotalCard, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { Field, ReadonlyField, SelectBox } from "../../components/ui/Field";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { btn, field, table } from "../../components/ui/styles";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
-import { fmt } from "../../lib/quotes";
+import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { getRevisionRoot } from "../../lib/revisionDiff";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
 import { useUserDirectory } from "../../lib/userDirectory";
@@ -19,17 +26,17 @@ import { Combobox } from "../../components/Combobox";
 import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
 import {
-  type PurchaseOrder, type PurchaseOrderUpdateFields, blankPurchaseOrderLine,
+  type PurchaseOrder, type PurchaseOrderLine, type PurchaseOrderUpdateFields, blankPurchaseOrderLine,
   fetchPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, rewritePurchaseOrder, revertPurchaseOrderApproval, logPurchaseOrderPrinted,
   submitPurchaseOrderApproval, approvePurchaseOrder, rejectPurchaseOrder, withdrawPurchaseOrderApproval,
 } from "../../lib/purchaseOrder";
+import type { DiscountMode } from "../../lib/purchaseOrder";
 import { PurchaseOrderPrintDocument } from "./PurchaseOrderPrintDocument";
 import { createReceivingReport, fetchReceivingReportsByPurchaseOrder, type ReceivingReportCode } from "../../lib/receivingReport";
 import { ReceiveCodeDialog } from "../receivingReport/ReceivingReportCreateDialog";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
-
-const inputCls = "w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg text-foreground outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
-const cellCls = "px-2 py-1.5 text-sm bg-transparent border border-transparent rounded focus:bg-secondary focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 outline-none w-full transition-colors disabled:opacity-60";
+import { DialogSummary, PurchaseOrderStatusPill, ReasonDialog } from "./purchasingUi";
+import { useApprovalCommands } from "./purchasingHooks";
 
 /** payload เดียวที่ใช้ทั้งกดบันทึกเอง บันทึกอัตโนมัติ ตรวจงานค้าง และเก็บร่างในเครื่อง */
 function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
@@ -61,6 +68,14 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
   };
 }
 
+/**
+ * หน้าเอกสารใบสั่งซื้อ — ดีไซน์ใหม่ 2026-09-30 (แบบ QuoteDocument)
+ *
+ * แถบหัวสีขาว: "← ใบสั่งซื้อทั้งหมด" · เลขที่ + ป้ายสถานะ + สถานะบันทึก · ขวา [พิมพ์][เพิ่มเติม ▾][บันทึก][ปุ่มหลัก]
+ * ปุ่มหลักเปลี่ยนตามขั้น: ร่าง = ส่งขออนุมัติ · รออนุมัติ = อนุมัติ (คนที่อนุมัติได้) · อนุมัติแล้ว = รับสินค้า
+ * คำสั่งที่ใช้ไม่บ่อย (ถอนการอนุมัติ / แก้ไข (Rewrite) / ลบ) อยู่ในเมนู "เพิ่มเติม"
+ * ใบที่ไม่ใช่ร่าง (หรือผู้ใช้ไม่มีสิทธิ์แก้) แสดงแบบอ่านอย่างเดียว ไม่มีกล่องช่องกรอก
+ */
 export function PurchaseOrderDocument({
   purchaseOrderId, canEdit, canApprove, canPrint, canDelete, canReceiveGoods, onBack, onDeleted, onOpenOther,
   onOpenReceivingReport, showToast,
@@ -86,7 +101,7 @@ export function PurchaseOrderDocument({
    * ฝั่งหน้าจอ เพราะหน้านี้ไม่มีตารางบทบาทอยู่ในมือ และเจ้าของเลือกไว้แล้วว่าการเลือกคนไม่ใช่การ
    * ล็อกสิทธิ์ — เซิร์ฟเวอร์ตรวจอีกชั้นว่าเป็นผู้ใช้จริงและยังไม่ถูกปิดบัญชี
    */
-  const { users: directoryUsers } = useUserDirectory();
+  const { users: directoryUsers, byId } = useUserDirectory();
   const approverOptions = directoryUsers.filter((u) => u.status === "active");
   const [doc, setDoc] = useState<PurchaseOrder | null>(null);
   const [draft, setDraft] = useState<PurchaseOrder | null>(null);
@@ -95,7 +110,9 @@ export function PurchaseOrderDocument({
   const [saving, setSaving] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   /** ถอนการอนุมัติ (2026-09-21) — ใบกลับเป็นร่าง เลขที่เดิม */
   const [confirmRevert, setConfirmRevert] = useState(false);
   const [revertReason, setRevertReason] = useState("");
@@ -177,6 +194,20 @@ export function PurchaseOrderDocument({
         dirty.markSaved(toUpdateFields(synced));
       }
     },
+  });
+
+  /**
+   * ขั้นอนุมัติ — ตรรกะเดียวกับ `DocumentApprovalActions` เดิม แต่ปุ่มวางเองบนแถบหัว (ดู `useApprovalCommands`)
+   * ต้อง markSaved ด้วย ไม่งั้นการอนุมัติ (ซึ่งเปลี่ยนเอกสารฝั่งเซิร์ฟเวอร์) จะทำให้ตัวจับการแก้ไขค้างว่า
+   * "ยังไม่บันทึก" แล้วเด้งกล่องเตือนตอนออกจากหน้า ทั้งที่ไม่มีอะไรค้าง
+   */
+  const approval = useApprovalCommands<PurchaseOrder>({
+    onSubmit: () => submitPurchaseOrderApproval(purchaseOrderId),
+    onApprove: () => approvePurchaseOrder(purchaseOrderId),
+    onReject: (comment) => rejectPurchaseOrder(purchaseOrderId, comment),
+    onWithdraw: () => withdrawPurchaseOrderApproval(purchaseOrderId),
+    onUpdated: (d) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); },
+    showToast,
   });
 
   /** ถอนการอนุมัติ — ใบกลับเป็นร่าง เลขที่เดิม (ต่างจาก Rewrite ที่ออกเลขใหม่) */
@@ -271,7 +302,7 @@ export function PurchaseOrderDocument({
 
   if (loading) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
         <span className="sr-only">{t("purchaseOrder.loading")}</span>
         <div className="h-8 w-64 bg-muted rounded animate-pulse mb-4" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
@@ -282,89 +313,627 @@ export function PurchaseOrderDocument({
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("purchaseOrder.loadError")}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-foreground">{t("purchaseOrderDoc.backToList")}</button>
+        <button type="button" onClick={onBack} className={btn.secondary}>{t("purchaseOrderDoc.backToList")}</button>
       </div>
     );
   }
 
   const set = <K extends keyof PurchaseOrder>(key: K, value: PurchaseOrder[K]) => setDraft((p) => (p ? { ...p, [key]: value } : p));
-  const setLine = (id: string, patch: Partial<PurchaseOrder["lines"][number]>) =>
+  const setLine = (id: string, patch: Partial<PurchaseOrderLine>) =>
     setDraft((p) => (p ? { ...p, lines: p.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) } : p));
 
   // ยอดทั้งใบคิดที่เดียว แล้วใบพิมพ์เรียกตัวเดียวกัน — เดิมสูตรถูกเขียนซ้ำสองที่ ทั้งที่นี่และในใบพิมพ์
   const totals = purchaseOrderTotals(draft);
+  const status = draft.status;
+  const docLabel = draft.documentNumber || draft.id;
+  const cancelledCount = draft.lines.filter((l) => l.cancelled).length;
+  const activeCount = draft.lines.length - cancelledCount;
+  const lineCountLabel = (n: number) => cancelledCount > 0
+    ? t("purchaseOrderDoc.lineCountCancelled").replace("{n}", String(n)).replace("{c}", String(cancelledCount))
+    : t("ui.itemCount").replace("{n}", String(n));
+  const linkedVendor = draft.vendorId ? vendors.find((v) => v.id === draft.vendorId) : undefined;
+  const approverName = (draft.approvedBy ?? "").trim() || byId(draft.approvedByUserId)?.fullName || "";
+  const intendedName = draft.intendedApproverUserId
+    ? byId(draft.intendedApproverUserId)?.fullName || draft.intendedApproverName || draft.intendedApproverUserId
+    : t("purchaseOrderDoc.intendedApproverAny");
+  const busyApproval = approval.busy !== null;
+
+  // ── แถบหัว ────────────────────────────────────────────────────────────────
+  const moreItems = [
+    // ถอนกลับมาแก้ — คนที่อนุมัติได้เห็นปุ่มอนุมัติ/ไม่อนุมัติอยู่แล้ว จึงเก็บคำสั่งนี้ไว้ในเมนู
+    status === "PendingApproval" && canEdit && canApprove && {
+      key: "withdraw", label: t("approval.withdraw"), icon: Undo2, onSelect: approval.withdraw, disabled: busyApproval,
+    },
+    // ถอนการอนุมัติ (2026-09-21) — คนที่อนุมัติได้คือคนที่ถอนได้ จึงผูกกับ canApprove ไม่ใช่ canEdit
+    // ต่างจาก Rewrite ตรงที่ไม่ได้ออกเลขที่เอกสารใหม่
+    canApprove && {
+      key: "revert", label: t("purchaseOrderDoc.revert"), icon: Undo2,
+      disabled: status !== "Final", hint: status !== "Final" ? t("purchaseOrderDoc.menu.afterApproval") : t("purchaseOrderDoc.menu.revertHint"),
+      onSelect: () => { setRevertReason(""); setConfirmRevert(true); },
+    },
+    canEdit && {
+      key: "rewrite", label: t("purchaseOrderDoc.rewrite"), icon: GitBranch,
+      disabled: status !== "Final", hint: status !== "Final" ? t("purchaseOrderDoc.menu.afterApproval") : undefined,
+      onSelect: () => setConfirmRewrite(true),
+    },
+    canDelete && {
+      key: "delete", label: t("purchaseOrderDoc.confirmDelete.title"), icon: Trash2, danger: true,
+      disabled: status === "Final", hint: status === "Final" ? t("purchaseOrderDoc.menu.deleteDraftOnly") : undefined,
+      onSelect: () => setConfirmDelete(true),
+    },
+  ];
+
+  const headerActions = (
+    <>
+      {canPrint && (
+        <button type="button" onClick={() => { void logPurchaseOrderPrinted(draft.id).catch(() => {}); setShowPrint(true); }} className={btn.secondary}>
+          <Printer size={16} /> {t("purchaseOrderDoc.print")}
+        </button>
+      )}
+      <MoreMenu items={moreItems} />
+      {editable && (
+        <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("purchaseOrderDoc.saveDraft")}
+        </button>
+      )}
+      {status === "PendingApproval" && canEdit && !canApprove && (
+        <button type="button" onClick={approval.withdraw} disabled={busyApproval} className={btn.secondary}>
+          {approval.busy === "withdraw" ? <Loader2 size={16} className="animate-spin" /> : <Undo2 size={16} />} {t("approval.withdraw")}
+        </button>
+      )}
+      {status === "PendingApproval" && canApprove && (
+        <button type="button" onClick={approval.openReject} disabled={busyApproval} className={`${btn.secondary} text-[#b93636]`}>
+          <XCircle size={16} /> {t("approval.reject")}
+        </button>
+      )}
+      {status === "Draft" && canEdit && (
+        <button type="button" onClick={approval.submit} disabled={busyApproval} className={btn.primary}>
+          {approval.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
+        </button>
+      )}
+      {status === "PendingApproval" && canApprove && (
+        <button type="button" onClick={approval.openApprove} disabled={busyApproval} className={btn.primary}>
+          {approval.busy === "approve" ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} {t("approval.approve")}
+        </button>
+      )}
+      {/* รับสินค้า (2026-09-03) — 1 ใบสั่งซื้อ = 1 ใบรับสินค้า จึงเปิดใบเดิมถ้ามีอยู่แล้ว
+          แทนที่จะสร้างใบที่สองแล้วไปชน 409 ที่ฐานข้อมูล */}
+      {status === "Final" && canReceiveGoods && (
+        <button type="button" onClick={() => void openReceivingReport()} disabled={receiving} className={btn.primary}>
+          {receiving ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />} {t("purchaseOrderDoc.receiveGoods")}
+        </button>
+      )}
+    </>
+  );
+
+  const headerMeta = editable ? (
+    <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
+  ) : (
+    <span className="inline-flex items-center gap-1.5">
+      <Lock size={14} />
+      {status === "Final" ? t("purchaseOrderDoc.lockedReadonly") : t("purchaseOrderDoc.readonly")}
+    </span>
+  );
+
+  // ── ขั้นตอน + คำแนะนำขั้นต่อไป ───────────────────────────────────────────
+  const stepIndex = status === "Draft" ? 0 : status === "PendingApproval" ? 1 : 2;
+  const steps = [
+    { label: t("approval.step.draft") },
+    { label: t("approval.step.pending") },
+    { label: t("approval.step.final") },
+  ];
+  const nextHint: { title: string; body: ReactNode } = status === "Final"
+    ? {
+      title: t("purchaseOrderDoc.hint.finalTitle"),
+      body: [
+        canReceiveGoods ? t("purchaseOrderDoc.hint.finalReceive") : "",
+        canEdit || canApprove ? t("purchaseOrderDoc.hint.finalRevise") : "",
+      ].filter(Boolean).join(" · ") || t("approval.step.hint.final")
+        .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
+        .replace("{at}", draft.approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(draft.approvedAt)) : ""),
+    }
+    : status === "PendingApproval"
+    ? { title: t("quotation.hint.nextTitle"), body: t("approval.step.hint.pending").replace("{approver}", t("purchaseOrderDoc.approverLabel")) }
+    : draft.rejectionComment
+    ? { title: t("quotation.hint.nextTitle"), body: t("approval.step.hint.draftRejected") }
+    : { title: t("quotation.hint.nextTitle"), body: editable ? t("purchaseOrderDoc.hint.draft") : t("approval.step.hint.draft") };
+
+  // ── คอลัมน์ขวา ───────────────────────────────────────────────────────────
+  const discountLabel = totals.discountAmt > 0
+    ? `${t("purchaseOrderDoc.docDiscount")}${draft.discountMode !== "amount" && draft.discount ? ` ${draft.discount}%` : ""}`
+    : "";
+  const rail = (
+    <>
+      <RailTotalCard
+        label={t("purchaseOrderDoc.grandTotal")}
+        amount={`฿${fmt(totals.total)}`}
+        rows={[
+          ...(totals.discountAmt > 0 ? [{ label: discountLabel, value: `−฿${fmt(totals.discountAmt)}` }] : []),
+          { label: t("purchaseOrderDoc.railVat").replace("{rate}", String(draft.vatRate ?? 0)), value: `฿${fmt(totals.vatAmt)}` },
+          { label: t("purchaseOrderDoc.railItems"), value: lineCountLabel(activeCount) },
+        ]}
+      />
+      <RailCard title={t("purchaseOrderDoc.approvalCard")}>
+        {editable ? (
+          <>
+            {/* ผู้อนุมัติที่ตั้งใจไว้ (2026-09-21) — เจ้าของข้อ 2 "ใบ PO สามารถเลือกคนอนุมัติได้"
+                รายชื่อมาจาก `useUserDirectory()` ซึ่ง App.tsx โหลดไว้ให้อยู่แล้ว ไม่ต้องส่ง prop
+                ลงมาอีกสี่ชั้น (เหตุผลเดียวกับที่ช่องลายเซ็นบนใบพิมพ์ใช้ context ตัวนี้) */}
+            <Field label={t("purchaseOrderDoc.intendedApprover")} htmlFor="po-intended-approver" help={t("purchaseOrderDoc.intendedApproverHint")}>
+              <SelectBox
+                id="po-intended-approver"
+                value={draft.intendedApproverUserId ?? ""}
+                onChange={(e) => {
+                  const picked = approverOptions.find((u) => u.id === e.target.value);
+                  setDraft((d) => d && {
+                    ...d,
+                    intendedApproverUserId: e.target.value,
+                    intendedApproverName: picked?.fullName ?? "",
+                  });
+                }}
+              >
+                <option value="">{t("purchaseOrderDoc.intendedApproverAny")}</option>
+                {approverOptions.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+                {/* คนที่เคยถูกเลือกไว้แล้วถูกปิดบัญชี — ยังต้องเห็นชื่อ ไม่ใช่ช่องว่างที่อธิบายไม่ได้ */}
+                {draft.intendedApproverUserId && !approverOptions.some((u) => u.id === draft.intendedApproverUserId) && (
+                  <option value={draft.intendedApproverUserId}>{draft.intendedApproverName || draft.intendedApproverUserId}</option>
+                )}
+              </SelectBox>
+            </Field>
+            <Field label={t("purchaseOrderDoc.orderedBy")} htmlFor="po-ordered-by">
+              <input id="po-ordered-by" className={`${field.input} w-full`} value={draft.orderedBy} onChange={(e) => set("orderedBy", e.target.value)} />
+            </Field>
+            <Field label={t("purchaseOrderDoc.approvedBy")} htmlFor="po-approved-by">
+              {/* ระบบเติมชื่อให้ตอนกดอนุมัติถ้ายังว่าง แต่ไม่ทับค่าที่พิมพ์เอง */}
+              <input id="po-approved-by" className={`${field.input} w-full`} placeholder={t("purchaseOrderDoc.approvedByPlaceholder")}
+                value={draft.approvedBy ?? ""} onChange={(e) => set("approvedBy", e.target.value)} />
+            </Field>
+          </>
+        ) : (
+          <>
+            {status === "Final" && (
+              <div className="grid grid-cols-2 gap-3">
+                <ReadonlyField label={t("purchaseOrderDoc.approvedBy")} value={approverName} />
+                <ReadonlyField label={t("purchaseOrderDoc.approvedAt")} value={draft.approvedAt ? formatQuoteDateThai(draft.approvedAt) : ""} />
+              </div>
+            )}
+            <ReadonlyField label={t("purchaseOrderDoc.intendedApprover")} value={intendedName} />
+            {status !== "Final" && (draft.approvedBy ?? "").trim() && <ReadonlyField label={t("purchaseOrderDoc.approvedBy")} value={draft.approvedBy} />}
+            <div className="h-px bg-[#eef1f6]" />
+            <ReadonlyField
+              label={t("purchaseOrderDoc.orderedBy")}
+              value={[draft.orderedBy, draft.orderDate ? formatQuoteDateThai(draft.orderDate) : ""].filter(Boolean).join(" · ")}
+            />
+          </>
+        )}
+      </RailCard>
+      <NextStepHint title={nextHint.title}>{nextHint.body}</NextStepHint>
+    </>
+  );
+
+  // ── การ์ดผู้ขาย ─────────────────────────────────────────────────────────
+  const vendorCard = (
+    <SectionCard title={t("purchaseOrderDoc.sectionVendor")}>
+      {editable ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+          <Field
+            className="sm:col-span-3"
+            label={t("purchaseOrderDoc.vendorName")}
+            htmlFor="po-vendor-name"
+            required
+            // ใบจะอนุมัติไม่ได้ถ้าไม่ได้ผูกกับทะเบียน — บอกตั้งแต่ตอนกรอก ดีกว่าให้ไปเจอตอนกดอนุมัติ
+            help={!draft.vendorId && draft.vendorName.trim() !== "" ? undefined : t("purchaseOrderDoc.vendorPickHelp")}
+          >
+            <div className="h-12 px-3 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-2.5 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+              <span aria-hidden="true" className="w-[30px] h-[30px] rounded-md bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0">
+                <Store size={16} />
+              </span>
+              <Combobox
+                id="po-vendor-name"
+                className="flex-1 min-w-0 h-full bg-transparent text-sm font-medium text-foreground placeholder:text-[#8a97ad] outline-none"
+                value={draft.vendorName}
+                // พิมพ์ชื่อเองได้อยู่ แต่ต้องล้างการผูกทิ้ง ไม่งั้นใบจะอ้างผู้ขายรายเดิมทั้งที่ชื่อเปลี่ยนไปแล้ว
+                // (เซิร์ฟเวอร์พยายามจับคู่ชื่อให้อีกชั้นตอนบันทึก ถ้าตรงรายเดียวเป๊ะ)
+                onChange={(next) => setDraft((d) => d && { ...d, vendorName: next, vendorId: "" })}
+                options={vendorComboboxOptions(vendors)}
+                ariaLabel={t("purchaseOrderDoc.vendorName")}
+                placeholder={t("purchaseOrderDoc.vendorSearchPlaceholder")}
+                // เลือกจากทะเบียนแล้วเติมช่องที่เหลือให้ — นั่นคือเหตุผลที่มีทะเบียน
+                // ทับของเดิมโดยตั้งใจ: การกดเลือกผู้ขายคือการบอกว่า "เอารายนี้" ทั้งราย
+                onPick={(opt) => {
+                  const v = vendors.find((x) => x.name === opt.value);
+                  if (!v) return;
+                  setDraft((d) => d && {
+                    ...d,
+                    vendorId: v.id,
+                    vendorName: v.name,
+                    vendorContact: v.contactName,
+                    vendorPhone: v.phone,
+                    vendorTaxId: v.taxId,
+                    vendorAddress: v.address,
+                  });
+                }}
+              />
+              {linkedVendor?.code && <CodeChip code={linkedVendor.code} />}
+              {draft.vendorId && <span className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap">{t("purchaseOrderDoc.vendorSearchOther")}</span>}
+              <ChevronDown size={16} aria-hidden="true" className="text-muted-foreground flex-shrink-0" />
+            </div>
+            {!draft.vendorId && draft.vendorName.trim() !== "" && (
+              <p className="text-xs text-[#8a5a00] flex items-start gap-1.5">
+                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />{t("purchaseOrderDoc.vendorNotLinked")}
+              </p>
+            )}
+          </Field>
+          <Field className="sm:col-span-2" label={t("purchaseOrderDoc.vendorAddress")} htmlFor="po-vendor-address">
+            <textarea id="po-vendor-address" rows={2} className={`${field.textarea} w-full resize-y`} value={draft.vendorAddress} onChange={(e) => set("vendorAddress", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.vendorTaxId")} htmlFor="po-vendor-tax">
+            <input id="po-vendor-tax" className={`${field.input} w-full font-mono`} value={draft.vendorTaxId} onChange={(e) => set("vendorTaxId", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.vendorContact")} htmlFor="po-vendor-contact">
+            <input id="po-vendor-contact" className={`${field.input} w-full`} value={draft.vendorContact} onChange={(e) => set("vendorContact", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.vendorPhone")} htmlFor="po-vendor-phone">
+            <input id="po-vendor-phone" className={`${field.input} w-full`} value={draft.vendorPhone} onChange={(e) => set("vendorPhone", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.vendorQuotationRef")} htmlFor="po-vendor-qref">
+            <input id="po-vendor-qref" className={`${field.input} w-full font-mono`} value={draft.vendorQuotationRef} onChange={(e) => set("vendorQuotationRef", e.target.value)} />
+          </Field>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
+          <div className="sm:col-span-2 flex items-start gap-3 min-w-0">
+            <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0">
+              <Store size={18} />
+            </span>
+            <ReadonlyField
+              label={t("purchaseOrderDoc.vendorName")}
+              value={draft.vendorName ? <span className="inline-flex items-center gap-2 flex-wrap">{draft.vendorName}{linkedVendor?.code && <CodeChip code={linkedVendor.code} />}</span> : ""}
+            />
+          </div>
+          <ReadonlyField label={t("purchaseOrderDoc.vendorTaxId")} value={draft.vendorTaxId} mono />
+          <ReadonlyField className="sm:col-span-3" label={t("purchaseOrderDoc.vendorAddress")} value={draft.vendorAddress} />
+          <ReadonlyField label={t("purchaseOrderDoc.vendorContact")} value={draft.vendorContact} />
+          <ReadonlyField label={t("purchaseOrderDoc.vendorPhone")} value={draft.vendorPhone} />
+          <ReadonlyField label={t("purchaseOrderDoc.vendorQuotationRef")} value={draft.vendorQuotationRef} mono />
+        </div>
+      )}
+    </SectionCard>
+  );
+
+  // ── การ์ดข้อมูลใบสั่งซื้อ ────────────────────────────────────────────────
+  const infoCard = (
+    <SectionCard title={t("purchaseOrderDoc.sectionHeader")}>
+      {editable ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+          <Field label={t("purchaseOrderDoc.documentNumber")} htmlFor="po-number">
+            <input id="po-number" className={`${field.input} w-full font-mono`} value={draft.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.orderDate")} htmlFor="po-order-date">
+            <input id="po-order-date" type="date" className={`${field.input} w-full`} value={draft.orderDate} onChange={(e) => set("orderDate", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.neededByDate")} htmlFor="po-needed-by">
+            <input id="po-needed-by" type="date" className={`${field.input} w-full`} value={draft.neededByDate} onChange={(e) => set("neededByDate", e.target.value)} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.jobCode")} htmlFor="po-job-code">
+            <input id="po-job-code" className={`${field.input} w-full font-mono`} value={draft.jobCode} onChange={(e) => set("jobCode", e.target.value)} />
+          </Field>
+          {/* อ้างอิงต้นทาง — อ่านอย่างเดียวเสมอ เปลี่ยนที่มาของเอกสารทีหลังไม่ได้ */}
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <span className={field.label}>{t("purchaseOrderDoc.purchaseRequest")}</span>
+            <span className={`h-10 flex items-center font-mono text-sm font-medium ${draft.purchaseRequestId ? "text-foreground" : "text-[#8a97ad]"}`}>{draft.purchaseRequestId || "—"}</span>
+          </div>
+          <Field label={t("purchaseOrderDoc.creditDays")} htmlFor="po-credit-days">
+            <input id="po-credit-days" type="number" className={`${field.input} w-full text-right tabular-nums`} value={draft.creditDays ?? ""}
+              onChange={(e) => set("creditDays", e.target.value === "" ? null : Number(e.target.value))} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.shippingMethod")} htmlFor="po-shipping">
+            <input id="po-shipping" className={`${field.input} w-full`} value={draft.shippingMethod} onChange={(e) => set("shippingMethod", e.target.value)} />
+          </Field>
+          <Field className="sm:col-span-2" label={t("purchaseOrderDoc.deliveryLocation")} htmlFor="po-delivery">
+            <input id="po-delivery" className={`${field.input} w-full`} value={draft.deliveryLocation} onChange={(e) => set("deliveryLocation", e.target.value)} />
+          </Field>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
+          <ReadonlyField label={t("purchaseOrderDoc.documentNumber")} value={draft.documentNumber} mono />
+          <ReadonlyField label={t("purchaseOrderDoc.orderDate")} value={draft.orderDate ? formatQuoteDateThai(draft.orderDate) : ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.neededByDate")} value={draft.neededByDate ? formatQuoteDateThai(draft.neededByDate) : ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.jobCode")} value={draft.jobCode} mono />
+          <ReadonlyField label={t("purchaseOrderDoc.purchaseRequest")} value={draft.purchaseRequestId} mono />
+          <ReadonlyField label={t("purchaseOrderDoc.creditDays")} value={draft.creditDays !== null ? t("purchaseOrderDoc.creditDaysValue").replace("{n}", String(draft.creditDays)) : ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.shippingMethod")} value={draft.shippingMethod} />
+          <ReadonlyField className="sm:col-span-2" label={t("purchaseOrderDoc.deliveryLocation")} value={draft.deliveryLocation} />
+        </div>
+      )}
+    </SectionCard>
+  );
+
+  // ── ตารางรายการ ─────────────────────────────────────────────────────────
+  const numCell = `${field.cell} w-full min-w-0 text-right tabular-nums`;
+  const headCols: { label: string; right?: boolean; w?: string }[] = [
+    { label: "#", w: "w-8" },
+    { label: t("purchaseOrderDoc.col.code"), w: "w-[110px]" },
+    { label: t("purchaseOrderDoc.col.description") },
+    { label: t("purchaseOrderDoc.col.unit"), w: "w-[84px]" },
+    { label: t("purchaseOrderDoc.col.department"), w: "w-[96px]" },
+    { label: t("purchaseOrderDoc.col.costCode"), w: "w-[110px]" },
+    { label: t("purchaseOrderDoc.col.qty"), right: true, w: "w-[84px]" },
+    { label: t("purchaseOrderDoc.col.unitPriceBaht"), right: true, w: "w-[120px]" },
+    { label: t("purchaseOrderDoc.col.discount"), w: "w-[140px]" },
+    { label: t("purchaseOrderDoc.col.amountBaht"), right: true, w: "w-[120px]" },
+  ];
+
+  const linesEditable = (
+    <>
+      <div className="overflow-x-auto">
+        {/* หัวคอลัมน์ตัวเลขชิดขวาตามตัวเลขในแถว (เจ้าของแจ้ง 2026-09-24) */}
+        <table className="w-full min-w-[1120px]">
+          <thead>
+            <tr className={table.head}>
+              {headCols.map((c, i) => (
+                <th key={i} className={`${table.th} ${c.right ? "text-right" : ""} ${c.w ?? ""}`}>{c.label}</th>
+              ))}
+              {/* สองคอลัมน์ท้ายไม่มีหัว: ปุ่มยกเลิกรายการ กับปุ่มลบรายการ (คนละเรื่องกัน) */}
+              <th className="w-9" aria-hidden="true" />
+              <th className="w-9 pr-5" aria-hidden="true" />
+            </tr>
+          </thead>
+          <tbody>
+            {draft.lines.length === 0 ? (
+              <tr><td colSpan={12} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
+            ) : draft.lines.map((l, i) => {
+              const dim = l.cancelled ? "opacity-60" : "";
+              return (
+                <tr key={l.id} className="border-b border-[#eef1f6] align-top">
+                  <td className="pl-5 pr-2 py-2"><span className="h-9 flex items-center text-[13px] text-muted-foreground">{i + 1}</span></td>
+                  <td className="px-1.5 py-2">
+                    <input className={`${field.cell} w-full min-w-0 font-mono text-[13px] ${dim}`} aria-label={t("purchaseOrderDoc.col.code")} placeholder="—" value={l.productCode} onChange={(e) => setLine(l.id, { productCode: e.target.value })} />
+                  </td>
+                  <td className="px-1.5 py-2 min-w-[220px]">
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        className={`${field.cell} w-full min-w-0 ${l.cancelled ? "line-through text-muted-foreground" : ""}`}
+                        aria-label={t("purchaseOrderDoc.col.description")}
+                        value={l.description}
+                        onChange={(e) => setLine(l.id, { description: e.target.value })}
+                      />
+                      {kits.has(l.productId ?? "") && <span className="text-xs text-[#b93636]">{t("kit.receiveBlocked")}</span>}
+                      {/* ช่องเหตุผลโผล่เฉพาะตอนติ๊กยกเลิก — เซิร์ฟเวอร์ตอบ 400 ถ้าเว้นว่าง */}
+                      {l.cancelled && (
+                        <label className="h-9 px-2.5 rounded-lg border border-[#efd3a0] bg-white flex items-center gap-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20">
+                          <Ban size={14} className="text-[#8a5a00] flex-shrink-0" aria-hidden="true" />
+                          <input
+                            className="flex-1 min-w-0 bg-transparent text-[13px] text-[#8a5a00] placeholder:text-[#b58a3c] outline-none"
+                            value={l.cancelRemark ?? ""}
+                            placeholder={t("purchaseOrderDoc.cancelRemarkPlaceholder")}
+                            aria-label={t("purchaseOrderDoc.cancelRemark")}
+                            onChange={(e) => setLine(l.id, { cancelRemark: e.target.value })}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-1.5 py-2">
+                    <input className={`${field.cell} w-full min-w-0 ${dim}`} aria-label={t("purchaseOrderDoc.col.unit")} value={l.unit} onChange={(e) => setLine(l.id, { unit: e.target.value })} />
+                  </td>
+                  {/* รหัสแผนก/บัญชีที่ดึงมาจากใบขอซื้อ — ก่อนหน้านี้คัดลอกมาแล้วแต่ไม่มีที่ให้เห็นหรือแก้
+                      จัดซื้อมักต้องแก้รหัสบัญชีที่ผู้ขอกรอกมาผิดหมวด จึงต้องแก้ได้บนใบสั่งซื้อด้วย */}
+                  <td className="px-1.5 py-2">
+                    <Combobox value={l.departmentCode ?? ""} onChange={(next) => setLine(l.id, { departmentCode: next })}
+                      options={codeComboboxOptions(codeEntries, "department")} ariaLabel={t("purchaseOrderDoc.col.department")}
+                      className={`${field.cell} w-full min-w-0 font-mono text-[13px] ${dim}`} />
+                  </td>
+                  <td className="px-1.5 py-2">
+                    <Combobox value={l.costCode ?? ""} onChange={(next) => setLine(l.id, { costCode: next })}
+                      options={codeComboboxOptions(codeEntries, "account")} ariaLabel={t("purchaseOrderDoc.col.costCode")}
+                      className={`${field.cell} w-full min-w-0 font-mono text-[13px] ${dim}`} />
+                  </td>
+                  <td className="px-1.5 py-2">
+                    <input type="number" className={`${numCell} ${dim}`} aria-label={t("purchaseOrderDoc.col.qty")} value={l.qty ?? ""} onChange={(e) => setLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })} />
+                  </td>
+                  <td className="px-1.5 py-2">
+                    <input type="number" className={`${numCell} ${dim}`} aria-label={t("purchaseOrderDoc.col.unitPrice")} value={l.unitPrice ?? ""} onChange={(e) => setLine(l.id, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })} />
+                  </td>
+                  {/* ส่วนลดรายบรรทัด: ตัวเลข + ปุ่มสลับ %/บาท — แนวเดียวกับใบเสนอราคา */}
+                  <td className="px-1.5 py-2">
+                    <DiscountInput
+                      className={dim}
+                      value={l.discount ?? null}
+                      mode={l.discountMode}
+                      label={t("purchaseOrderDoc.col.discount")}
+                      toggleLabel={t("purchaseOrderDoc.discountModeToggle")}
+                      onValue={(v) => setLine(l.id, { discount: v })}
+                      onMode={(m) => setLine(l.id, { discountMode: m })}
+                    />
+                  </td>
+                  <td className="px-1.5 py-2">
+                    <span className={`h-9 flex items-center justify-end text-sm font-semibold tabular-nums whitespace-nowrap ${l.cancelled ? "line-through text-[#8a97ad]" : "text-foreground"}`}>
+                      {fmt(purchaseOrderLineTotal(l))}
+                    </span>
+                  </td>
+                  {/* ยกเลิกรายการ (2026-09-21) — **คนละเรื่องกับปุ่มลบ** ลบ = บรรทัดที่ไม่เคยสั่ง
+                      (พิมพ์ผิด) · ยกเลิก = สั่งไปแล้วแต่ถอน ซึ่งยังต้องพิมพ์บนใบให้ผู้ขายเห็น
+                      จึงเก็บปุ่มลบไว้ด้วย ไม่ได้แทนที่กัน */}
+                  <td className="px-0.5 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setLine(l.id, { cancelled: !l.cancelled, ...(l.cancelled ? { cancelRemark: "" } : {}) })}
+                      aria-label={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
+                      aria-pressed={!!l.cancelled}
+                      title={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
+                      className={`w-8 h-9 rounded-lg flex items-center justify-center transition-colors ${l.cancelled ? "bg-[#fdf3e0] text-[#8a5a00]" : "text-[#8a97ad] hover:bg-[#f4f6fa] hover:text-foreground"}`}
+                    >
+                      <Ban size={16} />
+                    </button>
+                  </td>
+                  <td className="pl-0.5 pr-5 py-2">
+                    <button
+                      type="button"
+                      onClick={() => set("lines", draft.lines.filter((x) => x.id !== l.id))}
+                      aria-label={t("purchaseOrderDoc.removeLine")}
+                      title={t("purchaseOrderDoc.removeLine")}
+                      className="w-8 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 px-6 pt-3 pb-6">
+        <div className="flex flex-col gap-1">
+          <button type="button" onClick={() => set("lines", [...draft.lines, blankPurchaseOrderLine(newId("poline"))])} className={`${btn.text} self-start`}>
+            <Plus size={16} /> {t("purchaseOrderDoc.addLine")}
+          </button>
+          <span className="text-xs text-muted-foreground inline-flex items-start gap-1.5">
+            <Info size={13} className="flex-shrink-0 mt-0.5" /> {t("purchaseOrderDoc.cancelVsDelete")}
+          </span>
+        </div>
+        <div className="w-full lg:w-[440px] flex-shrink-0 flex flex-col gap-2.5 pt-2 text-sm">
+          <div className="flex justify-between text-[#3d5173]">
+            <span>{t("purchaseOrderDoc.subtotal")}</span>
+            <span className="tabular-nums text-foreground">{fmt(totals.subtotal)}</span>
+          </div>
+          {/* ส่วนลดท้ายใบ — คิดจากยอดหลังหักส่วนลดรายบรรทัดแล้ว และคิดก่อน VAT */}
+          <div className="flex items-center gap-3 text-[#3d5173]">
+            <span className="flex-1">{t("purchaseOrderDoc.docDiscount")}</span>
+            <DiscountInput
+              className="w-[170px]"
+              value={draft.discount ?? null}
+              mode={draft.discountMode}
+              label={t("purchaseOrderDoc.docDiscount")}
+              toggleLabel={t("purchaseOrderDoc.discountModeToggle")}
+              onValue={(v) => set("discount", v)}
+              onMode={(m) => set("discountMode", m)}
+            />
+            <span className="w-[110px] text-right tabular-nums text-[#b93636]">−{fmt(totals.discountAmt)}</span>
+          </div>
+          <div className="flex items-center gap-3 text-[#3d5173]">
+            <span className="flex-1">{t("purchaseOrderDoc.vatLabel")}</span>
+            <span className="w-[170px] h-9 rounded-lg border border-[#c3ccda] bg-white flex items-stretch overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20">
+              <input
+                type="number"
+                className="flex-1 min-w-0 px-2.5 bg-transparent text-sm text-right tabular-nums text-foreground outline-none"
+                value={draft.vatRate ?? ""}
+                aria-label={t("purchaseOrderDoc.vatRate")}
+                onChange={(e) => set("vatRate", e.target.value === "" ? null : Number(e.target.value))}
+              />
+              <span className="px-3 flex items-center bg-[#f4f6fa] border-l border-border text-[13px] text-[#3d5173]">%</span>
+            </span>
+            <span className="w-[110px] text-right tabular-nums text-foreground">{fmt(totals.vatAmt)}</span>
+          </div>
+          <div className="h-px bg-border my-1" />
+          <div className="flex justify-between items-baseline">
+            <span className="font-semibold text-foreground">{t("purchaseOrderDoc.grandTotal")}</span>
+            <span className="text-[22px] font-bold tabular-nums text-foreground">฿{fmt(totals.total)}</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  const discountText = (l: PurchaseOrderLine) =>
+    !l.discount ? "" : l.discountMode === "amount" ? `฿${fmt(l.discount)}` : `${l.discount}%`;
+  const linesReadonly = (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1040px]">
+          <thead>
+            <tr className={table.head}>
+              {headCols.map((c, i) => (
+                <th key={i} className={`${table.th} ${c.right ? "text-right" : ""} ${c.w ?? ""}`}>{c.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {draft.lines.length === 0 ? (
+              <tr><td colSpan={10} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
+            ) : draft.lines.map((l, i) => {
+              const fg = l.cancelled ? "text-muted-foreground" : "text-foreground";
+              const empty = <span className="text-[#8a97ad]">—</span>;
+              return (
+                <tr key={l.id} className="border-b border-[#eef1f6] align-top text-sm">
+                  <td className={`${table.td} py-3 text-[13px] text-muted-foreground`}>{i + 1}</td>
+                  <td className={`${table.td} py-3 font-mono text-[13px] ${fg}`}>{l.productCode || empty}</td>
+                  <td className={`${table.td} py-3`}>
+                    <span className={`block ${l.cancelled ? "line-through text-muted-foreground" : "text-foreground"}`}>{l.description || empty}</span>
+                    {kits.has(l.productId ?? "") && <span className="block text-xs text-[#b93636] mt-0.5">{t("kit.receiveBlocked")}</span>}
+                    {l.cancelled && (
+                      <span className="mt-1 text-[12.5px] text-[#8a5a00] inline-flex items-center gap-1.5">
+                        <Ban size={13} className="flex-shrink-0" />
+                        {t("purchaseOrderDoc.cancelledLine")}{(l.cancelRemark ?? "").trim() ? ` — ${l.cancelRemark}` : ""}
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${table.td} py-3 ${fg}`}>{l.unit || empty}</td>
+                  <td className={`${table.td} py-3 font-mono text-[13px] ${fg}`}>{l.departmentCode || empty}</td>
+                  <td className={`${table.td} py-3 font-mono text-[13px] ${fg}`}>{l.costCode || empty}</td>
+                  <td className={`${table.td} py-3 text-right tabular-nums ${fg}`}>{l.qty ?? empty}</td>
+                  <td className={`${table.td} py-3 text-right tabular-nums ${fg}`}>{l.unitPrice !== null ? fmt(l.unitPrice) : empty}</td>
+                  <td className={`${table.td} py-3 tabular-nums ${fg}`}>{discountText(l) || empty}</td>
+                  <td className={`${table.td} py-3 text-right tabular-nums font-semibold whitespace-nowrap ${l.cancelled ? "line-through text-[#8a97ad]" : "text-foreground"}`}>
+                    {fmt(purchaseOrderLineTotal(l))}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex justify-end px-6 pt-3 pb-6">
+        <div className="w-full sm:w-[360px] flex flex-col gap-2.5 pt-2 text-sm">
+          <div className="flex justify-between text-[#3d5173]">
+            <span>{t("purchaseOrderDoc.subtotal")}</span>
+            <span className="tabular-nums text-foreground">{fmt(totals.subtotal)}</span>
+          </div>
+          {totals.discountAmt > 0 && (
+            <div className="flex justify-between text-[#3d5173]">
+              <span>{t("purchaseOrderDoc.docDiscount")}{draft.discountMode !== "amount" && draft.discount ? ` (${draft.discount}%)` : ""}</span>
+              <span className="tabular-nums text-[#b93636]">−{fmt(totals.discountAmt)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-[#3d5173]">
+            <span>{t("purchaseOrderDoc.vatLabel")}{draft.vatRate !== null ? ` (${draft.vatRate}%)` : ""}</span>
+            <span className="tabular-nums text-foreground">{fmt(totals.vatAmt)}</span>
+          </div>
+          <div className="h-px bg-border my-1" />
+          <div className="flex justify-between items-baseline">
+            <span className="font-semibold text-foreground">{t("purchaseOrderDoc.grandTotal")}</span>
+            <span className="text-[22px] font-bold tabular-nums text-foreground">฿{fmt(totals.total)}</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  const summary = (
+    <DialogSummary
+      mono
+      title={docLabel}
+      sub={[draft.vendorName, draft.purchaseRequestId ? `${t("purchaseOrderDoc.purchaseRequest")} ${draft.purchaseRequestId}` : ""].filter(Boolean).join(" · ") || undefined}
+      aside={`฿${fmt(totals.total)}`}
+    />
+  );
 
   return (
     <>
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
-        {/* แถบเครื่องมือ */}
-        <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ArrowLeft size={15} /> {t("purchaseOrderDoc.backToList")}
-          </button>
-          <span className="text-sm font-mono font-semibold text-[#866d28] ml-2">{draft.documentNumber || draft.id}</span>
-
-          <div className="ml-auto flex items-center gap-2">
-            {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-
-            <DocumentApprovalActions
-              status={draft.status}
-              canEdit={canEdit}
-              canApprove={canApprove}
-              onSubmit={() => submitPurchaseOrderApproval(draft.id)}
-              onApprove={() => approvePurchaseOrder(draft.id)}
-              onReject={(comment) => rejectPurchaseOrder(draft.id, comment)}
-              onWithdraw={() => withdrawPurchaseOrderApproval(draft.id)}
-              // ต้อง markSaved ด้วย ไม่งั้นการอนุมัติ (ซึ่งเปลี่ยนเอกสารฝั่งเซิร์ฟเวอร์) จะทำให้ตัวจับ
-              // การแก้ไขค้างว่า "ยังไม่บันทึก" แล้วเด้งกล่องเตือนตอนออกจากหน้า ทั้งที่ไม่มีอะไรค้าง
-              onUpdated={(d) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); }}
-              showToast={showToast}
-            />
-
-            {editable && (
-              <button onClick={save} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("purchaseOrderDoc.saveDraft")}
-              </button>
-            )}
-            {/* ถอนการอนุมัติ (2026-09-21) — คนที่อนุมัติได้คือคนที่ถอนได้ จึงผูกกับ canApprove
-                ไม่ใช่ canEdit · ต่างจาก Rewrite ตรงที่ไม่ได้ออกเลขที่เอกสารใหม่ */}
-            {draft.status === "Final" && canApprove && (
-              <button onClick={() => { setRevertReason(""); setConfirmRevert(true); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                <Undo2 size={13} /> {t("purchaseOrderDoc.revert")}
-              </button>
-            )}
-            {draft.status === "Final" && canEdit && (
-              <button onClick={() => setConfirmRewrite(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                <GitBranch size={13} /> {t("purchaseOrderDoc.rewrite")}
-              </button>
-            )}
-            {/* รับสินค้า (2026-09-03) — 1 ใบสั่งซื้อ = 1 ใบรับสินค้า จึงเปิดใบเดิมถ้ามีอยู่แล้ว
-                แทนที่จะสร้างใบที่สองแล้วไปชน 409 ที่ฐานข้อมูล */}
-            {canReceiveGoods && draft.status === "Final" && (
-              <button onClick={() => void openReceivingReport()} disabled={receiving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                {receiving ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseOrderDoc.receiveGoods")}
-              </button>
-            )}
-            {canPrint && (
-              <button onClick={() => { void logPurchaseOrderPrinted(draft.id).catch(() => {}); setShowPrint(true); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                <Printer size={13} /> {t("purchaseOrderDoc.print")}
-              </button>
-            )}
-            {canDelete && draft.status !== "Final" && (
-              <button onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all">
-                <Trash2 size={13} /> {t("purchaseOrderDoc.delete")}
-              </button>
-            )}
-          </div>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader
+            backLabel={t("purchaseOrderDoc.backToAll")}
+            onBack={onBack}
+            number={docLabel}
+            status={<PurchaseOrderStatusPill status={status} />}
+            meta={headerMeta}
+            actions={headerActions}
+          />
         </div>
 
-        <div className="p-6 space-y-5 max-w-5xl">
+        <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
           {draftBackup.recovered && draftBackup.recoveredAt !== null && (
             <DraftRecoveryBanner
               savedAt={draftBackup.recoveredAt}
@@ -377,298 +946,50 @@ export function PurchaseOrderDocument({
               onDiscard={draftBackup.dismiss}
             />
           )}
-          <DocumentStatusStepper
-            status={draft.status}
-            rejectionComment={draft.rejectionComment ?? ""}
-            approverLabel={t("purchaseOrderDoc.approverLabel")}
-            approvedByUserId={draft.approvedByUserId}
-            approvedByName={draft.approvedBy}
-            approvedAt={draft.approvedAt}
-          />
-          {draft.rejectionComment ? <RejectionNotice comment={draft.rejectionComment} /> : null}
-
-          {/* หัวเอกสาร */}
-          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground">{t("purchaseOrderDoc.sectionHeader")}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label={t("purchaseOrderDoc.documentNumber")}>
-                <input className={inputCls} disabled={!editable} value={draft.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.orderDate")}>
-                <input type="date" className={inputCls} disabled={!editable} value={draft.orderDate} onChange={(e) => set("orderDate", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.neededByDate")}>
-                <input type="date" className={inputCls} disabled={!editable} value={draft.neededByDate} onChange={(e) => set("neededByDate", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.jobCode")}>
-                <input className={inputCls} disabled={!editable} value={draft.jobCode} onChange={(e) => set("jobCode", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.purchaseRequest")}>
-                {/* อ้างอิงต้นทาง — อ่านอย่างเดียวเสมอ เปลี่ยนที่มาของเอกสารทีหลังไม่ได้ */}
-                <input className={inputCls} disabled value={draft.purchaseRequestId || "—"} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.creditDays")}>
-                <input type="number" className={inputCls} disabled={!editable} value={draft.creditDays ?? ""}
-                  onChange={(e) => set("creditDays", e.target.value === "" ? null : Number(e.target.value))} />
-              </Field>
+          {(draft.rejectionComment ?? "").trim() && (
+            <div role="status" className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-[#fcebeb] border border-[#f1c9c9] text-sm text-[#b93636]">
+              <XCircle size={18} className="flex-shrink-0 mt-px" />
+              <span><span className="font-semibold">{t("approval.rejectedNotice")}</span> {draft.rejectionComment}</span>
             </div>
-          </section>
+          )}
+          <DocumentStepper ariaLabel={t("purchaseOrderDoc.stepperAria")} steps={steps} current={stepIndex} />
+          <DocumentColumns main={<>{vendorCard}{infoCard}</>} rail={rail} />
 
-          {/* ผู้ขาย */}
-          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground">{t("purchaseOrderDoc.sectionVendor")}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("purchaseOrderDoc.vendorName")}>
-                <Combobox
-                  className={inputCls}
-                  disabled={!editable}
-                  value={draft.vendorName}
-                  // พิมพ์ชื่อเองได้อยู่ แต่ต้องล้างการผูกทิ้ง ไม่งั้นใบจะอ้างผู้ขายรายเดิมทั้งที่ชื่อเปลี่ยนไปแล้ว
-                  // (เซิร์ฟเวอร์พยายามจับคู่ชื่อให้อีกชั้นตอนบันทึก ถ้าตรงรายเดียวเป๊ะ)
-                  onChange={(next) => setDraft((d) => d && { ...d, vendorName: next, vendorId: "" })}
-                  options={vendorComboboxOptions(vendors)}
-                  ariaLabel={t("purchaseOrderDoc.vendorName")}
-                  // เลือกจากทะเบียนแล้วเติมช่องที่เหลือให้ — นั่นคือเหตุผลที่มีทะเบียน
-                  // ทับของเดิมโดยตั้งใจ: การกดเลือกผู้ขายคือการบอกว่า "เอารายนี้" ทั้งราย
-                  onPick={(opt) => {
-                    const v = vendors.find((x) => x.name === opt.value);
-                    if (!v) return;
-                    setDraft((d) => d && {
-                      ...d,
-                      vendorId: v.id,
-                      vendorName: v.name,
-                      vendorContact: v.contactName,
-                      vendorPhone: v.phone,
-                      vendorTaxId: v.taxId,
-                      vendorAddress: v.address,
-                    });
-                  }}
-                />
-                {/* ใบจะอนุมัติไม่ได้ถ้าไม่ได้ผูกกับทะเบียน — บอกตั้งแต่ตอนกรอก ดีกว่าให้ไปเจอตอนกดอนุมัติ */}
-                {editable && !draft.vendorId && draft.vendorName.trim() !== "" && (
-                  <p className="text-xs text-[#a75d1a] mt-1">{t("purchaseOrderDoc.vendorNotLinked")}</p>
-                )}
-              </Field>
-              <Field label={t("purchaseOrderDoc.vendorContact")}>
-                <input className={inputCls} disabled={!editable} value={draft.vendorContact} onChange={(e) => set("vendorContact", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.vendorPhone")}>
-                <input className={inputCls} disabled={!editable} value={draft.vendorPhone} onChange={(e) => set("vendorPhone", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.vendorTaxId")}>
-                <input className={inputCls} disabled={!editable} value={draft.vendorTaxId} onChange={(e) => set("vendorTaxId", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.vendorQuotationRef")}>
-                <input className={inputCls} disabled={!editable} value={draft.vendorQuotationRef} onChange={(e) => set("vendorQuotationRef", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.shippingMethod")}>
-                <input className={inputCls} disabled={!editable} value={draft.shippingMethod} onChange={(e) => set("shippingMethod", e.target.value)} />
-              </Field>
-              <div className="sm:col-span-2">
-                <Field label={t("purchaseOrderDoc.vendorAddress")}>
-                  <textarea rows={2} className={inputCls} disabled={!editable} value={draft.vendorAddress} onChange={(e) => set("vendorAddress", e.target.value)} />
+          <SectionCard
+            title={
+              <span className="flex items-baseline gap-2.5 flex-wrap">
+                {t("purchaseOrderDoc.sectionLines")}
+                <span className="text-[13px] font-normal text-muted-foreground">{lineCountLabel(draft.lines.length)}</span>
+              </span>
+            }
+            bodyClassName=""
+          >
+            {editable ? linesEditable : linesReadonly}
+          </SectionCard>
+
+          <SectionCard title={t("purchaseOrderDoc.remarks")}>
+            {editable ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px] items-start">
+                <Field label={t("purchaseOrderDoc.remarks")} htmlFor="po-remarks">
+                  <textarea id="po-remarks" rows={2} className={`${field.textarea} w-full resize-y`} value={draft.remarks} onChange={(e) => set("remarks", e.target.value)} />
+                </Field>
+                <Field label={t("purchaseOrderDoc.revisionNote")} htmlFor="po-revision-note" help={t("purchaseOrderDoc.revisionNoteHint")}>
+                  <textarea id="po-revision-note" rows={2} className={`${field.textarea} w-full resize-y`} value={draft.revisionNote} onChange={(e) => set("revisionNote", e.target.value)} />
                 </Field>
               </div>
-              <div className="sm:col-span-2">
-                <Field label={t("purchaseOrderDoc.deliveryLocation")}>
-                  <input className={inputCls} disabled={!editable} value={draft.deliveryLocation} onChange={(e) => set("deliveryLocation", e.target.value)} />
-                </Field>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 items-start">
+                <ReadonlyField label={t("purchaseOrderDoc.remarks")} value={draft.remarks ? <span className="whitespace-pre-line">{draft.remarks}</span> : ""} />
+                <ReadonlyField label={t("purchaseOrderDoc.revisionNote")} value={draft.revisionNote ? <span className="whitespace-pre-line">{draft.revisionNote}</span> : ""} />
               </div>
-            </div>
-          </section>
-
-          {/* รายการ */}
-          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4">
-              <h2 className="text-base font-semibold text-foreground">{t("purchaseOrderDoc.sectionLines")}</h2>
-              {editable && (
-                <button onClick={() => set("lines", [...draft.lines, blankPurchaseOrderLine(newId("poline"))])}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <Plus size={13} /> {t("purchaseOrderDoc.addLine")}
-                </button>
-              )}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px]">
-                <thead>
-                  <tr className="border-y border-border bg-muted/40">
-                    {["#", t("purchaseOrderDoc.col.code"), t("purchaseOrderDoc.col.description"), t("purchaseOrderDoc.col.unit"),
-                      t("purchaseOrderDoc.col.department"), t("purchaseOrderDoc.col.costCode"),
-                      t("purchaseOrderDoc.col.qty"), t("purchaseOrderDoc.col.unitPrice"), t("purchaseOrderDoc.col.discount"),
-                      // สองคอลัมน์ท้ายไม่มีหัว: ปุ่มยกเลิกรายการ กับปุ่มลบรายการ (คนละเรื่องกัน)
-                      t("purchaseOrderDoc.col.amount"), "", ""].map((h, i) => (
-                      // คอลัมน์ตัวเลข (จำนวน · ราคา/หน่วย · ส่วนลด · จำนวนเงิน = ลำดับ 6–9) ชิดขวาตามตัวเลขในแถว — เดิมหัวชิดซ้าย
-                      // ตัวเลขชิดขวา หัวกับข้อมูลจึงเยื้องกันเกือบเต็มความกว้างคอลัมน์ (เจ้าของแจ้ง 2026-09-24)
-                      <th key={i} className={`px-3 py-2.5 ${i >= 6 && i <= 9 ? "text-right" : "text-left"} text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.lines.length === 0 ? (
-                    <tr><td colSpan={12} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
-                  ) : draft.lines.map((l, i) => (
-                    <tr key={l.id} className={`border-b border-border/50 ${l.cancelled ? "opacity-60" : ""}`}>
-                      <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{i + 1}</td>
-                      <td className="px-1 py-1"><input className={cellCls} disabled={!editable} value={l.productCode} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
-                      <td className="px-1 py-1">
-                        <input className={`${cellCls} ${l.cancelled ? "line-through" : ""}`} disabled={!editable} value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} />
-                        {kits.has(l.productId ?? "") && <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>}
-                        {/* ช่องเหตุผลโผล่เฉพาะตอนติ๊กยกเลิก — เซิร์ฟเวอร์ตอบ 400 ถ้าเว้นว่าง */}
-                        {l.cancelled && (
-                          <input
-                            className={`${cellCls} mt-1 text-[#a75d1a]`}
-                            disabled={!editable}
-                            value={l.cancelRemark ?? ""}
-                            placeholder={t("purchaseOrderDoc.cancelRemarkPlaceholder")}
-                            aria-label={t("purchaseOrderDoc.cancelRemark")}
-                            onChange={(e) => setLine(l.id, { cancelRemark: e.target.value })}
-                          />
-                        )}
-                      </td>
-                      <td className="px-1 py-1 w-24"><input className={cellCls} disabled={!editable} value={l.unit} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
-                      {/* รหัสแผนก/บัญชีที่ดึงมาจากใบขอซื้อ — ก่อนหน้านี้คัดลอกมาแล้วแต่ไม่มีที่ให้เห็นหรือแก้
-                          จัดซื้อมักต้องแก้รหัสบัญชีที่ผู้ขอกรอกมาผิดหมวด จึงต้องแก้ได้บนใบสั่งซื้อด้วย */}
-                      <td className="px-1 py-1">
-                        <Combobox disabled={!editable} value={l.departmentCode ?? ""} onChange={(next) => setLine(l.id, { departmentCode: next })}
-                          options={codeComboboxOptions(codeEntries, "department")} ariaLabel={t("purchaseOrderDoc.col.department")}
-                          className={`${cellCls} w-24 font-mono`} />
-                      </td>
-                      <td className="px-1 py-1">
-                        <Combobox disabled={!editable} value={l.costCode ?? ""} onChange={(next) => setLine(l.id, { costCode: next })}
-                          options={codeComboboxOptions(codeEntries, "account")} ariaLabel={t("purchaseOrderDoc.col.costCode")}
-                          className={`${cellCls} w-28 font-mono`} />
-                      </td>
-                      <td className="px-1 py-1 w-24"><input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.qty ?? ""} onChange={(e) => setLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })} /></td>
-                      <td className="px-1 py-1 w-28"><input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.unitPrice ?? ""} onChange={(e) => setLine(l.id, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })} /></td>
-                      {/* ส่วนลดรายบรรทัด: ตัวเลข + ปุ่มสลับ %/บาท — แนวเดียวกับใบเสนอราคา */}
-                      <td className="px-1 py-1 w-32">
-                        <div className="flex items-center gap-1">
-                          <input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.discount ?? ""}
- aria-label={t("purchaseOrderDoc.col.discount")}
- onChange={(e) => setLine(l.id, { discount: e.target.value === "" ? null : Number(e.target.value) })} />
- <button type="button" disabled={!editable}
- onClick={() => setLine(l.id, { discountMode: l.discountMode === "amount" ? "percent" : "amount" })}
- title={t("purchaseOrderDoc.discountModeToggle")}
- aria-label={t("purchaseOrderDoc.discountModeToggle")}
- className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-[#c3ccda] bg-white rounded hover:text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-50">
- {l.discountMode === "amount" ? "฿" : "%"}
- </button>
- </div>
- </td>
- <td className="px-3 py-2 text-right text-xs font-mono text-foreground whitespace-nowrap">{fmt(purchaseOrderLineTotal(l))}</td>
- {/* ยกเลิกรายการ (2026-09-21) — **คนละเรื่องกับปุ่มลบ** ลบ = บรรทัดที่ไม่เคยสั่ง
- (พิมพ์ผิด) · ยกเลิก = สั่งไปแล้วแต่ถอน ซึ่งยังต้องพิมพ์บนใบให้ผู้ขายเห็น
- จึงเก็บปุ่มลบไว้ด้วย ไม่ได้แทนที่กัน */}
- <td className="px-2 py-1 w-8">
- {editable && (
- <button
- onClick={() => setLine(l.id, { cancelled: !l.cancelled, ...(l.cancelled ? { cancelRemark: "" } : {}) })}
- aria-label={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
- title={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
- className={`opacity-50 hover:opacity-100 focus-visible:opacity-100 transition-opacity ${l.cancelled ? "text-[#c9a84c]" : "text-muted-foreground"}`}
-                          >
-                            <Ban size={13} />
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-2 py-1 w-8">
-                        {editable && (
-                          <button onClick={() => set("lines", draft.lines.filter((x) => x.id !== l.id))}
-                            aria-label={t("purchaseOrderDoc.removeLine")}
-                            className="opacity-50 hover:opacity-100 focus-visible:opacity-100 text-[#e05252] transition-opacity">
-                            <X size={13} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-col items-end gap-1 px-5 py-4 border-t border-border">
-              <Total label={t("purchaseOrderDoc.subtotal")} value={fmt(totals.subtotal)} />
-              {/* ส่วนลดท้ายใบ — คิดจากยอดหลังหักส่วนลดรายบรรทัดแล้ว และคิดก่อน VAT */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.docDiscount")}</span>
-                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60"
-                  disabled={!editable} value={draft.discount ?? ""} aria-label={t("purchaseOrderDoc.docDiscount")}
-                  onChange={(e) => set("discount", e.target.value === "" ? null : Number(e.target.value))} />
-                <button type="button" disabled={!editable}
-                  onClick={() => set("discountMode", draft.discountMode === "amount" ? "percent" : "amount")}
-                  title={t("purchaseOrderDoc.discountModeToggle")}
-                  aria-label={t("purchaseOrderDoc.discountModeToggle")}
-                  className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-colors disabled:opacity-50">
-                  {draft.discountMode === "amount" ? "฿" : "%"}
-                </button>
-                <span className="text-xs font-mono text-muted-foreground w-28 text-right">-{fmt(totals.discountAmt)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.vatRate")}</span>
-                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60"
-                  disabled={!editable} value={draft.vatRate ?? ""} aria-label={t("purchaseOrderDoc.vatRate")}
-                  onChange={(e) => set("vatRate", e.target.value === "" ? null : Number(e.target.value))} />
-                <span className="text-xs font-mono text-muted-foreground w-28 text-right">{fmt(totals.vatAmt)}</span>
-              </div>
-              <Total label={t("purchaseOrderDoc.grandTotal")} value={fmt(totals.total)} strong />
-            </div>
-          </section>
-
-          {/* หมายเหตุ + ลงนาม */}
-          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("purchaseOrderDoc.orderedBy")}>
-                <input className={inputCls} disabled={!editable} value={draft.orderedBy} onChange={(e) => set("orderedBy", e.target.value)} />
-              </Field>
-              <Field label={t("purchaseOrderDoc.approvedBy")}>
-                {/* ระบบเติมชื่อให้ตอนกดอนุมัติถ้ายังว่าง แต่ไม่ทับค่าที่พิมพ์เอง */}
-                <input className={inputCls} disabled={!editable} value={draft.approvedBy ?? ""} onChange={(e) => set("approvedBy", e.target.value)} />
-              </Field>
-              {/* ผู้อนุมัติที่ตั้งใจไว้ (2026-09-21) — เจ้าของข้อ 2 "ใบ PO สามารถเลือกคนอนุมัติได้"
-
-                  รายชื่อมาจาก `useUserDirectory()` ซึ่ง App.tsx โหลดไว้ให้อยู่แล้ว ไม่ต้องส่ง prop
-                  ลงมาอีกสี่ชั้น (เหตุผลเดียวกับที่ช่องลายเซ็นบนใบพิมพ์ใช้ context ตัวนี้) */}
-              <div className="sm:col-span-2">
-                <Field label={t("purchaseOrderDoc.intendedApprover")}>
-                  <select
-                    className={inputCls}
-                    disabled={!editable}
-                    value={draft.intendedApproverUserId ?? ""}
-                    onChange={(e) => {
-                      const picked = approverOptions.find((u) => u.id === e.target.value);
-                      setDraft((d) => d && {
-                        ...d,
-                        intendedApproverUserId: e.target.value,
-                        intendedApproverName: picked?.fullName ?? "",
-                      });
-                    }}
-                  >
-                    <option value="">{t("purchaseOrderDoc.intendedApproverAny")}</option>
-                    {approverOptions.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-                    {/* คนที่เคยถูกเลือกไว้แล้วถูกปิดบัญชี — ยังต้องเห็นชื่อ ไม่ใช่ช่องว่างที่อธิบายไม่ได้ */}
-                    {draft.intendedApproverUserId && !approverOptions.some((u) => u.id === draft.intendedApproverUserId) && (
-                      <option value={draft.intendedApproverUserId}>{draft.intendedApproverName || draft.intendedApproverUserId}</option>
-                    )}
-                  </select>
-                </Field>
-                <p className="text-xs text-muted-foreground mt-1">{t("purchaseOrderDoc.intendedApproverHint")}</p>
-              </div>
-              <div className="sm:col-span-2">
-                <Field label={t("purchaseOrderDoc.remarks")}>
-                  <textarea rows={2} className={inputCls} disabled={!editable} value={draft.remarks} onChange={(e) => set("remarks", e.target.value)} />
-                </Field>
-              </div>
-              <div className="sm:col-span-2">
-                <Field label={t("purchaseOrderDoc.revisionNote")} hint={t("purchaseOrderDoc.revisionNoteHint")}>
-                  <textarea rows={2} className={inputCls} disabled={!editable} value={draft.revisionNote} onChange={(e) => set("revisionNote", e.target.value)} />
-                </Field>
-              </div>
-            </div>
-          </section>
+            )}
+          </SectionCard>
         </div>
       </div>
 
       <PurchaseOrderPrintDocument doc={draft} />
 
+      {approval.dialogs}
       {receiveCodeOpen && (
         <ReceiveCodeDialog onCreate={createReceivingReportWithCode} onCancel={() => setReceiveCodeOpen(false)} />
       )}
@@ -676,50 +997,77 @@ export function PurchaseOrderDocument({
         open={confirmDelete}
         title={t("purchaseOrderDoc.confirmDelete.title")}
         message={t("purchaseOrderDoc.confirmDelete.message")}
-        confirmLabel={t("purchaseOrderDoc.delete")}
+        confirmLabel={t("purchaseOrderDoc.confirmDelete.title")}
         danger
+        busy={deleting}
+        summary={summary}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={async () => {
+          setDeleting(true);
           try {
             await deletePurchaseOrder(draft.id);
             setConfirmDelete(false);
             onDeleted();
           } catch (err) {
             showToast(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
+          } finally {
+            setDeleting(false);
           }
         }}
       />
-      {/* กล่องยืนยันการถอน — มีช่องเหตุผลจึงทำเองแทน ConfirmDialog ที่รับได้แค่ข้อความ */}
-      {confirmRevert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setConfirmRevert(false)} />
-          <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("purchaseOrderDoc.revertConfirmTitle")}</h2>
-            <p className="text-xs text-muted-foreground leading-relaxed">{t("purchaseOrderDoc.revertConfirmBody")}</p>
-            <textarea
-              autoFocus rows={2} value={revertReason} onChange={(e) => setRevertReason(e.target.value)}
-              placeholder={t("purchaseOrderDoc.revertReasonPlaceholder")}
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setConfirmRevert(false)} disabled={reverting} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
-                {t("common.cancel")}
-              </button>
-              <button onClick={() => void handleRevert()} disabled={reverting}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#d8ba62] transition-colors disabled:opacity-60">
-                {reverting && <Loader2 size={12} className="animate-spin" />} {t("purchaseOrderDoc.revert")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* กล่องยืนยันการถอน — มีช่องเหตุผลจึงใช้ ReasonDialog แทน ConfirmDialog ที่รับได้แค่ข้อความ */}
+      <ReasonDialog
+        open={confirmRevert}
+        tone="warning"
+        title={t("purchaseOrderDoc.revertConfirmTitle")}
+        message={t("purchaseOrderDoc.revertConfirmMessage")}
+        summary={<DialogSummary mono title={docLabel} sub={draft.vendorName || undefined} aside={`฿${fmt(totals.total)}`} />}
+        confirmLabel={<>{reverting ? <Loader2 size={16} className="animate-spin" /> : <Undo2 size={16} />} {t("purchaseOrderDoc.revert")}</>}
+        busy={reverting}
+        onCancel={() => setConfirmRevert(false)}
+        onConfirm={() => void handleRevert()}
+      >
+        <ul className="flex flex-col gap-1.5 text-[13px] text-[#3d5173]">
+          <li className="flex items-start gap-2"><AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-[#d89614]" />{t("purchaseOrderDoc.revertEffectSignature")}</li>
+          <li className="flex items-start gap-2"><AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-[#d89614]" />{t("purchaseOrderDoc.revertEffectVendorCheck")}</li>
+        </ul>
+        <Field
+          label={<>{t("purchaseOrderDoc.revertReasonLabel")} <span className="font-normal text-muted-foreground">{t("purchaseOrderDoc.optional")}</span></>}
+          htmlFor="po-revert-reason"
+          help={t("purchaseOrderDoc.revertReasonHelp")}
+        >
+          <textarea
+            id="po-revert-reason"
+            autoFocus
+            rows={3}
+            value={revertReason}
+            onChange={(e) => setRevertReason(e.target.value)}
+            className={`${field.textarea} w-full resize-y`}
+          />
+        </Field>
+      </ReasonDialog>
       <ConfirmDialog
         open={confirmRewrite}
         title={t("purchaseOrderDoc.confirmRewrite.title")}
         message={t("purchaseOrderDoc.confirmRewrite.message")}
         confirmLabel={t("purchaseOrderDoc.rewrite")}
+        busy={rewriting}
+        summary={
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.rewriteFrom")}</span>
+              <span className="font-mono text-[13px] font-medium text-foreground">{docLabel}</span>
+            </span>
+            <ArrowRight size={16} className="text-muted-foreground" aria-hidden="true" />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.rewriteTo")}</span>
+              <span className="font-mono text-[13px] font-medium text-foreground">{t("purchaseOrderDoc.rewriteNextNumber").replace("{root}", getRevisionRoot(draft.id))}</span>
+            </span>
+          </div>
+        }
         onCancel={() => setConfirmRewrite(false)}
         onConfirm={async () => {
+          setRewriting(true);
           try {
             const next = await rewritePurchaseOrder(draft.id);
             setConfirmRewrite(false);
@@ -727,6 +1075,8 @@ export function PurchaseOrderDocument({
             showToast(t("purchaseOrderDoc.rewritten"));
           } catch (err) {
             showToast(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
+          } finally {
+            setRewriting(false);
           }
         }}
       />
@@ -734,21 +1084,42 @@ export function PurchaseOrderDocument({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+/** ป้ายรหัสผู้ขายเล็ก ๆ ข้างชื่อ (VD-018) */
+function CodeChip({ code }: { code: string }) {
   return (
-    <label className="block">
-      <span className="block text-xs font-medium text-muted-foreground mb-1.5">{label}</span>
-      {children}
-      {hint && <span className="block text-xs text-muted-foreground mt-1">{hint}</span>}
-    </label>
+    <span className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center flex-shrink-0">{code}</span>
   );
 }
 
-function Total({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+/**
+ * ช่องส่วนลด + ปุ่มสลับ %/฿ แบบ segmented ในกล่องเดียว — ใช้ทั้งส่วนลดรายบรรทัดและส่วนลดท้ายใบ
+ * ค่าว่าง/undefined ของ mode = เปอร์เซ็นต์ (ค่าเริ่มต้นเดิมของบรรทัดใหม่)
+ */
+function DiscountInput({ value, mode, label, toggleLabel, onValue, onMode, className = "" }: {
+  value: number | null;
+  mode: DiscountMode | undefined;
+  label: string;
+  toggleLabel: string;
+  onValue: (v: number | null) => void;
+  onMode: (m: DiscountMode) => void;
+  className?: string;
+}) {
+  const isAmount = mode === "amount";
+  const seg = (on: boolean) =>
+    `h-[26px] min-w-6 px-1 rounded-[5px] text-xs flex items-center justify-center transition-colors ${on ? "bg-white text-foreground font-semibold shadow-[0_1px_2px_rgba(11,29,58,0.12)]" : "text-muted-foreground hover:text-foreground"}`;
   return (
-    <div className="flex items-center gap-2">
-      <span className={`text-xs ${strong ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{label}</span>
-      <span className={`w-28 text-right font-mono ${strong ? "text-sm font-semibold text-foreground" : "text-xs text-muted-foreground"}`}>{value}</span>
-    </div>
+    <span className={`h-9 rounded-lg border border-[#c3ccda] bg-white flex items-center pr-[3px] overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors ${className}`}>
+      <input
+        type="number"
+        className="flex-1 min-w-0 px-2 bg-transparent text-sm text-right tabular-nums text-foreground outline-none"
+        value={value ?? ""}
+        aria-label={label}
+        onChange={(e) => onValue(e.target.value === "" ? null : Number(e.target.value))}
+      />
+      <span role="group" aria-label={toggleLabel} title={toggleLabel} className="flex bg-[#eef1f6] rounded-md p-0.5 flex-shrink-0">
+        <button type="button" aria-pressed={!isAmount} onClick={() => onMode("percent")} className={seg(!isAmount)}>%</button>
+        <button type="button" aria-pressed={isAmount} onClick={() => onMode("amount")} className={seg(isAmount)}>฿</button>
+      </span>
+    </span>
   );
 }

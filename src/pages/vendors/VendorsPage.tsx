@@ -1,29 +1,32 @@
-import { useId, useMemo, useState } from "react";
-import { Plus, Search, X, Store, Pencil, Archive, RotateCcw, Send, Check, Ban, Loader2 } from "lucide-react";
-import { type Vendor, type VendorDraft, emptyVendorDraft, createVendor, updateVendor, setVendorArchived, vendorApprovalStatusOf, submitVendorApproval, approveVendor, rejectVendor } from "../../lib/vendors";
-import { EmptyState } from "../../components/EmptyState";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import { Plus, ChevronRight } from "lucide-react";
+import { type Vendor, type VendorDraft, createVendor, updateVendor, setVendorArchived, vendorApprovalStatusOf, submitVendorApproval, approveVendor, rejectVendor } from "../../lib/vendors";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
-import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { DialogSummary, ReasonDialog, TonePill } from "../purchaseOrder/purchasingUi";
+import { VendorDrawer } from "./VendorDrawer";
+import { filterVendors, vendorApprovalLabelKey, vendorApprovalTone, type VendorStatusTab } from "./vendorDisplay";
+
+const PAGE_SIZE = 20;
 
 /**
  * ทะเบียนผู้ขาย (2026-08-31) — เจ้าของขอไว้ 2026-08-28:
  * *"มีหน้าเพิ่มผู้ขายสำหรับจัดซื้อเพราะมันจะมีรหัสผู้ขายด้วย"*
  *
- * ลอกโครงจาก `pages/customers/CustomersPage.tsx` ซึ่งเป็นแม่แบบข้อมูลหลักที่ครบที่สุดในแอปนี้
- * (props สิทธิ์จริงส่งมาจาก App.tsx ไม่เรียก `hasPermission` เอง · i18n ทุกข้อความรวม aria-label ·
- * `EmptyState` แยกจาก "ค้นแล้วไม่เจอ" · `ConfirmDialog` ก่อนทุกการกระทำที่ย้อนยาก · `useDialogA11y`)
+ * ดีไซน์ใหม่ 2026-09-30 (แบบ CustomersPage): แท็บสถานะพร้อมจำนวน → ค้นหา + แสดงที่เก็บถาวร → ตาราง
+ * ที่ทั้งแถวกดเปิด**แผงด้านขวา** (สร้าง/แก้ไข/ดู) · ปุ่มอนุมัติของบัญชีย้ายจากแถวไปอยู่ในแผง
+ * props สิทธิ์จริงส่งมาจาก App.tsx ไม่เรียก `hasPermission` เอง · i18n ทุกข้อความรวม aria-label
  *
  * ต่างจากลูกค้าตรงที่มี **รหัสผู้ขาย** ซึ่งห้ามซ้ำ — ความซ้ำถูกตัดสินที่เซิร์ฟเวอร์ (409) ไม่ใช่ที่นี่
- * เพราะต้องถามฐานข้อมูล หน้าจอแค่เอา error ขึ้นให้อ่านในฟอร์ม
+ * เพราะต้องถามฐานข้อมูล หน้าจอแค่เอา error ขึ้นให้อ่านในแผง
  */
-
-type StatusFilter = "all" | "active" | "inactive";
-
 export function VendorsPage({
   vendors,
   onVendorsChange,
@@ -43,43 +46,62 @@ export function VendorsPage({
   const { t } = useI18n();
   const toast = useToast();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [tab, setTab] = useState<VendorStatusTab>("all");
   const [showArchived, setShowArchived] = useState(false);
-  const [formTarget, setFormTarget] = useState<Vendor | "new" | null>(null);
+  const [page, setPage] = useState(1);
+  /** id ของผู้ขายที่เปิดในแผง หรือ "new" — เก็บเป็น id เพื่อให้แผงเห็นสถานะล่าสุดหลังกดคำสั่งจากแผง */
+  const [formTarget, setFormTarget] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Vendor | null>(null);
   const [archiving, setArchiving] = useState(false);
-  /** ขั้นอนุมัติของบัญชี (2026-09-21) — ปุ่มบนแถว + กล่องกรอกเหตุผลตอนไม่อนุมัติ */
+  const [deactivateTarget, setDeactivateTarget] = useState<Vendor | null>(null);
+  /** ขั้นอนุมัติของบัญชี (2026-09-21) — ปุ่มในแผง + กล่องกรอกเหตุผลตอนไม่อนุมัติ */
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Vendor | null>(null);
   const [rejectComment, setRejectComment] = useState("");
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return vendors.filter((v) => {
-      if (!showArchived && v.isDeleted) return false;
-      if (statusFilter === "active" && !v.isActive) return false;
-      if (statusFilter === "inactive" && v.isActive) return false;
-      if (!q) return true;
-      return [v.name, v.code, v.contactName, v.phone, v.taxId].some((field) => field.toLowerCase().includes(q));
-    });
-  }, [vendors, search, statusFilter, showArchived]);
+  const visible = useMemo(() => vendors.filter((v) => showArchived || !v.isDeleted), [vendors, showArchived]);
+  const counts = useMemo(() => ({
+    all: visible.length,
+    active: visible.filter((v) => v.isActive).length,
+    inactive: visible.filter((v) => !v.isActive).length,
+  }), [visible]);
+  const filtered = useMemo(() => filterVendors(vendors, { tab, search, showArchived }), [vendors, tab, search, showArchived]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const withReset = <V,>(set: (v: V) => void) => (v: V) => { set(v); setPage(1); };
 
   const replaceVendor = (next: Vendor) => {
     onVendorsChange(vendors.some((v) => v.id === next.id) ? vendors.map((v) => (v.id === next.id ? next : v)) : [...vendors, next]);
   };
 
+  const drawerVendor = formTarget && formTarget !== "new" ? vendors.find((v) => v.id === formTarget) ?? null : null;
+  const drawerOpen = formTarget === "new" ? canCreate : drawerVendor !== null;
+
   const handleSave = async (draft: VendorDraft): Promise<string | null> => {
+    const isNew = formTarget === "new" || drawerVendor === null;
     try {
-      const saved = formTarget === "new" || formTarget === null
-        ? await createVendor(draft)
-        : await updateVendor(formTarget.id, draft);
+      const saved = isNew ? await createVendor(draft) : await updateVendor(drawerVendor.id, draft);
       replaceVendor(saved);
       setFormTarget(null);
-      toast.show(t(formTarget === "new" ? "vendors.toast.created" : "vendors.toast.updated"));
+      toast.show(t(isNew ? "vendors.toast.created" : "vendors.toast.updated"));
       return null;
     } catch (err) {
-      // 409 (รหัสซ้ำ) มาถึงตรงนี้พร้อมข้อความไทยจากเซิร์ฟเวอร์แล้ว แสดงตรง ๆ ในฟอร์ม
+      // 409 (รหัสซ้ำ) มาถึงตรงนี้พร้อมข้อความไทยจากเซิร์ฟเวอร์แล้ว แสดงตรง ๆ ในแผง
       return err instanceof ApiError ? err.message : t("common.errorGeneric");
+    }
+  };
+
+  /** ปิด/เปิดใช้งาน — เดิมเป็นช่องติ๊กในฟอร์ม ตอนนี้เป็นคำสั่งในเมนูของแผง บันทึกเฉพาะช่องนี้ช่องเดียว
+   *  (เซิร์ฟเวอร์ไม่ถือว่าเป็นการแก้ข้อมูลระบุตัวผู้ขาย ขั้นอนุมัติของบัญชีจึงไม่ตก) */
+  const handleToggleActive = async (v: Vendor) => {
+    try {
+      const next = await updateVendor(v.id, { isActive: !v.isActive });
+      replaceVendor(next);
+      toast.show(t(next.isActive ? "vendors.toast.activated" : "vendors.toast.deactivated"));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("common.errorGeneric"));
     }
   };
 
@@ -112,6 +134,8 @@ export function VendorsPage({
       replaceVendor(next);
       toast.show(t(next.isDeleted ? "vendors.toast.archived" : "vendors.toast.restored"));
       setArchiveTarget(null);
+      // เก็บถาวรแล้วปิดแผงไปด้วย — แถวหายจากรายการหลัก (ถ้าไม่ได้ติ๊กแสดงที่เก็บถาวร)
+      if (next.isDeleted && !showArchived) setFormTarget(null);
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("common.errorGeneric"));
     } finally {
@@ -119,336 +143,213 @@ export function VendorsPage({
     }
   };
 
-  const th = "px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
+  const openOnKey = (e: KeyboardEvent<HTMLTableRowElement>, id: string) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFormTarget(id); }
+  };
+
+  const tabs = ([
+    { key: "all", label: t("vendors.filter.all"), count: counts.all },
+    { key: "active", label: t("vendors.filter.active"), count: counts.active },
+    { key: "inactive", label: t("vendors.filter.inactive"), count: counts.inactive },
+  ] as { key: VendorStatusTab; label: string; count: number }[]);
+
+  const columns = [
+    t("vendors.col.code"), t("vendors.col.name"), t("vendors.col.contact"), t("vendors.col.phone"),
+    t("vendors.col.status"), t("vendors.approval.col"), "",
+  ];
+  const dash = <span className="text-[#8a97ad]">—</span>;
+  const vendorSummary = (v: Vendor) => (
+    <DialogSummary
+      title={v.name}
+      sub={[v.contactName && `${t("vendors.col.contact")} ${v.contactName}`, v.phone].filter(Boolean).join(" · ") || undefined}
+      aside={v.code ? <span className="font-mono text-[13px]">{v.code}</span> : undefined}
+    />
+  );
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">
-            {t("vendors.pageTitle")}
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">{t("vendors.pageSubtitle")}</p>
-        </div>
-        {canCreate && (
-          <button onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-            <Plus size={15} /> {t("vendors.addNew")}
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        title={t("vendors.pageTitle")}
+        description={t("vendors.pageSubtitle")}
+        actions={canCreate ? (
+          <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}>
+            <Plus size={16} /> {t("vendors.addNew")}
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
-      {vendors.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
-            <Search size={14} className="text-muted-foreground flex-shrink-0" />
+      <ListCard>
+        <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("vendors.col.status")} />
+        <ListToolbar
+          search={search}
+          onSearch={withReset(setSearch)}
+          searchPlaceholder={t("vendors.searchPlaceholder")}
+          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+        >
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173] ml-1">
             <input
-              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("vendors.searchPlaceholder")}
-              aria-label={t("vendors.searchPlaceholder")}
-              className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
+              className="w-4 h-4 rounded border-[#c3ccda] accent-[#0b1d3a]"
             />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            aria-label={t("vendors.col.status")}
-            className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none"
-          >
-            <option value="all">{t("vendors.filter.all")}</option>
-            <option value="active">{t("vendors.filter.active")}</option>
-            <option value="inactive">{t("vendors.filter.inactive")}</option>
-          </select>
-          <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-muted-foreground ml-auto">
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="w-4 h-4 rounded border-border accent-[#c9a84c]" />
             {t("vendors.showArchived")}
           </label>
-        </div>
-      )}
+        </ListToolbar>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
         {vendors.length === 0 ? (
-          <EmptyState
-            icon={Store}
+          <ListEmpty
             title={t("empty.vendors.title")}
-            description={t("empty.vendors.sub")}
-            actionLabel={canCreate ? t("empty.vendors.action") : undefined}
-            onAction={canCreate ? () => setFormTarget("new") : undefined}
-            compact
+            hint={t("empty.vendors.sub")}
+            action={canCreate ? <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}><Plus size={16} /> {t("empty.vendors.action")}</button> : undefined}
           />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Store size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("vendors.noFilterResults")}</p>
-          </div>
+          <ListEmpty title={t("vendors.noFilterResults")} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[1000px]">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className={th}>{t("vendors.col.code")}</th>
-                  <th className={th}>{t("vendors.col.name")}</th>
-                  <th className={th}>{t("vendors.col.contact")}</th>
-                  <th className={th}>{t("vendors.col.phone")}</th>
-                  <th className={th}>{t("vendors.col.taxId")}</th>
-                  <th className={th}>{t("vendors.col.status")}</th>
-                  <th className={th}>{t("vendors.approval.col")}</th>
-                  <th className={th} />
+                <tr className={table.head}>
+                  {columns.map((h, i) => <th key={i} className={table.th}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((v) => (
-                  <tr key={v.id} className={`border-b border-border/50 ${v.isDeleted ? "opacity-50" : ""}`}>
-                    <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{v.code || "—"}</td>
-                    <td className="px-4 py-2.5 text-sm text-foreground">{v.name}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{v.contactName || "—"}</td>
-                    <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{v.phone || "—"}</td>
-                    <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{v.taxId || "—"}</td>
-                    <td className="px-4 py-2.5">
-                      <StatusBadge
-                        status={v.isDeleted ? "archived" : v.isActive ? "active" : "inactive"}
-                        label={t(v.isDeleted ? "vendors.status.archived" : v.isActive ? "vendors.status.active" : "vendors.status.inactive")}
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {/* ขั้นอนุมัติของบัญชี (2026-09-21) — ป้าย + ปุ่มของขั้นถัดไปในช่องเดียว
-                          ผู้ขายที่ถูกเก็บถาวรไม่ต้องเดินขั้นนี้ ไม่มีใครเอาไปใช้บนใบสั่งซื้อได้อยู่แล้ว */}
-                      {v.isDeleted ? <span className="text-xs text-muted-foreground">—</span> : (() => {
-                        const stage = vendorApprovalStatusOf(v);
-                        const busy = approvalBusyId === v.id;
-                        return (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <StatusBadge
-                              status={stage === "approved" ? "active" : stage === "rejected" ? "archived" : "inactive"}
-                              label={t(stage === "approved" ? "vendors.approval.approved"
-                                : stage === "pendingApproval" ? "vendors.approval.pending"
-                                : stage === "rejected" ? "vendors.approval.rejected" : "vendors.approval.draft")}
-                            />
-                            {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-                            {!busy && canEdit && (stage === "draft" || stage === "rejected") && (
-                              <button
-                                onClick={() => void runApproval(v, "submit")}
-                                className="flex items-center gap-1 text-xs text-[#a7841a] hover:underline"
-                              >
-                                <Send size={11} /> {t("vendors.approval.submit")}
-                              </button>
-                            )}
-                            {!busy && canApprove && stage === "pendingApproval" && (
-                              <>
-                                <button onClick={() => void runApproval(v, "approve")} className="flex items-center gap-1 text-xs text-[#1c7a4e] hover:underline">
-                                  <Check size={11} /> {t("vendors.approval.approve")}
-                                </button>
-                                <button onClick={() => { setRejectTarget(v); setRejectComment(""); }} className="flex items-center gap-1 text-xs text-[#e05252] hover:underline">
-                                  <Ban size={11} /> {t("vendors.approval.reject")}
-                                </button>
-                              </>
-                            )}
+                {pageRows.map((v) => {
+                  const stage = vendorApprovalStatusOf(v);
+                  return (
+                    <tr
+                      key={v.id}
+                      tabIndex={0}
+                      aria-label={`${t("vendors.openRow")} ${v.name}`}
+                      onClick={() => setFormTarget(v.id)}
+                      onKeyDown={(e) => openOnKey(e, v.id)}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 ${v.isDeleted ? "opacity-60" : ""}`}
+                    >
+                      <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{v.code || dash}</td>
+                      <td className={`${table.td} max-w-[320px]`}>
+                        <div className="flex flex-col min-w-0 leading-snug">
+                          <span className="text-sm font-medium text-foreground truncate" title={v.name}>{v.name}</span>
+                          {v.taxId && (
+                            <span className="text-xs text-muted-foreground truncate">
+                              {t("vendors.col.taxId")} <span className="font-mono">{v.taxId}</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className={`${table.td} text-sm text-foreground`}>{v.contactName || dash}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{v.phone || dash}</td>
+                      <td className={table.td}>
+                        <StatusBadge
+                          status={v.isDeleted ? "archived" : v.isActive ? "active" : "inactive"}
+                          label={t(v.isDeleted ? "vendors.status.archived" : v.isActive ? "vendors.status.active" : "vendors.status.inactive")}
+                        />
+                      </td>
+                      <td className={`${table.td} py-2.5`}>
+                        {v.isDeleted ? dash : (
+                          <div className="flex flex-col items-start gap-1 max-w-[260px]">
+                            <TonePill tone={vendorApprovalTone[stage]} label={t(vendorApprovalLabelKey[stage])} />
                             {stage === "rejected" && (v.rejectionComment ?? "").trim() && (
-                              <span className="text-xs text-[#e05252] w-full">{v.rejectionComment}</span>
+                              <span className="text-xs text-[#b93636] line-clamp-2" title={v.rejectionComment}>{v.rejectionComment}</span>
                             )}
                           </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {canEdit && !v.isDeleted && (
-                          <button
-                            onClick={() => setFormTarget(v)}
-                            title={t("vendors.form.editTitle")}
-                            aria-label={`${t("vendors.form.editTitle")} — ${v.name}`}
-                            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <Pencil size={13} />
-                          </button>
                         )}
-                        {canArchive && (
-                          <button
-                            onClick={() => setArchiveTarget(v)}
-                            title={t(v.isDeleted ? "vendors.confirmRestore.title" : "vendors.confirmArchive.title")}
-                            aria-label={`${t(v.isDeleted ? "vendors.confirmRestore.title" : "vendors.confirmArchive.title")} — ${v.name}`}
-                            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {v.isDeleted ? <RotateCcw size={13} /> : <Archive size={13} />}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className={`${table.td} w-10`}>
+                        <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
+        )}
+      </ListCard>
 
-      {formTarget !== null && (
-        <VendorFormModal
-          initial={formTarget === "new" ? emptyVendorDraft() : {
-            name: formTarget.name, code: formTarget.code, contactName: formTarget.contactName,
-            phone: formTarget.phone, taxId: formTarget.taxId, address: formTarget.address,
-            note: formTarget.note, isActive: formTarget.isActive,
-          }}
-          isNew={formTarget === "new"}
+      {drawerOpen && (
+        <VendorDrawer
+          key={formTarget ?? "none"}
+          vendor={drawerVendor}
+          canEdit={canEdit}
+          canArchive={canArchive}
+          canApprove={canApprove}
+          locked={archiveTarget !== null || deactivateTarget !== null || rejectTarget !== null}
+          approvalBusy={drawerVendor !== null && approvalBusyId === drawerVendor.id}
           onSave={handleSave}
-          onCancel={() => setFormTarget(null)}
+          onClose={() => setFormTarget(null)}
+          onToggleActive={(v) => (v.isActive ? setDeactivateTarget(v) : void handleToggleActive(v))}
+          onArchiveToggle={(v) => setArchiveTarget(v)}
+          onSubmitApproval={(v) => void runApproval(v, "submit")}
+          onApprove={(v) => void runApproval(v, "approve")}
+          onReject={(v) => { setRejectTarget(v); setRejectComment(""); }}
         />
       )}
 
       {/* กล่องเหตุผลตอนไม่อนุมัติ — เซิร์ฟเวอร์บังคับว่าต้องมีเหตุผลเสมอ ปุ่มจึงปิดไว้จนกว่าจะพิมพ์ */}
-      {rejectTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setRejectTarget(null)} />
-          <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("vendors.approval.rejectTitle")}</h2>
-            <p className="text-xs text-muted-foreground">{rejectTarget.name}</p>
-            <textarea
-              autoFocus
-              value={rejectComment}
-              onChange={(e) => setRejectComment(e.target.value)}
-              placeholder={t("vendors.approval.rejectPlaceholder")}
-              rows={3}
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setRejectTarget(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={() => void runApproval(rejectTarget, "reject")}
-                disabled={!rejectComment.trim() || approvalBusyId === rejectTarget.id}
-                className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#e05252] text-white hover:bg-[#c94545] transition-colors disabled:opacity-50"
-              >
-                {t("vendors.approval.reject")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReasonDialog
+        open={rejectTarget !== null}
+        tone="danger"
+        danger
+        title={t("vendors.approval.rejectTitle")}
+        message={t("vendors.approval.rejectMessage")}
+        summary={rejectTarget ? (
+          <DialogSummary
+            title={rejectTarget.name}
+            sub={rejectTarget.taxId ? <>{t("vendors.col.taxId")} <span className="font-mono">{rejectTarget.taxId}</span></> : undefined}
+            aside={rejectTarget.code ? <span className="font-mono text-[13px]">{rejectTarget.code}</span> : undefined}
+          />
+        ) : undefined}
+        confirmLabel={t("vendors.approval.reject")}
+        confirmDisabled={!rejectComment.trim()}
+        busy={rejectTarget !== null && approvalBusyId === rejectTarget.id}
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={() => { if (rejectTarget) void runApproval(rejectTarget, "reject"); }}
+      >
+        <Field label={t("vendors.approval.rejectLabel")} htmlFor="vendor-reject-comment" required help={!rejectComment.trim() ? t("vendors.approval.rejectRequiredHint") : undefined}>
+          <textarea
+            id="vendor-reject-comment"
+            autoFocus
+            value={rejectComment}
+            onChange={(e) => setRejectComment(e.target.value)}
+            placeholder={t("vendors.approval.rejectPlaceholder")}
+            rows={3}
+            className={`${field.textarea} w-full resize-y`}
+          />
+        </Field>
+      </ReasonDialog>
+      <ConfirmDialog
+        open={deactivateTarget !== null}
+        tone="warning"
+        title={t("vendors.confirmDeactivate.title")}
+        message={t("vendors.confirmDeactivate.message")}
+        confirmLabel={t("vendors.action.deactivate")}
+        summary={deactivateTarget ? vendorSummary(deactivateTarget) : undefined}
+        onConfirm={() => { if (deactivateTarget) void handleToggleActive(deactivateTarget); setDeactivateTarget(null); }}
+        onCancel={() => setDeactivateTarget(null)}
+      />
       <ConfirmDialog
         open={archiveTarget !== null}
         title={t(archiveTarget?.isDeleted ? "vendors.confirmRestore.title" : "vendors.confirmArchive.title")}
         message={t(archiveTarget?.isDeleted ? "vendors.confirmRestore.message" : "vendors.confirmArchive.message")}
+        confirmLabel={t(archiveTarget?.isDeleted ? "vendors.action.restore" : "common.archive")}
         danger={!archiveTarget?.isDeleted}
+        summary={archiveTarget ? vendorSummary(archiveTarget) : undefined}
         busy={archiving}
         onConfirm={handleArchiveToggle}
         onCancel={() => setArchiveTarget(null)}
       />
 
       <Toast message={toast.message} />
-    </div>
-  );
-}
-
-function VendorFormModal({
-  initial,
-  isNew,
-  onSave,
-  onCancel,
-}: {
-  initial: VendorDraft;
-  isNew: boolean;
-  onSave: (draft: VendorDraft) => Promise<string | null>;
-  onCancel: () => void;
-}) {
-  const { t } = useI18n();
-  const [draft, setDraft] = useState<VendorDraft>(initial);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const panelRef = useDialogA11y(onCancel);
-  const titleId = useId();
-
-  const field = (key: "name" | "code" | "contactName" | "phone" | "taxId") => ({
-    id: `vendor-${key}`,
-    value: draft[key],
-    disabled: saving,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft((d) => ({ ...d, [key]: e.target.value })),
-    className: "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60",
-  });
-
-  const handleSubmit = async () => {
-    if (!draft.name.trim()) { setError(t("vendors.form.nameRequired")); return; }
-    setSaving(true);
-    const err = await onSave(draft);
-    setSaving(false);
-    if (err) setError(err);
-  };
-
-  const label = "text-xs text-muted-foreground block mb-1";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground">
-            {t(isNew ? "vendors.form.createTitle" : "vendors.form.editTitle")}
-          </h2>
-          <button onClick={onCancel} disabled={saving} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="sm:col-span-2">
-            <label htmlFor="vendor-name" className={label}>{t("vendors.form.name")}</label>
-            <input {...field("name")} />
-          </div>
-          <div>
-            <label htmlFor="vendor-code" className={label}>{t("vendors.form.code")}</label>
-            <input {...field("code")} />
-            <p className="text-xs text-muted-foreground mt-1">{t("vendors.form.codeHint")}</p>
-          </div>
-          <div>
-            <label htmlFor="vendor-contactName" className={label}>{t("vendors.form.contactName")}</label>
-            <input {...field("contactName")} />
-          </div>
-          <div>
-            <label htmlFor="vendor-phone" className={label}>{t("vendors.form.phone")}</label>
-            <input {...field("phone")} />
-          </div>
-          <div>
-            <label htmlFor="vendor-taxId" className={label}>{t("vendors.form.taxId")}</label>
-            <input {...field("taxId")} />
-          </div>
-          <div className="sm:col-span-2">
-            <label htmlFor="vendor-address" className={label}>{t("vendors.form.address")}</label>
-            <textarea
-              id="vendor-address" rows={2} disabled={saving} value={draft.address}
-              onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))}
-              className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y disabled:opacity-60"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label htmlFor="vendor-note" className={label}>{t("vendors.form.note")}</label>
-            <textarea
-              id="vendor-note" rows={2} disabled={saving} value={draft.note}
-              onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
-              className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y disabled:opacity-60"
-            />
-          </div>
-          <label className="sm:col-span-2 flex items-center gap-2 cursor-pointer select-none text-sm text-foreground">
-            <input
-              type="checkbox" disabled={saving} checked={draft.isActive}
-              onChange={(e) => setDraft((d) => ({ ...d, isActive: e.target.checked }))}
-              className="w-4 h-4 rounded border-border accent-[#c9a84c]"
-            />
-            {t("vendors.form.isActive")}
-          </label>
-        </div>
-
-        {error && <p className="text-xs text-[#e05252] mt-3">{error}</p>}
-
-        <div className="flex items-center justify-end gap-2 mt-5">
-          <button onClick={onCancel} disabled={saving} className="px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:text-foreground transition-colors disabled:opacity-60">
-            {t("common.cancel")}
-          </button>
-          <button onClick={handleSubmit} disabled={saving} className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-            {t("common.save")}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

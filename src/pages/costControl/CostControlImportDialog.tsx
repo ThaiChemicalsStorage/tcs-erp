@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
-import { FileSpreadsheet, Loader2, Trash2, TriangleAlert, Upload, X } from "lucide-react";
+import { FilePlus2, FileSpreadsheet, Loader2, Trash2, TriangleAlert, Upload, X } from "lucide-react";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useI18n } from "../../lib/i18n";
 import { ApiError } from "../../lib/apiClient";
@@ -159,23 +161,34 @@ export function CostControlImportDialog({ onCreated, onClose }: {
   };
 
   const titleId = "cost-control-import-title";
-  const inputCls = "w-full px-2 py-1 text-xs bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20";
+  const cellCls = `${field.cell} w-full min-w-0`;
+  const [countBefore, countAfter = ""] = t("costControlImport.previewCount").split("{count}");
+  const setHeader = (key: keyof CostControlImportResult["header"], value: string) =>
+    { if (result) setResult({ ...result, header: { ...result.header, [key]: value } }); };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={onClose} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId}
-        className="relative bg-card border border-border rounded-xl shadow-xl w-full max-w-5xl max-h-[88vh] flex flex-col">
+        className="relative bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] w-full max-w-[880px] max-h-[88vh] flex flex-col overflow-hidden">
 
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <h2 id={titleId} className="text-base font-semibold text-foreground">{t("costControlImport.title")}</h2>
-          <button onClick={onClose} aria-label={t("costControlImport.cancel")}
-            className="ml-auto text-muted-foreground hover:text-foreground transition-colors">
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b border-[#eef1f6] flex-shrink-0">
+          <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <h2 id={titleId} className="text-lg font-semibold leading-snug text-foreground">{t("costControlImport.title")}</h2>
+            {fileName && (
+              <span className="text-[13px] text-[#3d5173] flex items-center gap-1.5 min-w-0">
+                <FileSpreadsheet size={15} className="text-[#1b7f4f] flex-shrink-0" />
+                <span className="truncate">{fileName}</span>
+              </span>
+            )}
+          </div>
+          <button type="button" onClick={onClose} aria-label={t("costControlImport.cancel")}
+            className="w-9 h-9 -mt-1 -mr-2 rounded-lg text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground flex items-center justify-center flex-shrink-0 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-4">
           {!result && (
             <button
               type="button"
@@ -188,12 +201,12 @@ export function CostControlImportDialog({ onCreated, onClose }: {
                 const file = e.dataTransfer.files?.[0];
                 if (file) void readFile(file);
               }}
-              className={`w-full rounded-xl border-2 border-dashed px-6 py-12 flex flex-col items-center gap-3 transition-colors
-                ${dragOver ? "border-[#c9a84c] bg-[#c9a84c]/5" : "border-border hover:border-[#c9a84c]/40"}`}
+              className={`w-full rounded-xl border-2 border-dashed px-6 py-12 flex flex-col items-center gap-3 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40
+                ${dragOver ? "border-[#1a5fb4] bg-[#eef4fc]" : "border-[#c3ccda] hover:border-[#1a5fb4]/60 hover:bg-[#f8f9fc]"}`}
             >
-              {reading ? <Loader2 size={28} className="text-[#c9a84c] animate-spin" /> : <Upload size={28} className="text-muted-foreground" />}
-              <span className="text-sm text-foreground">{reading ? t("costControlImport.reading") : t("costControlImport.dropHere")}</span>
-              <span className="text-xs text-muted-foreground">{t("costControlImport.dropHint")}</span>
+              {reading ? <Loader2 size={28} className="text-[#1a5fb4] animate-spin" /> : <Upload size={28} className="text-muted-foreground" />}
+              <span className="text-sm font-medium text-foreground">{reading ? t("costControlImport.reading") : t("costControlImport.dropHere")}</span>
+              <span className="text-[13px] text-muted-foreground max-w-md text-center">{t("costControlImport.dropHint")}</span>
             </button>
           )}
 
@@ -210,155 +223,174 @@ export function CostControlImportDialog({ onCreated, onClose }: {
           />
 
           {error && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[#d22626]/10 border border-[#d22626]/25 text-xs text-[#a81f1f]">
-              <TriangleAlert size={14} className="mt-0.5 flex-shrink-0" />
+            <div role="alert" className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-[#fcebeb] border border-[#efc2c2] text-[13px] text-[#b93636]">
+              <TriangleAlert size={16} className="mt-0.5 flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {result && (
             <>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <FileSpreadsheet size={14} /> {fileName}
-              </div>
-
               {sheets.length > 1 && (
-                <fieldset className="border border-border rounded-lg px-3 py-2.5">
-                  <legend className="px-1 text-xs text-muted-foreground">{t("costControlImport.chooseSheet")}</legend>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                    {sheets.map((s) => (
-                      <label key={s.name} className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="accent-[#c9a84c]"
-                          checked={picked.includes(s.name)}
-                          onChange={() => toggleSheet(s.name)}
-                        />
-                        <span>{s.name}</span>
-                        <span className="text-muted-foreground">
-                          ({s.kind === "costControl" ? t("costControlImport.sheetCostControl") : t("costControlImport.sheetSc")}
-                          {" · "}
-                          {t("costControlImport.sheetLineCount").replace("{count}", String(s.lineCount))})
-                        </span>
-                      </label>
-                    ))}
+                <fieldset className="m-0 p-0 border-0 flex flex-col gap-2 flex-shrink-0">
+                  <legend className={`${field.label} p-0 mb-2`}>{t("costControlImport.chooseSheet")}</legend>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {sheets.map((s) => {
+                      const on = picked.includes(s.name);
+                      return (
+                        <label key={s.name}
+                          className={`min-h-[52px] px-3 py-2 rounded-lg border flex items-center gap-2.5 cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-[#1a5fb4]/30 ${
+                            on ? "border-[#1a5fb4] bg-[#eef4fc]" : "border-[#c3ccda] bg-white hover:bg-[#f8f9fc]"
+                          }`}>
+                          <input
+                            type="checkbox"
+                            className="w-[18px] h-[18px] accent-[#0b1d3a] flex-shrink-0 cursor-pointer"
+                            checked={on}
+                            onChange={() => toggleSheet(s.name)}
+                          />
+                          <span className="flex flex-col min-w-0 leading-snug">
+                            <span className="text-sm font-medium text-foreground truncate">{s.name}</span>
+                            <span className="text-xs text-muted-foreground truncate">
+                              {s.kind === "costControl" ? t("costControlImport.sheetCostControl") : t("costControlImport.sheetSc")}
+                              {" · "}
+                              {t("costControlImport.sheetLineCount").replace("{count}", String(s.lineCount))}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">{t("costControlImport.chooseSheetHint")}</p>
+                  <p className={field.help}>{t("costControlImport.chooseSheetHint")}</p>
                 </fieldset>
               )}
 
               {result.warnings.length > 0 && (
-                <div className="px-3 py-2.5 rounded-lg bg-[#e08a3c]/10 border border-[#e08a3c]/25 space-y-1">
-                  <p className="flex items-center gap-1.5 text-xs font-semibold text-[#a75d1a]">
-                    <TriangleAlert size={13} /> {t("costControlImport.warningsTitle")}
-                  </p>
-                  {result.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-[#a75d1a] leading-relaxed">{w}</p>
-                  ))}
+                <div role="alert" className="flex-shrink-0 px-3.5 py-3 rounded-lg bg-[#fdf3e0] border border-[#efd3a0] text-[#8a5a00] flex gap-2.5">
+                  <TriangleAlert size={16} className="flex-shrink-0 mt-0.5" />
+                  <div className="flex flex-col gap-0.5 text-[13px] leading-relaxed min-w-0">
+                    <strong className="font-semibold">{t("costControlImport.warningsTitle")}</strong>
+                    {result.warnings.map((w, i) => <span key={i}>{w}</span>)}
+                  </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="text-xs text-muted-foreground">
-                  {t("costControlDoc.field.jobName")}
-                  <input className={inputCls} value={result.header.jobName}
-                    onChange={(e) => setResult({ ...result, header: { ...result.header, jobName: e.target.value } })} />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  {t("costControlDoc.field.workType")}
-                  <input className={inputCls} value={result.header.workType}
-                    onChange={(e) => setResult({ ...result, header: { ...result.header, workType: e.target.value } })} />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  {t("costControlDoc.field.jobOrder")}
-                  <input className={inputCls} value={result.header.jobOrder}
-                    onChange={(e) => setResult({ ...result, header: { ...result.header, jobOrder: e.target.value } })} />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  {t("costControlDoc.field.docDate")}
-                  <input type="date" className={inputCls} value={result.header.docDate}
-                    onChange={(e) => setResult({ ...result, header: { ...result.header, docDate: e.target.value } })} />
-                </label>
+              <div className="flex-shrink-0 grid grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_150px] gap-3">
+                <Field label={t("costControlDoc.field.jobName")} htmlFor="cci-jobName">
+                  <input id="cci-jobName" className={`${field.input} w-full min-w-0`} value={result.header.jobName}
+                    onChange={(e) => setHeader("jobName", e.target.value)} />
+                </Field>
+                <Field label={t("costControlDoc.field.workType")} htmlFor="cci-workType">
+                  <input id="cci-workType" className={`${field.input} w-full min-w-0`} value={result.header.workType}
+                    onChange={(e) => setHeader("workType", e.target.value)} />
+                </Field>
+                <Field label={t("costControlDoc.field.jobOrder")} htmlFor="cci-jobOrder">
+                  <input id="cci-jobOrder" className={`${field.input} w-full min-w-0 font-mono text-[13px]`} value={result.header.jobOrder}
+                    onChange={(e) => setHeader("jobOrder", e.target.value)} />
+                </Field>
+                <Field label={t("costControlDoc.field.docDate")} htmlFor="cci-docDate">
+                  <input id="cci-docDate" type="date" className={`${field.input} w-full min-w-0`} value={result.header.docDate}
+                    onChange={(e) => setHeader("docDate", e.target.value)} />
+                </Field>
               </div>
 
-              {/* ราคาในไฟล์ไม่ถูกนำเข้าเลย — บอกไว้ตรง ๆ ไม่งั้นคนจะนึกว่าระบบอ่านราคาไม่ออก */}
-              <p className="text-xs text-muted-foreground">{t("costControlImport.pricesNotImported")}</p>
-
-              <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="overflow-x-auto max-h-[38vh]">
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-muted/95">
-                      <tr className="border-b border-border">
-                        {[t("costControlDoc.line.kind"), t("costControlDoc.line.seq"), t("costControlDoc.line.description"),
-                          t("costControlDoc.line.qty"), t("costControlDoc.line.unit"), t("costControlDoc.line.unitCost"),
-                          t("costControlDoc.line.total"), ""].map((h, i) => (
-                          <th key={i} className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((l, idx) => (
-                        <tr key={l.id} className={`border-b border-border/50 ${l.kind === "group" ? "bg-muted/40" : ""}`}>
-                          <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
-                            {l.kind === "group" ? t("costControlDoc.line.kind.group")
-                              : l.kind === "sub" ? t("costControlDoc.line.kind.sub") : t("costControlDoc.line.kind.item")}
-                          </td>
-                          <td className="px-3 py-1.5 text-xs font-mono text-muted-foreground">{l.seq || "—"}</td>
-                          <td className="px-3 py-1.5">
-                            <input className={inputCls} value={l.description}
-                              onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} />
-                          </td>
-                          <td className="px-3 py-1.5 w-24">
-                            <input type="number" className={`${inputCls} text-right`} value={l.qty ?? ""}
-                              onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, qty: e.target.value === "" ? null : Number(e.target.value) } : x))} />
-                          </td>
-                          <td className="px-3 py-1.5 w-20">
-                            <input className={inputCls} value={l.unit}
-                              onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, unit: e.target.value } : x))} />
-                          </td>
-                          <td className="px-3 py-1.5 w-32">
-                            <input type="number" className={`${inputCls} text-right`} value={l.unitCost ?? ""}
-                              onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, unitCost: e.target.value === "" ? null : Number(e.target.value) } : x))} />
-                          </td>
-                          <td className="px-3 py-1.5 text-xs font-mono text-right text-foreground whitespace-nowrap">
-                            {/* ยังไม่กรอกต้นทุน = ยังไม่มียอดรวม ปล่อยว่าง ไม่โชว์ 0.00 ทั้งคอลัมน์
-                                ตั้งแต่ไม่นำราคาจากไฟล์เข้ามาแล้ว (ใบพิมพ์ใช้กติกาเดียวกัน) */}
-                            {l.kind === "group" ? "—" : l.unitCost === null ? "" : fmt(lineTotalCost(l))}
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <button onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                              aria-label={t("costControlImport.removeLine")}
-                              className="text-muted-foreground hover:text-[#d22626] transition-colors">
-                              <Trash2 size={13} />
-                            </button>
-                          </td>
+              <div className="flex flex-col gap-2 min-h-0">
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                  <h3 className="text-[15px] font-semibold text-foreground">{t("costControlImport.preview")}</h3>
+                  {/* ราคาในไฟล์ไม่ถูกนำเข้าเลย — บอกไว้ตรง ๆ ไม่งั้นคนจะนึกว่าระบบอ่านราคาไม่ออก */}
+                  <span className="text-xs text-muted-foreground">{t("costControlImport.pricesNotImported")}</span>
+                </div>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="overflow-auto max-h-[38vh]">
+                    <table className="w-full min-w-[720px] table-fixed">
+                      <colgroup>
+                        <col className="w-[122px]" />
+                        <col className="w-[66px]" />
+                        <col />
+                        <col className="w-[84px]" />
+                        <col className="w-[84px]" />
+                        <col className="w-[108px]" />
+                        <col className="w-[108px]" />
+                        <col className="w-[50px]" />
+                      </colgroup>
+                      <thead className="sticky top-0 z-[1]">
+                        <tr className={table.head}>
+                          {[t("costControlDoc.line.kind"), t("costControlDoc.line.seq"), t("costControlDoc.line.description"),
+                            t("costControlDoc.line.qty"), t("costControlDoc.line.unit"), t("costControlDoc.line.unitCost"),
+                            t("costControlDoc.line.total"), ""].map((h, i) => (
+                            <th key={i} className={`px-[3px] first:pl-3 last:pr-3 font-semibold whitespace-nowrap ${i === 3 || i === 5 || i === 6 ? "text-right" : "text-left"}`}>{h}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {lines.map((l, idx) => (
+                          <tr key={l.id} className={`border-b border-[#eef1f6] ${l.kind === "group" ? "bg-[#f8f9fc]" : "bg-white"}`}>
+                            <td className="px-[3px] py-1.5 first:pl-3 text-[13px] text-[#3d5173] whitespace-nowrap">
+                              {l.kind === "group" ? t("costControlDoc.line.kind.group")
+                                : l.kind === "sub" ? t("costControlDoc.line.kind.sub") : t("costControlDoc.line.kind.item")}
+                            </td>
+                            <td className={`px-[3px] py-1.5 text-[13px] tabular-nums ${l.seq ? "text-foreground" : "text-[#8a97ad]"}`}>{l.seq || "—"}</td>
+                            <td className="px-[3px] py-1.5">
+                              <input className={`${cellCls} ${l.kind === "group" ? "font-semibold" : ""}`} value={l.description}
+                                aria-label={t("costControlDoc.line.description")}
+                                onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} />
+                            </td>
+                            <td className="px-[3px] py-1.5">
+                              <input type="number" className={`${cellCls} text-right tabular-nums`} value={l.qty ?? ""}
+                                aria-label={t("costControlDoc.line.qty")}
+                                onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, qty: e.target.value === "" ? null : Number(e.target.value) } : x))} />
+                            </td>
+                            <td className="px-[3px] py-1.5">
+                              <input className={cellCls} value={l.unit}
+                                aria-label={t("costControlDoc.line.unit")}
+                                onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, unit: e.target.value } : x))} />
+                            </td>
+                            <td className="px-[3px] py-1.5">
+                              <input type="number" className={`${cellCls} text-right tabular-nums`} value={l.unitCost ?? ""}
+                                aria-label={t("costControlDoc.line.unitCost")}
+                                onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, unitCost: e.target.value === "" ? null : Number(e.target.value) } : x))} />
+                            </td>
+                            {/* ยังไม่กรอกต้นทุน = ยังไม่มียอดรวม แสดง — ไม่โชว์ 0.00 ทั้งคอลัมน์
+                                ตั้งแต่ไม่นำราคาจากไฟล์เข้ามาแล้ว (ใบพิมพ์ใช้กติกาเดียวกัน) */}
+                            <td className={`px-[3px] py-1.5 text-sm text-right tabular-nums whitespace-nowrap ${l.kind === "group" || l.unitCost === null ? "text-[#8a97ad]" : "font-semibold text-foreground"}`}>
+                              {l.kind === "group" || l.unitCost === null ? "—" : fmt(lineTotalCost(l))}
+                            </td>
+                            <td className="px-[3px] py-1.5 last:pr-3 text-right">
+                              <button type="button" onClick={() => setLines(lines.filter((_, i) => i !== idx))}
+                                aria-label={t("costControlImport.removeLine")} title={t("costControlImport.removeLine")}
+                                className="w-8 h-9 inline-flex items-center justify-center rounded-lg text-[#8a97ad] hover:text-[#b93636] hover:bg-[#fcebeb] transition-colors">
+                                <Trash2 size={15} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-2 px-5 py-3 border-t border-border">
-          {result && (
-            <span className="text-xs text-muted-foreground">
-              {t("costControlImport.previewCount").replace("{count}", String(lines.length))}
-            </span>
-          )}
-          <button onClick={onClose}
-            className="ml-auto px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+        <div className="flex items-center gap-2.5 px-6 py-3.5 border-t border-border flex-shrink-0">
+          <span className="flex-1 text-sm text-[#3d5173]">
+            {result && (
+              <>
+                {countBefore}<strong className="font-semibold text-foreground">{lines.length}</strong>{countAfter}
+              </>
+            )}
+          </span>
+          <button type="button" onClick={onClose} className={btn.secondary}>
             {t("costControlImport.cancel")}
           </button>
           <button
+            type="button"
             onClick={() => void handleCreate()}
             disabled={!result || lines.length === 0 || creating}
             title={result && lines.length === 0 ? t("costControlImport.noLines") : undefined}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
+            className={btn.primary}
           >
-            {creating && <Loader2 size={13} className="animate-spin" />}
+            {creating ? <Loader2 size={16} className="animate-spin" /> : <FilePlus2 size={16} />}
             {creating ? t("costControlImport.creating") : t("costControlImport.confirm")}
           </button>
         </div>

@@ -12,6 +12,7 @@ import { btn, field, surface } from "../../components/ui/styles";
 import { AccountingDialog, MonthField, Pill, SummaryBox, TotalsStrip } from "./accountingUi";
 import { currentMonthLocal, groupApEntriesByVendor, money, thaiMonthLabel } from "./accountingFormat";
 import { REPORT } from "./reportTable";
+import { ApRegisterPrint } from "./legacyReportPrint";
 
 /**
  * ทะเบียนเจ้าหนี้ (2026-09-03) — จัดกลุ่มตามผู้ขาย ตอบคำถามเดียวที่บัญชีจ่ายถามทุกวัน:
@@ -23,6 +24,7 @@ import { REPORT } from "./reportTable";
  *
  * ดีไซน์ใหม่ 2026-09-30 (เจ้าของอนุมัติ): จากตารางแยกใบละผู้ขาย เป็นตารางเดียวที่มีแถวหัวกลุ่มผู้ขาย
  * (ชื่อ · เลขผู้เสียภาษี · ค้างจ่าย) คั่นก่อนรายการของผู้ขายนั้น — ลำดับผู้ขายเหมือนเดิม (ค้างมากสุดก่อน)
+ * **เฉพาะบนจอ** — ใบพิมพ์ยังเป็นตารางแยกใบละผู้ขายแบบเดิมตามที่เจ้าของสั่ง (`ApRegisterPrint` ใน legacyReportPrint.tsx)
  */
 const COLS = 7;
 
@@ -83,8 +85,10 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
         />
       </div>
 
-      <p className="hidden print:block text-lg font-semibold">{t("apRegister.printHeadingPrefix")} {thaiMonthLabel(month)}</p>
+      {/* กระดาษพิมพ์แบบเดิม (ก่อนเฟส 3) — ดู legacyReportPrint.tsx · เนื้อหาบนจอด้านล่างไม่ขึ้นบนกระดาษ */}
+      {!loading && !loadError && <ApRegisterPrint month={month} entries={entries} />}
 
+      <div className="space-y-5 print:hidden">
       {loading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}</div>
       ) : loadError ? (
@@ -178,6 +182,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
           </section>
         </>
       )}
+      </div>
 
       {payTarget && (
         <MarkPaidDialog

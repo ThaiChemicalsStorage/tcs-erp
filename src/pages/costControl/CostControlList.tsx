@@ -1,130 +1,134 @@
 import { useState, type ReactNode } from "react";
-import { Calculator, Search, X } from "lucide-react";
-import { EmptyState } from "../../components/EmptyState";
+import { ChevronRight } from "lucide-react";
+import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import { type CostControlSummary, type CostControlStatus } from "../../lib/costControl";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
-import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
+import { CostControlDateRangeSelect, CostControlStatusPill } from "./costControlUi";
+import { useCostControlStatusLabel } from "./costControlHooks";
 
-const FILTER_ALL = "all";
+const PAGE_SIZE = 25;
 
-const statusStyle: Record<CostControlStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
+type ListTabKey = "all" | CostControlStatus;
 
+// รายการ Cost Control ตามดีไซน์ใหม่ (2026-09-30): แท็บสถานะพร้อมจำนวน → ค้นหา + ช่วงวันที่ → ตาราง → แบ่งหน้า
 export function CostControlList({ costControls, onOpen, headerAction }: {
   costControls: CostControlSummary[];
   onOpen: (id: string) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
-  const statusLabel: Record<CostControlStatus, string> = {
-    Draft: t("materialRequisition.status.draft"),
-    PendingApproval: t("materialRequisition.status.pendingApproval"),
-    Final: t("materialRequisition.status.final"),
-  };
-  const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  const statusLabel = useCostControlStatusLabel();
+  const [tab, setTab] = useState<ListTabKey>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const q = searchQuery.trim().toLowerCase();
 
+  // แท็บนับตามช่วงวันที่และคำค้นที่ใช้อยู่ — ตัวเลขบนแท็บจึงตรงกับสิ่งที่จะเห็นเมื่อกดแท็บนั้น
   const dateRangeResolved = resolveRange(dateRange);
-  const filtered = costControls
+  const base = costControls
     .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
-    .filter((c) => filterStatus === FILTER_ALL || c.status === filterStatus)
     .filter((c) => !q || [c.documentNumber, c.id, c.jobName, c.jobOrder].some((v) => (v ?? "").toLowerCase().includes(q)));
+  const filtered = base.filter((c) => tab === "all" || c.status === tab);
+
+  const tabs: { key: ListTabKey; label: string; count: number }[] = [
+    { key: "all", label: t("quotation.filterAll"), count: base.length },
+    ...(["Draft", "PendingApproval", "Final"] as const).map((s) => ({
+      key: s, label: statusLabel(s), count: base.filter((c) => c.status === s).length,
+    })),
+  ];
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // เปลี่ยนตัวกรองแล้วกลับไปหน้าแรกเสมอ ไม่งั้นค้างอยู่หน้าที่ไม่มีข้อมูล
+  const resetPage = <V,>(set: (v: V) => void) => (v: V) => { set(v); setPage(1); };
+
+  const headers = [
+    t("costControl.col.id"), t("costControl.col.jobName"), t("costControl.col.jobOrder"),
+    t("costControl.col.status"), t("costControl.col.updatedAt"),
+  ];
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("costControl.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("costControl.pageSubtitle")}</p>
-        </div>
-        {headerAction}
-      </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.bd")}
+        title={t("costControl.pageTitle")}
+        description={t("costControl.pageSubtitle")}
+        actions={headerAction}
+      />
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("costControl.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as CostControlStatus]}
-            </button>
-          ))}
-        </div>
-      </div>
+      <ListCard>
+        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("costControl.tabsAria")} />
+        <ListToolbar
+          search={searchQuery}
+          onSearch={resetPage(setSearchQuery)}
+          searchPlaceholder={t("costControl.searchPlaceholder")}
+          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+        >
+          <CostControlDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+        </ListToolbar>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
         {costControls.length === 0 ? (
-          <EmptyState icon={Calculator} title={t("costControl.empty.title")} description={t("costControl.empty.description")} compact />
+          <ListEmpty title={t("costControl.empty.title")} hint={t("costControl.empty.description")} />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Calculator size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("costControl.noFilterResults")}</p>
-          </div>
+          <ListEmpty title={t("costControl.noFilterResults")} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[820px]">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {[t("costControl.col.id"), t("costControl.col.jobName"), t("costControl.col.jobOrder"),
-                    t("costControl.col.status"), t("costControl.col.updatedAt")].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
+                <tr className={table.head}>
+                  {headers.map((h) => <th key={h} className={table.th}>{h}</th>)}
+                  <th className={`${table.th} w-10`} aria-hidden="true" />
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => {
-                  return (
-                    <tr
-                      key={c.id}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`${t("costControl.openRow")} ${c.documentNumber || c.id}`}
-                      onClick={() => onOpen(c.id)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(c.id); } }}
-                      className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-                    >
-                      <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{c.documentNumber || c.id}</td>
-                      <td className="px-4 py-3.5 text-sm text-foreground max-w-[260px] truncate" title={c.jobName}>{c.jobName || "—"}</td>
-                      <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{c.jobOrder || "—"}</td>
-                      <td className="px-4 py-3.5">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[c.status]}`}>
-                          {statusLabel[c.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(c.updatedAt)}</td>
-                    </tr>
-                  );
-                })}
+                {pageRows.map((c) => (
+                  <tr
+                    key={c.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`${t("costControl.openRow")} ${c.documentNumber || c.id}`}
+                    onClick={() => onOpen(c.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(c.id); } }}
+                    className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                  >
+                    <td className={`${table.td} whitespace-nowrap`}><span className={table.code}>{c.documentNumber || c.id}</span></td>
+                    <td className={`${table.td} max-w-[420px]`}>
+                      <span className="block text-sm font-medium text-foreground truncate" title={c.jobName}>{c.jobName || "—"}</span>
+                    </td>
+                    <td className={`${table.td} whitespace-nowrap`}>
+                      {c.jobOrder
+                        ? <span className="font-mono text-[13px] text-[#3d5173]">{c.jobOrder}</span>
+                        : <span className="text-[#8a97ad]">—</span>}
+                    </td>
+                    <td className={table.td}><CostControlStatusPill status={c.status} /></td>
+                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(c.updatedAt)}</td>
+                    <td className={table.td}>
+                      <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
+        )}
+      </ListCard>
     </div>
   );
 }
