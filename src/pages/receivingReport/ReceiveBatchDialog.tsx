@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, PackagePlus, X } from "lucide-react";
+import { Info, Loader2, PackagePlus } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { fmt } from "../../lib/quotes";
 import { formatQuoteDateThai } from "../../lib/quotes";
@@ -10,18 +10,17 @@ import {
   batchLineDiscountAmt, defaultBatchLineDiscount,
 } from "../../lib/receivingReport";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
-
-const inputCls = "w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg text-foreground outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
-const cellCls = "w-24 px-2 py-1.5 text-sm text-right bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
-/** ช่องที่ความกว้างมาจากตัวห่อ — ไม่มี w-* ของตัวเอง (inputCls มี w-full ซึ่งชนะ w-20 แล้วช่องล้นทับช่องข้าง ๆ) */
-const boxCls = "w-full px-2 py-1.5 text-sm bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
+import { Drawer } from "../../components/ui/Overlays";
+import { Field, ReadonlyField, SelectBox } from "../../components/ui/Field";
+import { btn, field } from "../../components/ui/styles";
+import { DiscountInput, SuffixInput } from "./receivingUi";
 
 /**
- * กล่อง "บันทึกรับของ" — หนึ่งรอบการรับ ตามที่เจ้าของสั่ง: *"มีช่องให้กรอกแบบราคาต่อหน่วยเท่าไหร่
- * จำนวนเท่าไหร่ กี่บาท"*
+ * แผง "บันทึกรับของ" — หนึ่งรอบการรับ ตามที่เจ้าของสั่ง: *"มีช่องให้กรอกแบบราคาต่อหน่วยเท่าไหร่
+ * จำนวนเท่าไหร่ กี่บาท"* · ดีไซน์ใหม่ (2026-09-30) เป็นแผงกว้าง 880 จากขวา แทนหน้าต่างกลางจอ
  *
  * ตั้งต้นให้ทุกบรรทัด = ยอดค้างรับเต็ม ที่ราคาตามใบสั่งซื้อ (กรณีที่พบบ่อยที่สุดคือของมาครบตามที่สั่ง)
- * ผู้ใช้แก้ลงได้ทีละบรรทัด · บรรทัดที่รับครบแล้วไม่แสดงในกล่องนี้เลย
+ * ผู้ใช้แก้ลงได้ทีละบรรทัด · บรรทัดที่รับครบแล้วไม่แสดงในแผงนี้เลย
  */
 export function ReceiveBatchDialog({
   doc, busy, onCancel, onSubmit,
@@ -75,12 +74,8 @@ export function ReceiveBatchDialog({
   );
   const [error, setError] = useState("");
 
+  // แผงวาดอยู่ใต้คอมโพเนนต์นี้ effect ของแผงจึงรันก่อน — โฟกัสช่องเลขที่ใบกำกับที่นี่ชนะเสมอ
   useEffect(() => { firstFieldRef.current?.focus(); }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [busy, onCancel]);
 
   const num = (v: string) => {
     const n = Number(v);
@@ -121,194 +116,160 @@ export function ReceiveBatchDialog({
     });
   };
 
+  const setRow = (id: string, patch: Partial<{ qty: string; unitPrice: string; discount: string; discountMode: DiscountMode }>) =>
+    setRows((p) => ({ ...p, [id]: { ...(p[id] ?? { qty: "", unitPrice: "", discount: "", discountMode: "percent" as DiscountMode }), ...patch } }));
+
+  const vatLabel = priceType === "none" ? t("receivingReportDoc.summary.noVat") : t("receivingReportDoc.summary.vat").replace("{rate}", String(totals.vatRate ?? 0));
+  const breakdown = [
+    totals.discountAmt > 0 ? `${t("receivingReportDoc.summary.discount")} ${fmt(totals.discountAmt)}` : "",
+    `${t("receivingReportDoc.receive.subtotal")} ${fmt(totals.subtotal)}`,
+    `${vatLabel} ${fmt(totals.vatAmt)}`,
+  ].filter(Boolean).join(" · ");
+  const grid = "grid grid-cols-[minmax(0,1fr)_48px_64px_92px_104px_124px_96px] gap-2.5 items-center px-3.5";
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="receive-batch-title">
-      <div className="bg-card border border-border rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card">
-          <h2 id="receive-batch-title" className="text-base font-semibold text-foreground">
-            {t("receivingReportDoc.receive.title").replace("{seq}", String(doc.batches.length + 1))}
-          </h2>
-          <button onClick={onCancel} disabled={busy} className="text-muted-foreground hover:text-foreground disabled:opacity-50" aria-label={t("common.cancel")}>
-            <X size={18} />
-          </button>
+    <Drawer
+      open
+      wide
+      busy={busy}
+      onClose={onCancel}
+      title={t("receivingReportDoc.receive.title").replace("{seq}", String(doc.batches.length + 1))}
+      subtitle={[
+        doc.documentNumber || doc.id,
+        doc.vendorName,
+        t("receivingReportDoc.receive.pendingCount").replace("{n}", String(pending.length)),
+      ].filter(Boolean).join(" · ")}
+      footerLeft={
+        <div className="flex flex-col leading-tight">
+          <span className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.totalThisRound")}</span>
+          <span className="text-xl font-bold tabular-nums text-foreground">฿{fmt(totals.total)}</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{t("receivingReportDoc.summary.gross")} {fmt(totals.gross)} · {breakdown}</span>
+          {/* ข้อผิดพลาดอยู่ท้ายแผงที่มองเห็นเสมอ — รายการยาวแล้วข้อความในเนื้อหาจะหลุดจอตอนกดปุ่มบันทึก */}
+          {error && <span className={`${field.error} mt-1`} role="alert">{error}</span>}
         </div>
-
-        <div className="p-5 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.receive.invoiceNumber")} *</span>
-              <input ref={firstFieldRef} className={inputCls} value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.receive.invoiceDate")}</span>
-              <input type="date" className={inputCls} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.receive.receivedDate")}</span>
-              <input type="date" className={inputCls} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.creditDays")}</span>
-              <input type="number" min={0} className={inputCls} value={creditDays} onChange={(e) => setCreditDays(e.target.value)} />
-              <span className="text-xs text-muted-foreground block mt-1">
-                {t("receivingReportDoc.dueDate")}: <span className="font-mono">{dueDate ? formatQuoteDateThai(dueDate) : "—"}</span>
-              </span>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.priceType")}</span>
-              <select className={inputCls} value={priceType} onChange={(e) => setPriceType(e.target.value as ReceivingPriceType)}>
+      }
+      footerRight={
+        <>
+          <button type="button" onClick={onCancel} disabled={busy} className={btn.secondary}>{t("common.cancel")}</button>
+          <button type="button" onClick={submit} disabled={busy} className={btn.primary}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <PackagePlus size={16} />} {t("receivingReportDoc.receive.submit")}
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-6">
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-[15px] font-semibold text-foreground">{t("receivingReportDoc.receive.billSection")}</h3>
+            <span className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.billHint")}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
+            <Field label={t("receivingReportDoc.receive.invoiceNumber")} htmlFor="rb-invoice" required className="sm:col-span-2">
+              <input id="rb-invoice" ref={firstFieldRef} className={`${field.input} w-full font-mono`} value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+            </Field>
+            <Field label={t("receivingReportDoc.receive.invoiceDate")} htmlFor="rb-invoice-date">
+              <input id="rb-invoice-date" type="date" className={`${field.input} w-full`} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </Field>
+            <Field label={t("receivingReportDoc.receive.receivedDate")} htmlFor="rb-received-date">
+              <input id="rb-received-date" type="date" className={`${field.input} w-full`} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+            </Field>
+            <Field label={t("receivingReportDoc.priceType")} htmlFor="rb-price-type">
+              <SelectBox id="rb-price-type" value={priceType} onChange={(e) => setPriceType(e.target.value as ReceivingPriceType)}>
                 {RECEIVING_PRICE_TYPES.map((p) => <option key={p} value={p}>{t(RECEIVING_PRICE_TYPE_LABEL_KEY[p])}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.receive.vatRate")}</span>
-              <input type="number" min={0} max={100} className={`${inputCls} disabled:opacity-60`} disabled={priceType === "none"}
-                value={priceType === "none" ? "" : vatRate} onChange={(e) => setVatRate(e.target.value)} />
-            </label>
-            <div className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.discount")}</span>
-              {/* ความกว้างอยู่ที่ตัวห่อ (บั๊ก 2026-09-29: inputCls มี w-full ซึ่งชนะ w-20 ช่อง %/บาทจึงกว้างเต็มคอลัมน์แล้วล้นทับ "ผู้ออกบิล")
-                  — แก้แบบเดียวกับช่องส่วนลดหน้าใบรับสินค้าเมื่อ 2026-09-24 */}
-              <div className="flex gap-2">
-                <div className="flex-1 min-w-0">
-                  <input type="number" min={0} className={inputCls} value={discount} aria-label={t("receivingReportDoc.discount")} onChange={(e) => setDiscount(e.target.value)} />
-                </div>
-                <div className="w-20 shrink-0">
-                  <select className={inputCls} value={discountMode} aria-label={t("receivingReportDoc.discountMode")}
-                    onChange={(e) => setDiscountMode(e.target.value === "amount" ? "amount" : "percent")}>
-                    <option value="percent">%</option>
-                    <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
-                  </select>
-                </div>
+              </SelectBox>
+            </Field>
+            {priceType === "none" ? (
+              <ReadonlyField label={t("receivingReportDoc.receive.vatRate")} value="" className="pt-1" />
+            ) : (
+              <Field label={t("receivingReportDoc.receive.vatRate")} htmlFor="rb-vat">
+                <SuffixInput id="rb-vat" min={0} max={100} value={vatRate} onChange={setVatRate} suffix="%" />
+              </Field>
+            )}
+            {/* ความกว้างอยู่ที่กรอบ ช่องข้างในไม่มี w-* ของตัวเอง (บทเรียนช่องส่วนลดล้นทับ "ผู้ออกบิล" 2026-09-24/29) */}
+            <Field label={t("receivingReportDoc.discount")}>
+              <DiscountInput value={discount} mode={discountMode} onValue={setDiscount} onMode={setDiscountMode} ariaLabel={t("receivingReportDoc.discount")} />
+            </Field>
+            <Field
+              label={t("receivingReportDoc.creditDays")}
+              htmlFor="rb-credit"
+              help={<>{t("receivingReportDoc.dueDate")} <span className="font-mono">{dueDate ? formatQuoteDateThai(dueDate) : "—"}</span></>}
+            >
+              <SuffixInput id="rb-credit" min={0} integer value={creditDays} onChange={setCreditDays} suffix={t("receivingReportDoc.daysUnit")} />
+            </Field>
+            <ReadonlyField label={t("receivingReportDoc.biller")} value={biller.name} className="sm:col-span-2 pt-1" />
+            <Field label={t("receivingReportDoc.receive.receivedBy")} htmlFor="rb-received-by" className="sm:col-span-2">
+              <input id="rb-received-by" className={`${field.input} w-full`} value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} placeholder={t("receivingReportDoc.receive.receivedByPlaceholder")} />
+            </Field>
+          </div>
+        </section>
+
+        <div className="h-px bg-[#eef1f6]" />
+
+        <section className="flex flex-col gap-3">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h3 className="flex-1 text-[15px] font-semibold text-foreground">{t("receivingReportDoc.receive.linesSection")}</h3>
+            <span className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.linesHint")}</span>
+          </div>
+          <div className="border border-border rounded-[10px] overflow-x-auto">
+            <div className="min-w-[720px]">
+              <div className={`${grid} h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]`}>
+                <span>{t("receivingReportDoc.col.item")}</span>
+                <span>{t("receivingReportDoc.col.unit")}</span>
+                <span className="text-right">{t("receivingReportDoc.col.outstanding")}</span>
+                <span className="text-right">{t("receivingReportDoc.receive.qty")}</span>
+                <span className="text-right">{t("receivingReportDoc.receive.unitPrice")}</span>
+                <span>{t("receivingReportDoc.col.discount")}</span>
+                <span className="text-right">{t("receivingReportDoc.receive.amount")}</span>
               </div>
-            </div>
-            <div className="block">
-              <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.biller")}</span>
-              <p className="text-sm text-foreground py-2 truncate" title={biller.name}>{biller.name || "—"}</p>
+              {pending.map((line) => {
+                const row = rows[line.id] ?? { qty: "", unitPrice: "", discount: "", discountMode: "percent" as DiscountMode };
+                const qty = num(row.qty);
+                const price = Math.max(0, Number(row.unitPrice) || 0);
+                const lineDiscountAmt = batchLineDiscountAmt(qty, price, row.discount.trim() === "" ? null : Math.max(0, Number(row.discount) || 0), row.discountMode);
+                const outstanding = outstandingQtyOf(doc, line);
+                return (
+                  <div key={line.id} className={`${grid} py-2 border-b border-[#eef1f6] last:border-b-0`}>
+                    <span className="flex flex-col min-w-0 leading-snug">
+                      <span className="text-sm font-medium text-foreground truncate" title={line.description}>{line.description}</span>
+                      <span className="text-xs font-mono text-muted-foreground">{line.productCode || "—"}</span>
+                      {kits.has(line.productId ?? "") && <span className="text-xs text-[#b93636]">{t("kit.receiveBlocked")}</span>}
+                    </span>
+                    <span className="text-sm text-[#3d5173]">{line.unit || "—"}</span>
+                    <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(outstanding)}</span>
+                    <input
+                      type="number" min={0} max={outstanding}
+                      className={`${qty > outstanding ? field.cell.replace("border-[#c3ccda]", "border-[#b93636]") : field.cell} w-full min-w-0 text-right tabular-nums`}
+                      aria-label={`${t("receivingReportDoc.receive.qty")} ${line.description}`}
+                      value={row.qty}
+                      onChange={(e) => setRow(line.id, { qty: e.target.value })}
+                    />
+                    <input
+                      type="number" min={0}
+                      className={`${field.cell} w-full min-w-0 text-right tabular-nums`}
+                      aria-label={`${t("receivingReportDoc.receive.unitPrice")} ${line.description}`}
+                      value={row.unitPrice}
+                      onChange={(e) => setRow(line.id, { unitPrice: e.target.value })}
+                    />
+                    <DiscountInput small value={row.discount} mode={row.discountMode}
+                      onValue={(v) => setRow(line.id, { discount: v })} onMode={(m) => setRow(line.id, { discountMode: m })}
+                      ariaLabel={`${t("receivingReportDoc.col.discount")} ${line.description}`} />
+                    <span className="text-sm font-semibold text-right tabular-nums text-foreground">{fmt(qty * price - lineDiscountAmt)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </section>
 
-          <div className="border border-border rounded-lg overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {[
-                    t("receivingReportDoc.col.item"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.outstanding"),
-                    t("receivingReportDoc.receive.qty"), t("receivingReportDoc.receive.unitPrice"), t("receivingReportDoc.col.discount"), t("receivingReportDoc.receive.amount"),
-                  ].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((line) => {
-                  const row = rows[line.id] ?? { qty: "", unitPrice: "", discount: "", discountMode: "percent" as DiscountMode };
-                  const qty = num(row.qty);
-                  const price = Math.max(0, Number(row.unitPrice) || 0);
-                  const lineDiscountAmt = batchLineDiscountAmt(qty, price, row.discount.trim() === "" ? null : Math.max(0, Number(row.discount) || 0), row.discountMode);
-                  const outstanding = outstandingQtyOf(doc, line);
-                  return (
-                    <tr key={line.id} className="border-b border-border/50 last:border-0">
-                      <td className="px-3 py-2 text-sm text-foreground">
-                        <span className="font-mono text-xs text-muted-foreground mr-2">{line.productCode || "—"}</span>
-                        {line.description}
-                        {kits.has(line.productId ?? "") && <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{line.unit || "—"}</td>
-                      <td className="px-3 py-2 text-xs font-mono text-right text-muted-foreground">{fmt(outstanding)}</td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number" min={0} max={outstanding} className={`${cellCls} ${qty > outstanding ? "border-[#e05252]" : ""}`}
-                          aria-label={`${t("receivingReportDoc.receive.qty")} ${line.description}`}
-                          value={row.qty}
-                          onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, qty: e.target.value } }))}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number" min={0} className={cellCls}
-                          aria-label={`${t("receivingReportDoc.receive.unitPrice")} ${line.description}`}
-                          value={row.unitPrice}
-                          onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, unitPrice: e.target.value } }))}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <div className="w-20 shrink-0">
-                            <input type="number" min={0} className={`${boxCls} text-right`} value={row.discount}
-                              aria-label={`${t("receivingReportDoc.col.discount")} ${line.description}`}
-                              onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, discount: e.target.value } }))} />
-                          </div>
-                          <div className="w-16 shrink-0">
-                            <select className={boxCls} value={row.discountMode} aria-label={`${t("receivingReportDoc.discountMode")} ${line.description}`}
-                              onChange={(e) => setRows((p) => ({ ...p, [line.id]: { ...row, discountMode: e.target.value === "amount" ? "amount" : "percent" } }))}>
-                              <option value="percent">%</option>
-                              <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
-                            </select>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-sm font-mono text-right text-foreground">{fmt(qty * price - lineDiscountAmt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <Field label={t("receivingReportDoc.receive.remark")} htmlFor="rb-remark">
+          <textarea id="rb-remark" rows={2} className={`${field.textarea} w-full`} value={remark} onChange={(e) => setRemark(e.target.value)} />
+        </Field>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-4">
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.receive.receivedBy")}</span>
-                <input className={inputCls} value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} placeholder={t("receivingReportDoc.receive.receivedByPlaceholder")} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.receive.remark")}</span>
-                <textarea rows={2} className={inputCls} value={remark} onChange={(e) => setRemark(e.target.value)} />
-              </label>
-            </div>
-            <dl className="bg-secondary/40 border border-border rounded-lg p-4 space-y-2 self-start">
-              <div className="flex justify-between text-sm">
-                <dt className="text-muted-foreground">{t("receivingReportDoc.summary.gross")}</dt>
-                <dd className="font-mono text-foreground">{fmt(totals.gross)}</dd>
-              </div>
-              {totals.discountAmt > 0 && (
-                <div className="flex justify-between text-sm">
-                  <dt className="text-muted-foreground">{t("receivingReportDoc.summary.discount")}</dt>
-                  <dd className="font-mono text-foreground">{fmt(-totals.discountAmt)}</dd>
-                </div>
-              )}
-              <div className="flex justify-between text-sm">
-                <dt className="text-muted-foreground">{t("receivingReportDoc.receive.subtotal")}</dt>
-                <dd className="font-mono text-foreground">{fmt(totals.subtotal)}</dd>
-              </div>
-              <div className="flex justify-between text-sm">
-                <dt className="text-muted-foreground">
-                  {priceType === "none" ? t("receivingReportDoc.summary.noVat") : t("receivingReportDoc.summary.vat").replace("{rate}", String(totals.vatRate ?? 0))}
-                </dt>
-                <dd className="font-mono text-foreground">{fmt(totals.vatAmt)}</dd>
-              </div>
-              <div className="flex justify-between text-base font-semibold border-t border-border pt-2">
-                <dt className="text-foreground">{t("receivingReportDoc.receive.total")}</dt>
-                <dd className="font-mono text-[#c9a84c]">{fmt(totals.total)}</dd>
-              </div>
-            </dl>
-          </div>
-
-          {error && <p className="text-xs text-[#e05252]" role="alert">{error}</p>}
-          <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.hint")}</p>
-        </div>
-
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-border sticky bottom-0 bg-card">
-          <button onClick={onCancel} disabled={busy} className="px-4 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
-            {t("common.cancel")}
-          </button>
-          <button onClick={submit} disabled={busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-            {busy ? <Loader2 size={13} className="animate-spin" /> : <PackagePlus size={13} />} {t("receivingReportDoc.receive.submit")}
-          </button>
+        <div className="rounded-[10px] bg-[#e8f0fb] border border-[#b9d0f0] px-3.5 py-3 flex gap-2.5 text-[#16407a]">
+          <Info size={16} className="flex-shrink-0 mt-0.5" />
+          <span className="text-[13px] leading-relaxed">{t("receivingReportDoc.receive.hint")}</span>
         </div>
       </div>
-    </div>
+    </Drawer>
   );
 }

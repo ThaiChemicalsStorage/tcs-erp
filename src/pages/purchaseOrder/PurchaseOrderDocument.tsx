@@ -991,7 +991,11 @@ export function PurchaseOrderDocument({
 
       {approval.dialogs}
       {receiveCodeOpen && (
-        <ReceiveCodeDialog onCreate={createReceivingReportWithCode} onCancel={() => setReceiveCodeOpen(false)} />
+        <ReceiveCodeDialog
+          purchaseOrder={{ number: draft.documentNumber.trim() || draft.id, vendorName: draft.vendorName, amount: totals.total }}
+          onCreate={createReceivingReportWithCode}
+          onCancel={() => setReceiveCodeOpen(false)}
+        />
       )}
       <ConfirmDialog
         open={confirmDelete}

@@ -12,6 +12,8 @@ import {
 import { ReceivingReportList } from "./ReceivingReportList";
 import { ReceivingReportDocument } from "./ReceivingReportDocument";
 import { ReceivingReportCreateDialog } from "./ReceivingReportCreateDialog";
+import { PAGE_CLASS, LoadErrorState } from "./receivingUi";
+import { btn } from "../../components/ui/styles";
 
 /**
  * หน้าใบรับสินค้า (แผนกสโตร์) — สลับระหว่างรายการกับเอกสาร ตามแพตเทิร์นเดียวกับใบสั่งซื้อ
@@ -123,9 +125,9 @@ export function ReceivingReportPage({
 
   if (loading) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className={PAGE_CLASS} role="status" aria-live="polite">
         <span className="sr-only">{t("receivingReport.loading")}</span>
-        <div className="h-8 w-56 bg-muted rounded animate-pulse mb-4" />
+        <div className="h-8 w-56 bg-muted rounded animate-pulse" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
       </div>
     );
@@ -133,11 +135,8 @@ export function ReceivingReportPage({
 
   if (loadError) {
     return (
-      <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
-        <p className="text-sm text-muted-foreground">{t("receivingReport.loadError")}</p>
-        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
-          {t("receivingReport.retry")}
-        </button>
+      <div className={PAGE_CLASS}>
+        <LoadErrorState message={t("receivingReport.loadError")} retryLabel={t("receivingReport.retry")} onRetry={loadList} />
       </div>
     );
   }
@@ -148,11 +147,8 @@ export function ReceivingReportPage({
         receivingReports={rows}
         onOpen={open}
         headerAction={canCreate ? (
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors"
-          >
-            <Plus size={14} /> {t("receivingReport.createBtn")}
+          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+            <Plus size={16} /> {t("receivingReport.createBtn")}
           </button>
         ) : undefined}
       />

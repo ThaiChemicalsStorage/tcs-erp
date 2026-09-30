@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CheckCircle2, Loader2, LockOpen, PackageCheck, PackagePlus, Plus, Printer, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Info, Loader2, LockOpen, PackageCheck, PackagePlus, Plus, Printer, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { Combobox } from "../../components/Combobox";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
@@ -29,8 +29,14 @@ import { AddPurchaseOrderDialog } from "./AddPurchaseOrderDialog";
 import { ReceiveBatchDialog } from "./ReceiveBatchDialog";
 import { ReceivingReportPrintDocument } from "./ReceivingReportPrintDocument";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
-
-const inputCls = "w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg text-foreground outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+import { DocumentHeader, DocumentStepper, DocumentColumns, NextStepHint } from "../../components/ui/DocumentLayout";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { Field, ReadonlyField, SelectBox } from "../../components/ui/Field";
+import { btn, field, surface, table } from "../../components/ui/styles";
+import { ReceivingReportStatusPill } from "./ReceivingReportList";
+import { DiscountInput, RailSummaryCard, SuffixInput, SummaryLine, Tag } from "./receivingUi";
+import { discountText } from "./receivingFormat";
 
 /**
  * payload เดียวที่ใช้ทั้งกดบันทึกเองและบันทึกอัตโนมัติ — รอบการรับไม่เคยอยู่ในนี้
@@ -57,17 +63,6 @@ function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
       qtyOrdered: l.qtyOrdered, unitPriceOrdered: l.unitPriceOrdered,
     })),
   };
-}
-
-const cellCls = "w-full px-2 py-1 text-xs bg-transparent border border-transparent rounded outline-none focus:bg-secondary focus:border-border text-foreground disabled:opacity-70";
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-muted-foreground block mb-1.5">{label}</span>
-      {children}
-    </label>
-  );
 }
 
 /**
@@ -202,9 +197,9 @@ export function ReceivingReportDocument({
 
   if (loading) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className="flex-1 px-4 md:px-8 py-6 flex flex-col gap-5" role="status" aria-live="polite">
         <span className="sr-only">{t("receivingReport.loading")}</span>
-        <div className="h-8 w-64 bg-muted rounded animate-pulse mb-4" />
+        <div className="h-8 w-64 bg-muted rounded animate-pulse" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
       </div>
     );
@@ -213,7 +208,7 @@ export function ReceivingReportDocument({
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("receivingReport.loadError")}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("receivingReportDoc.backToList")}</button>
+        <button type="button" onClick={onBack} className={btn.secondary}>{t("receivingReportDoc.backToList")}</button>
       </div>
     );
   }
@@ -349,317 +344,406 @@ export function ReceivingReportDocument({
     }
   };
 
+  const docNumber = draft.documentNumber || draft.id;
+  const code = receivingReportCodeOf(draft);
+  const poCount = new Set(draft.lines.map((l) => l.purchaseOrderId || draft.purchaseOrderId).filter(Boolean)).size;
+  const receivedPct = totals.orderedValue > 0 ? (totals.receivedValue / totals.orderedValue) * 100 : 0;
+  const receivedAmountTotal = draft.lines.reduce((sum, l) => sum + receivedAmountOf(draft, l.id), 0);
+  const lastBatch = draft.batches[draft.batches.length - 1];
+  const reverseTarget = confirmReverse ? draft.batches.find((b) => b.id === confirmReverse) : undefined;
+  const removeTargetLines = confirmRemovePo ? draft.lines.filter((l) => l.purchaseOrderId === confirmRemovePo.id) : [];
+
+  const steps = [
+    { label: blank ? t("receivingReportDoc.step.openedBlank") : t("receivingReportDoc.step.opened") },
+    {
+      label: draft.batches.length > 0
+        ? `${t("receivingReportDoc.step.receive")} · ${t("receivingReportDoc.step.receiveCount").replace("{n}", String(draft.batches.length))}`
+        : t("receivingReportDoc.step.receive"),
+    },
+    { label: t("receivingReportDoc.step.closed") },
+  ];
+
   /**
-   * ช่องส่วนลดรายบรรทัด (2026-09-29) — ตัวเลข + %/บาท · แก้ได้ทุกใบ ตั้งต้นจากใบสั่งซื้อ เป็นค่าตั้งต้นของหน้าต่างรับของ
+   * ช่องส่วนลดรายบรรทัด (2026-09-29) — ตัวเลข + %/฿ · แก้ได้ทุกใบ ตั้งต้นจากใบสั่งซื้อ เป็นค่าตั้งต้นของหน้าต่างรับของ
    * ความกว้างอยู่ที่ตัวห่อ ไม่ใส่ w-full ลงช่องเอง (บทเรียนช่องส่วนลดท้ายบิล 2026-09-24/29: w-full ชนะ w-20 แล้วช่องล้นทับกัน)
    */
   const discountCell = (line: ReceivingReportLine) => {
-    const mode = line.discountMode ?? "percent";
     if (!canEdit) {
-      return <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{line.discount ? (mode === "amount" ? fmt(line.discount) : `${line.discount}%`) : "—"}</span>;
+      return <span className="text-sm tabular-nums text-muted-foreground whitespace-nowrap">{discountText(line.discount, line.discountMode)}</span>;
     }
     return (
-      <div className="flex items-center gap-1">
-        <div className="w-20 shrink-0">
-          <input type="number" min={0} value={line.discount ?? ""}
-            aria-label={`${t("receivingReportDoc.col.discount")} ${line.description}`}
-            onChange={(e) => setLine(line.id, { discount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })}
-            className="w-full px-2 py-1 text-xs text-right font-mono bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 text-foreground" />
-        </div>
-        <div className="w-16 shrink-0">
-          <select value={mode} aria-label={`${t("receivingReportDoc.discountMode")} ${line.description}`}
-            onChange={(e) => setLine(line.id, { discountMode: e.target.value === "amount" ? "amount" : "percent" })}
-            className="w-full px-1 py-1 text-xs bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 text-foreground">
-            <option value="percent">%</option>
-            <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
-          </select>
-        </div>
+      <DiscountInput
+        small
+        value={line.discount ?? ""}
+        mode={line.discountMode ?? "percent"}
+        onValue={(v) => setLine(line.id, { discount: v === "" ? null : Math.max(0, Number(v) || 0) })}
+        onMode={(m) => setLine(line.id, { discountMode: m })}
+        ariaLabel={`${t("receivingReportDoc.col.discount")} ${line.description}`}
+      />
+    );
+  };
+
+  const lineGrid = "grid grid-cols-[28px_minmax(0,1fr)_60px_72px_72px_80px_112px_132px_116px] gap-2.5 items-center px-6";
+
+  const lineRow = (line: ReceivingReportLine, n: number, done: boolean) => {
+    const received = receivedQtyOf(draft, line.id);
+    const outstanding = outstandingQtyOf(draft, line);
+    const amount = receivedAmountOf(draft, line.id);
+    return (
+      <div key={line.id} className={`${lineGrid} py-2.5 border-b border-[#eef1f6]`}>
+        <span className="text-[13px] text-muted-foreground">{n}</span>
+        <span className="flex flex-col gap-0.5 min-w-0 leading-snug">
+          <span className="text-sm font-medium text-foreground">{line.description}</span>
+          <span className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+            <span className="font-mono">{line.productCode || "—"}</span>
+            {extraPos.length > 0 && (
+              <span className="h-5 px-1.5 rounded-[5px] bg-[#eef1f6] text-[#3d5173] font-mono text-[11.5px] font-medium inline-flex items-center">
+                {line.purchaseOrderNumber || draft.purchaseOrderNumber}
+              </span>
+            )}
+          </span>
+          {line.subDetails.length > 0 && <span className="text-xs text-muted-foreground">{line.subDetails.join(" · ")}</span>}
+          {kits.has(line.productId ?? "") && <span className="text-xs text-[#b93636]">{t("kit.receiveBlocked")}</span>}
+        </span>
+        <span className="text-sm text-[#3d5173]">{line.unit || "—"}</span>
+        <span className="text-sm text-right tabular-nums text-[#3d5173]">{fmt(line.qtyOrdered)}</span>
+        <span className="text-sm text-right tabular-nums text-foreground">{fmt(received)}</span>
+        <span className={`text-sm text-right tabular-nums ${done ? "text-[#8a97ad]" : "font-semibold text-[#8a5a00]"}`}>{fmt(outstanding)}</span>
+        <span className="text-sm text-right tabular-nums text-[#3d5173]">{fmt(line.unitPriceOrdered)}</span>
+        <span className="min-w-0">{discountCell(line)}</span>
+        <span className={`text-sm text-right tabular-nums font-semibold ${amount === 0 ? "text-[#8a97ad]" : "text-foreground"}`}>{fmt(amount)}</span>
       </div>
     );
   };
 
-  const lineRow = (line: ReceivingReportLine, done: boolean) => {
-    const received = receivedQtyOf(draft, line.id);
-    const outstanding = outstandingQtyOf(draft, line);
-    return (
-      <tr key={line.id} className="border-b border-border/50 last:border-0">
-        <td className="px-3 py-2.5 text-sm text-foreground">
-          <span className="font-mono text-xs text-muted-foreground mr-2">{line.productCode || "—"}</span>
-          {line.description}
-          {extraPos.length > 0 && (
-            <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-mono bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20 whitespace-nowrap">
-              {line.purchaseOrderNumber || draft.purchaseOrderNumber}
-            </span>
-          )}
-          {line.subDetails.length > 0 && (
-            <span className="block text-xs text-muted-foreground mt-0.5">{line.subDetails.join(" · ")}</span>
-          )}
-          {kits.has(line.productId ?? "") && <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>}
-        </td>
-        <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{line.unit || "—"}</td>
-        <td className="px-3 py-2.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(line.qtyOrdered)}</td>
-        <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(received)}</td>
-        <td className={`px-3 py-2.5 text-xs font-mono text-right whitespace-nowrap ${done ? "text-muted-foreground" : "text-[#a75d1a] font-semibold"}`}>{fmt(outstanding)}</td>
-        <td className="px-3 py-2.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(line.unitPriceOrdered)}</td>
-        <td className="px-3 py-1.5">{discountCell(line)}</td>
-        <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(receivedAmountOf(draft, line.id))}</td>
-      </tr>
-    );
-  };
-
-  const lineTable = (lines: ReceivingReportLine[], done: boolean) => (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border bg-muted/40">
-            {[
-              t("receivingReportDoc.col.item"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.ordered"),
-              t("receivingReportDoc.col.received"), t("receivingReportDoc.col.outstanding"),
-              t("receivingReportDoc.col.poPrice"), t("receivingReportDoc.col.discount"), t("receivingReportDoc.col.receivedAmount"),
-            ].map((h) => (
-              <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{lines.map((l) => lineRow(l, done))}</tbody>
-      </table>
+  const groupBand = (tone: "pending" | "done", count: number) => (
+    <div className={`flex items-center gap-2.5 px-6 h-10 border-b border-[#eef1f6] ${tone === "pending" ? "bg-[#fdf8ee]" : "bg-[#f3faf6]"}`}>
+      {tone === "pending"
+        ? <PackagePlus size={16} className="text-[#d89614]" aria-hidden="true" />
+        : <PackageCheck size={16} className="text-[#1b7f4f]" aria-hidden="true" />}
+      <span className={`text-[13px] font-semibold ${tone === "pending" ? "text-[#8a5a00]" : "text-[#14603b]"}`}>
+        {tone === "pending" ? t("receivingReportDoc.pendingTitle") : t("receivingReportDoc.doneTitle")}
+      </span>
+      <span className="min-w-[22px] h-5 px-1.5 rounded-full bg-white border border-border text-[#3d5173] text-xs font-semibold inline-flex items-center justify-center">{count}</span>
     </div>
   );
+
+  // ช่องกรอกของหัวใบ — แก้ได้ = กล่องกรอก · แก้ไม่ได้ = ข้อความอ่านอย่างเดียว (ไม่มีกล่อง)
+  const textField = (label: string, id: string, value: string, onChange: (v: string) => void, opts: { mono?: boolean; className?: string } = {}) =>
+    canEdit ? (
+      <Field label={label} htmlFor={id} className={opts.className}>
+        <input id={id} className={`${field.input} w-full ${opts.mono ? "font-mono" : ""}`} value={value} onChange={(e) => onChange(e.target.value)} />
+      </Field>
+    ) : (
+      <ReadonlyField label={label} value={value} mono={opts.mono} className={opts.className} />
+    );
+
+  const summaryRows = [
+    { label: t("receivingReportDoc.summary.gross"), value: orderTotals.gross },
+    { label: t("receivingReportDoc.summary.discount"), value: -orderTotals.discountAmt, hide: orderTotals.discountAmt === 0 },
+    { label: t("receivingReportDoc.summary.afterDiscount"), value: orderTotals.afterDiscount, hide: orderTotals.discountAmt === 0 },
+    { label: t("receivingReportDoc.summary.base"), value: orderTotals.base, hide: priceType !== "inclusive" },
+    {
+      label: priceType === "none"
+        ? t("receivingReportDoc.summary.noVat")
+        : t("receivingReportDoc.summary.vat").replace("{rate}", String(orderTotals.vatRate ?? 0)),
+      value: orderTotals.vatAmt,
+    },
+  ].filter((r) => !r.hide);
 
   return (
     <>
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
-        <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={15} /> {t("receivingReportDoc.backToList")}
-          </button>
-          <span className="text-sm font-mono font-semibold text-[#866d28] ml-2">{draft.documentNumber || draft.id}</span>
-          <span className="text-xs text-muted-foreground">{receivingReportCodeOf(draft)} · {t(RECEIVING_REPORT_CODE_LABEL_KEY[receivingReportCodeOf(draft)])}</span>
-          {blank && (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">{t("receivingReportDoc.blankBadge")}</span>
-          )}
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${isOpen ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
-            {isOpen ? t("receivingReport.status.open") : t("receivingReport.status.closed")}
-          </span>
-
-          <div className="ml-auto flex items-center gap-2">
-            {canEdit && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-            {canReceive && isOpen && (
-              <button onClick={() => void openReceive()} disabled={busy || pendingLines.length === 0}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                <PackagePlus size={13} /> {t("receivingReportDoc.receiveBtn")}
-              </button>
-            )}
-            {canEdit && (
-              <button onClick={save} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("receivingReportDoc.save")}
-              </button>
-            )}
-            {canReceive && (
-              <button onClick={() => void toggleStatus()} disabled={busy || (!isOpen && pendingLines.length === 0)}
-                title={!isOpen && pendingLines.length === 0 ? t("receivingReportDoc.reopenBlocked") : undefined}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                {isOpen ? <><CheckCircle2 size={13} /> {t("receivingReportDoc.closeBtn")}</> : <><LockOpen size={13} /> {t("receivingReportDoc.reopenBtn")}</>}
-              </button>
-            )}
-            {canPrint && (
-              <button onClick={() => void handlePrint(null)} disabled={printing}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("receivingReportDoc.print")}
-              </button>
-            )}
-            {canDelete && draft.batches.length === 0 && (
-              <button onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all">
-                <Trash2 size={13} /> {t("receivingReportDoc.delete")}
-              </button>
-            )}
-          </div>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader
+            backLabel={t("receivingReportDoc.backToAll")}
+            onBack={onBack}
+            number={docNumber}
+            status={
+              <span className="flex items-center gap-2 flex-wrap">
+                <ReceivingReportStatusPill status={draft.status} />
+                <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold whitespace-nowrap">
+                  <span className="font-mono">{code}</span>{t(RECEIVING_REPORT_CODE_LABEL_KEY[code])}
+                </span>
+                {blank && <Tag tone="grey">{t("receivingReportDoc.blankBadge")}</Tag>}
+              </span>
+            }
+            meta={canEdit ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
+            actions={
+              <>
+                {canPrint && (
+                  <button type="button" onClick={() => void handlePrint(null)} disabled={printing} className={btn.secondary}>
+                    {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("receivingReportDoc.print")}
+                  </button>
+                )}
+                {/* ปุ่มบันทึกคงไว้ตามที่เจ้าของสั่ง (2026-09-30) แม้มีบันทึกอัตโนมัติ */}
+                {canEdit && (
+                  <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("receivingReportDoc.save")}
+                  </button>
+                )}
+                <MoreMenu
+                  items={[
+                    canReceive && (isOpen
+                      ? { key: "close", label: t("receivingReportDoc.closeBtn"), icon: CheckCircle2, disabled: busy, hint: t("receivingReportDoc.closeHint"), onSelect: () => void toggleStatus() }
+                      : {
+                        key: "reopen", label: t("receivingReportDoc.reopenBtn"), icon: LockOpen,
+                        disabled: busy || pendingLines.length === 0,
+                        hint: pendingLines.length === 0 ? t("receivingReportDoc.reopenBlocked") : undefined,
+                        onSelect: () => void toggleStatus(),
+                      }),
+                    canDelete && {
+                      key: "delete", label: t("receivingReportDoc.confirmDelete.title"), icon: Trash2, danger: true,
+                      disabled: draft.batches.length > 0,
+                      hint: draft.batches.length > 0 ? t("receivingReportDoc.deleteBlockedHint") : undefined,
+                      onSelect: () => setConfirmDelete(true),
+                    },
+                  ]}
+                />
+                {canReceive && isOpen && (
+                  <button type="button" onClick={() => void openReceive()} disabled={busy || pendingLines.length === 0} className={btn.primary}>
+                    <PackagePlus size={16} /> {t("receivingReportDoc.receiveBtn")}
+                  </button>
+                )}
+              </>
+            }
+          />
         </div>
 
-        <div className="p-6 space-y-5 max-w-5xl">
-          {/* สามตัวเลขที่เจ้าของขอไว้ข้อแรก: ซื้อมาเท่าไหร่ รับมาเท่าไหร่ ค้างรับเท่าไหร่ */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: blank ? t("receivingReportDoc.kpi.orderedBlank") : t("receivingReportDoc.kpi.ordered"), value: totals.orderedValue, tone: "text-foreground" },
-              { label: t("receivingReportDoc.kpi.received"), value: totals.receivedValue, tone: "text-[#207e52]" },
-              { label: t("receivingReportDoc.kpi.outstanding"), value: totals.outstandingValue, tone: totals.outstandingValue > 0 ? "text-[#a75d1a]" : "text-muted-foreground" },
-            ].map((k) => (
-              <div key={k.label} className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4">
-                <p className="text-xs text-muted-foreground">{k.label}</p>
-                <p className={`text-xl font-semibold font-mono mt-1 ${k.tone}`}>{fmt(k.value)}</p>
-              </div>
-            ))}
-          </div>
+        <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
+          <DocumentStepper steps={steps} current={isOpen ? 1 : steps.length} ariaLabel={t("receivingReportDoc.stepsAria")} />
 
-          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground">{t("receivingReportDoc.sectionHeader")}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label={t("receivingReportDoc.documentNumber")}>
-                <input className={inputCls} disabled={!canEdit} value={draft.documentNumber}
-                  onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })} />
-              </Field>
-              {blank ? (
-                <Field label={t("receivingReportDoc.purchaseOrder")}>
-                  <input className={inputCls} disabled value="—" />
-                </Field>
-              ) : (
-                // ใบเดียวรับหลาย PO (2026-09-29) — ใบหลัก + ใบที่เพิ่ม (กด × เอาออกได้ถ้ายังไม่รับของของใบนั้น) + ปุ่มเพิ่ม
-                <div className="block">
-                  <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.purchaseOrder")}</span>
-                  <div className="flex flex-wrap items-center gap-1.5 min-h-[38px]">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono bg-white border border-[#c3ccda] text-foreground">{draft.purchaseOrderNumber}</span>
-                    {extraPos.map((p) => (
-                      <span key={p.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono bg-white border border-[#c3ccda] text-foreground">
-                        {p.number}
-                        {canEdit && !poHasReceipts(p.id) && (
-                          <button onClick={() => setConfirmRemovePo(p)} disabled={busy}
-                            aria-label={t("receivingReportDoc.addPo.remove").replace("{po}", p.number)} title={t("receivingReportDoc.addPo.remove").replace("{po}", p.number)}
-                            className="text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-60">
-                            <X size={12} />
-                          </button>
+          <DocumentColumns
+            main={
+              <>
+                <SectionCard title={t("receivingReportDoc.sectionHeader")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+                    {textField(t("receivingReportDoc.documentNumber"), "rr-number", draft.documentNumber, (v) => setDraft({ ...draft, documentNumber: v }), { mono: true })}
+                    {blank ? (
+                      <ReadonlyField label={t("receivingReportDoc.purchaseOrder")} value="" className="sm:col-span-2" />
+                    ) : (
+                      // ใบเดียวรับหลาย PO (2026-09-29) — ใบหลัก + ใบที่เพิ่ม (กด × เอาออกได้ถ้ายังไม่รับของของใบนั้น) + ปุ่มเพิ่ม
+                      <div className="sm:col-span-2 flex flex-col gap-1.5 min-w-0">
+                        <span className={field.label}>{t("receivingReportDoc.purchaseOrder")}</span>
+                        <div className="min-h-10 flex flex-wrap items-center gap-2">
+                          <span className="h-8 px-3 rounded-lg border border-border bg-[#f8f9fc] font-mono text-[13px] font-medium text-foreground inline-flex items-center">{draft.purchaseOrderNumber}</span>
+                          {extraPos.map((p) => (
+                            <span key={p.id} className="h-8 pl-3 pr-1 rounded-lg border border-border bg-[#f8f9fc] font-mono text-[13px] font-medium text-foreground inline-flex items-center gap-1">
+                              {p.number}
+                              {canEdit && !poHasReceipts(p.id) && (
+                                <button type="button" onClick={() => setConfirmRemovePo(p)} disabled={busy}
+                                  aria-label={t("receivingReportDoc.addPo.remove").replace("{po}", p.number)} title={t("receivingReportDoc.addPo.remove").replace("{po}", p.number)}
+                                  className="w-6 h-6 rounded-md text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] flex items-center justify-center transition-colors disabled:opacity-60">
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                          {canEdit && isOpen && (
+                            <button type="button" onClick={() => setAddPoOpen(true)} disabled={busy} className={`${btn.text} mx-0 h-8`}>
+                              <Plus size={16} /> {t("receivingReportDoc.addPo.button")}
+                            </button>
+                          )}
+                        </div>
+                        <span className={field.help}>{t("receivingReportDoc.addPo.help")}</span>
+                      </div>
+                    )}
+                    {blank ? (
+                      <>
+                        {textField(t("receivingReportDoc.jobCode"), "rr-job", draft.jobCode, (v) => setDraft({ ...draft, jobCode: v }), { mono: true })}
+                        {canEdit ? (
+                          <Field label={t("receivingReportDoc.vendor")} className="sm:col-span-2">
+                            <Combobox
+                              className={`${field.input} w-full`}
+                              value={draft.vendorName}
+                              onChange={(next) => setDraft((d) => d && { ...d, vendorName: next })}
+                              options={vendorComboboxOptions(vendors)}
+                              ariaLabel={t("receivingReportDoc.vendor")}
+                              onPick={(opt) => {
+                                const v = vendors.find((x) => x.name === opt.value);
+                                if (v) setDraft((d) => d && { ...d, vendorName: v.name, vendorTaxId: v.taxId, vendorAddress: v.address });
+                              }}
+                            />
+                          </Field>
+                        ) : (
+                          <ReadonlyField label={t("receivingReportDoc.vendor")} value={draft.vendorName} className="sm:col-span-2" />
                         )}
-                      </span>
-                    ))}
-                    {canEdit && isOpen && (
-                      <button onClick={() => setAddPoOpen(true)} disabled={busy}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs border border-dashed border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                        <Plus size={12} /> {t("receivingReportDoc.addPo.button")}
-                      </button>
+                        {textField(t("receivingReportDoc.vendorTaxId"), "rr-tax", draft.vendorTaxId, (v) => setDraft({ ...draft, vendorTaxId: v }), { mono: true })}
+                        {textField(t("receivingReportDoc.vendorAddress"), "rr-address", draft.vendorAddress, (v) => setDraft({ ...draft, vendorAddress: v }), { className: "sm:col-span-2" })}
+                      </>
+                    ) : (
+                      <>
+                        <ReadonlyField label={t("receivingReportDoc.vendor")} value={draft.vendorName} className="sm:col-span-2" />
+                        <ReadonlyField label={t("receivingReportDoc.vendorTaxId")} value={draft.vendorTaxId} mono />
+                        <ReadonlyField label={t("receivingReportDoc.jobCode")} value={draft.jobCode} mono />
+                      </>
+                    )}
+                    {canEdit ? (
+                      <Field label={t("receivingReportDoc.remarks")} htmlFor="rr-remarks" className="sm:col-span-3">
+                        <textarea id="rr-remarks" rows={2} className={`${field.textarea} w-full`} value={draft.remarks}
+                          onChange={(e) => setDraft({ ...draft, remarks: e.target.value })} />
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("receivingReportDoc.remarks")} value={draft.remarks} className="sm:col-span-3" />
+                    )}
+                    <p className="sm:col-span-3 flex items-start gap-2 text-xs text-muted-foreground">
+                      <Info size={14} className="flex-shrink-0 mt-px" aria-hidden="true" />
+                      {blank ? t("receivingReportDoc.blankHeaderHint") : t("receivingReportDoc.headerHint")}
+                    </p>
+                  </div>
+                </SectionCard>
+
+                {/* เงื่อนไขบิล (2026-09-24) — ประเภทราคา · ส่วนลด · เครดิต/ครบกำหนด · ผู้ออกบิล แก้ได้ทุกใบ เป็นค่าตั้งต้นของรอบรับ */}
+                <SectionCard title={t("receivingReportDoc.termsTitle")} subtitle={t("receivingReportDoc.termsHint")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+                    {canEdit ? (
+                      <Field label={t("receivingReportDoc.priceType")} htmlFor="rr-price-type">
+                        <SelectBox id="rr-price-type" value={priceType}
+                          onChange={(e) => setDraft({ ...draft, priceType: e.target.value as ReceivingPriceType, orderVatRate: e.target.value === "none" ? draft.orderVatRate : draft.orderVatRate ?? 7 })}>
+                          {RECEIVING_PRICE_TYPES.map((p) => <option key={p} value={p}>{t(RECEIVING_PRICE_TYPE_LABEL_KEY[p])}</option>)}
+                        </SelectBox>
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("receivingReportDoc.priceType")} value={t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceType])} />
+                    )}
+                    {canEdit && priceType !== "none" ? (
+                      <Field label={t("receivingReportDoc.receive.vatRate")} htmlFor="rr-vat">
+                        <SuffixInput id="rr-vat" min={0} max={100} suffix="%" value={draft.orderVatRate ?? ""}
+                          onChange={(v) => setDraft({ ...draft, orderVatRate: v === "" ? null : Number(v) })} />
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("receivingReportDoc.receive.vatRate")} value={priceType === "none" || draft.orderVatRate === null ? "" : `${draft.orderVatRate}%`} />
+                    )}
+                    {canEdit ? (
+                      <Field label={t("receivingReportDoc.discount")}>
+                        <DiscountInput
+                          value={draft.orderDiscount ?? ""}
+                          mode={draft.orderDiscountMode ?? "percent"}
+                          onValue={(v) => setDraft({ ...draft, orderDiscount: v === "" ? null : Math.max(0, Number(v) || 0) })}
+                          onMode={(m) => setDraft({ ...draft, orderDiscountMode: m })}
+                          ariaLabel={t("receivingReportDoc.discount")}
+                        />
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("receivingReportDoc.discount")} value={discountText(draft.orderDiscount, draft.orderDiscountMode)} />
+                    )}
+                    {canEdit ? (
+                      <Field label={t("receivingReportDoc.creditDays")} htmlFor="rr-credit">
+                        <SuffixInput id="rr-credit" min={0} integer suffix={t("receivingReportDoc.daysUnit")} value={draft.creditDays ?? ""}
+                          onChange={(v) => setDraft({ ...draft, creditDays: v === "" ? null : Math.max(0, Math.floor(Number(v) || 0)) })} />
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("receivingReportDoc.creditDays")} value={draft.creditDays ?? ""} />
+                    )}
+                    <div className="flex flex-col gap-0.5 min-w-0 pt-0.5">
+                      <span className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDate")}</span>
+                      <span className={`text-sm font-medium ${dueDate ? "text-foreground" : "text-[#8a97ad]"}`}>{dueDate ? formatQuoteDateThai(dueDate) : "—"}</span>
+                      <span className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDateBase").replace("{date}", formatQuoteDateThai(dueBase))}</span>
+                    </div>
+                    {/* ผู้ออกบิลเป็นช่องพิมพ์ช่องเดียว (เจ้าของ 2026-09-24: "ให้ทำเป็นแค่ textbox พอเอาไปกรอกเอง") — ว่าง = ใช้ผู้ขาย
+                        `billerCustom` ตามว่ามีชื่อไหม (billerOf() ยังอ่านธงนี้) · พิมพ์ใหม่ล้างเลขภาษี/ที่อยู่ของผู้ออกบิลเดิมที่ช่องถูกถอดไปแล้ว
+                        ไม่งั้นค่าที่มองไม่เห็นจะยังไปโผล่ในทะเบียนเจ้าหนี้และใบพิมพ์ */}
+                    {canEdit ? (
+                      <Field label={t("receivingReportDoc.biller")} htmlFor="rr-biller">
+                        <input id="rr-biller" className={`${field.input} w-full`} value={draft.billerCustom ? draft.billerName ?? "" : ""}
+                          placeholder={t("receivingReportDoc.billerPlaceholder")}
+                          onChange={(e) => setDraft({ ...draft, billerCustom: e.target.value.trim() !== "", billerName: e.target.value, billerTaxId: "", billerAddress: "" })} />
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("receivingReportDoc.biller")} value={draft.billerCustom ? draft.billerName ?? "" : draft.vendorName} />
                     )}
                   </div>
-                </div>
-              )}
-              {blank ? (
-                <>
-                  <Field label={t("receivingReportDoc.jobCode")}>
-                    <input className={inputCls} disabled={!canEdit} value={draft.jobCode} onChange={(e) => setDraft({ ...draft, jobCode: e.target.value })} />
-                  </Field>
-                  <div className="block">
-                    <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.vendor")}</span>
-                    <Combobox
-                      className={inputCls}
-                      disabled={!canEdit}
-                      value={draft.vendorName}
-                      onChange={(next) => setDraft((d) => d && { ...d, vendorName: next })}
-                      options={vendorComboboxOptions(vendors)}
-                      ariaLabel={t("receivingReportDoc.vendor")}
-                      onPick={(opt) => {
-                        const v = vendors.find((x) => x.name === opt.value);
-                        if (v) setDraft((d) => d && { ...d, vendorName: v.name, vendorTaxId: v.taxId, vendorAddress: v.address });
-                      }}
-                    />
-                  </div>
-                  <Field label={t("receivingReportDoc.vendorTaxId")}>
-                    <input className={inputCls} disabled={!canEdit} value={draft.vendorTaxId} onChange={(e) => setDraft({ ...draft, vendorTaxId: e.target.value })} />
-                  </Field>
-                  <Field label={t("receivingReportDoc.vendorAddress")}>
-                    <input className={inputCls} disabled={!canEdit} value={draft.vendorAddress} onChange={(e) => setDraft({ ...draft, vendorAddress: e.target.value })} />
-                  </Field>
-                </>
-              ) : (
-                <>
-                  <Field label={t("receivingReportDoc.jobCode")}>
-                    <input className={inputCls} disabled value={draft.jobCode || "—"} />
-                  </Field>
-                  <Field label={t("receivingReportDoc.vendor")}>
-                    <input className={inputCls} disabled value={draft.vendorName || "—"} />
-                  </Field>
-                  <Field label={t("receivingReportDoc.vendorTaxId")}>
-                    <input className={inputCls} disabled value={draft.vendorTaxId || "—"} />
-                  </Field>
-                </>
-              )}
-            </div>
-            <Field label={t("receivingReportDoc.remarks")}>
-              <textarea rows={2} className={inputCls} disabled={!canEdit} value={draft.remarks}
-                onChange={(e) => setDraft({ ...draft, remarks: e.target.value })} />
-            </Field>
-            <p className="text-xs text-muted-foreground">{blank ? t("receivingReportDoc.blankHeaderHint") : t("receivingReportDoc.headerHint")}</p>
-          </section>
+                </SectionCard>
+              </>
+            }
+            rail={
+              <>
+                <RailSummaryCard
+                  label={t("receivingReportDoc.kpi.outstanding")}
+                  value={`฿${fmt(totals.outstandingValue)}`}
+                  progress={receivedPct}
+                  progressLabel={t("receivingReportDoc.receivedPct").replace("{pct}", String(Math.round(receivedPct)))}
+                  rows={[
+                    { label: blank ? t("receivingReportDoc.kpi.orderedBlank") : t("receivingReportDoc.kpi.ordered"), value: `฿${fmt(totals.orderedValue)}` },
+                    { label: t("receivingReportDoc.kpi.received"), value: `฿${fmt(totals.receivedValue)}` },
+                    {
+                      label: t("receivingReportDoc.linesLabel"),
+                      value: t("receivingReportDoc.linesSplit").replace("{pending}", String(pendingLines.length)).replace("{done}", String(doneLines.length)),
+                    },
+                  ]}
+                />
 
-          {/* เงื่อนไขบิล (2026-09-24) — ประเภทราคา · ส่วนลด · เครดิต/ครบกำหนด · ผู้ออกบิล แก้ได้ทุกใบ เป็นค่าตั้งต้นของรอบรับ */}
-          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground">{t("receivingReportDoc.termsTitle")}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label={t("receivingReportDoc.priceType")}>
-                <select className={inputCls} disabled={!canEdit} value={priceType}
-                  onChange={(e) => setDraft({ ...draft, priceType: e.target.value as ReceivingPriceType, orderVatRate: e.target.value === "none" ? draft.orderVatRate : draft.orderVatRate ?? 7 })}>
-                  {RECEIVING_PRICE_TYPES.map((p) => <option key={p} value={p}>{t(RECEIVING_PRICE_TYPE_LABEL_KEY[p])}</option>)}
-                </select>
-              </Field>
-              <Field label={t("receivingReportDoc.receive.vatRate")}>
-                <input type="number" min={0} max={100} className={inputCls} disabled={!canEdit || priceType === "none"}
-                  value={priceType === "none" ? "" : draft.orderVatRate ?? ""}
-                  onChange={(e) => setDraft({ ...draft, orderVatRate: e.target.value === "" ? null : Number(e.target.value) })} />
-              </Field>
-              <div className="block">
-                <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.discount")}</span>
-                {/* ช่องตัวเลขกินที่ที่เหลือ หน่วยกว้างคงที่ — เดิมใส่ w-24 ทับ w-full ของ inputCls ใน class เดียวกัน w-full ชนะ
-                    ช่องหน่วยจึงยืดเต็มแถวและบีบช่องตัวเลขจนเหลือนิดเดียว (เจ้าของแจ้ง 2026-09-24) */}
-                <div className="flex gap-2">
-                  <div className="flex-1 min-w-0">
-                    <input type="number" min={0} className={inputCls} disabled={!canEdit} value={draft.orderDiscount ?? ""}
-                      aria-label={t("receivingReportDoc.discount")}
-                      onChange={(e) => setDraft({ ...draft, orderDiscount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })} />
-                  </div>
-                  <div className="w-24 shrink-0">
-                    <select className={inputCls} disabled={!canEdit} value={draft.orderDiscountMode ?? "percent"}
-                      aria-label={t("receivingReportDoc.discountMode")}
-                      onChange={(e) => setDraft({ ...draft, orderDiscountMode: e.target.value === "amount" ? "amount" : "percent" })}>
-                      <option value="percent">%</option>
-                      <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <Field label={t("receivingReportDoc.creditDays")}>
-                <input type="number" min={0} className={inputCls} disabled={!canEdit} value={draft.creditDays ?? ""}
-                  onChange={(e) => setDraft({ ...draft, creditDays: e.target.value === "" ? null : Math.max(0, Math.floor(Number(e.target.value) || 0)) })} />
-              </Field>
-              <Field label={t("receivingReportDoc.dueDate")}>
-                <input className={inputCls} disabled value={dueDate ? formatQuoteDateThai(dueDate) : "—"} />
-              </Field>
-              {/* ผู้ออกบิลเป็นช่องพิมพ์ช่องเดียว (เจ้าของ 2026-09-24: "ให้ทำเป็นแค่ textbox พอเอาไปกรอกเอง") — ว่าง = ใช้ผู้ขาย
-                  `billerCustom` ตามว่ามีชื่อไหม (billerOf() ยังอ่านธงนี้) · พิมพ์ใหม่ล้างเลขภาษี/ที่อยู่ของผู้ออกบิลเดิมที่ช่องถูกถอดไปแล้ว
-                  ไม่งั้นค่าที่มองไม่เห็นจะยังไปโผล่ในทะเบียนเจ้าหนี้และใบพิมพ์ */}
-              <Field label={t("receivingReportDoc.biller")}>
-                <input className={inputCls} disabled={!canEdit} value={draft.billerCustom ? draft.billerName ?? "" : ""}
-                  placeholder={t("receivingReportDoc.billerPlaceholder")}
-                  onChange={(e) => setDraft({ ...draft, billerCustom: e.target.value.trim() !== "", billerName: e.target.value, billerTaxId: "", billerAddress: "" })} />
-              </Field>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("receivingReportDoc.termsHint")}
-              {" "}{t("receivingReportDoc.dueDateBase").replace("{date}", formatQuoteDateThai(dueBase))}
-            </p>
-          </section>
+                {/* สรุปยอดแบบใบเสนอราคา (2026-09-24) — ไว้เทียบกับบิลของผู้ขายว่าตรงกันไหม ก่อนกดรับของ */}
+                <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-2.5">
+                  <h2 className="text-[15px] font-semibold text-foreground">{t("receivingReportDoc.summaryTitle")}</h2>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{t("receivingReportDoc.summaryHintRail")}</p>
+                  <dl className="flex flex-col gap-2 pt-1">
+                    {summaryRows.map((r) => (
+                      <div key={r.label} className="flex justify-between gap-4 text-sm">
+                        <dt className="text-[#3d5173]">{r.label}</dt>
+                        <dd className="tabular-nums text-foreground">{fmt(r.value)}</dd>
+                      </div>
+                    ))}
+                    <div className="h-px bg-border my-0.5" />
+                    <div className="flex justify-between items-baseline gap-4">
+                      <dt className="text-sm font-semibold text-foreground">{t("receivingReportDoc.summary.total")}</dt>
+                      <dd className="text-lg font-bold tabular-nums text-foreground">{fmt(orderTotals.total)}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <DocumentAttachmentsCard
+                  attachments={draft.attachments ?? []}
+                  disabled={!canEdit}
+                  onUpload={async (file) => {
+                    const updated = await uploadReceivingReportAttachment(draft.id, file);
+                    setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+                    setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+                  }}
+                  onDelete={async (attachmentId) => {
+                    const updated = await deleteReceivingReportAttachment(draft.id, attachmentId);
+                    setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+                    setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+                  }}
+                />
+
+                <NextStepHint title={t("receivingReportDoc.nextStep")}>
+                  {isOpen ? t("receivingReportDoc.nextStep.open") : t("receivingReportDoc.nextStep.closed")}
+                </NextStepHint>
+              </>
+            }
+          />
 
           {blank && (
-            <section className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-border">
-                <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.linesTitle")}</h2>
-                {canEdit && (
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setProductPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                      <Plus size={13} /> {t("receivingReportDoc.addFromCatalog")}
-                    </button>
-                    <button onClick={() => setDraft((d) => d && { ...d, lines: [...d.lines, blankReceivingReportLine()] })} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                      <Plus size={13} /> {t("receivingReportDoc.addTyped")}
-                    </button>
-                  </div>
-                )}
-              </div>
+            <SectionCard
+              title={t("receivingReportDoc.linesTitle")}
+              subtitle={t("receivingReportDoc.linesHint")}
+              bodyClassName=""
+              actions={canEdit ? (
+                <>
+                  <button type="button" onClick={() => setProductPickerOpen(true)} className={btn.secondarySm}>
+                    <Plus size={15} /> {t("receivingReportDoc.addFromCatalog")}
+                  </button>
+                  <button type="button" onClick={() => setDraft((d) => d && { ...d, lines: [...d.lines, blankReceivingReportLine()] })} className={btn.secondarySm}>
+                    <Plus size={15} /> {t("receivingReportDoc.addTyped")}
+                  </button>
+                </>
+              ) : undefined}
+            >
               {draft.lines.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-muted-foreground text-center">{t("receivingReportDoc.linesEmpty")}</p>
+                <p className="px-6 py-8 text-sm text-muted-foreground text-center">{t("receivingReportDoc.linesEmpty")}</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[900px]">
                     <thead>
-                      <tr className="border-b border-border bg-muted/40">
-                        {[t("receivingReportDoc.col.productCode"), t("receivingReportDoc.col.description"), t("receivingReportDoc.col.unit"), t("receivingReportDoc.col.qty"), t("receivingReportDoc.col.unitPrice"), t("receivingReportDoc.col.discount"), t("receivingReportDoc.col.amount"), t("receivingReportDoc.col.received"), ""].map((h, i) => (
-                          <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      <tr className={table.head}>
+                        {[
+                          { label: t("receivingReportDoc.col.productCode") }, { label: t("receivingReportDoc.col.description") },
+                          { label: t("receivingReportDoc.col.unit") }, { label: t("receivingReportDoc.col.qty"), right: true },
+                          { label: t("receivingReportDoc.col.unitPrice"), right: true }, { label: t("receivingReportDoc.col.discount") },
+                          { label: t("receivingReportDoc.col.amount"), right: true }, { label: t("receivingReportDoc.col.received"), right: true }, { label: "" },
+                        ].map((h, i) => (
+                          <th key={`${i}-${h.label}`} className={h.right ? table.th.replace("text-left", "text-right") : table.th}>{h.label}</th>
                         ))}
                       </tr>
                     </thead>
@@ -668,20 +752,20 @@ export function ReceivingReportDocument({
                         const received = receivedQtyOf(draft, l.id);
                         const fromCatalog = !!l.productId;
                         return (
-                          <tr key={l.id} className="border-b border-border/50 last:border-0">
-                            <td className="px-2 py-1.5 w-32"><input className={`${cellCls} font-mono`} disabled={!canEdit || fromCatalog} value={l.productCode} aria-label={t("receivingReportDoc.col.productCode")} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
-                            <td className="px-2 py-1.5"><input className={cellCls} disabled={!canEdit} value={l.description} aria-label={t("receivingReportDoc.col.description")} onChange={(e) => setLine(l.id, { description: e.target.value })} /></td>
-                            <td className="px-2 py-1.5 w-24"><input className={cellCls} disabled={!canEdit || fromCatalog} value={l.unit} aria-label={t("receivingReportDoc.col.unit")} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
-                            <td className="px-2 py-1.5 w-24"><input type="number" min={received} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.qtyOrdered} aria-label={t("receivingReportDoc.col.qty")} onChange={(e) => setLine(l.id, { qtyOrdered: Number(e.target.value) || 0 })} /></td>
-                            <td className="px-2 py-1.5 w-28"><input type="number" min={0} className={`${cellCls} text-right font-mono`} disabled={!canEdit} value={l.unitPriceOrdered} aria-label={t("receivingReportDoc.col.unitPrice")} onChange={(e) => setLine(l.id, { unitPriceOrdered: Number(e.target.value) || 0 })} /></td>
-                            <td className="px-2 py-1.5">{discountCell(l)}</td>
-                            <td className="px-3 py-2 text-xs font-mono text-right text-foreground whitespace-nowrap">{fmt(lineSubtotal({ qty: l.qtyOrdered, unitPrice: l.unitPriceOrdered, discount: l.discount ?? 0, discountMode: l.discountMode }))}</td>
-                            <td className="px-3 py-2 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(received)}</td>
-                            <td className="px-2 py-1.5 w-8">
+                          <tr key={l.id} className="border-b border-[#eef1f6] last:border-b-0">
+                            <td className="px-3 first:pl-6 py-2 w-36"><input className={`${field.cell} w-full font-mono`} disabled={!canEdit || fromCatalog} value={l.productCode} aria-label={t("receivingReportDoc.col.productCode")} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
+                            <td className="px-3 py-2"><input className={`${field.cell} w-full`} disabled={!canEdit} value={l.description} aria-label={t("receivingReportDoc.col.description")} onChange={(e) => setLine(l.id, { description: e.target.value })} /></td>
+                            <td className="px-3 py-2 w-24"><input className={`${field.cell} w-full`} disabled={!canEdit || fromCatalog} value={l.unit} aria-label={t("receivingReportDoc.col.unit")} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
+                            <td className="px-3 py-2 w-24"><input type="number" min={received} className={`${field.cell} w-full text-right tabular-nums`} disabled={!canEdit} value={l.qtyOrdered} aria-label={t("receivingReportDoc.col.qty")} onChange={(e) => setLine(l.id, { qtyOrdered: Number(e.target.value) || 0 })} /></td>
+                            <td className="px-3 py-2 w-28"><input type="number" min={0} className={`${field.cell} w-full text-right tabular-nums`} disabled={!canEdit} value={l.unitPriceOrdered} aria-label={t("receivingReportDoc.col.unitPrice")} onChange={(e) => setLine(l.id, { unitPriceOrdered: Number(e.target.value) || 0 })} /></td>
+                            <td className="px-3 py-2 w-36">{discountCell(l)}</td>
+                            <td className="px-3 py-2 text-sm text-right tabular-nums text-foreground whitespace-nowrap">{fmt(lineSubtotal({ qty: l.qtyOrdered, unitPrice: l.unitPriceOrdered, discount: l.discount ?? 0, discountMode: l.discountMode }))}</td>
+                            <td className="px-3 py-2 text-sm text-right tabular-nums text-muted-foreground whitespace-nowrap">{fmt(received)}</td>
+                            <td className="px-3 last:pr-6 py-2 w-12">
                               {canEdit && received === 0 && (
-                                <button onClick={() => setDraft((d) => d && { ...d, lines: d.lines.filter((x) => x.id !== l.id) })} aria-label={t("receivingReportDoc.removeLine")} title={t("receivingReportDoc.removeLine")}
-                                  className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-[#e05252] transition-opacity">
-                                  <X size={13} />
+                                <button type="button" onClick={() => setDraft((d) => d && { ...d, lines: d.lines.filter((x) => x.id !== l.id) })} aria-label={t("receivingReportDoc.removeLine")} title={t("receivingReportDoc.removeLine")}
+                                  className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors">
+                                  <X size={16} />
                                 </button>
                               )}
                             </td>
@@ -692,136 +776,118 @@ export function ReceivingReportDocument({
                   </table>
                 </div>
               )}
-              <p className="px-5 py-3 text-xs text-muted-foreground border-t border-border">{t("receivingReportDoc.linesHint")}</p>
-            </section>
+            </SectionCard>
           )}
 
-          {/* สรุปยอดแบบใบเสนอราคา (2026-09-24) — ไว้เทียบกับบิลของผู้ขายว่าตรงกันไหม ก่อนกดรับของ */}
-          <section className="bg-card border border-border rounded-xl p-5 flex flex-col sm:flex-row sm:items-start gap-4">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.summaryTitle")}</h2>
-              <p className="text-xs text-muted-foreground mt-1">{t("receivingReportDoc.summaryHint")}</p>
+          {/* รายการค้างรับ + รับครบแล้วในตารางเดียว (ดีไซน์ใหม่ 2026-09-30) — บรรทัดย้ายกลุ่มเองเมื่อค้างรับเหลือศูนย์ */}
+          <section className={surface.card}>
+            <div className={`${surface.cardHead} flex-wrap`}>
+              <h2 className={surface.cardTitle}>{t("receivingReportDoc.itemsTitle")}</h2>
+              <span className="flex-1 text-[13px] text-muted-foreground">
+                {poCount > 1
+                  ? t("receivingReportDoc.itemsCountFromPos").replace("{n}", String(draft.lines.length)).replace("{po}", String(poCount))
+                  : t("ui.itemCount").replace("{n}", String(draft.lines.length))}
+              </span>
+              <span className="text-xs text-muted-foreground">{t("receivingReportDoc.itemsDiscountHint")}</span>
             </div>
-            <dl className="w-full sm:w-80 space-y-2">
-              {[
-                { label: t("receivingReportDoc.summary.gross"), value: orderTotals.gross },
-                { label: t("receivingReportDoc.summary.discount"), value: -orderTotals.discountAmt, hide: orderTotals.discountAmt === 0 },
-                { label: t("receivingReportDoc.summary.afterDiscount"), value: orderTotals.afterDiscount, hide: orderTotals.discountAmt === 0 },
-                { label: t("receivingReportDoc.summary.base"), value: orderTotals.base, hide: priceType !== "inclusive" },
-                {
-                  label: priceType === "none"
-                    ? t("receivingReportDoc.summary.noVat")
-                    : t("receivingReportDoc.summary.vat").replace("{rate}", String(orderTotals.vatRate ?? 0)),
-                  value: orderTotals.vatAmt,
-                },
-              ].filter((r) => !r.hide).map((r) => (
-                <div key={r.label} className="flex justify-between gap-4 text-sm">
-                  <dt className="text-muted-foreground">{r.label}</dt>
-                  <dd className="font-mono text-foreground">{fmt(r.value)}</dd>
+            <div className="overflow-x-auto">
+              <div className="min-w-[960px]">
+                <div className={`${lineGrid} h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]`}>
+                  <span>#</span>
+                  <span>{t("receivingReportDoc.col.item")}</span>
+                  <span>{t("receivingReportDoc.col.unit")}</span>
+                  <span className="text-right">{t("receivingReportDoc.col.ordered")}</span>
+                  <span className="text-right">{t("receivingReportDoc.col.received")}</span>
+                  <span className="text-right">{t("receivingReportDoc.col.outstanding")}</span>
+                  <span className="text-right">{t("receivingReportDoc.col.poPrice")}</span>
+                  <span>{t("receivingReportDoc.col.discount")}</span>
+                  <span className="text-right">{t("receivingReportDoc.col.receivedAmount")}</span>
                 </div>
-              ))}
-              <div className="flex justify-between gap-4 text-base font-semibold border-t border-border pt-2">
-                <dt className="text-foreground">{t("receivingReportDoc.summary.total")}</dt>
-                <dd className="font-mono text-[#866d28]">{fmt(orderTotals.total)}</dd>
+                {groupBand("pending", pendingLines.length)}
+                {pendingLines.length === 0
+                  ? <p className="px-6 py-4 text-sm text-muted-foreground border-b border-[#eef1f6]">{t("receivingReportDoc.pendingEmpty")}</p>
+                  : pendingLines.map((l, i) => lineRow(l, i + 1, false))}
+                {groupBand("done", doneLines.length)}
+                {doneLines.length === 0
+                  ? <p className="px-6 py-4 text-sm text-muted-foreground border-b border-[#eef1f6]">{t("receivingReportDoc.doneEmpty")}</p>
+                  : doneLines.map((l, i) => lineRow(l, pendingLines.length + i + 1, true))}
               </div>
-            </dl>
-          </section>
-
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
-              <PackagePlus size={15} className="text-[#a75d1a]" />
-              <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.pendingTitle")}</h2>
-              <span className="text-xs text-muted-foreground font-mono">({pendingLines.length})</span>
             </div>
-            {pendingLines.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-muted-foreground text-center">{t("receivingReportDoc.pendingEmpty")}</p>
-            ) : lineTable(pendingLines, false)}
-          </section>
-
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
-              <PackageCheck size={15} className="text-[#207e52]" />
-              <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.doneTitle")}</h2>
-              <span className="text-xs text-muted-foreground font-mono">({doneLines.length})</span>
+            <div className="flex justify-end items-center gap-6 px-6 pt-3.5 pb-[18px] text-sm text-[#3d5173]">
+              <span>{t("receivingReportDoc.receivedAmountTotal")}</span>
+              <span className="min-w-[116px] text-right font-semibold tabular-nums text-foreground">{fmt(receivedAmountTotal)}</span>
             </div>
-            {doneLines.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-muted-foreground text-center">{t("receivingReportDoc.doneEmpty")}</p>
-            ) : lineTable(doneLines, true)}
           </section>
 
-          <section className="bg-card border border-border rounded-xl p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.historyTitle")}</h2>
+          <section className={surface.card}>
+            <div className={surface.cardHead}>
+              <h2 className={surface.cardTitle}>{t("receivingReportDoc.historyTitle")}</h2>
+              <span className="text-[13px] text-muted-foreground">{t("receivingReportDoc.historyCount").replace("{n}", String(draft.batches.length))}</span>
+            </div>
             {draft.batches.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("receivingReportDoc.historyEmpty")}</p>
+              <p className="px-6 py-8 text-sm text-muted-foreground text-center">{t("receivingReportDoc.historyEmpty")}</p>
             ) : (
-              <ul className="space-y-2">
-                {draft.batches.map((b, idx) => (
-                  <li key={b.id} className="border border-border rounded-lg p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">{t("receivingReportDoc.batchSeq").replace("{seq}", String(b.seq))}</p>
-                      <p className="text-sm font-mono text-foreground">{b.invoiceNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.invoiceDate")}</p>
-                      <p className="text-sm font-mono text-foreground">{b.invoiceDate ? formatQuoteDateThai(b.invoiceDate) : "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.receivedBy")}</p>
-                      <p className="text-sm text-foreground">{b.receivedBy || b.postedByName || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">{t("receivingReportDoc.priceType")}</p>
-                      <p className="text-sm text-foreground">{t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(b)])}{b.discountAmt ? ` · ${t("receivingReportDoc.summary.discount")} ${fmt(b.discountAmt)}` : ""}</p>
- </div>
- {b.dueDate && (
- <div>
- <p className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDate")}</p>
- <p className="text-sm font-mono text-foreground">{formatQuoteDateThai(b.dueDate)}</p>
- </div>
- )}
- <div className="ml-auto text-right">
- <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.total")}</p>
- <p className="text-sm font-mono font-semibold text-[#c9a84c]">{fmt(b.total)}</p>
- </div>
- {/* ใบพิมพ์ FM-ST-01 คือหนึ่งบิลต่อหนึ่งใบ — พิมพ์เฉพาะรอบนี้ได้ (2026-09-23) */}
- {canPrint && (
- <button onClick={() => void handlePrint(b.id)} disabled={printing}
- title={t("receivingReportDoc.printBatch")} aria-label={t("receivingReportDoc.printBatch")}
- className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
- <Printer size={12} /> {t("receivingReportDoc.printBatch")}
- </button>
- )}
- {/* ยกเลิกได้เฉพาะรอบล่าสุด — ต้นทุนถัวเฉลี่ยเดินไปตามลำดับการรับ ถอนรอบกลางย้อนไม่ได้ */}
- {canReceive && idx === draft.batches.length - 1 && (
- <button onClick={() => setConfirmReverse(b.id)} disabled={busy}
- className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all disabled:opacity-60">
- <RotateCcw size={12} /> {t("receivingReportDoc.reverseBtn")}
- </button>
- )}
- </li>
- ))}
- </ul>
- )}
- </section>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[960px]">
+                  <thead>
+                    <tr className={table.head}>
+                      {[
+                        { label: t("receivingReportDoc.historyCol.batch") }, { label: t("receivingReportDoc.receive.invoiceDate") },
+                        { label: t("receivingReportDoc.receive.receivedBy") }, { label: t("receivingReportDoc.priceType") },
+                        { label: t("receivingReportDoc.dueDate") }, { label: t("receivingReportDoc.receive.total"), right: true }, { label: "" },
+                      ].map((h, i) => (
+                        <th key={i} className={`${h.right ? table.th.replace("text-left", "text-right") : table.th} first:pl-6 last:pr-6`}>{h.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draft.batches.map((b) => (
+                      <tr key={b.id} className="h-16 border-b border-[#eef1f6]">
+                        <td className={`${table.td} first:pl-6`}>
+                          <div className="flex flex-col leading-snug">
+                            <span className="text-sm font-semibold text-foreground">{t("receivingReportDoc.batchSeq").replace("{seq}", String(b.seq))}</span>
+                            <span className="text-xs font-mono text-muted-foreground">{b.invoiceNumber}</span>
+                          </div>
+                        </td>
+                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.invoiceDate ? formatQuoteDateThai(b.invoiceDate) : "—"}</td>
+                        <td className={`${table.td} text-sm text-[#3d5173]`}>{b.receivedBy || b.postedByName || "—"}</td>
+                        <td className={`${table.td} text-sm text-[#3d5173]`}>
+                          {t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(b)])}
+                          {b.discountAmt ? <span className="block text-xs text-muted-foreground">{t("receivingReportDoc.summary.discount")} {fmt(b.discountAmt)}</span> : null}
+                        </td>
+                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.dueDate ? formatQuoteDateThai(b.dueDate) : "—"}</td>
+                        <td className={`${table.td} text-sm text-right font-semibold tabular-nums whitespace-nowrap`}>{fmt(b.total)}</td>
+                        <td className={`${table.td} last:pr-6`}>
+                          <div className="flex items-center justify-end gap-2">
+                            {/* ใบพิมพ์ FM-ST-01 คือหนึ่งบิลต่อหนึ่งใบ — พิมพ์เฉพาะรอบนี้ได้ (2026-09-23) */}
+                            {canPrint && (
+                              <button type="button" onClick={() => void handlePrint(b.id)} disabled={printing} className={btn.secondarySm}>
+                                <Printer size={15} /> {t("receivingReportDoc.printBatch")}
+                              </button>
+                            )}
+                            {/* ยกเลิกได้เฉพาะรอบล่าสุด — ต้นทุนถัวเฉลี่ยเดินไปตามลำดับการรับ ถอนรอบกลางย้อนไม่ได้ */}
+                            {canReceive && b.id === lastBatch?.id && (
+                              <button type="button" onClick={() => setConfirmReverse(b.id)} disabled={busy}
+                                className="h-9 px-2.5 inline-flex items-center gap-1.5 rounded-lg text-[13px] font-medium text-[#b93636] hover:bg-[#fcebeb] transition-colors disabled:opacity-60 whitespace-nowrap">
+                                <RotateCcw size={15} /> {t("receivingReportDoc.reverseBtn")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {draft.batches.length > 0 && canReceive && (
+              <p className="px-6 py-3 text-xs text-muted-foreground">{t("receivingReportDoc.historyHint")}</p>
+            )}
+          </section>
+        </div>
+      </div>
 
- <DocumentAttachmentsCard
- attachments={draft.attachments ?? []}
- disabled={!canEdit}
- onUpload={async (file) => {
- const updated = await uploadReceivingReportAttachment(draft.id, file);
- setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
- setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
- }}
- onDelete={async (attachmentId) => {
- const updated = await deleteReceivingReportAttachment(draft.id, attachmentId);
- setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
- setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
- }}
- />
- </div>
- </div>
-
- {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
+      {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
           (บั๊กเดิมของหกโมดูลที่แก้ไปเมื่อ 2026-09-02: เรนเดอร์เฉพาะตอนกดปุ่ม แล้ว Ctrl+P ได้กระดาษเปล่า) */}
       <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} printInfo={printInfo} batchId={printBatchId ?? undefined} />
 
@@ -844,6 +910,13 @@ export function ReceivingReportDocument({
         confirmLabel={t("receivingReportDoc.addPo.removeConfirm")}
         danger
         busy={busy}
+        summary={confirmRemovePo ? (
+          <SummaryLine
+            title={confirmRemovePo.number}
+            sub={[draft.vendorName, removeTargetLines.map((l) => l.description).join(", ")].filter(Boolean).join(" · ")}
+            right={t("ui.itemCount").replace("{n}", String(removeTargetLines.length))}
+          />
+        ) : undefined}
         onConfirm={() => { if (confirmRemovePo) void removePurchaseOrder(confirmRemovePo.id); }}
         onCancel={() => setConfirmRemovePo(null)}
       />
@@ -855,7 +928,15 @@ export function ReceivingReportDocument({
         title={t("receivingReportDoc.confirmDelete.title")}
         message={t("receivingReportDoc.confirmDelete.message")}
         confirmLabel={t("receivingReportDoc.delete")}
+        danger
         busy={busy}
+        summary={
+          <SummaryLine
+            title={docNumber}
+            sub={[draft.vendorName, draft.purchaseOrderNumber].filter(Boolean).join(" · ")}
+            right={`฿${fmt(totals.orderedValue)}`}
+          />
+        }
         onConfirm={() => void runDelete()}
         onCancel={() => setConfirmDelete(false)}
       />
@@ -864,7 +945,18 @@ export function ReceivingReportDocument({
         title={t("receivingReportDoc.confirmReverse.title")}
         message={t("receivingReportDoc.confirmReverse.message")}
         confirmLabel={t("receivingReportDoc.reverseBtn")}
+        danger
         busy={busy}
+        summary={reverseTarget ? (
+          <SummaryLine
+            title={`${t("receivingReportDoc.batchSeq").replace("{seq}", String(reverseTarget.seq))} · ${reverseTarget.invoiceNumber}`}
+            sub={[
+              reverseTarget.invoiceDate ? formatQuoteDateThai(reverseTarget.invoiceDate) : "",
+              (reverseTarget.receivedBy || reverseTarget.postedByName) ? `${t("receivingReportDoc.receive.receivedBy")} ${reverseTarget.receivedBy || reverseTarget.postedByName}` : "",
+            ].filter(Boolean).join(" · ")}
+            right={`฿${fmt(reverseTarget.total)}`}
+          />
+        ) : undefined}
         onConfirm={() => { if (confirmReverse) void runReverse(confirmReverse); }}
         onCancel={() => setConfirmReverse(null)}
       />

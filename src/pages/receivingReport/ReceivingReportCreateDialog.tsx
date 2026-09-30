@@ -1,30 +1,103 @@
-import { useEffect, useState } from "react";
-import { FilePlus2, Loader2, Search, X } from "lucide-react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { FilePlus2, Loader2, PackageCheck, Plus, Search, X } from "lucide-react";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useI18n } from "../../lib/i18n";
 import { fetchAllPurchaseOrders, type PurchaseOrderSummary } from "../../lib/purchaseOrder";
 import {
   fetchAllReceivingReports, RECEIVING_REPORT_CODES, RECEIVING_REPORT_CODE_LABEL_KEY, type ReceivingReportCode,
 } from "../../lib/receivingReport";
-import { formatQuoteDateThai } from "../../lib/quotes";
+import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { btn } from "../../components/ui/styles";
+import { RadioDot } from "./receivingUi";
+import { pickRowClass } from "./receivingFormat";
 
-/** แถวเลือกรหัสรับเข้า — ใช้ทั้งหน้าต่างสร้างใบและหน้าต่างเลือกรหัสจากปุ่ม "รับสินค้า" บนใบสั่งซื้อ */
-export function ReceiveCodeOptions({ value, onChange }: { value: ReceivingReportCode; onChange: (code: ReceivingReportCode) => void }) {
+/**
+ * แถวเลือกรหัสรับเข้า — ใช้ทั้งหน้าต่างสร้างใบและหน้าต่างเลือกรหัสจากปุ่ม "รับสินค้า" บนใบสั่งซื้อ
+ * การ์ดรหัสห่อ radio จริงของเบราว์เซอร์ไว้ (ซ่อนด้วยตา) ลูกศรขึ้น/ลงจึงเลื่อนตัวเลือกได้เหมือนเดิม
+ */
+export function ReceiveCodeOptions({ value, onChange, layout = "row" }: {
+  value: ReceivingReportCode;
+  onChange: (code: ReceivingReportCode) => void;
+  /** row = สามการ์ดเรียงแถว (หน้าต่างสร้างใบ) · list = เรียงลง (หน้าต่างเลือกรหัส) */
+  layout?: "row" | "list";
+}) {
   const { t } = useI18n();
+  const name = useId();
   return (
-    <fieldset className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-      <legend className="sr-only">{t("receivingReport.code.label")}</legend>
-      {RECEIVING_REPORT_CODES.map((c) => (
-        <label
-          key={c}
-          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer border transition-colors ${value === c ? "bg-[#c9a84c]/10 border-[#c9a84c]/40" : "border-border hover:bg-secondary/50"}`}
-        >
-          <input type="radio" name="rr-code" value={c} checked={value === c} onChange={() => onChange(c)} className="accent-[#c9a84c]" />
-          <span className="font-mono font-semibold text-sm text-[#866d28]">{c}</span>
-          <span className="text-xs text-foreground">{t(RECEIVING_REPORT_CODE_LABEL_KEY[c])}</span>
-        </label>
-      ))}
-    </fieldset>
+    <div role="radiogroup" aria-label={t("receivingReport.code.label")} className={layout === "row" ? "grid grid-cols-1 sm:grid-cols-3 gap-3" : "flex flex-col gap-2"}>
+      {RECEIVING_REPORT_CODES.map((c) => {
+        const on = value === c;
+        return (
+          <label
+            key={c}
+            className={`${layout === "row" ? "h-14" : "h-12"} px-3.5 rounded-lg border flex items-center gap-3 cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#1a5fb4]/40 ${
+              on ? "border-[#0b1d3a] bg-[#f5f8fd] shadow-[0_0_0_1px_#0b1d3a]" : "border-[#c3ccda] bg-white hover:bg-[#f8f9fc]"
+            }`}
+          >
+            <input type="radio" name={name} value={c} checked={on} onChange={() => onChange(c)} className="sr-only" />
+            <RadioDot on={on} />
+            <span className={`h-6 px-2 rounded-md font-mono text-[13px] font-medium inline-flex items-center ${on ? "bg-[#0b1d3a] text-white" : "bg-[#eef1f6] text-[#3d5173]"}`}>{c}</span>
+            <span className="text-sm font-medium text-foreground">{t(RECEIVING_REPORT_CODE_LABEL_KEY[c])}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** เปลือกหน้าต่างกว้าง 880 (หัว + ✕ · เนื้อหาเลื่อนได้ · ท้าย) — หน้าต่างเลือกของโมดูลนี้ใช้ร่วมกัน */
+export function WidePickerShell({ title, subtitle, onClose, busy = false, children, footer }: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  busy?: boolean;
+  children: ReactNode;
+  footer: ReactNode;
+}) {
+  const { t } = useI18n();
+  const close = () => { if (!busy) onClose(); };
+  const panelRef = useDialogA11y(close);
+  const titleId = useId();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={close} aria-hidden="true" />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId}
+        className="relative w-full max-w-[880px] max-h-[85vh] bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] flex flex-col overflow-hidden">
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b border-[#eef1f6]">
+          <div className="flex-1 min-w-0">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">{title}</h2>
+            {subtitle && <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          <button type="button" onClick={close} aria-label={t("common.close")} className="w-9 h-9 -mr-2 -mt-1 rounded-lg text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground flex items-center justify-center flex-shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+        <div className="flex items-center gap-2.5 px-6 py-3.5 border-t border-border flex-wrap">{footer}</div>
+      </div>
+    </div>
+  );
+}
+
+/** ช่องค้นหาในแถบบนของหน้าต่างเลือก (340px) */
+export function PickerSearch({ value, onChange, placeholder, autoFocus = false }: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  autoFocus?: boolean;
+}) {
+  return (
+    <label className="w-full sm:w-[340px] h-10 px-3 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+      <Search size={16} className="text-muted-foreground flex-shrink-0" />
+      <input
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-[#8a97ad] outline-none"
+      />
+    </label>
   );
 }
 
@@ -42,7 +115,6 @@ export function ReceivingReportCreateDialog({
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const panelRef = useDialogA11y(onCancel);
   const [code, setCode] = useState<ReceivingReportCode>("RR");
   const [rows, setRows] = useState<PurchaseOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +138,7 @@ export function ReceivingReportCreateDialog({
 
   const q = query.trim().toLowerCase();
   const filtered = rows.filter((r) => !q || [r.id, r.documentNumber, r.vendorName, r.jobCode].some((v) => (v ?? "").toLowerCase().includes(q)));
+  const picked = source ? rows.find((r) => r.id === source) : null;
 
   const submit = async () => {
     if (source === null) return;
@@ -73,127 +146,144 @@ export function ReceivingReportCreateDialog({
     try { await onCreate(code, source || null); } finally { setBusy(false); }
   };
 
-  const rowCls = (on: boolean) => `w-full text-left px-5 py-3 border-b border-border/50 transition-colors flex items-start gap-3 ${on ? "bg-[#c9a84c]/10" : "hover:bg-secondary/40"}`;
+  const grid = "grid grid-cols-[20px_150px_110px_minmax(0,1fr)_150px] gap-3.5 items-center px-6";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} aria-hidden="true" />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("receivingReport.create.title")}
-        className="relative w-full max-w-2xl max-h-[85vh] flex flex-col bg-card border border-border rounded-xl shadow-xl overflow-hidden"
-      >
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground">{t("receivingReport.create.title")}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{t("receivingReport.create.subtitle")}</p>
-          </div>
-          <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-5 py-4 border-b border-border space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">{t("receivingReport.create.codeStep")}</p>
-          <ReceiveCodeOptions value={code} onChange={setCode} />
-        </div>
-
-        <div className="px-5 pt-4 pb-3 border-b border-border space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">{t("receivingReport.create.sourceStep")}</p>
-          <div className="relative h-9">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("receivingReport.picker.searchPlaceholder")}
-              aria-label={t("receivingReport.picker.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto min-h-0" role="listbox" aria-label={t("receivingReport.create.sourceStep")}>
-          <button role="option" aria-selected={source === ""} onClick={() => setSource("")} className={rowCls(source === "")}>
-            <FilePlus2 size={16} className="text-[#866d28] mt-0.5 flex-shrink-0" />
-            <span>
-              <span className="block text-sm font-semibold text-foreground">{t("receivingReport.create.blank")}</span>
-              <span className="block text-xs text-muted-foreground mt-0.5">{t("receivingReport.create.blankHint")}</span>
-            </span>
-          </button>
-          {loading ? (
-            <div className="flex items-center justify-center py-10"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
-          ) : filtered.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-10 px-5">{t("receivingReport.picker.empty")}</p>
-          ) : (
-            filtered.map((r) => (
-              <button key={r.id} role="option" aria-selected={source === r.id} onClick={() => setSource(r.id)} className={rowCls(source === r.id)}>
-                <span className="flex-1 min-w-0">
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-mono font-semibold text-[#866d28]">{r.documentNumber || r.id}</span>
-                    <span className="text-xs font-mono text-muted-foreground">{formatQuoteDateThai(r.updatedAt)}</span>
-                  </span>
-                  <span className="block text-xs text-muted-foreground mt-0.5">{r.vendorName || "—"} · {r.jobCode || "—"}</span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border bg-secondary/30">
-          <p className="text-xs text-muted-foreground">
-            {t("receivingReport.create.numberPreview")} <span className="font-mono font-semibold text-foreground">{code}-</span>
+    <WidePickerShell
+      title={t("receivingReport.create.title")}
+      subtitle={t("receivingReport.create.subtitle")}
+      onClose={onCancel}
+      busy={busy}
+      footer={
+        <>
+          <p className="flex-1 min-w-0 text-sm text-[#3d5173] truncate">
+            {t("receivingReport.create.numberPreview")} <span className="font-mono font-medium text-foreground">{code}-</span>
+            {source !== null && (
+              <>
+                <span className="text-[#8a97ad]"> · </span>
+                {source === "" ? t("receivingReport.create.blankPicked") : t("receivingReport.create.fromPicked").replace("{po}", picked?.documentNumber || picked?.id || "")}
+              </>
+            )}
           </p>
-          <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              {t("common.cancel")}
+          <button type="button" onClick={onCancel} disabled={busy} className={btn.secondary}>{t("common.cancel")}</button>
+          <button type="button" onClick={() => void submit()} disabled={source === null || busy} className={btn.primary}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} {t("receivingReport.create.submit")}
+          </button>
+        </>
+      }
+    >
+      <fieldset className="m-0 px-6 py-4 border-0 border-b border-[#eef1f6] flex flex-col gap-2.5 flex-shrink-0">
+        <legend className="float-left p-0 text-[13px] font-medium text-[#26395a]">
+          {t("receivingReport.code.label")} <span className="text-[#b93636]">*</span>
+        </legend>
+        <div className="clear-both"><ReceiveCodeOptions value={code} onChange={setCode} /></div>
+      </fieldset>
+
+      <div className="px-6 py-3.5 flex items-center gap-2.5 flex-wrap border-b border-[#eef1f6] flex-shrink-0">
+        <PickerSearch value={query} onChange={setQuery} placeholder={t("receivingReport.picker.searchPlaceholder")} />
+        <span className="flex-1" />
+        <span className="text-[13px] text-muted-foreground">{t("receivingReport.picker.subtitle")}</span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-auto">
+        <div className="min-w-[680px]">
+          <div className={`${grid} h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173] sticky top-0`}>
+            <span /><span>{t("receivingReport.picker.col.number")}</span><span>{t("receivingReport.picker.col.date")}</span>
+            <span>{t("receivingReport.col.vendor")}</span><span>{t("receivingReportDoc.jobCode")}</span>
+          </div>
+          <div role="radiogroup" aria-label={t("receivingReport.create.sourceStep")}>
+            <button type="button" role="radio" aria-checked={source === ""} onClick={() => setSource("")} className={`${pickRowClass(source === "")} ${grid} h-[60px]`}>
+              <RadioDot on={source === ""} />
+              <span className="col-span-4 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-lg bg-[#eef1f6] text-[#3d5173] flex items-center justify-center flex-shrink-0"><FilePlus2 size={16} /></span>
+                <span className="flex flex-col leading-snug">
+                  <span className="text-sm font-medium text-foreground">{t("receivingReport.create.blank")}</span>
+                  <span className="text-xs text-muted-foreground">{t("receivingReport.create.blankHint")}</span>
+                </span>
+              </span>
             </button>
-            <button
-              onClick={() => void submit()}
-              disabled={source === null || busy}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
-            >
-              {busy && <Loader2 size={13} className="animate-spin" />} {t("receivingReport.create.submit")}
-            </button>
+            {loading ? (
+              <div className="flex items-center justify-center py-10" role="status"><Loader2 size={18} className="animate-spin text-muted-foreground" /></div>
+            ) : filtered.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-10 px-6">{t("receivingReport.picker.empty")}</p>
+            ) : (
+              filtered.map((r) => {
+                const on = source === r.id;
+                return (
+                  <button key={r.id} type="button" role="radio" aria-checked={on} onClick={() => setSource(r.id)} className={`${pickRowClass(on)} ${grid} h-[52px]`}>
+                    <RadioDot on={on} />
+                    <span className="font-mono text-[13px] font-medium text-foreground truncate">{r.documentNumber || r.id}</span>
+                    <span className="text-sm text-[#3d5173]">{formatQuoteDateThai(r.updatedAt)}</span>
+                    <span className="text-sm font-medium text-foreground truncate" title={r.vendorName}>{r.vendorName || "—"}</span>
+                    <span className={`font-mono text-[13px] truncate ${r.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{r.jobCode || "—"}</span>
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
-    </div>
+    </WidePickerShell>
   );
 }
 
 /** เลือกรหัสอย่างเดียว — ปุ่ม "รับสินค้า" บนใบสั่งซื้อรู้ใบสั่งซื้ออยู่แล้ว เหลือแค่รหัส */
 export function ReceiveCodeDialog({
-  onCreate, onCancel,
+  onCreate, onCancel, purchaseOrder,
 }: {
   onCreate: (code: ReceivingReportCode) => Promise<void>;
   onCancel: () => void;
+  /** กล่องสรุปใบสั่งซื้อที่กำลังจะเปิดใบรับ (ไม่ส่ง = ไม่แสดงกล่อง) */
+  purchaseOrder?: { number: string; vendorName: string; amount?: number };
 }) {
   const { t } = useI18n();
-  const panelRef = useDialogA11y(onCancel);
-  const [code, setCode] = useState<ReceivingReportCode>("RR");
   const [busy, setBusy] = useState(false);
+  const close = () => { if (!busy) onCancel(); };
+  const panelRef = useDialogA11y(close);
+  const titleId = useId();
+  const descId = useId();
+  const [code, setCode] = useState<ReceivingReportCode>("RR");
   const submit = async () => {
     setBusy(true);
     try { await onCreate(code); } finally { setBusy(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} aria-hidden="true" />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={t("receivingReport.create.codeOnlyTitle")}
-        className="relative w-full max-w-lg bg-card border border-border rounded-xl shadow-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <h2 className="flex-1 text-base font-semibold text-foreground">{t("receivingReport.create.codeOnlyTitle")}</h2>
-          <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={close} aria-hidden="true" />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}
+        className="relative w-full max-w-[480px] bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] flex flex-col">
+        <div className="flex items-start gap-4 px-6 pt-6">
+          <span className="w-11 h-11 rounded-full bg-[#e8f0fb] text-[#1a5fb4] flex items-center justify-center flex-shrink-0"><PackageCheck size={20} /></span>
+          <div className="flex-1 min-w-0 pt-0.5 flex flex-col gap-1">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">{t("receivingReport.create.codeOnlyTitle")}</h2>
+            <p id={descId} className="text-sm text-[#3d5173] leading-relaxed">{t("receivingReport.create.codeOnlyHint")}</p>
+          </div>
+          <button type="button" onClick={close} aria-label={t("common.close")} className="w-9 h-9 -mt-1.5 -mr-2 rounded-lg text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground flex items-center justify-center flex-shrink-0">
+            <X size={18} />
+          </button>
         </div>
-        <div className="p-5"><ReceiveCodeOptions value={code} onChange={setCode} /></div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-          <button onClick={onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-          <button onClick={() => void submit()} disabled={busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
-            {busy && <Loader2 size={13} className="animate-spin" />} {t("receivingReport.create.submit")}
+        <div className="px-6 pt-5 pb-6 flex flex-col gap-4">
+          {purchaseOrder && (
+            <div className="px-3.5 py-3 bg-[#f8f9fc] border border-border rounded-lg flex items-center gap-3">
+              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                <span className="font-mono text-[13px] font-medium text-foreground">{purchaseOrder.number}</span>
+                <span className="text-[13px] text-[#3d5173] truncate">{purchaseOrder.vendorName || "—"}</span>
+              </div>
+              {purchaseOrder.amount !== undefined && <span className="font-semibold tabular-nums whitespace-nowrap">฿{fmt(purchaseOrder.amount)}</span>}
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-medium text-[#26395a]">{t("receivingReport.code.label")} <span className="text-[#b93636]">*</span></span>
+            <ReceiveCodeOptions value={code} onChange={setCode} layout="list" />
+            <span className="text-xs text-muted-foreground">
+              {t("receivingReport.create.numberPreview")} <span className="font-mono text-[#3d5173]">{code}-</span>
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#eef1f6]">
+          <button type="button" onClick={close} disabled={busy} className={btn.secondary}>{t("common.cancel")}</button>
+          <button type="button" onClick={() => void submit()} disabled={busy} className={btn.primary}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} {t("receivingReport.create.submit")}
           </button>
         </div>
       </div>

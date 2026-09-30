@@ -9,6 +9,8 @@ import { fetchVendorBills, createVendorBill, type VendorBillSummary } from "../.
 import { VendorBillList } from "./VendorBillList";
 import { VendorBillDocument } from "./VendorBillDocument";
 import { VendorBillCreateDialog } from "./VendorBillCreateDialog";
+import { PAGE_CLASS, LoadErrorState } from "../receivingReport/receivingUi";
+import { btn } from "../../components/ui/styles";
 
 /**
  * หน้าใบรับวางบิลของสโตร์ (2026-09-23) — สลับรายการ/เอกสาร แบบเดียวกับหน้าใบรับสินค้า
@@ -100,9 +102,9 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
 
   if (loading) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className={PAGE_CLASS} role="status" aria-live="polite">
         <span className="sr-only">{t("vendorBill.loading")}</span>
-        <div className="h-8 w-56 bg-muted rounded animate-pulse mb-4" />
+        <div className="h-8 w-56 bg-muted rounded animate-pulse" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
       </div>
     );
@@ -110,11 +112,8 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
 
   if (loadError) {
     return (
-      <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
-        <p className="text-sm text-muted-foreground">{t("vendorBill.loadError")}</p>
-        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
-          {t("vendorBill.retry")}
-        </button>
+      <div className={PAGE_CLASS}>
+        <LoadErrorState message={t("vendorBill.loadError")} retryLabel={t("vendorBill.retry")} onRetry={loadList} />
       </div>
     );
   }
@@ -125,9 +124,8 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
         vendorBills={rows}
         onOpen={open}
         headerAction={canCreate ? (
-          <button onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors">
-            <Plus size={14} /> {t("vendorBill.createBtn")}
+          <button type="button" onClick={() => setCreating(true)} className={btn.primary}>
+            <Plus size={16} /> {t("vendorBill.createBtn")}
           </button>
         ) : undefined}
       />

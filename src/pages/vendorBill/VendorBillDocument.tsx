@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Loader2, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { Building2, Loader2, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
@@ -16,9 +16,15 @@ import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { VendorBillPrintDocument } from "./VendorBillPrintDocument";
+import { DocumentHeader, DocumentColumns, NextStepHint } from "../../components/ui/DocumentLayout";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field, surface } from "../../components/ui/styles";
+import { CheckDot, CodeChip, RailSummaryCard, SuffixInput, SummaryLine } from "../receivingReport/receivingUi";
+import { pickRowClass } from "../receivingReport/receivingFormat";
+import { WidePickerShell } from "../receivingReport/ReceivingReportCreateDialog";
 
-const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
-const thCls = "px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
 function toUpdateFields(d: VendorBill): VendorBillUpdateFields {
   return { billDate: d.billDate, creditDays: d.creditDays, paymentDate: d.paymentDate, remarks: d.remarks, apEntryIds: d.apEntryIds };
@@ -124,15 +130,15 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{loadError}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-foreground">{t("vendorBill.backToList")}</button>
+        <button type="button" onClick={onBack} className={btn.secondary}>{t("vendorBill.backToList")}</button>
       </div>
     );
   }
   if (!doc || !draft) {
     return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
+      <div className="flex-1 px-4 md:px-8 py-6 flex flex-col gap-5" role="status" aria-live="polite">
         <span className="sr-only">{t("vendorBill.loading")}</span>
-        <div className="h-8 w-64 bg-muted rounded animate-pulse mb-4" />
+        <div className="h-8 w-64 bg-muted rounded animate-pulse" />
         <div className="h-64 bg-muted rounded-xl animate-pulse" />
       </div>
     );
@@ -192,38 +198,43 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
     }
   };
 
+
+  const grid = "grid grid-cols-[36px_170px_150px_120px_120px_minmax(0,1fr)_120px_132px_40px] gap-3 items-center px-6";
+  const toggle = (id: string) => setPicked((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
   return (
     <>
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("vendorBill.backToList")}
-          </button>
-          <ChevronRight size={13} className="text-muted-foreground" />
-          <span className="text-sm text-[#866d28] font-mono font-semibold">{draft.documentNumber}</span>
-          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-            {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-            {canPrint && (
-              <button onClick={() => void handlePrint()} disabled={printing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("vendorBill.print")}
-              </button>
-            )}
-            {editable && (
-              <button onClick={() => void save()} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("vendorBill.save")}
-              </button>
-            )}
-            {canDelete && (
-              <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-                <Trash2 size={13} /> {t("vendorBill.delete")}
-              </button>
-            )}
-          </div>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader
+            backLabel={t("vendorBill.backToAll")}
+            onBack={() => requestLeave(onBack)}
+            number={draft.documentNumber}
+            meta={editable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
+            actions={
+              <>
+                {/* ปุ่มบันทึกคงไว้ตามที่เจ้าของสั่ง (2026-09-30) แม้มีบันทึกอัตโนมัติ */}
+                {editable && (
+                  <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("vendorBill.save")}
+                  </button>
+                )}
+                <MoreMenu
+                  items={[
+                    canDelete && { key: "delete", label: t("vendorBill.deleteMenu"), icon: Trash2, danger: true, hint: t("vendorBill.deleteMenuHint"), onSelect: () => setConfirmDelete(true) },
+                  ]}
+                />
+                {canPrint && (
+                  <button type="button" onClick={() => void handlePrint()} disabled={printing} className={btn.primary}>
+                    {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("vendorBill.print")}
+                  </button>
+                )}
+              </>
+            }
+          />
         </div>
 
-        <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto">
+        <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
           {editable && draftBackup.recovered && draftBackup.recoveredAt !== null && (
             <DraftRecoveryBanner
               savedAt={draftBackup.recoveredAt}
@@ -237,47 +248,82 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             />
           )}
 
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-            <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-              <h1 className="text-[#c9a84c] text-xl font-bold">{t("vendorBill.title")}</h1>
-              <p className="text-[#a8bed8] text-xs mt-1">{t("vendorBill.subtitle")}</p>
-            </div>
-            <div className="p-4 sm:p-7 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground">{t("vendorBill.field.vendor")}</p>
-                <p className="text-sm font-semibold text-foreground">{draft.vendorName}{draft.vendorCode && <span className="ml-2 font-mono text-xs text-[#866d28]">{draft.vendorCode}</span>}</p>
-                {draft.vendorAddress && <p className="text-xs text-muted-foreground whitespace-pre-line">{draft.vendorAddress}</p>}
-                {draft.vendorTaxId && <p className="text-xs text-muted-foreground font-mono">{t("vendorBill.field.taxId")} {draft.vendorTaxId}</p>}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="vb-billDate" className="text-xs text-muted-foreground block mb-1">{t("vendorBill.field.billDate")}</label>
-                  <input id="vb-billDate" type="date" disabled={!editable} value={draft.billDate} onChange={(e) => set({ billDate: e.target.value })} className={inputCls} />
-                </div>
-                <div>
-                  <label htmlFor="vb-credit" className="text-xs text-muted-foreground block mb-1">{t("vendorBill.field.creditDays")}</label>
-                  <input id="vb-credit" type="number" min={0} disabled={!editable} value={draft.creditDays ?? ""}
-                    onChange={(e) => set({ creditDays: e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))) })} className={inputCls} />
-                </div>
-                <div className="col-span-2">
-                  <label htmlFor="vb-payDate" className="text-xs text-muted-foreground block mb-1">{t("vendorBill.field.paymentDate")}</label>
-                  <input id="vb-payDate" type="date" disabled={!editable} value={draft.paymentDate} onChange={(e) => set({ paymentDate: e.target.value })} className={inputCls} />
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <label htmlFor="vb-remarks" className="text-xs text-muted-foreground block mb-1">{t("vendorBill.field.remarks")}</label>
-                <textarea id="vb-remarks" rows={2} disabled={!editable} value={draft.remarks} onChange={(e) => set({ remarks: e.target.value })} className={inputCls} />
-              </div>
-            </div>
-          </div>
+          <DocumentColumns
+            main={
+              <>
+                <SectionCard title={t("vendorBill.field.vendor")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
+                    <div className="sm:col-span-2 flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0"><Building2 size={18} /></span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-xs text-muted-foreground">{t("vendorBill.field.vendorName")}</span>
+                        <span className="text-sm font-medium text-foreground flex items-center gap-2 flex-wrap">
+                          {draft.vendorName}
+                          {draft.vendorCode && <CodeChip>{draft.vendorCode}</CodeChip>}
+                        </span>
+                      </div>
+                    </div>
+                    <ReadonlyField label={t("vendorBill.field.taxId")} value={draft.vendorTaxId} mono />
+                    <ReadonlyField label={t("vendorBill.field.address")} value={draft.vendorAddress} className="sm:col-span-3 whitespace-pre-line" />
+                  </div>
+                </SectionCard>
 
-          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground">{t("vendorBill.rowsTitle")}</h2>
+                <SectionCard title={t("vendorBill.infoTitle")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+                    {editable ? (
+                      <>
+                        <Field label={t("vendorBill.field.billDate")} htmlFor="vb-billDate">
+                          <input id="vb-billDate" type="date" value={draft.billDate} onChange={(e) => set({ billDate: e.target.value })} className={`${field.input} w-full`} />
+                        </Field>
+                        <Field label={t("vendorBill.field.creditDays")} htmlFor="vb-credit">
+                          <SuffixInput id="vb-credit" min={0} integer suffix={t("receivingReportDoc.daysUnit")} value={draft.creditDays ?? ""}
+                            onChange={(v) => set({ creditDays: v === "" ? null : Math.max(0, Math.round(Number(v))) })} />
+                        </Field>
+                        <Field label={t("vendorBill.field.paymentDate")} htmlFor="vb-payDate">
+                          <input id="vb-payDate" type="date" value={draft.paymentDate} onChange={(e) => set({ paymentDate: e.target.value })} className={`${field.input} w-full`} />
+                        </Field>
+                        <Field label={t("vendorBill.field.remarks")} htmlFor="vb-remarks" className="sm:col-span-3">
+                          <textarea id="vb-remarks" rows={2} value={draft.remarks} onChange={(e) => set({ remarks: e.target.value })} className={`${field.textarea} w-full`} />
+                        </Field>
+                      </>
+                    ) : (
+                      <>
+                        <ReadonlyField label={t("vendorBill.field.billDate")} value={draft.billDate ? formatQuoteDateThai(draft.billDate) : ""} />
+                        <ReadonlyField label={t("vendorBill.field.creditDays")} value={draft.creditDays ?? ""} />
+                        <ReadonlyField label={t("vendorBill.field.paymentDate")} value={draft.paymentDate ? formatQuoteDateThai(draft.paymentDate) : ""} />
+                        <ReadonlyField label={t("vendorBill.field.remarks")} value={draft.remarks} className="sm:col-span-3" />
+                      </>
+                    )}
+                  </div>
+                </SectionCard>
+              </>
+            }
+            rail={
+              <>
+                <RailSummaryCard
+                  label={t("vendorBill.col.outstanding")}
+                  value={`฿${fmt(totals.outstanding)}`}
+                  rows={[
+                    { label: t("vendorBill.col.amount"), value: `฿${fmt(totals.amount)}` },
+                    { label: t("vendorBill.col.paid"), value: `฿${fmt(totals.paid)}` },
+                    { label: t("vendorBill.col.rows"), value: t("vendorBill.create.count").replace("{n}", String(shownRows.length)) },
+                  ]}
+                />
+                <NextStepHint title={t("receivingReportDoc.nextStep")}>
+                  <span className="block">{t("vendorBill.nextStepBody")}</span>
+                  <span className="block mt-1 text-muted-foreground">{t("vendorBill.subtitle")}</span>
+                </NextStepHint>
+              </>
+            }
+          />
+
+          <section className={surface.card}>
+            <div className={`${surface.cardHead} min-h-[60px] py-3`}>
+              <h2 className={surface.cardTitle}>{t("vendorBill.rowsTitle")}</h2>
+              <span className="flex-1 text-[13px] text-muted-foreground">{t("vendorBill.rowsCount").replace("{n}", String(shownRows.length))}</span>
               {editable && (
-                <button onClick={() => void openAdd()}
-                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <Plus size={13} /> {t("vendorBill.addRows")}
+                <button type="button" onClick={() => void openAdd()} className={btn.secondarySm}>
+                  <Plus size={15} /> {t("vendorBill.addRows")}
                 </button>
               )}
             </div>
@@ -285,45 +331,48 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
               <p className="py-10 text-center text-sm text-muted-foreground">{t("vendorBill.rowsEmpty")}</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      {["No.", t("vendorBill.col.receivingReport"), t("vendorBill.col.invoice"), t("vendorBill.col.date"), t("vendorBill.col.dueDate"),
-                        t("vendorBill.col.amount"), t("vendorBill.col.paid"), t("vendorBill.col.outstanding"), ""].map((h, i) => (
-                        <th key={i} className={thCls}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shownRows.map((r, i) => (
-                      <tr key={r.apEntryId} className="border-b border-border/50">
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">{i + 1}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono font-semibold text-foreground whitespace-nowrap">{r.missing ? <span className="text-[#e05252]">{t("vendorBill.rowMissing")}</span> : r.receivingReportNumber}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{r.invoiceNumber || "—"}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{r.invoiceDate ? formatQuoteDateThai(r.invoiceDate) : "—"}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{r.dueDate ? formatQuoteDateThai(r.dueDate) : "—"}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-foreground text-right whitespace-nowrap">{fmt(r.amount)}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-[#207e52] text-right whitespace-nowrap">{r.paid > 0 ? fmt(r.paid) : ""}</td>
-                        <td className={`px-3 py-2.5 text-xs font-mono text-right whitespace-nowrap ${r.outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{fmt(r.outstanding)}</td>
-                        <td className="px-3 py-2.5 text-right">
-                          {editable && (
-                            <button onClick={() => removeRow(r.apEntryId)} aria-label={t("vendorBill.removeRow")} title={t("vendorBill.removeRow")}
-                              className="p-1 rounded text-muted-foreground hover:text-[#e05252] hover:bg-[#e05252]/10 transition-colors">
-                              <X size={14} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="bg-muted/30">
-                      <td colSpan={5} className="px-3 py-3 text-xs font-semibold text-foreground text-right">{t("vendorBill.total")}</td>
-                      <td className="px-3 py-3 text-sm font-mono font-semibold text-foreground text-right whitespace-nowrap">{fmt(totals.amount)}</td>
-                      <td className="px-3 py-3 text-xs font-mono text-[#207e52] text-right whitespace-nowrap">{totals.paid > 0 ? fmt(totals.paid) : ""}</td>
-                      <td className="px-3 py-3 text-sm font-mono font-semibold text-[#c9a84c] text-right whitespace-nowrap">{fmt(totals.outstanding)}</td>
-                      <td />
-                    </tr>
-                  </tbody>
-                </table>
+                <div className="min-w-[1000px]">
+                  <div className={`${grid} h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]`}>
+                    <span>No.</span>
+                    <span>{t("vendorBill.col.receivingReport")}</span>
+                    <span>{t("vendorBill.col.invoice")}</span>
+                    <span>{t("vendorBill.col.date")}</span>
+                    <span>{t("vendorBill.col.dueDate")}</span>
+                    <span className="text-right">{t("vendorBill.col.amount")}</span>
+                    <span className="text-right">{t("vendorBill.col.paid")}</span>
+                    <span className="text-right">{t("vendorBill.col.outstanding")}</span>
+                    <span />
+                  </div>
+                  {shownRows.map((r, i) => (
+                    <div key={r.apEntryId} className={`${grid} h-14 border-b border-[#eef1f6]`}>
+                      <span className="text-[13px] text-muted-foreground">{i + 1}</span>
+                      <span className="font-mono text-[13px] font-medium text-foreground truncate">
+                        {r.missing ? <span className="text-[#b93636] font-sans">{t("vendorBill.rowMissing")}</span> : r.receivingReportNumber}
+                      </span>
+                      <span className="font-mono text-[13px] text-[#3d5173] truncate">{r.invoiceNumber || "—"}</span>
+                      <span className="text-sm text-[#3d5173]">{r.invoiceDate ? formatQuoteDateThai(r.invoiceDate) : "—"}</span>
+                      <span className="text-sm text-[#3d5173]">{r.dueDate ? formatQuoteDateThai(r.dueDate) : "—"}</span>
+                      <span className="text-sm text-right tabular-nums text-foreground">{fmt(r.amount)}</span>
+                      <span className={`text-sm text-right tabular-nums ${r.paid > 0 ? "text-[#1b7f4f]" : "text-[#8a97ad]"}`}>{r.paid > 0 ? fmt(r.paid) : "—"}</span>
+                      <span className={`text-sm text-right tabular-nums ${r.outstanding > 0 ? "font-semibold text-[#8a5a00]" : "text-[#8a97ad]"}`}>{fmt(r.outstanding)}</span>
+                      <span className="flex justify-end">
+                        {editable && (
+                          <button type="button" onClick={() => removeRow(r.apEntryId)} aria-label={t("vendorBill.removeRow")} title={t("vendorBill.removeRow")}
+                            className="w-8 h-9 inline-flex items-center justify-center rounded-lg text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors">
+                            <X size={16} />
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  <div className={`${grid} h-14 bg-[#f8f9fc] rounded-b-xl`}>
+                    <span className="col-span-5 text-sm font-semibold text-foreground">{t("vendorBill.total")}</span>
+                    <span className="text-sm text-right font-semibold tabular-nums text-foreground">{fmt(totals.amount)}</span>
+                    <span className="text-sm text-right font-semibold tabular-nums text-foreground">{fmt(totals.paid)}</span>
+                    <span className="text-base text-right font-bold tabular-nums text-foreground">{fmt(totals.outstanding)}</span>
+                    <span />
+                  </div>
+                </div>
               </div>
             )}
           </section>
@@ -331,43 +380,48 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
       </div>
 
       {adding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setAdding(false)} aria-hidden="true" />
-          <div role="dialog" aria-modal="true" aria-label={t("vendorBill.addRows")} className="relative w-full max-w-2xl bg-card border border-border rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-              <h2 className="flex-1 text-base font-semibold text-foreground">{t("vendorBill.addRows")}</h2>
-              <button onClick={() => setAdding(false)} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
-            </div>
-            <div className="p-5 overflow-y-auto flex-1">
-              {candidates === null ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" /> {t("vendorBill.loading")}</div>
-              ) : candidates.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("vendorBill.addNone")}</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {candidates.map((c) => (
-                    <li key={c.apEntryId}>
-                      <label className="flex items-center gap-3 px-3 py-2.5 border border-border rounded-lg cursor-pointer hover:bg-secondary/40">
-                        <input type="checkbox" checked={picked.has(c.apEntryId)}
-                          onChange={(e) => setPicked((prev) => { const next = new Set(prev); if (e.target.checked) next.add(c.apEntryId); else next.delete(c.apEntryId); return next; })} />
-                        <span className="text-xs font-mono font-semibold text-foreground w-40">{c.receivingReportNumber}</span>
-                        <span className="text-xs font-mono text-muted-foreground flex-1">{c.invoiceNumber} · {c.invoiceDate ? formatQuoteDateThai(c.invoiceDate) : "—"}</span>
-                        <span className="text-xs font-mono text-foreground">{fmt(c.amount)}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-              <button onClick={() => setAdding(false)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">{t("common.cancel")}</button>
-              <button onClick={confirmAdd} disabled={picked.size === 0}
-                className="px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
-                {t("vendorBill.addSelected").replace("{n}", String(picked.size))}
+        <WidePickerShell
+          title={t("vendorBill.addRows")}
+          subtitle={t("vendorBill.addRowsHint").replace("{vendor}", draft.vendorName)}
+          onClose={() => setAdding(false)}
+          footer={
+            <>
+              <p className="flex-1 min-w-0 text-sm text-[#3d5173]">{t("ui.selectedCount").replace("{n}", String(picked.size))}</p>
+              <button type="button" onClick={() => setAdding(false)} className={btn.secondary}>{t("common.cancel")}</button>
+              <button type="button" onClick={confirmAdd} disabled={picked.size === 0} className={btn.primary}>
+                <Plus size={16} /> {t("vendorBill.addSelected").replace("{n}", String(picked.size))}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="flex-1 min-h-[8rem] overflow-auto">
+            {candidates === null ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground" role="status"><Loader2 size={16} className="animate-spin" /> {t("vendorBill.loading")}</div>
+            ) : candidates.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-10 text-center">{t("vendorBill.addNone")}</p>
+            ) : (
+              <div className="min-w-[640px]">
+                <div className="grid grid-cols-[20px_190px_170px_minmax(0,1fr)_150px] gap-3.5 items-center px-6 h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173] sticky top-0">
+                  <span /><span>{t("vendorBill.col.receivingReport")}</span><span>{t("vendorBill.col.invoice")}</span>
+                  <span>{t("vendorBill.col.date")}</span><span className="text-right">{t("vendorBill.col.amount")}</span>
+                </div>
+                {candidates.map((c) => {
+                  const on = picked.has(c.apEntryId);
+                  return (
+                    <button key={c.apEntryId} type="button" role="checkbox" aria-checked={on} onClick={() => toggle(c.apEntryId)}
+                      className={`${pickRowClass(on)} grid grid-cols-[20px_190px_170px_minmax(0,1fr)_150px] gap-3.5 items-center px-6 h-[52px]`}>
+                      <CheckDot on={on} />
+                      <span className="font-mono text-[13px] font-medium text-foreground truncate">{c.receivingReportNumber}</span>
+                      <span className="font-mono text-[13px] text-[#3d5173] truncate">{c.invoiceNumber || "—"}</span>
+                      <span className="text-sm text-[#3d5173]">{c.invoiceDate ? formatQuoteDateThai(c.invoiceDate) : "—"}</span>
+                      <span className="text-sm text-right font-semibold tabular-nums text-foreground">{fmt(c.amount)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+        </WidePickerShell>
       )}
 
       <ConfirmDialog
@@ -378,6 +432,13 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
         cancelLabel={t("common.cancel")}
         danger
         busy={deleting}
+        summary={
+          <SummaryLine
+            title={draft.documentNumber}
+            sub={`${draft.vendorName} · ${t("vendorBill.create.count").replace("{n}", String(shownRows.length))}`}
+            right={`฿${fmt(totals.amount)}`}
+          />
+        }
         onConfirm={() => void runDelete()}
         onCancel={() => setConfirmDelete(false)}
       />
