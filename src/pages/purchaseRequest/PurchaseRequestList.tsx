@@ -1,54 +1,55 @@
 import { useState, type ReactNode } from "react";
-import { ShoppingCart, Search, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
-import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import type { PurchaseRequestSummary, PurchaseRequestStatus } from "../../lib/purchaseRequest";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
-import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
+import { ApprovalStatusPill, ListDateRangeSelect, StageTag } from "./docShared";
 
-const FILTER_ALL = "all";
+const PAGE_SIZE = 25;
 
-const statusStyle: Record<PurchaseRequestStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
+type StatusTab = "all" | PurchaseRequestStatus;
+type StageTab = "forwarded" | "pending" | "all";
 
-// แสดงตารางรายการใบขอซื้อ พร้อมตัวกรองสถานะและช่องค้นหา
-// Renders the Purchase Request list table with a status filter and search box.
+/**
+ * แถบบนการ์ดรายการ:
+ * - `"status"` = แท็บสถานะเอกสาร (ทั้งหมด / Draft / รออนุมัติ / Final) — หน้าของแต่ละฝ่าย
+ * - `"stage"` = แท็บขั้นของใบ (ถึงคิวจัดซื้อ / ยังอยู่ที่สโตร์ / ทั้งหมด) — กล่องงานเข้าของจัดซื้อ (2026-09-10)
+ * - `"none"` = ไม่มีแท็บ — กล่องของสโตร์ ซึ่งเซิร์ฟเวอร์กรองมาให้แล้วว่าเป็นใบที่รอสโตร์เท่านั้น
+ */
+export type PurchaseRequestListTabs = "status" | "stage" | "none";
+
+// แสดงรายการใบขอซื้อ: แท็บพร้อมจำนวน ค้นหา ช่วงวันที่ ตาราง และแบ่งหน้า (ดีไซน์ใหม่ 2026-09-30)
+// Renders the Purchase Request list: counted tabs, search, date range, table and pagination.
 export function PurchaseRequestList({
   purchaseRequests,
   currentUserId,
   onOpen,
   headerAction,
   heading,
+  moduleLabel,
   showDepartment = false,
-  stageFilter = false,
+  tabs: tabsMode = "status",
 }: {
   purchaseRequests: PurchaseRequestSummary[];
   currentUserId: string;
   onOpen: (id: string) => void;
-  /** หัวข้อหน้า — ระบุเมื่อหน้านี้ถูกเมาต์เป็นกล่องงานเข้าของจัดซื้อ ที่ไม่ใช่ใบของแผนกใดแผนกหนึ่ง */
+  /** หัวข้อหน้า — ระบุเมื่อหน้านี้ถูกเมาต์เป็นกล่องงานเข้า ที่ไม่ใช่ใบของแผนกใดแผนกหนึ่ง */
   heading?: string;
+  /** ชื่อกลุ่มเมนูเล็กเหนือชื่อหน้า (โครงการ / ผลิต / จัดซื้อ / คลังสินค้า) */
+  moduleLabel?: string;
   /** เพิ่มคอลัมน์ "แผนก" — จำเป็นเฉพาะมุมมองรวมทุกฝ่าย ที่ไม่รู้จากหน้าเองว่าใบไหนของใคร */
   showDepartment?: boolean;
-  /**
-   * เปลี่ยนแถบกรองจาก "สถานะเอกสาร" เป็น "ขั้นของใบ" — ใช้กับกล่องงานเข้าของฝ่ายจัดซื้อเท่านั้น (2026-09-10)
-   *
-   * กล่องนั้นเป็นคิวงาน คำถามของคนเปิดคือ *"ใบไหนถึงคิวฉันแล้ว"* ไม่ใช่ *"ใบไหนเป็นร่าง"* · ก่อนหน้านี้
-   * กล่องนี้แสดงทุกใบรวมกันโดยไม่มีตัวกรองขั้นเลย ใบที่ยังรอสโตร์เช็คของอยู่จึงปนมากับงานที่ทำได้จริง
-   * (กดออกใบสั่งซื้อแล้วโดน 400) ต่างจากกล่องของสโตร์ที่กรอง `?storeStage=pending` มาตั้งแต่แรก
-   */
-  stageFilter?: boolean;
+  tabs?: PurchaseRequestListTabs;
   /** ปุ่ม "+ สร้าง" ของหน้านั้นๆ — หน้า Page เป็นเจ้าของ state ของกล่องเลือกต้นทาง (2026-08-20) */
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
-  const statusLabel: Record<PurchaseRequestStatus, string> = { Draft: t("materialRequisition.status.draft"), PendingApproval: t("materialRequisition.status.pendingApproval"), Final: t("materialRequisition.status.final") };
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="pr-filters"]', popover: { title: t("tour.pr.filters.title"), description: t("tour.pr.filters.desc"), side: "bottom" } },
     { element: '[data-tour="pr-table"]', popover: { title: t("tour.pr.table.title"), description: t("tour.pr.table.desc"), side: "top" } },
@@ -59,15 +60,16 @@ export function PurchaseRequestList({
     production: t("purchaseRequest.dept.production"),
     general: t("purchaseRequest.dept.general"),
   };
-  const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
-  /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
-  const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   /**
    * ตั้งต้นที่ "ถึงคิวจัดซื้อ" ไม่ใช่ "ทั้งหมด" — เปิดหน้ามาแล้วต้องเห็นงานที่ทำได้จริงก่อน
-   * ใบที่ยังรอสโตร์อยู่ดูได้จากชิปข้าง ๆ ไม่ได้ถูกซ่อนหายไป
+   * ใบที่ยังรอสโตร์อยู่ดูได้จากแท็บข้าง ๆ ไม่ได้ถูกซ่อนหายไป
    */
-  const [filterStage, setFilterStage] = useState<"forwarded" | "pending" | "all">("forwarded");
+  const [stageTab, setStageTab] = useState<StageTab>("forwarded");
+  /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
+  const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
   /**
@@ -76,142 +78,149 @@ export function PurchaseRequestList({
    * ฝั่งเซิร์ฟเวอร์ (`purchaseRequestHandler.ts`) ถ้าสองที่นี้ไม่ตรงกัน หน้าจอกับ API จะตอบคนละอย่าง
    */
   const atPurchasing = (p: PurchaseRequestSummary) => p.status === "Final" && (p.storeStage === "forwarded" || !p.storeStage);
+  const atStore = (p: PurchaseRequestSummary) => p.status === "Final" && p.storeStage === "pending";
+  const matchesStage = (p: PurchaseRequestSummary, s: StageTab) => s === "all" || (s === "forwarded" ? atPurchasing(p) : atStore(p));
 
   const items = purchaseRequests.map((p) => ({ ...p, jobCode: p.jobCode ?? "", status: p.status ?? "Draft" }));
+
+  const statusTabs = [
+    { key: "all" as const, label: t("quotation.filterAll"), count: items.length },
+    { key: "Draft" as const, label: t("materialRequisition.status.draft"), count: items.filter((p) => p.status === "Draft").length },
+    { key: "PendingApproval" as const, label: t("materialRequisition.status.pendingApproval"), count: items.filter((p) => p.status === "PendingApproval").length },
+    { key: "Final" as const, label: t("materialRequisition.status.final"), count: items.filter((p) => p.status === "Final").length },
+  ];
+  const stageTabs = [
+    { key: "forwarded" as const, label: t("purchaseRequest.stageFilter.forwarded"), count: items.filter((p) => matchesStage(p, "forwarded")).length },
+    { key: "pending" as const, label: t("purchaseRequest.stageFilter.pending"), count: items.filter((p) => matchesStage(p, "pending")).length },
+    { key: "all" as const, label: t("quotation.filterAll"), count: items.length },
+  ];
+
   const dateRangeResolved = resolveRange(dateRange);
   const filtered = items
     .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
-    .filter((p) => (stageFilter
-      ? filterStage === "all" || (filterStage === "forwarded" ? atPurchasing(p) : p.status === "Final" && p.storeStage === "pending")
-      : filterStatus === FILTER_ALL || p.status === filterStatus))
+    .filter((p) => (tabsMode === "stage" ? matchesStage(p, stageTab)
+      : tabsMode === "status" ? statusTab === "all" || p.status === statusTab
+      : true))
     .filter((p) => !normalizedSearch || [p.id, p.jobCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
-  return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{heading ?? t("purchaseRequest.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("purchaseRequest.pageSubtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {headerAction}
-          <TourReplayButton onClick={tour.start} />
-        </div>
-      </div>
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const resetPage = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPage(1); };
 
-      <div data-tour="pr-filters" className="flex items-center gap-3 flex-wrap">
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("purchaseRequest.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
-            </button>
+  /** ป้ายขั้นหลังอนุมัติ — สโตร์ (2026-09-09) และจัดซื้อ (2026-09-21) · ใบเก่าที่ไม่มีฟิลด์ไม่ขึ้นป้าย ซึ่งถูกต้อง */
+  const stageTags = (p: PurchaseRequestSummary) => {
+    if (p.status !== "Final") return [];
+    const tags: ReactNode[] = [];
+    if (p.storeStage === "pending") tags.push(<StageTag key="store" tone="amber">{t("purchaseRequest.stage.pending")}</StageTag>);
+    else if (p.storeStage === "forwarded") tags.push(<StageTag key="store" tone="blue">{t("purchaseRequest.stage.forwarded")}</StageTag>);
+    else if (p.storeStage === "closed") tags.push(<StageTag key="store" tone="green">{t("purchaseRequest.stage.closed")}</StageTag>);
+    // "review" ไม่ขึ้นป้าย เพราะป้ายสโตร์ "รอจัดซื้อ" บอกอยู่แล้ว
+    if (p.purchasingStage === "approved") tags.push(<StageTag key="purchasing" tone="green">{t("purchaseRequestDoc.purchasing.stageBadge")}</StageTag>);
+    return tags;
+  };
+
+  const formCode = <span className="font-mono text-xs">{t("purchaseRequest.pageSubtitle")}</span>;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={<span className="inline-flex items-center gap-2">{moduleLabel}{moduleLabel && <span className="text-[#c3ccda]">·</span>}{formCode}</span>}
+        title={heading ?? t("purchaseRequest.pageTitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={headerAction}
+      />
+
+      <ListCard>
+        <div data-tour="pr-filters">
+          {tabsMode === "status" && (
+            <ListTabs tabs={statusTabs} active={statusTab} onChange={resetPage(setStatusTab)} ariaLabel={t("purchaseRequest.tabsAria")} />
+          )}
+          {tabsMode === "stage" && (
+            <ListTabs tabs={stageTabs} active={stageTab} onChange={resetPage(setStageTab)} ariaLabel={t("purchaseRequest.stageTabsAria")} />
+          )}
+          <ListToolbar
+            search={searchQuery}
+            onSearch={resetPage(setSearchQuery)}
+            searchPlaceholder={t("purchaseRequest.searchPlaceholder")}
+            count={<span role="status" aria-live="polite">{t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}</span>}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+          </ListToolbar>
+        </div>
+
+        <div data-tour="pr-table" className="min-w-0">
+          {items.length === 0 ? (
+            <ListEmpty title={t("purchaseRequest.empty.title")} hint={t("purchaseRequest.empty.description")} />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("purchaseRequest.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px]">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("purchaseRequest.col.id")}</th>
+                    <th className={table.th}>{t("purchaseRequest.col.jobCode")}</th>
+                    {showDepartment && <th className={table.th}>{t("purchaseRequest.col.department")}</th>}
+                    <th className={table.th}>{t("purchaseRequest.col.status")}</th>
+                    {!showDepartment && <th className={table.th}>{t("purchaseRequest.col.afterApproval")}</th>}
+                    <th className={table.th}>{t("purchaseRequest.col.updatedAt")}</th>
+                    <th className={`${table.th} w-10`} aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((p) => {
+                    const tags = stageTags(p);
+                    return (
+                      <tr
+                        key={p.id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${t("purchaseRequest.openRow")} ${p.id}`}
+                        onClick={() => onOpen(p.id)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } }}
+                        className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                      >
+                        <td className={`${table.td} ${table.code} whitespace-nowrap`}>{p.id}</td>
+                        <td className={`${table.td} font-mono text-[13px] whitespace-nowrap ${p.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{p.jobCode || "—"}</td>
+                        {showDepartment && (
+                          <td className={table.td}><StageTag tone="grey">{departmentLabel[p.ownerDepartment ?? "project"]}</StageTag></td>
+                        )}
+                        <td className={table.td}>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <ApprovalStatusPill status={p.status} />
+                            {showDepartment && tags}
+                          </span>
+                        </td>
+                        {!showDepartment && (
+                          <td className={table.td}>
+                            {tags.length > 0 ? <span className="flex items-center gap-1.5 flex-wrap">{tags}</span> : <span className="text-[#8a97ad]">—</span>}
+                          </td>
+                        )}
+                        <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                        <td className={table.td}>
+                          <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-        {stageFilter ? (
-          <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-            {(["forwarded", "pending", "all"] as const).map((s) => (
-              <button key={s} onClick={() => setFilterStage(s)}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStage === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-                {s === "all" ? t("quotation.filterAll") : s === "forwarded" ? t("purchaseRequest.stageFilter.forwarded") : t("purchaseRequest.stageFilter.pending")}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-            {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
-              <button key={s} onClick={() => setFilterStatus(s)}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-                {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as PurchaseRequestStatus]}
-              </button>
-            ))}
-          </div>
-        )}
-        {stageFilter && (
-          <p className="text-xs text-muted-foreground font-mono" role="status" aria-live="polite">
-            {t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}
-          </p>
-        )}
-      </div>
 
-      <div data-tour="pr-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        {items.length === 0 ? (
-          <EmptyState icon={ShoppingCart} title={t("purchaseRequest.empty.title")} description={t("purchaseRequest.empty.description")} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <ShoppingCart size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("purchaseRequest.noFilterResults")}</p>
-          </div>
-        ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {[t("purchaseRequest.col.id"), t("purchaseRequest.col.jobCode"), ...(showDepartment ? [t("purchaseRequest.col.department")] : []), t("purchaseRequest.col.status"), t("purchaseRequest.col.updatedAt")].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p) => (
-              <tr
-                key={p.id}
-                tabIndex={0}
-                role="button"
-                aria-label={`${t("purchaseRequest.openRow")} ${p.id}`}
-                onClick={() => onOpen(p.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } }}
-                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-              >
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.id}</td>
-                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{p.jobCode || "—"}</td>
-                {showDepartment && (
-                  <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{departmentLabel[p.ownerDepartment ?? "project"]}</td>
-                )}
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[p.status]}`}>
-                      {statusLabel[p.status]}
-                    </span>
-                    {/* ขั้นของสโตร์ (2026-09-09) — ใบที่อนุมัติแล้วยังไม่จบ ต้องผ่านสโตร์ก่อนถึงจัดซื้อ
-                        ใบก่อนวันนั้นไม่มีฟิลด์นี้ จึงไม่ขึ้นป้ายอะไรเลย ซึ่งถูกต้อง: มันวิ่งตรงไปจัดซื้อ */}
-                    {p.status === "Final" && p.storeStage && (
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        p.storeStage === "pending" ? "bg-[#e08a3c]/15 text-[#a75d1a]"
-                        : p.storeStage === "forwarded" ? "bg-[#3c7de0]/15 text-[#1a4fa7]"
-                        : "bg-[#2aa36b]/15 text-[#1c7a4e]"}`}>
-                        {p.storeStage === "pending" ? t("purchaseRequest.stage.pending")
-                          : p.storeStage === "forwarded" ? t("purchaseRequest.stage.forwarded")
-                          : t("purchaseRequest.stage.closed")}
-                      </span>
-                    )}
-                    {/* ขั้นของจัดซื้อ (2026-09-21) — ป้ายที่สามบอกว่าใบถูกล็อกแล้วพร้อมออกใบสั่งซื้อ
-                        ขึ้นเฉพาะตอน "approved" · "review" ไม่ขึ้นป้าย เพราะป้ายสโตร์ "รอจัดซื้อ" บอกอยู่แล้ว */}
-                    {p.status === "Final" && p.purchasingStage === "approved" && (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#2aa36b]/15 text-[#1c7a4e]">
-                        {t("purchaseRequestDoc.purchasing.stageBadge")}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(p.updatedAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
         )}
-      </div>
+      </ListCard>
     </div>
   );
 }

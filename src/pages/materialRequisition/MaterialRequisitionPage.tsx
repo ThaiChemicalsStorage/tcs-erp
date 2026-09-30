@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Company } from "../../lib/storage";
-import { Plus } from "lucide-react";
+import { FilePlus2, Loader2, Plus } from "lucide-react";
+import { btn } from "../../components/ui/styles";
 import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition, createMaterialRequisitionFromProductionOrder, createBlankMaterialRequisition } from "../../lib/materialRequisition";
 import { MaterialRequisitionList } from "./MaterialRequisitionList";
 import { MaterialRequisitionDocument } from "./MaterialRequisitionDocument";
@@ -171,10 +172,7 @@ export function MaterialRequisitionPage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{t("materialRequisition.loadError")}</p>
-        <button
-          onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
-        >
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("materialRequisition.retry")}
         </button>
       </div>
@@ -187,22 +185,16 @@ export function MaterialRequisitionPage({
         materialRequisitions={materialRequisitions}
         currentUserId={currentUserId}
         onOpen={openMaterialRequisition}
+        moduleLabel={ownerDepartment === "production" ? t("nav.group.production") : t("nav.group.project")}
         headerAction={canCreate ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => void handleCreateBlank()}
-              disabled={creatingBlank}
-              className="flex items-center gap-2 px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60"
-            >
-              <Plus size={15} /> {t("materialRequisition.createBlankBtn")}
+          <>
+            <button type="button" onClick={() => void handleCreateBlank()} disabled={creatingBlank} className={btn.secondary}>
+              {creatingBlank ? <Loader2 size={16} className="animate-spin" /> : <FilePlus2 size={16} />} {t("materialRequisition.createBlankBtn")}
             </button>
-            <button
-              onClick={() => setPickerOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-            >
-              <Plus size={15} /> {t("materialRequisition.createBtn")}
+            <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+              <Plus size={16} /> {t("materialRequisition.createBtn")}
             </button>
-          </div>
+          </>
         ) : undefined}
       />
       {pickerOpen && (ownerDepartment === "production" ? (

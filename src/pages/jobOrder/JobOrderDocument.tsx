@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X , CornerDownRight , GitBranch } from "lucide-react";
+import { Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, GitBranch, Send, CheckCircle2, Undo2 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
@@ -8,8 +8,16 @@ import {
   uploadJobOrderAttachment, deleteJobOrderAttachment,
   rewriteJobOrder,
 } from "../../lib/jobOrder";
-import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentHeader, DocumentStepper, DocumentColumns, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field, ReadonlyField, SelectBox } from "../../components/ui/Field";
+import { btn, field } from "../../components/ui/styles";
+import {
+  ApprovalPill, RailSummaryCard, rejectBtn, rowRemoveBtn, useApprovalFlow, useApprovalHint, useApprovalSteps,
+} from "../project/projectUi";
+import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -196,37 +204,49 @@ export function JobOrderDocument({
     return () => window.removeEventListener("afterprint", reset);
   }, [showPrint]);
 
-  if (loadError) {
-    return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <AlertTriangle size={20} className="text-[#e05252]" />
-          <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            <RotateCw size={12} /> {t("jobOrder.retry")}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // ── ขั้นตอนอนุมัติ / ขั้นตอนเอกสาร / ข้อความ "ขั้นต่อไป" — เป็น hook จึงต้องอยู่เหนือ early return ─────
+  // ตรรกะอนุมัติเดียวกับ DocumentApprovalActions เดิมทุกประการ แค่ปุ่มถูกวางตามดีไซน์ใหม่ (ปุ่มหลักมุมขวา)
+  const approval = useApprovalFlow<JobOrder>({
+    status: doc?.status ?? "Draft",
+    canEdit,
+    canApprove: canFinalize,
+    onSubmit: () => submitJobOrderApproval(doc?.id ?? ""),
+    onApprove: () => approveJobOrder(doc?.id ?? ""),
+    onReject: (c) => rejectJobOrder(doc?.id ?? "", c),
+    onWithdraw: () => withdrawJobOrderApproval(doc?.id ?? ""),
+    onUpdated: (updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toUpdateFields(updated)); },
+    showToast,
+  });
+  const approvalSteps = useApprovalSteps(doc?.status ?? "Draft");
+  const approvalHint = useApprovalHint({
+    status: doc?.status ?? "Draft",
+    approverLabel: t("jobOrderDoc.approverLabel"),
+    rejectionComment: doc?.rejectionComment ?? "",
+    approvedByUserId: doc?.approvedByUserId,
+    approvedByName: doc?.approvedBy ?? "",
+    approvedAt: doc?.approvedAt ?? "",
+  });
 
-  if (!doc || !draft) {
+  if (loadError || !doc || !draft) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
-          </button>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader backLabel={t("jobOrderDoc.backToAll")} onBack={() => requestLeave(onBack)} number={t("jobOrderDoc.title")} mono={false} />
         </div>
-        <div className="flex flex-col items-center justify-center gap-2.5 p-6">
-          <Loader2 size={20} className="text-muted-foreground animate-spin" />
-          <p className="text-xs text-muted-foreground">{t("jobOrderDoc.loadingDocument")}</p>
-        </div>
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+            <AlertTriangle size={20} className="text-[#b93636]" />
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <button type="button" onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className={btn.secondary}>
+              <RotateCw size={16} /> {t("jobOrder.retry")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2.5 p-10" role="status">
+            <Loader2 size={20} className="text-muted-foreground animate-spin" />
+            <p className="text-[13px] text-muted-foreground">{t("jobOrderDoc.loadingDocument")}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -290,56 +310,88 @@ export function JobOrderDocument({
     }
   };
 
+  const inputCls = `${field.input} w-full`;
+  const cellCls = `${field.cell} w-full min-w-0`;
+  /** ช่องข้อความของหัวใบ — แก้ได้ตอนร่าง · ล็อกแล้วแสดงเป็นค่าอ่านอย่างเดียว */
+  const textField = (id: string, label: string, value: string, onChange: (v: string) => void, opts: { type?: "text" | "date"; className?: string } = {}) =>
+    editable ? (
+      <Field label={label} htmlFor={id} className={opts.className}>
+        <input id={id} type={opts.type ?? "text"} value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} />
+      </Field>
+    ) : (
+      <ReadonlyField label={label} value={opts.type === "date" && value ? formatQuoteDateThai(value) : value} className={opts.className} />
+    );
+
+  const mainLineCount = draft.lines.filter((l) => !l.isContinuation).length;
+  const continuationCount = draft.lines.length - mainLineCount;
+  const lineCountText = continuationCount > 0
+    ? t("jobOrderDoc.lineCountWithCont").replace("{n}", String(mainLineCount)).replace("{c}", String(continuationCount))
+    : t("ui.itemCount").replace("{n}", String(mainLineCount));
+  const scopeTotal = draft.scopeChecklist.reduce((n, g) => n + g.options.length, 0);
+  const scopeChecked = draft.scopeChecklist.reduce((n, g) => n + g.options.filter((o) => o.checked).length, 0);
+  // เลขลำดับของบรรทัดหลัก — บรรทัดต่อไม่กินเลข (ตรงกับใบพิมพ์ FM-PJ-01)
+  let runningNo = 0;
+  const lineNumbers = draft.lines.map((l) => (l.isContinuation ? null : ++runningNo));
+
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">{doc.id}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${doc.status === "Draft" ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
-          {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
-        </span>
-
-        <div data-tour="jodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <TourReplayButton onClick={docTour.start} />
-          {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-          {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
-            </button>
-          )}
-          {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("jobOrderDoc.print")}
-            </button>
-          )}
-          {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("jobOrderDoc.saveDraft")}
-            </button>
-          )}
-          <DocumentApprovalActions
-            status={doc.status}
-            canEdit={canEdit}
-            canApprove={canFinalize}
-            onSubmit={() => submitJobOrderApproval(doc.id)}
-            onApprove={() => approveJobOrder(doc.id)}
-            onReject={(c) => rejectJobOrder(doc.id, c)}
-            onWithdraw={() => withdrawJobOrderApproval(doc.id)}
-            onUpdated={(updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toUpdateFields(updated)); }}
-            showToast={showToast}
-          />
-          {canDelete && (
-            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Trash2 size={13} /> {t("jobOrderDoc.delete")}
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20 print:hidden">
+        <DocumentHeader
+          backLabel={t("jobOrderDoc.backToAll")}
+          onBack={() => requestLeave(onBack)}
+          number={doc.id}
+          status={<ApprovalPill status={doc.status} />}
+          meta={autoSaveEditable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
+          actions={
+            <div data-tour="jodoc-actions" className="flex items-center gap-2.5 flex-wrap">
+              <TourReplayButton variant="title" onClick={docTour.start} />
+              {canPrint && (
+                <button type="button" onClick={() => void handlePrint()} disabled={printing} className={btn.secondary}>
+                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("jobOrderDoc.print")}
+                </button>
+              )}
+              <MoreMenu
+                items={[
+                  canEdit && {
+                    key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch,
+                    disabled: doc.status !== "Final" || rewriting, hint: doc.status === "Final" ? undefined : t("materialRequisitionDoc.rewriteAfterFinal"),
+                    onSelect: () => setConfirmRewrite(true),
+                  },
+                  approval.canWithdraw && approval.canDecide && {
+                    key: "withdraw", label: t("approval.withdraw"), icon: Undo2, disabled: approval.busy !== null, onSelect: approval.withdraw,
+                  },
+                  canDelete && { key: "delete", label: t("jobOrderDoc.deleteConfirmTitle"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+                ]}
+              />
+              {editable && (
+                <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("jobOrderDoc.saveDraft")}
+                </button>
+              )}
+              {approval.canWithdraw && !approval.canDecide && (
+                <button type="button" onClick={approval.withdraw} disabled={approval.busy !== null} className={btn.secondary}>
+                  {approval.busy === "withdraw" ? <Loader2 size={16} className="animate-spin" /> : <Undo2 size={16} />} {t("approval.withdraw")}
+                </button>
+              )}
+              {approval.canDecide && (
+                <>
+                  <button type="button" onClick={approval.requestReject} disabled={approval.busy !== null} className={rejectBtn}>{t("approval.reject")}</button>
+                  <button type="button" onClick={approval.requestApprove} disabled={approval.busy !== null} className={btn.primary}>
+                    <CheckCircle2 size={16} /> {t("approval.approve")}
+                  </button>
+                </>
+              )}
+              {approval.canSubmit && (
+                <button type="button" onClick={approval.submit} disabled={approval.busy !== null} className={btn.primary}>
+                  {approval.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
+      <div className="px-4 md:px-8 py-6 flex flex-col gap-5 print:hidden">
         {draftBackup.recovered && draftBackup.recoveredAt !== null && (
           <DraftRecoveryBanner
             savedAt={draftBackup.recoveredAt}
@@ -353,117 +405,118 @@ export function JobOrderDocument({
           />
         )}
 
-        <DocumentStatusStepper
-          status={doc.status}
-          rejectionComment={doc.rejectionComment ?? ""}
-          approverLabel={t("jobOrderDoc.approverLabel")}
-          approvedByUserId={doc.approvedByUserId}
-          approvedByName={doc.approvedBy}
-          approvedAt={doc.approvedAt}
-        />
+        <DocumentStepper steps={approvalSteps.steps} current={approvalSteps.current} ariaLabel={t("materialRequisitionDoc.stepsAria")} />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold">{t("jobOrderDoc.title")}</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">{t("jobOrderDoc.jobCodePrefix")} {doc.jobCode}</p>
-          </div>
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="jo-customerName" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.customerName")}</label>
-              <input id="jo-customerName" disabled={!editable} value={draft.customerName}
-                onChange={(e) => setDraft({ ...draft, customerName: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div />
-            <div>
-              <label htmlFor="jo-fromSite" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.fromSite")}</label>
-              <input id="jo-fromSite" disabled={!editable} value={draft.fromSite}
-                onChange={(e) => setDraft({ ...draft, fromSite: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="jo-toSite" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.toSite")}</label>
-              {/* ดึงจากตาราง departments จริง — เก็บเป็น "ชื่อ" ไม่ใช่ id เพราะใบพิมพ์ต้องแสดงชื่อ
-                  และมี option สำรองสำหรับค่าเก่าที่พิมพ์ไว้ก่อนมี dropdown แบบเดียวกับหน้าจัดการผู้ใช้ จะได้ไม่หายเงียบ */}
-              <select id="jo-toSite" disabled={!editable} value={draft.toSite}
-                onChange={(e) => setDraft({ ...draft, toSite: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70">
-                <option value="">{t("jobOrderDoc.field.toSitePlaceholder")}</option>
-                {departments.filter((d) => d.isActive).map((d) => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
-                ))}
-                {draft.toSite && !departments.some((d) => d.name === draft.toSite) && (
-                  <option value={draft.toSite}>{draft.toSite} ({t("users.field.department.legacy")})</option>
+
+        <DocumentColumns
+          main={
+            <>
+              <SectionCard title={t("jobOrderDoc.infoTitle")}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 items-start">
+                  {textField("jo-customerName", t("jobOrderDoc.field.customerName"), draft.customerName,
+                    (v) => setDraft({ ...draft, customerName: v }), { className: "sm:col-span-2" })}
+                  {textField("jo-fromSite", t("jobOrderDoc.field.fromSite"), draft.fromSite, (v) => setDraft({ ...draft, fromSite: v }))}
+                  {editable ? (
+                    <Field label={t("jobOrderDoc.field.toSite")} htmlFor="jo-toSite">
+                      {/* ดึงจากตาราง departments จริง — เก็บเป็น "ชื่อ" ไม่ใช่ id เพราะใบพิมพ์ต้องแสดงชื่อ
+                          และมี option สำรองสำหรับค่าเก่าที่พิมพ์ไว้ก่อนมี dropdown แบบเดียวกับหน้าจัดการผู้ใช้ จะได้ไม่หายเงียบ */}
+                      <SelectBox id="jo-toSite" value={draft.toSite} onChange={(e) => setDraft({ ...draft, toSite: e.target.value })}>
+                        <option value="">{t("jobOrderDoc.field.toSitePlaceholder")}</option>
+                        {departments.filter((d) => d.isActive).map((d) => (
+                          <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                        {draft.toSite && !departments.some((d) => d.name === draft.toSite) && (
+                          <option value={draft.toSite}>{draft.toSite} ({t("users.field.department.legacy")})</option>
+                        )}
+                      </SelectBox>
+                    </Field>
+                  ) : (
+                    <ReadonlyField label={t("jobOrderDoc.field.toSite")} value={draft.toSite} />
+                  )}
+                  {textField("jo-startDate", t("jobOrderDoc.field.startDate"), draft.startDate, (v) => setDraft({ ...draft, startDate: v }), { type: "date" })}
+                  {textField("jo-finishDate", t("jobOrderDoc.field.finishDate"), draft.finishDate, (v) => setDraft({ ...draft, finishDate: v }), { type: "date" })}
+                </div>
+              </SectionCard>
+
+              {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
+                  ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+              {getRevisionNumber(doc.id) > 0 && (
+                <SectionCard title={t("docRevision.noteTitle")} subtitle={t("docRevision.noteHelp")}>
+                  {editable ? (
+                    <textarea
+                      rows={4}
+                      aria-label={t("docRevision.noteTitle")}
+                      value={draft.revisionNote}
+                      onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+                      placeholder={t("docRevision.notePlaceholder")}
+                      className={`${field.textarea} w-full resize-y`}
+                    />
+                  ) : (
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{draft.revisionNote || "—"}</p>
+                  )}
+                </SectionCard>
+              )}
+
+              <SectionCard title={t("jobOrderDoc.outOfScopeTitle")}>
+                {editable ? (
+                  <textarea id="jo-outOfScope" aria-label={t("jobOrderDoc.outOfScopeTitle")} rows={3} value={draft.outOfScope}
+                    onChange={(e) => setDraft({ ...draft, outOfScope: e.target.value })}
+                    className={`${field.textarea} w-full resize-y`} />
+                ) : (
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{draft.outOfScope || "—"}</p>
                 )}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="jo-startDate" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.startDate")}</label>
-              <input id="jo-startDate" type="date" disabled={!editable} value={draft.startDate}
-                onChange={(e) => setDraft({ ...draft, startDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="jo-finishDate" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.finishDate")}</label>
-              <input id="jo-finishDate" type="date" disabled={!editable} value={draft.finishDate}
-                onChange={(e) => setDraft({ ...draft, finishDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-          </div>
-        </div>
+              </SectionCard>
+            </>
+          }
+          rail={
+            <>
+              <RailSummaryCard
+                label={t("jobOrderDoc.jobCodePrefix")}
+                value={doc.jobCode || "—"}
+                mono
+                rows={[
+                  { label: t("jobOrderDoc.field.toSite"), value: draft.toSite || "—" },
+                  { label: t("jobOrderDoc.linesTitle"), value: lineCountText },
+                  { label: t("jobOrderDoc.scopeShort"), value: t("jobOrderDoc.scopeCount").replace("{n}", String(scopeChecked)) },
+                  { label: t("jobOrderDoc.attachmentsShort"), value: t("jobOrderDoc.attachmentCount").replace("{n}", String((doc.attachments ?? []).length)) },
+                ]}
+              />
+              {/* ไฟล์แนบ — ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะแบบ/PO มักมาหลังอนุมัติ */}
+              <DocumentAttachmentsCard
+                attachments={doc.attachments ?? []}
+                disabled={!canEdit}
+                onUpload={async (file) => { const updated = await uploadJobOrderAttachment(doc.id, file); setDoc(updated); }}
+                onDelete={async (attachmentId) => { const updated = await deleteJobOrderAttachment(doc.id, attachmentId); setDoc(updated); }}
+              />
+              <NextStepHint title={t("project.doc.nextStep")}>{approvalHint}</NextStepHint>
+            </>
+          }
+        />
 
-        {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
-            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
-        {getRevisionNumber(doc.id) > 0 && (
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
-            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
-            <textarea
-              rows={4}
-              disabled={!editable}
-              value={draft.revisionNote}
-              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
-              placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
-            />
-          </div>
-        )}
-
-        <div data-tour="jodoc-lines" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("jobOrderDoc.linesTitle")}</h2>
-            {editable && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => addLine()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <Plus size={13} /> {t("jobOrderDoc.addLine")}
-                </button>
-                {/* บรรทัดต่อ — ฟอร์ม FM-PJ-01 ตัวจริงมีแถวที่ไม่มีเลขลำดับแต่มีจำนวน/หน่วยของตัวเอง
-                    เช่น "1 Flexible Joint" แล้วตามด้วย "Ø 650 | 15 | PCS" (ยืนยันจากตัวอย่างจริง 2026-08-31) */}
-                <button onClick={() => addLine(true)} title={t("jobOrderDoc.continuationHint")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <CornerDownRight size={13} /> {t("jobOrderDoc.addContinuationLine")}
-                </button>
-              </div>
-            )}
-          </div>
-          {draft.lines.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">{t("jobOrderDoc.linesEmpty")}</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    {[t("jobOrderDoc.col.description"), t("jobOrderDoc.col.quantity"), t("jobOrderDoc.col.unit"), t("jobOrderDoc.col.remark"), ""].map((h, i) => (
-                      // คอลัมน์รายละเอียดมีปุ่มสลับบรรทัดต่อเนื่อง (13px + ช่องว่าง 6px) นำหน้ากล่อง — ขยับหัวตามให้ตรงขอบกล่อง (2026-09-24)
-                      <th key={h} className={`${i === 0 ? "pl-[31px] pr-3" : "px-3"} py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.lines.map((line) => (
+        <div data-tour="jodoc-lines">
+          <SectionCard
+            title={
+              <span className="flex items-baseline gap-2.5 flex-wrap">
+                {t("jobOrderDoc.linesTitle")}
+                <span className="text-[13px] font-normal text-muted-foreground">{lineCountText}</span>
+              </span>
+            }
+            bodyClassName=""
+          >
+            {draft.lines.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">{t("jobOrderDoc.linesEmpty")}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[860px]">
+                  <div className="grid grid-cols-[28px_36px_minmax(0,1fr)_96px_96px_240px_36px] gap-2 items-center px-6 h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]">
+                    <span>#</span><span /><span>{t("jobOrderDoc.col.description")}</span><span className="text-right">{t("jobOrderDoc.col.quantity")}</span>
+                    <span>{t("jobOrderDoc.col.unit")}</span><span>{t("jobOrderDoc.col.remark")}</span><span />
+                  </div>
+                  {draft.lines.map((line, idx) => (
                     <Fragment key={line.id}>
-                    <tr className="border-b border-border/50">
-                      <td className="px-3 py-2 min-w-[200px]">
-                        <div className="flex items-center gap-1.5">
+                      <div className={`px-6 pt-2 pb-1.5 flex flex-col gap-1.5 ${idx > 0 ? (line.isContinuation ? "border-t border-dashed border-border" : "border-t border-[#eef1f6]") : ""} ${line.isContinuation ? "bg-[#fafbfd]" : ""}`}>
+                        <div className="grid grid-cols-[28px_36px_minmax(0,1fr)_96px_96px_240px_36px] gap-2 items-center">
+                          <span className={`text-[13px] ${line.isContinuation ? "text-[#a3aec2]" : "text-muted-foreground"}`}>{lineNumbers[idx] ?? "—"}</span>
                           {/* ปุ่มสลับชนิดบรรทัด — ไอคอนบอกสถานะ ไม่ใช่แค่ตกแต่ง */}
                           <button
                             type="button"
@@ -472,127 +525,123 @@ export function JobOrderDocument({
                             title={t("jobOrderDoc.continuationHint")}
                             aria-pressed={line.isContinuation === true}
                             aria-label={t("jobOrderDoc.addContinuationLine")}
-                            className={`flex-shrink-0 transition-colors disabled:opacity-40 ${line.isContinuation ? "text-[#c9a84c]" : "text-muted-foreground opacity-40 hover:opacity-100"}`}
+                            className={`w-9 h-9 rounded-lg inline-flex items-center justify-center transition-colors disabled:opacity-40 ${line.isContinuation ? "bg-[#e8f0fb] text-[#1a5fb4]" : "text-[#8a97ad] hover:bg-[#f4f6fa] hover:text-foreground"}`}
                           >
-                            <CornerDownRight size={13} />
+                            <CornerDownRight size={16} />
                           </button>
-                          <input disabled={!editable} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
-                            className={`w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70 ${line.isContinuation ? "ml-3" : ""}`} />
+                          {editable ? (
+                            <>
+                              <input aria-label={t("jobOrderDoc.col.description")} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
+                                className={`${cellCls} ${line.isContinuation ? "" : "font-medium"}`} />
+                              <input type="number" aria-label={t("jobOrderDoc.col.quantity")} value={line.quantity ?? ""}
+                                onChange={(e) => updateLine(line.id, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
+                                className={`${cellCls} text-right tabular-nums`} />
+                              <input aria-label={t("jobOrderDoc.col.unit")} value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })} className={cellCls} />
+                              <input aria-label={t("jobOrderDoc.col.remark")} value={line.remark} onChange={(e) => updateLine(line.id, { remark: e.target.value })} className={cellCls} />
+                              <button type="button" onClick={() => removeLine(line.id)} title={t("jobOrderDoc.removeLine")} aria-label={t("jobOrderDoc.removeLine")} className={rowRemoveBtn}>
+                                <X size={16} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className={`text-sm text-foreground ${line.isContinuation ? "" : "font-medium"}`}>{line.description || "—"}</span>
+                              <span className="text-sm text-right tabular-nums">{line.quantity ?? "—"}</span>
+                              <span className="text-sm text-[#3d5173]">{line.unit}</span>
+                              <span className="text-sm text-[#3d5173]">{line.remark}</span>
+                              <span />
+                            </>
+                          )}
                         </div>
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <input type="number" disabled={!editable} value={line.quantity ?? ""} onChange={(e) => updateLine(line.id, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <input disabled={!editable} value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })}
-                          className="w-20 text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input disabled={!editable} value={line.remark} onChange={(e) => updateLine(line.id, { remark: e.target.value })}
-                          className="w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        {editable && (
-                          <button onClick={() => removeLine(line.id)} title={t("jobOrderDoc.removeLine")} className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
-                            <X size={13} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {/* บรรทัดรายละเอียดย่อย — แถวของตัวเองใต้รายการหลัก ซ่อนทั้งแถวเมื่อเอกสารล็อกแล้วและไม่มีบรรทัดย่อย */}
-                    {((line.subDetails ?? []).length > 0 || editable) && (
-                      <tr className="border-b border-border/50">
-                        <td colSpan={5} className="px-3 pb-2 space-y-1">
-                          {(line.subDetails ?? []).map((sd, i) => (
-                            <div key={i} className="flex items-center gap-2 pl-4">
-                              <CornerDownRight size={12} className="text-muted-foreground flex-shrink-0" />
+                        {/* บรรทัดรายละเอียดย่อย — ใต้รายการหลัก ซ่อนเมื่อเอกสารล็อกแล้วและไม่มีบรรทัดย่อย */}
+                        {(line.subDetails ?? []).map((sd, i) => (
+                          <div key={i} className="grid grid-cols-[72px_20px_minmax(0,1fr)_36px] gap-2 items-center">
+                            <span />
+                            <CornerDownRight size={14} className="text-[#a3aec2]" />
+                            {editable ? (
                               <input
-                                disabled={!editable} value={sd}
+                                value={sd}
+                                aria-label={t("jobOrderDoc.subDetailPlaceholder")}
                                 onChange={(e) => updateLine(line.id, { subDetails: (line.subDetails ?? []).map((x, j) => (j === i ? e.target.value : x)) })}
                                 placeholder={t("jobOrderDoc.subDetailPlaceholder")}
-                                className="flex-1 min-w-[160px] text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
+                                className={`${cellCls} text-[#3d5173]`}
                               />
-                              {editable && (
-                                <button onClick={() => updateLine(line.id, { subDetails: (line.subDetails ?? []).filter((_, j) => j !== i) })}
-                                  className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
-                                  <X size={11} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                          {editable && (
-                            <button onClick={() => updateLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })}
-                              className="flex items-center gap-1.5 pl-4 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                              <Plus size={11} /> {t("jobOrderDoc.addSubDetail")}
+                            ) : <span className="text-sm text-[#3d5173]">{sd}</span>}
+                            {editable ? (
+                              <button type="button" onClick={() => updateLine(line.id, { subDetails: (line.subDetails ?? []).filter((_, j) => j !== i) })}
+                                aria-label={t("jobOrderDoc.removeSubDetail")} title={t("jobOrderDoc.removeSubDetail")} className={rowRemoveBtn}>
+                                <X size={14} />
+                              </button>
+                            ) : <span />}
+                          </div>
+                        ))}
+                        {editable && (
+                          <div className="pl-[72px]">
+                            <button type="button" onClick={() => updateLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })}
+                              className="h-8 px-2 rounded-md text-[13px] font-medium text-[#1a5fb4] hover:bg-[#e8f0fb] inline-flex items-center gap-1.5 transition-colors">
+                              <Plus size={14} /> {t("jobOrderDoc.addSubDetail")}
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    )}
+                          </div>
+                        )}
+                      </div>
                     </Fragment>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </div>
+            )}
+            {editable && (
+              <div className="px-6 py-3 border-t border-[#eef1f6] flex items-center gap-4 flex-wrap">
+                <button type="button" onClick={() => addLine()} className={btn.text}>
+                  <Plus size={16} /> {t("jobOrderDoc.addLine")}
+                </button>
+                {/* บรรทัดต่อ — ฟอร์ม FM-PJ-01 ตัวจริงมีแถวที่ไม่มีเลขลำดับแต่มีจำนวน/หน่วยของตัวเอง
+                    เช่น "1 Flexible Joint" แล้วตามด้วย "Ø 650 | 15 | PCS" (ยืนยันจากตัวอย่างจริง 2026-08-31) */}
+                <button type="button" onClick={() => addLine(true)} title={t("jobOrderDoc.continuationHint")} className={btn.text}>
+                  <CornerDownRight size={16} /> {t("jobOrderDoc.addContinuationLine")}
+                </button>
+                <span className="text-xs text-muted-foreground">{t("jobOrderDoc.continuationHint")}</span>
+              </div>
+            )}
+          </SectionCard>
+        </div>
+
+        <div data-tour="jodoc-checklist">
+          <SectionCard
+            title={
+              <span className="flex items-baseline gap-2.5 flex-wrap">
+                {t("jobOrderDoc.scopeChecklistTitle")}
+                <span className="text-[13px] font-normal text-muted-foreground">
+                  {t("jobOrderDoc.scopeSelected").replace("{n}", String(scopeChecked)).replace("{total}", String(scopeTotal))}
+                </span>
+              </span>
+            }
+          >
+            <div className="flex flex-col gap-3">
+              {draft.scopeChecklist.map((group) => (
+                <ChecklistGroupCard
+                  key={group.key}
+                  group={group}
+                  disabled={!editable}
+                  onChange={(next) => setDraft((prev) => prev && { ...prev, scopeChecklist: prev.scopeChecklist.map((g) => (g.key === next.key ? next : g)) })}
+                />
+              ))}
             </div>
-          )}
+          </SectionCard>
         </div>
 
-        <div data-tour="jodoc-checklist" className="bg-card border border-border rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">{t("jobOrderDoc.scopeChecklistTitle")}</h2>
-          {draft.scopeChecklist.map((group) => (
-            <ChecklistGroupCard
-              key={group.key}
-              group={group}
-              disabled={!editable}
-              onChange={(next) => setDraft((prev) => prev && { ...prev, scopeChecklist: prev.scopeChecklist.map((g) => (g.key === next.key ? next : g)) })}
-            />
-          ))}
-        </div>
-
-        {/* ไฟล์แนบ — การ์ดของตัวเอง ไม่ใช่ซ้อนอยู่ในการ์ด "รายละเอียดอื่นๆ" (DocumentAttachmentsCard
-            เรนเดอร์ `bg-card border rounded-xl` ของมันเองอยู่แล้ว การซ้อนจึงได้กรอบซ้อนกรอบและอ่านเหมือน
-            ว่าไฟล์แนบเป็นส่วนหนึ่งของ Out of Scope)
-            ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะแบบ/PO มักมาหลังอนุมัติ */}
-        <DocumentAttachmentsCard
-          attachments={doc.attachments ?? []}
-          disabled={!canEdit}
-          onUpload={async (file) => { const updated = await uploadJobOrderAttachment(doc.id, file); setDoc(updated); }}
-          onDelete={async (attachmentId) => { const updated = await deleteJobOrderAttachment(doc.id, attachmentId); setDoc(updated); }}
-        />
-
-        <div className="bg-card border border-border rounded-xl p-5">
-          <label htmlFor="jo-outOfScope" className="text-sm font-semibold text-foreground block mb-2">{t("jobOrderDoc.outOfScopeTitle")}</label>
-          <textarea id="jo-outOfScope" disabled={!editable} rows={3} value={draft.outOfScope}
-            onChange={(e) => setDraft({ ...draft, outOfScope: e.target.value })}
-            className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-        </div>
-
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">{t("jobOrderDoc.signatoriesTitle")}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+        <SectionCard title={t("jobOrderDoc.signatoriesTitle")}>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-7 gap-y-5">
             {([
               ["requestedBy", "requestedAt", t("jobOrderDoc.field.requestedBy")],
               ["approvedBy", "approvedAt", t("jobOrderDoc.field.approvedBy")],
               ["documentRecipientBy", "documentRecipientAt", t("jobOrderDoc.field.documentRecipientBy")],
             ] as const).map(([nameField, dateField, label]) => (
-              <div key={nameField} className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor={`jo-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
-                  <input id={`jo-${nameField}`} disabled={!editable} value={draft[nameField]}
-                    onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })}
-                    className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-                </div>
-                <div>
-                  <label htmlFor={`jo-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
-                  <input id={`jo-${dateField}`} type="date" disabled={!editable} value={draft[dateField]}
-                    onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })}
-                    className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-                </div>
+              <div key={nameField} className="grid grid-cols-[minmax(0,1fr)_150px] gap-2.5 items-start">
+                {textField(`jo-${nameField}`, label, draft[nameField], (v) => setDraft({ ...draft, [nameField]: v }))}
+                {textField(`jo-${dateField}`, t("materialRequisitionDoc.field.date"), draft[dateField], (v) => setDraft({ ...draft, [dateField]: v }), { type: "date" })}
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       <JobOrderPrintDocument jobOrder={doc} companyHeader={companyHeader} />
@@ -601,8 +650,18 @@ export function JobOrderDocument({
         open={confirmDelete}
         title={t("jobOrderDoc.deleteConfirmTitle")}
         message={t("jobOrderDoc.deleteConfirmMessage")}
+        confirmLabel={t("jobOrderDoc.deleteConfirmTitle")}
         danger
         busy={deleting}
+        summary={
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <span className="font-mono text-[13px] font-medium text-foreground">{doc.id}</span>
+              <span className="text-[13px] text-[#3d5173] truncate">{doc.customerName || "—"}</span>
+            </div>
+            {doc.jobCode && <span className="font-mono text-[12.5px] text-[#3d5173] whitespace-nowrap">{doc.jobCode}</span>}
+          </div>
+        }
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
       />
@@ -615,6 +674,7 @@ export function JobOrderDocument({
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}
       />
+      {approval.dialogs}
     </div>
   );
 }

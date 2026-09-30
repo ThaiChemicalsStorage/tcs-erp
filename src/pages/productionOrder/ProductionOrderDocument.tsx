@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, Loader2, Printer, Save, Trash2, Plus, CornerDownRight, Heading, RotateCw, GitBranch } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, CheckCircle2, CornerDownRight, GitBranch, Heading, Loader2, Lock, Plus, Printer, RotateCw, Save, Send, Trash2, Undo2 } from "lucide-react";
 import {
   fetchProductionOrder, updateProductionOrder, deleteProductionOrder, logProductionOrderPrinted,
   submitProductionOrderApproval, approveProductionOrder, rejectProductionOrder, withdrawProductionOrderApproval,
@@ -7,22 +7,29 @@ import {
   type ProductionOrder, type ProductionOrderLine, type ProductionOrderUpdateFields,
 } from "../../lib/productionOrder";
 import { ProductionOrderPrintDocument } from "./ProductionOrderPrintDocument";
-import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
 import { useI18n } from "../../lib/i18n";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
-import { getRevisionNumber } from "../../lib/revisionDiff";
+import { getRevisionNumber, getRevisionRoot } from "../../lib/revisionDiff";
+import { formatQuoteDateThai } from "../../lib/quotes";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
-
-const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field, surface, table } from "../../components/ui/styles";
+import {
+  ApprovalStatusPill, PersonRow, RailSummaryCard, StepHint, SummaryBox, rejectButtonClass,
+} from "../purchaseRequest/docShared";
+import { useApprovalFlow } from "../purchaseRequest/useApprovalFlow";
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
@@ -33,7 +40,12 @@ function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   };
 }
 
+/** คอลัมน์ของตารางรายการสั่งผลิต: # · รายการ · จำนวน · หน่วย · หมายเหตุ (· ปุ่มลบ เมื่อแก้ได้) */
+const LINE_GRID_EDIT = "grid grid-cols-[28px_minmax(0,1fr)_96px_96px_240px_36px] gap-2";
+const LINE_GRID_READ = "grid grid-cols-[28px_minmax(0,1fr)_96px_96px_240px] gap-2";
+
 // หน้าแก้ไขใบสั่งผลิต (FM-PD-02) — แก้ได้เฉพาะฉบับร่าง อนุมัติแล้วล็อก เหมือนเอกสารอื่นในระบบ
+// หน้าตาแบบใหม่ 2026-09-30: หัวเอกสาร + แถบขั้นตอน + การ์ดข้อมูล/คอลัมน์ขวา + ตารางรายการ + ผู้เกี่ยวข้อง
 export function ProductionOrderDocument({
   productionOrderId, company, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
 }: {
@@ -196,19 +208,59 @@ export function ProductionOrderDocument({
       : null,
   );
 
+  const applyUpdated = (d: ProductionOrder) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); };
+
+  /** กล่องสรุปเอกสารในกล่องยืนยัน: เลขที่ · สินค้า · ลูกค้า (+ ค่าชิดขวา) */
+  const docSummary = (aside?: ReactNode) => doc
+    ? <SummaryBox primary={doc.documentNumber || doc.id} secondary={[doc.productName, doc.customerCompanyName].filter(Boolean).join(" · ") || undefined} aside={aside} />
+    : undefined;
+
+  // ขั้นอนุมัติ — hook จึงต้องอยู่เหนือ early return · เรียก route ด้วย id ของหน้า เพราะ doc อาจยังโหลดไม่เสร็จ
+  const approvalFlow = useApprovalFlow<ProductionOrder>({
+    status: doc?.status ?? "Draft",
+    canEdit: !!doc && canEdit,
+    canApprove: !!doc && canApprove,
+    onSubmit: () => submitProductionOrderApproval(productionOrderId),
+    onApprove: () => approveProductionOrder(productionOrderId),
+    onReject: (c) => rejectProductionOrder(productionOrderId, c),
+    onWithdraw: () => withdrawProductionOrderApproval(productionOrderId),
+    onUpdated: applyUpdated,
+    showToast,
+    summary: docSummary(doc?.orderedBy.name ? `${t("productionOrderDoc.field.orderedBy")} ${doc.orderedBy.name}` : undefined),
+  });
+
+  const backLink = (
+    <button type="button" onClick={() => requestLeave(onBack)} className="self-start text-[13px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+      <ArrowLeft size={14} /> {t("productionOrderDoc.backToAll")}
+    </button>
+  );
+
   if (loading) {
-    return <div className="flex-1 flex items-center justify-center p-6"><Loader2 className="animate-spin text-muted-foreground" size={20} /></div>;
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="bg-card border-b border-border px-4 md:px-8 py-3.5 flex">{backLink}</div>
+        <div className="flex items-center justify-center p-6" role="status" aria-live="polite">
+          <Loader2 className="animate-spin text-muted-foreground" size={20} />
+          <span className="sr-only">{t("productionOrder.loading")}</span>
+        </div>
+      </div>
+    );
   }
   if (!doc || !draft) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6">
-        <p className="text-sm text-muted-foreground">{t("productionOrder.loadError")}</p>
-        <button onClick={() => requestLeave(onBack)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("productionOrderDoc.backToList")}</button>
+      <div className="flex-1 overflow-y-auto">
+        <div className="bg-card border-b border-border px-4 md:px-8 py-3.5 flex">{backLink}</div>
+        <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <p className="text-sm text-muted-foreground">{t("productionOrder.loadError")}</p>
+          <button type="button" onClick={() => requestLeave(onBack)} className={btn.secondary}>{t("productionOrderDoc.backToList")}</button>
+        </div>
       </div>
     );
   }
 
   const editable = canEdit && doc.status === "Draft";
+  const isFinal = doc.status === "Final";
+  const isRevision = getRevisionNumber(doc.id) > 0;
   // หัวจดหมายของใบพิมพ์ — FM-PD-02 ใช้แค่โลโก้ ที่เหลือส่งไปเพื่อให้ชนิดครบเท่านั้น
   // สร้าง inline แบบเดียวกับใบเบิกพัสดุ/ใบส่งมอบสินค้า (ยังไม่มีตัวช่วยกลางสำหรับเรื่องนี้)
   const companyHeader: CompanyHeaderInfo = {
@@ -236,96 +288,116 @@ export function ProductionOrderDocument({
     catch (err) { showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorDelete")); setDeleting(false); }
   };
 
-  const applyUpdated = (d: ProductionOrder) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); };
+  const dateText = (iso: string) => (iso ? formatQuoteDateThai(iso) : "");
+  const itemCount = draft.lines.filter((l) => !l.isSectionHeader && !l.isContinuation).length;
+  const continuationCount = draft.lines.filter((l) => l.isContinuation).length;
+  const headerCount = draft.lines.filter((l) => l.isSectionHeader).length;
 
-  const statusPill = doc.status === "Draft"
-    ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
+  const headerMeta = autoSaveEditable
+    ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
     : doc.status === "PendingApproval"
-    ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
-    : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20";
-  const statusText = doc.status === "Draft"
-    ? t("materialRequisition.status.draft")
-    : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final");
+      ? <><Lock size={14} /> {t("purchaseRequest.shared.lockedPending")}</>
+      : undefined;
 
-  const field = (label: string, value: string, onChange: (v: string) => void, type = "text") => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      <input type={type} disabled={!editable} value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} />
-    </div>
-  );
+  const stepCurrent = doc.status === "Draft" ? 0 : doc.status === "PendingApproval" ? 1 : 3;
+  const approverName = doc.approver.name.trim();
+  const nextStep: { tone: "info" | "waiting"; text: string } =
+    doc.status === "Draft"
+      ? { tone: "info", text: t((doc.rejectionComment ?? "").trim() ? "approval.step.hint.draftRejected" : "approval.step.hint.draft") }
+      : doc.status === "PendingApproval"
+        ? { tone: "waiting", text: t("approval.step.hint.pending").replace("{approver}", t("productionOrderDoc.approverLabel")) }
+        : {
+          tone: "info",
+          text: t("approval.step.hint.final")
+            .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
+            .replace("{at}", doc.approver.date ? t("approval.step.at").replace("{date}", formatQuoteDateThai(doc.approver.date)) : ""),
+        };
 
   // ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน เซ็นกันหลังอนุมัติและทำงานเสร็จ จึงกรอกได้แม้เอกสาร Final แล้ว
   // (บันทึกผ่าน route แยก /signatories ที่ไม่ติดล็อก Final — ดู handleSignatories() ฝั่งเซิร์ฟเวอร์)
   const postApprovalKeys = ["deliveredBy", "receivedBy", "costDeptBy"] as const;
-  const signatoryRow = (label: string, key: "orderedBy" | "deliveredBy" | "receivedBy" | "costDeptBy") => {
+  const signerBlock = (label: string, key: "orderedBy" | "deliveredBy" | "receivedBy" | "costDeptBy") => {
     const alwaysEditable = (postApprovalKeys as readonly string[]).includes(key) && canEdit;
     const enabled = editable || alwaysEditable;
+    if (!enabled) {
+      return (
+        <div key={key} className="grid grid-cols-[minmax(0,1fr)_150px] gap-2.5">
+          <ReadonlyField label={label} value={draft[key].name} />
+          <ReadonlyField label={t("productionOrderDoc.field.date")} value={dateText(draft[key].date)} />
+        </div>
+      );
+    }
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-          <input disabled={!enabled} value={draft[key].name} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], name: e.target.value } })} className={inputCls} />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">{t("productionOrderDoc.field.date")}</label>
-          <input type="date" disabled={!enabled} value={draft[key].date} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], date: e.target.value } })} className={inputCls} />
-        </div>
+      <div key={key} className="grid grid-cols-[minmax(0,1fr)_150px] gap-2.5">
+        <Field label={label} htmlFor={`po-${key}`}>
+          <input id={`po-${key}`} value={draft[key].name} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], name: e.target.value } })} className={`${field.input} w-full min-w-0`} />
+        </Field>
+        <Field label={t("productionOrderDoc.field.date")} htmlFor={`po-${key}-date`}>
+          <input id={`po-${key}-date`} type="date" value={draft[key].date} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], date: e.target.value } })} className={`${field.input} w-full min-w-0 px-2`} />
+        </Field>
       </div>
     );
   };
 
+  const lineGrid = editable ? LINE_GRID_EDIT : LINE_GRID_READ;
+  const removeButton = (onClick: () => void, label: string) => (
+    <button type="button" onClick={onClick} title={label} aria-label={label}
+      className="w-9 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors">
+      <Trash2 size={16} />
+    </button>
+  );
+
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {t("productionOrderDoc.backToList")}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">{doc.documentNumber || doc.id}</span>
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusPill}`}>{statusText}</span>
-
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-          {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
-            </button>
-          )}
-          {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("productionOrderDoc.print")}
-            </button>
-          )}
-          {editable && (
-            <button onClick={() => setConfirmRefresh(true)} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />} {t("productionOrderDoc.refreshFromScope")}
-            </button>
-          )}
-          {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("productionOrderDoc.saveDraft")}
-            </button>
-          )}
-          <DocumentApprovalActions
-            status={doc.status}
-            canEdit={canEdit}
-            canApprove={canApprove}
-            onSubmit={() => submitProductionOrderApproval(doc.id)}
-            onApprove={() => approveProductionOrder(doc.id)}
-            onReject={(c) => rejectProductionOrder(doc.id, c)}
-            onWithdraw={() => withdrawProductionOrderApproval(doc.id)}
-            onUpdated={applyUpdated}
-            showToast={showToast}
-          />
-          {canDelete && (
-            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Trash2 size={13} /> {t("productionOrderDoc.delete")}
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20 print:hidden">
+        <DocumentHeader
+          backLabel={t("productionOrderDoc.backToAll")}
+          onBack={() => requestLeave(onBack)}
+          number={doc.documentNumber || doc.id}
+          status={<ApprovalStatusPill status={doc.status} />}
+          meta={headerMeta}
+          actions={
+            <>
+              {canPrint && (
+                <button type="button" onClick={handlePrint} disabled={printing} className={btn.secondary}>
+                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("productionOrderDoc.print")}
+                </button>
+              )}
+              {/* ปุ่ม "บันทึกฉบับร่าง" คงไว้ตามเจ้าของสั่ง (2026-09-30) แม้บอร์ดจะไม่มี — บันทึกอัตโนมัติยังทำงานอยู่ด้วย */}
+              {editable && (
+                <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("productionOrderDoc.saveDraft")}
+                </button>
+              )}
+              {approvalFlow.canDecide && (
+                <button type="button" onClick={approvalFlow.reject} disabled={approvalFlow.busy !== null} className={rejectButtonClass}>
+                  {t("approval.reject")}
+                </button>
+              )}
+              <MoreMenu
+                items={[
+                  editable && { key: "refresh", label: t("productionOrderDoc.refreshFromScope"), icon: RotateCw, hint: t("productionOrderDoc.refreshHint"), disabled: refreshing, onSelect: () => setConfirmRefresh(true) },
+                  canEdit && isFinal && { key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch, hint: t("productionOrderDoc.rewriteHint"), disabled: rewriting, onSelect: () => setConfirmRewrite(true) },
+                  approvalFlow.canWithdraw && { key: "withdraw", label: t("approval.withdraw"), icon: Undo2, hint: t("purchaseRequest.shared.withdrawHint"), disabled: approvalFlow.busy !== null, onSelect: approvalFlow.withdraw },
+                  canDelete && { key: "delete", label: t("productionOrderDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+                ]}
+              />
+              {approvalFlow.canSubmit && (
+                <button type="button" onClick={approvalFlow.submit} disabled={approvalFlow.busy !== null} className={btn.primary}>
+                  {approvalFlow.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
+                </button>
+              )}
+              {approvalFlow.canDecide && (
+                <button type="button" onClick={approvalFlow.approve} disabled={approvalFlow.busy !== null} className={btn.primary}>
+                  <CheckCircle2 size={16} /> {t("approval.approve")}
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
+      <div className="px-4 md:px-8 py-6 flex flex-col gap-5 print:hidden">
         {draftBackup.recovered && draftBackup.recoveredAt !== null && (
           <DraftRecoveryBanner
             savedAt={draftBackup.recoveredAt}
@@ -339,175 +411,256 @@ export function ProductionOrderDocument({
           />
         )}
 
-        <DocumentStatusStepper
-          status={doc.status}
-          rejectionComment={doc.rejectionComment ?? ""}
-          approverLabel={t("productionOrderDoc.approverLabel")}
-          approvedByUserId={doc.approvedByUserId}
-          approvedByName={doc.approver.name}
-          approvedAt={doc.approver.date}
+        <DocumentStepper
+          steps={[{ label: t("approval.step.draft") }, { label: t("approval.step.pending") }, { label: t("approval.step.final") }]}
+          current={stepCurrent}
+          ariaLabel={t("purchaseRequest.shared.stepsAria")}
         />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold">{t("productionOrderDoc.title")}</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">{t("productionOrderDoc.jobCodePrefix")} {doc.jobCode} · {doc.customerCompanyName}</p>
-          </div>
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* เลขที่ที่พิมพ์บนฟอร์ม — แก้ได้ตอนเป็นร่าง แต่ id จริงของเอกสารไม่เปลี่ยน ตัวนับจึงเดินต่อตามปกติ */}
-            <div>
-              {field(t("productionOrderDoc.field.documentNumber"), draft.documentNumber, (v) => setDraft({ ...draft, documentNumber: v }))}
-              <p className="text-xs text-muted-foreground mt-1">{t("productionOrderDoc.field.documentNumberHint")}</p>
-            </div>
-            {field(t("productionOrderDoc.field.productName"), draft.productName, (v) => setDraft({ ...draft, productName: v }))}
-            {field(t("productionOrderDoc.field.supervisorName"), draft.supervisorName, (v) => setDraft({ ...draft, supervisorName: v }))}
-            {field(t("productionOrderDoc.field.startDate"), draft.startDate, (v) => setDraft({ ...draft, startDate: v }), "date")}
-            {field(t("productionOrderDoc.field.dueDate"), draft.dueDate, (v) => setDraft({ ...draft, dueDate: v }), "date")}
-          </div>
-        </div>
-
-{/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย) เท่านั้น
-            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
-        {getRevisionNumber(doc.id) > 0 && (
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
-            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
-            <textarea
-              rows={4}
-              disabled={!editable}
-              value={draft.revisionNote}
-              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
-              placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
-            />
-          </div>
-        )}
-
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4 space-y-2">
-          <h2 className="text-sm font-semibold text-foreground mb-1">{t("productionOrderDoc.linesHeading")}</h2>
-          {draft.lines.length === 0 && <p className="text-xs text-muted-foreground">{t("productionOrderDoc.noLines")}</p>}
-
-          {draft.lines.map((l, idx) => (
-            <div key={l.id} className={`rounded-lg border p-2 space-y-1.5 ${l.isSectionHeader ? "border-[#c9a84c]/40 bg-[#c9a84c]/5" : "border-border/60"} ${l.isContinuation ? "ml-6" : ""}`}>
-              <div className="flex items-center gap-2">
-                {/* บรรทัดต่อไม่กินเลขลำดับเหมือนบรรทัดหัวข้อ แต่ยังมีจำนวน/หน่วยของตัวเอง
-                    ("3 หน้าแปลน 20A | 2 ตัว" แล้ว "หน้าแปลน 50A | 3 ตัว" บนฟอร์ม FM-PD-02 ตัวจริง) */}
-                <span className="text-xs font-mono text-muted-foreground w-6 flex-shrink-0 text-center">
-                  {l.isSectionHeader || l.isContinuation ? "—" : draft.lines.slice(0, idx + 1).filter((x) => !x.isSectionHeader && !x.isContinuation).length}
-                </span>
-                <input
-                  disabled={!editable} value={l.description}
-                  onChange={(e) => updateLine(l.id, { description: e.target.value })}
-                  placeholder={l.isSectionHeader ? t("productionOrderDoc.line.headerPlaceholder") : t("productionOrderDoc.line.descriptionPlaceholder")}
-                  className={`flex-1 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70 ${l.isSectionHeader ? "font-semibold" : ""}`}
-                />
-                {/* บรรทัดหัวข้อไม่มีจำนวน/หน่วย ตามฟอร์มจริง — ซ่อนช่องไปเลยจะได้ไม่สับสน */}
-                {!l.isSectionHeader && (
-                  <>
-                    <input
-                      type="number" disabled={!editable} value={l.qty ?? ""}
-                      onChange={(e) => updateLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })}
-                      placeholder={t("productionOrderDoc.line.qty")}
-                      className="w-20 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
-                    />
-                    <input
-                      disabled={!editable} value={l.unit}
-                      onChange={(e) => updateLine(l.id, { unit: e.target.value })}
-                      placeholder={t("productionOrderDoc.line.unit")}
-                      className="w-20 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
-                    />
-                  </>
+        <DocumentColumns
+          main={
+            <>
+              <SectionCard title={t("productionOrderDoc.infoTitle")}>
+                {editable ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px] items-start">
+                    {/* เลขที่ที่พิมพ์บนฟอร์ม — แก้ได้ตอนเป็นร่าง แต่ id จริงของเอกสารไม่เปลี่ยน ตัวนับจึงเดินต่อตามปกติ */}
+                    <Field label={t("productionOrderDoc.field.documentNumber")} htmlFor="po-documentNumber" help={t("productionOrderDoc.field.documentNumberHint")}>
+                      <input id="po-documentNumber" value={draft.documentNumber} onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })} className={`${field.input} w-full font-mono`} />
+                    </Field>
+                    <Field label={t("productionOrderDoc.field.supervisorName")} htmlFor="po-supervisorName">
+                      <input id="po-supervisorName" value={draft.supervisorName} onChange={(e) => setDraft({ ...draft, supervisorName: e.target.value })} className={`${field.input} w-full`} />
+                    </Field>
+                    <Field label={t("productionOrderDoc.field.productName")} htmlFor="po-productName" className="sm:col-span-2">
+                      <input id="po-productName" value={draft.productName} onChange={(e) => setDraft({ ...draft, productName: e.target.value })} className={`${field.input} w-full`} />
+                    </Field>
+                    <Field label={t("productionOrderDoc.field.startDate")} htmlFor="po-startDate">
+                      <input id="po-startDate" type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} className={`${field.input} w-full`} />
+                    </Field>
+                    <Field label={t("productionOrderDoc.field.dueDate")} htmlFor="po-dueDate">
+                      <input id="po-dueDate" type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} className={`${field.input} w-full`} />
+                    </Field>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
+                    <ReadonlyField label={t("productionOrderDoc.field.productName")} value={doc.productName} />
+                    <ReadonlyField label={t("productionOrderDoc.field.supervisorName")} value={doc.supervisorName} />
+                    <ReadonlyField label={t("productionOrderDoc.field.documentNumber")} value={doc.documentNumber || doc.id} mono />
+                    <ReadonlyField label={t("productionOrderDoc.field.startDate")} value={dateText(doc.startDate)} />
+                    <ReadonlyField label={t("productionOrderDoc.field.dueDate")} value={dateText(doc.dueDate)} />
+                  </div>
                 )}
-                <input
-                  disabled={!editable} value={l.remark}
-                  onChange={(e) => updateLine(l.id, { remark: e.target.value })}
-                  placeholder={t("productionOrderDoc.line.remark")}
-                  className="w-32 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
-                />
-                {editable && (
-                  <button onClick={() => setLines((lines) => lines.filter((x) => x.id !== l.id))} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("productionOrderDoc.line.remove")}>
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
+              </SectionCard>
 
-              {l.subDetails.map((sd, i) => (
-                <div key={i} className="flex items-center gap-2 pl-8">
-                  <CornerDownRight size={12} className="text-muted-foreground flex-shrink-0" />
-                  <input
-                    disabled={!editable} value={sd}
-                    onChange={(e) => updateLine(l.id, { subDetails: l.subDetails.map((x, j) => (j === i ? e.target.value : x)) })}
-                    placeholder={t("productionOrderDoc.line.subDetailPlaceholder")}
-                    className="flex-1 h-8 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
+              {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย) เท่านั้น
+                  ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+              {isRevision && (
+                <SectionCard title={<span id="po-revisionNote-heading">{t("docRevision.noteTitle")}</span>} subtitle={t("docRevision.noteHelp")}>
+                  <textarea
+                    rows={4}
+                    disabled={!editable}
+                    aria-labelledby="po-revisionNote-heading"
+                    value={draft.revisionNote}
+                    onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+                    placeholder={t("docRevision.notePlaceholder")}
+                    className={`${field.textarea} w-full resize-y`}
                   />
-                  {editable && (
-                    <button onClick={() => updateLine(l.id, { subDetails: l.subDetails.filter((_, j) => j !== i) })} className="text-muted-foreground hover:text-[#e05252] transition-colors">
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {editable && (
-                <button onClick={() => updateLine(l.id, { subDetails: [...l.subDetails, ""] })} className="flex items-center gap-1.5 pl-8 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                  <Plus size={12} /> {t("productionOrderDoc.line.addSubDetail")}
-                </button>
+                </SectionCard>
               )}
-            </div>
-          ))}
+            </>
+          }
+          rail={
+            <>
+              <RailSummaryCard
+                label={t("productionOrderDoc.source.title")}
+                value={doc.jobCode || "—"}
+                mono
+                subValue={doc.customerCompanyName || undefined}
+                rows={[
+                  { label: t("productionOrderDoc.linesHeading"), value: t("productionOrderDoc.source.linesValue").replace("{n}", String(itemCount)).replace("{c}", String(continuationCount)) },
+                  { label: t("productionOrderDoc.source.headers"), value: String(headerCount) },
+                  ...(doc.status === "Draft" ? [{ label: t("productionOrderDoc.field.orderedBy"), value: draft.orderedBy.name.trim() || "—" }] : []),
+                ]}
+              />
+              {doc.status !== "Draft" && (
+                <RailCard title={t("productionOrderDoc.approvalTitle")}>
+                  <PersonRow role={t("productionOrderDoc.field.orderedBy")} name={doc.orderedBy.name} date={dateText(doc.orderedBy.date)} />
+                  {/* ผู้อนุมัติแก้เองไม่ได้ — ระบบเติมให้ตอนกดอนุมัติ กันการปลอมลายเซ็น */}
+                  {approverName ? (
+                    <PersonRow role={t("productionOrderDoc.field.approver")} name={approverName} date={dateText(doc.approver.date)} />
+                  ) : (
+                    <ReadonlyField label={t("productionOrderDoc.field.approver")} value={<span className="text-[#8a97ad] font-normal">{t("productionOrderDoc.approverPending")}</span>} />
+                  )}
+                </RailCard>
+              )}
+              <StepHint tone={nextStep.tone} title={t("purchaseRequest.shared.nextStep")}>{nextStep.text}</StepHint>
+            </>
+          }
+        />
 
-          {editable && (
-            <div className="flex items-center gap-2 pt-1">
-              <button onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"))])} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                <Plus size={13} /> {t("productionOrderDoc.line.add")}
-              </button>
-              <button onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"), true)])} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                <Heading size={13} /> {t("productionOrderDoc.line.addHeader")}
-              </button>
-              <button onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"), false, true)])} title={t("productionOrderDoc.line.continuationHint")} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                <CornerDownRight size={13} /> {t("productionOrderDoc.line.addContinuation")}
-              </button>
-            </div>
-          )}
-        </div>
+        <section className={`${surface.card} overflow-hidden`}>
+          <div className={surface.cardHead}>
+            <h2 className={surface.cardTitle}>{t("productionOrderDoc.linesHeading")}</h2>
+            <span className="flex-1 text-[13px] text-muted-foreground">
+              {t("productionOrderDoc.lines.summary").replace("{n}", String(itemCount)).replace("{c}", String(continuationCount)).replace("{h}", String(headerCount))}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[720px]">
+              <div className={`${lineGrid} items-center px-6 ${table.head}`}>
+                <span>#</span>
+                <span>{t("productionOrderDoc.line.descriptionPlaceholder")}</span>
+                <span className="text-right">{t("productionOrderDoc.line.qty")}</span>
+                <span>{t("productionOrderDoc.line.unit")}</span>
+                <span>{t("productionOrderDoc.line.remark")}</span>
+                {editable && <span />}
+              </div>
+              {draft.lines.length === 0 && (
+                <p className="px-6 py-8 text-center text-sm text-muted-foreground">{t("productionOrderDoc.noLines")}</p>
+              )}
+              {draft.lines.map((l, idx) => {
+                // บรรทัดต่อไม่กินเลขลำดับเหมือนบรรทัดหัวข้อ แต่ยังมีจำนวน/หน่วยของตัวเอง
+                // ("3 หน้าแปลน 20A | 2 ตัว" แล้ว "หน้าแปลน 50A | 3 ตัว" บนฟอร์ม FM-PD-02 ตัวจริง)
+                const number = draft.lines.slice(0, idx + 1).filter((x) => !x.isSectionHeader && !x.isContinuation).length;
+                const rowBg = l.isSectionHeader ? "bg-[#fbf7ea]" : l.isContinuation ? "bg-[#fafbfd]" : "bg-white";
+                const marker = l.isSectionHeader
+                  ? <span className="text-xs font-bold text-[#7d6420]" aria-hidden="true">§</span>
+                  : l.isContinuation
+                    ? <span title={t("productionOrderDoc.line.continuationHint")} className="text-[#1a5fb4] flex"><CornerDownRight size={16} /></span>
+                    : <span className="text-[13px] text-muted-foreground tabular-nums">{number}</span>;
+                return (
+                  <div key={l.id} className={`px-6 ${editable ? "pt-2 pb-1.5" : "py-3"} flex flex-col gap-1.5 border-b border-[#eef1f6] ${rowBg}`}>
+                    {editable ? (
+                      <div className={`${lineGrid} items-center`}>
+                        {marker}
+                        <input
+                          value={l.description}
+                          onChange={(e) => updateLine(l.id, { description: e.target.value })}
+                          placeholder={l.isSectionHeader ? t("productionOrderDoc.line.headerPlaceholder") : t("productionOrderDoc.line.descriptionPlaceholder")}
+                          aria-label={l.isSectionHeader ? t("productionOrderDoc.line.headerPlaceholder") : t("productionOrderDoc.line.descriptionPlaceholder")}
+                          className={`${field.cell} min-w-0 ${l.isSectionHeader ? "col-span-3 font-semibold" : !l.isContinuation ? "font-medium" : ""}`}
+                        />
+                        {/* บรรทัดหัวข้อไม่มีจำนวน/หน่วย ตามฟอร์มจริง — ช่องนั้นจึงไม่มีเลย */}
+                        {!l.isSectionHeader && (
+                          <>
+                            <input
+                              type="number" value={l.qty ?? ""}
+                              onChange={(e) => updateLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })}
+                              placeholder={t("productionOrderDoc.line.qty")} aria-label={t("productionOrderDoc.line.qty")}
+                              className={`${field.cell} min-w-0 text-right tabular-nums`}
+                            />
+                            <input
+                              value={l.unit}
+                              onChange={(e) => updateLine(l.id, { unit: e.target.value })}
+                              placeholder={t("productionOrderDoc.line.unit")} aria-label={t("productionOrderDoc.line.unit")}
+                              className={`${field.cell} min-w-0`}
+                            />
+                          </>
+                        )}
+                        <input
+                          value={l.remark}
+                          onChange={(e) => updateLine(l.id, { remark: e.target.value })}
+                          placeholder={t("productionOrderDoc.line.remark")} aria-label={t("productionOrderDoc.line.remark")}
+                          className={`${field.cell} min-w-0`}
+                        />
+                        {removeButton(() => setLines((lines) => lines.filter((x) => x.id !== l.id)), t("productionOrderDoc.line.remove"))}
+                      </div>
+                    ) : (
+                      <div className={`${lineGrid} items-start`}>
+                        <span className="pt-0.5">{marker}</span>
+                        <span className={`flex flex-col gap-1 min-w-0 ${l.isSectionHeader ? "col-span-3" : ""}`}>
+                          <span className={`text-sm text-foreground break-words ${l.isSectionHeader ? "font-semibold" : !l.isContinuation ? "font-medium" : ""}`}>{l.description || "—"}</span>
+                          {l.subDetails.map((sd, i) => (
+                            <span key={i} className="text-[13px] text-[#3d5173] flex gap-1.5"><span aria-hidden="true" className="text-[#a3aec2]">↳</span>{sd}</span>
+                          ))}
+                        </span>
+                        {!l.isSectionHeader && (
+                          <>
+                            <span className="text-sm text-right tabular-nums font-semibold">{l.qty ?? ""}</span>
+                            <span className="text-sm text-[#3d5173]">{l.unit}</span>
+                          </>
+                        )}
+                        <span className="text-sm text-[#3d5173] break-words">{l.remark}</span>
+                      </div>
+                    )}
 
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">{t("productionOrderDoc.signHeading")}</h2>
-          {signatoryRow(t("productionOrderDoc.field.orderedBy"), "orderedBy")}
-          {/* ผู้อนุมัติแก้เองไม่ได้ — ระบบเติมให้ตอนกดอนุมัติ กันการปลอมลายเซ็น */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("productionOrderDoc.field.approver")}</label>
-              <input disabled value={draft.approver.name || t("productionOrderDoc.approverPending")} className={inputCls} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("productionOrderDoc.field.date")}</label>
-              <input disabled value={draft.approver.date} className={inputCls} />
+                    {editable && l.subDetails.map((sd, i) => (
+                      <div key={i} className="grid grid-cols-[28px_20px_minmax(0,1fr)_36px] gap-2 items-center">
+                        <span />
+                        <CornerDownRight size={16} className="text-[#a3aec2]" />
+                        <input
+                          value={sd}
+                          onChange={(e) => updateLine(l.id, { subDetails: l.subDetails.map((x, j) => (j === i ? e.target.value : x)) })}
+                          placeholder={t("productionOrderDoc.line.subDetailPlaceholder")}
+                          aria-label={t("productionOrderDoc.line.subDetailPlaceholder")}
+                          className={`${field.cell} min-w-0 text-[13.5px] text-[#3d5173]`}
+                        />
+                        {removeButton(() => updateLine(l.id, { subDetails: l.subDetails.filter((_, j) => j !== i) }), t("productionOrderDoc.line.remove"))}
+                      </div>
+                    ))}
+                    {editable && (
+                      <div className="pl-[30px]">
+                        <button type="button" onClick={() => updateLine(l.id, { subDetails: [...l.subDetails, ""] })} className={`${btn.text} h-8 text-[13px] mx-0`}>
+                          <Plus size={14} /> {t("productionOrderDoc.line.addSubDetail")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
-          {signatoryRow(t("productionOrderDoc.field.deliveredBy"), "deliveredBy")}
-          {signatoryRow(t("productionOrderDoc.field.receivedBy"), "receivedBy")}
-          {signatoryRow(t("productionOrderDoc.field.costDeptBy"), "costDeptBy")}
-
-          {/* หลังอนุมัติแล้วปุ่ม "บันทึกฉบับร่าง" ด้านบนหายไป สามช่องล่างจึงต้องมีปุ่มบันทึกของตัวเอง */}
-          {!editable && canEdit && (
-            <div className="pt-1">
-              <button onClick={() => { void saveSignatories(); }} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("productionOrderDoc.saveSignatories")}
+          {editable && (
+            <div className="px-6 pt-3 pb-4 flex items-center gap-4 flex-wrap">
+              <button type="button" onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"))])} className={btn.text}>
+                <Plus size={16} /> {t("productionOrderDoc.line.add")}
               </button>
-              <p className="text-xs text-muted-foreground mt-1.5">{t("productionOrderDoc.saveSignatoriesHint")}</p>
+              <button type="button" onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"), true)])} className={btn.text}>
+                <Heading size={16} /> {t("productionOrderDoc.line.addHeader")}
+              </button>
+              <button type="button" onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"), false, true)])} title={t("productionOrderDoc.line.continuationHint")} className={btn.text}>
+                <CornerDownRight size={16} /> {t("productionOrderDoc.line.addContinuation")}
+              </button>
+              <span className="text-xs text-muted-foreground">{t("productionOrderDoc.line.continuationHint")}</span>
             </div>
           )}
-        </div>
+        </section>
+
+        {/* หลังอนุมัติแล้วปุ่ม "บันทึกฉบับร่าง" บนหัวหายไป สามช่องล่างจึงมีปุ่มบันทึกของตัวเองที่หัวการ์ด */}
+        <SectionCard
+          title={t("productionOrderDoc.signHeading")}
+          subtitle={!editable && canEdit ? t("productionOrderDoc.saveSignatoriesHint") : undefined}
+          actions={!editable && canEdit ? (
+            <button type="button" onClick={() => { void saveSignatories(); }} disabled={saving} className={btn.secondarySm}>
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} {t("productionOrderDoc.saveSignatories")}
+            </button>
+          ) : undefined}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-x-7 gap-y-5">
+            {signerBlock(t("productionOrderDoc.field.orderedBy"), "orderedBy")}
+            {/* ผู้อนุมัติแก้เองไม่ได้ — ระบบเติมให้ตอนกดอนุมัติ กันการปลอมลายเซ็น */}
+            <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-2.5">
+              <ReadonlyField label={t("productionOrderDoc.field.approver")} value={approverName || <span className="text-[#8a97ad] font-normal">{t("productionOrderDoc.approverPending")}</span>} />
+              <ReadonlyField label={t("productionOrderDoc.field.date")} value={dateText(doc.approver.date)} />
+            </div>
+            {signerBlock(t("productionOrderDoc.field.deliveredBy"), "deliveredBy")}
+            {signerBlock(t("productionOrderDoc.field.receivedBy"), "receivedBy")}
+            {signerBlock(t("productionOrderDoc.field.costDeptBy"), "costDeptBy")}
+          </div>
+        </SectionCard>
       </div>
 
       <ProductionOrderPrintDocument doc={doc} companyHeader={companyHeader} />
+
+      {approvalFlow.dialogs}
 
       <ConfirmDialog
         open={confirmDelete}
         title={t("productionOrderDoc.confirmDelete.title")}
         message={t("productionOrderDoc.confirmDelete.message")}
-        confirmLabel={deleting ? t("productionOrderDoc.deleting") : t("productionOrderDoc.delete")}
+        confirmLabel={deleting ? t("productionOrderDoc.deleting") : t("productionOrderDoc.confirmDelete.title")}
+        danger
+        summary={docSummary(doc.jobCode ? <span className="font-mono">{doc.jobCode}</span> : undefined)}
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onCancel={() => setConfirmDelete(false)}
@@ -517,6 +670,15 @@ export function ProductionOrderDocument({
         title={t("productionOrderDoc.refreshConfirmTitle")}
         message={t("productionOrderDoc.refreshConfirmBody")}
         confirmLabel={t("productionOrderDoc.refreshFromScope")}
+        tone="warning"
+        summary={
+          <SummaryBox
+            primary={doc.jobCode || "—"}
+            secondary={[t("productionOrderDoc.refresh.sourceOf").replace("{id}", doc.documentNumber || doc.id), doc.customerCompanyName].filter(Boolean).join(" · ")}
+            aside={t("productionOrderDoc.refresh.currentLines").replace("{n}", String(draft.lines.length))}
+          />
+        }
+        busy={refreshing}
         onConfirm={() => void refreshFromScope()}
         onCancel={() => setConfirmRefresh(false)}
       />
@@ -525,6 +687,19 @@ export function ProductionOrderDocument({
         title={t("docRevision.rewriteConfirmTitle")}
         message={t("docRevision.rewriteConfirmBody")}
         confirmLabel={t("docRevision.rewrite")}
+        summary={
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{t("purchaseRequest.shared.rewriteOriginal")}</span>
+              <span className="font-mono text-[13px] font-medium text-foreground">{doc.documentNumber || doc.id}</span>
+            </span>
+            <ArrowRight size={16} className="text-[#8a97ad] flex-shrink-0" />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{t("purchaseRequest.shared.rewriteNext")}</span>
+              <span className="font-mono text-[13px] font-semibold text-[#1a5fb4]">{getRevisionRoot(doc.id)}-R…</span>
+            </span>
+          </div>
+        }
         busy={rewriting}
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}
@@ -532,3 +707,4 @@ export function ProductionOrderDocument({
     </div>
   );
 }
+

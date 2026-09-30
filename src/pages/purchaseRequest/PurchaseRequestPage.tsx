@@ -6,6 +6,7 @@ import { PurchaseRequestList } from "./PurchaseRequestList";
 import { PurchaseRequestDocument } from "./PurchaseRequestDocument";
 import { ProjectItemSourcePickerDialog, ProductionOrderSourcePickerDialog } from "../project/ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
+import { btn } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
@@ -174,8 +175,8 @@ export function PurchaseRequestPage({
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
-        <div className="space-y-3 w-full max-w-3xl">
+      <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
+        <div className="space-y-3 w-full">
           <span className="sr-only">{t("purchaseRequest.loading")}</span>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" aria-hidden="true" />
@@ -189,10 +190,7 @@ export function PurchaseRequestPage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{t("purchaseRequest.loadError")}</p>
-        <button
-          onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
-        >
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("purchaseRequest.retry")}
         </button>
       </div>
@@ -201,6 +199,11 @@ export function PurchaseRequestPage({
 
   // มีแค่สองแผนกที่ต้องเลือกเอกสารต้นทางก่อน — ที่เหลือเปิดใบเปล่า
   const needsSourcePicker = ownerDepartment === "project" || ownerDepartment === "production";
+  // ชื่อกลุ่มเมนูเหนือชื่อหน้า — หน้านี้ถูกเมาต์หลายที่ (โครงการ / ผลิต / สโตร์เปิดเอง / กล่องงานเข้าของจัดซื้อและสโตร์)
+  const moduleLabel = ownerDepartment === "all" ? t("nav.group.purchasing")
+    : ownerDepartment === "production" ? t("nav.group.production")
+    : ownerDepartment === "general" ? t("nav.group.inventory")
+    : t("nav.group.project");
 
   return (
     <>
@@ -208,16 +211,18 @@ export function PurchaseRequestPage({
         purchaseRequests={purchaseRequests}
         currentUserId={currentUserId}
         onOpen={openPurchaseRequest}
+        moduleLabel={moduleLabel}
         heading={storeStage === "pending" ? t("nav.storeRequestInbox") : ownerDepartment === "all" ? t("nav.purchasingRequestInbox") : undefined}
         showDepartment={ownerDepartment === "all"}
-        // กล่องงานเข้าของจัดซื้อเท่านั้น — กล่องของสโตร์กรองมาจากเซิร์ฟเวอร์แล้ว (storeStage="pending")
-        stageFilter={ownerDepartment === "all" && storeStage === undefined}
+        // กล่องงานเข้าของจัดซื้อ = แท็บขั้นของใบ · กล่องของสโตร์กรองมาจากเซิร์ฟเวอร์แล้ว (storeStage="pending") จึงไม่มีแท็บ
+        tabs={ownerDepartment !== "all" ? "status" : storeStage === undefined ? "stage" : "none"}
         headerAction={canCreate ? (
           <button
+            type="button"
             onClick={() => (needsSourcePicker ? setPickerOpen(true) : setCodePickerOpen(true))}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
+            className={btn.primary}
           >
-            <Plus size={15} /> {t("purchaseRequest.createBtn")}
+            <Plus size={16} /> {t("purchaseRequest.createBtn")}
           </button>
         ) : undefined}
       />

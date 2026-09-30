@@ -1,48 +1,47 @@
 import { useState, type ReactNode } from "react";
-import { Package2, Search, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
-import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import type { MaterialRequisitionSummary, MaterialRequisitionStatus } from "../../lib/materialRequisition";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
-import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
+import { ApprovalPill, ListDateRangeSelect, Tag, paginate, rowOpenProps, useApprovalStatusLabel } from "../project/projectUi";
 
-const FILTER_ALL = "all";
+type TabKey = "all" | MaterialRequisitionStatus;
 
-const statusStyle: Record<MaterialRequisitionStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
-
-// แสดงตารางรายการใบเบิกและใบคืนวัสดุ พร้อมตัวกรองสถานะและช่องค้นหา
-// Renders the Material Requisition list table with a status filter and search box.
+// แสดงตารางรายการใบเบิกและใบคืนวัสดุ พร้อมแท็บสถานะ ช่องค้นหา และตัวกรองช่วงวันที่ (ดีไซน์ใหม่ 2026-09-30)
+// Renders the Material Requisition list: status tabs with counts, search + date-range toolbar, paged table.
 export function MaterialRequisitionList({
   materialRequisitions,
   currentUserId,
   onOpen,
   headerAction,
+  moduleLabel,
 }: {
   materialRequisitions: MaterialRequisitionSummary[];
   currentUserId: string;
   onOpen: (id: string) => void;
   /** ปุ่ม "+ สร้าง" ของหน้านั้นๆ — หน้า Page เป็นเจ้าของ state ของกล่องเลือกต้นทาง (2026-08-20) */
   headerAction?: ReactNode;
+  /** ชื่อกลุ่มเมนูเล็กเหนือชื่อหน้า — หน้านี้ถูกเมาต์ทั้งใต้ "โครงการ" และ "ผลิต" */
+  moduleLabel?: string;
 }) {
   const { t } = useI18n();
-  const statusLabel: Record<MaterialRequisitionStatus, string> = { Draft: t("materialRequisition.status.draft"), PendingApproval: t("materialRequisition.status.pendingApproval"), Final: t("materialRequisition.status.final") };
+  const statusLabel = useApprovalStatusLabel();
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="mr-filters"]', popover: { title: t("tour.mr.filters.title"), description: t("tour.mr.filters.desc"), side: "bottom" } },
     { element: '[data-tour="mr-table"]', popover: { title: t("tour.mr.table.title"), description: t("tour.mr.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("materialRequisition", currentUserId, tourSteps);
-  const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  const [tab, setTab] = useState<TabKey>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
   const items = materialRequisitions.map((m) => ({
@@ -51,112 +50,105 @@ export function MaterialRequisitionList({
     jobCode: m.jobCode ?? "", productionOrderId: m.productionOrderId ?? "", status: m.status ?? "Draft",
     chargeTo: [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / "),
   }));
+  const tabs: { key: TabKey; label: string; count: number }[] = [
+    { key: "all", label: t("quotation.filterAll"), count: items.length },
+    ...(["Draft", "PendingApproval", "Final"] as const).map((s) => ({ key: s, label: statusLabel(s), count: items.filter((m) => m.status === s).length })),
+  ];
   const dateRangeResolved = resolveRange(dateRange);
   const filtered = items
     .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
-    .filter((m) => filterStatus === FILTER_ALL || m.status === filterStatus)
+    .filter((m) => tab === "all" || m.status === tab)
     .filter((m) => !normalizedSearch || [m.id, m.documentNumber, m.jobCode, m.productionOrderId, m.chargeTo, m.chargeWorkTypeName ?? ""].some((v) => v.toLowerCase().includes(normalizedSearch)));
+  const paged = paginate(filtered, page);
+  const resetPage = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPage(1); };
+  const dash = <span className="text-[#8a97ad]">—</span>;
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("materialRequisition.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("materialRequisition.pageSubtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {headerAction}
-          <TourReplayButton onClick={tour.start} />
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={moduleLabel ?? t("nav.group.project")}
+        title={
+          <span className="inline-flex items-center gap-3 flex-wrap">
+            {t("materialRequisition.pageTitle")}
+            <span title={t("project.list.formCode")} className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center">{t("materialRequisition.pageSubtitle")}</span>
+          </span>
+        }
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={headerAction}
+      />
 
-      <div data-tour="mr-filters" className="flex items-center gap-3 flex-wrap">
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("materialRequisition.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
-            </button>
+      <ListCard>
+        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("materialRequisition.list.tabsAria")} />
+        <div data-tour="mr-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={resetPage(setSearchQuery)}
+            searchPlaceholder={t("materialRequisition.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+          </ListToolbar>
+        </div>
+
+        <div data-tour="mr-table" className="min-w-0">
+          {items.length === 0 ? (
+            <ListEmpty title={t("materialRequisition.empty.title")} hint={t("materialRequisition.empty.description")} />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("materialRequisition.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px]">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("materialRequisition.col.id")}</th>
+                    <th className={table.th}>{t("materialRequisition.col.productionOrder")}</th>
+                    <th className={table.th}>{t("materialRequisition.col.jobCode")}</th>
+                    <th className={table.th}>{t("materialRequisition.col.chargeTo")}</th>
+                    <th className={table.th}>{t("materialRequisition.col.status")}</th>
+                    <th className={table.th}>{t("materialRequisition.col.updatedAt")}</th>
+                    <th className={`${table.th} w-10`} aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {paged.rows.map((m) => (
+                    <tr
+                      key={m.id}
+                      {...rowOpenProps(() => onOpen(m.id), `${t("materialRequisition.openRow")} ${m.documentNumber}`)}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} whitespace-nowrap`}>
+                        <span className={`block ${table.code}`}>{m.documentNumber}</span>
+                        {/* เลขบนฟอร์มถูกพิมพ์ทับ — โชว์เลขรันของระบบไว้ใต้เลข ให้ค้นเจอทั้งสองทาง */}
+                        {m.documentNumber !== m.id && <span className="block font-mono text-xs text-muted-foreground">{m.id}</span>}
+                      </td>
+                      <td className={`${table.td} font-mono text-[13px] whitespace-nowrap`}>{m.productionOrderId || dash}</td>
+                      <td className={`${table.td} font-mono text-[13px] whitespace-nowrap`}>{m.jobCode || dash}</td>
+                      <td className={`${table.td} max-w-[260px]`}>
+                        <span className="block text-sm text-foreground truncate">{m.chargeTo || dash}</span>
+                        {m.chargeWorkTypeName && <span className="block text-xs text-muted-foreground truncate">{m.chargeWorkTypeName}</span>}
+                      </td>
+                      <td className={table.td}>
+                        <span className="flex items-center gap-1.5">
+                          <ApprovalPill status={m.status} />
+                          {m.hasOutstanding && <Tag tone="amber">{t("materialRequisition.outstandingBadge")}</Tag>}
+                        </span>
+                      </td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(m.updatedAt)}</td>
+                      <td className={table.td}>
+                        <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as MaterialRequisitionStatus]}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <div data-tour="mr-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        {items.length === 0 ? (
-          <EmptyState icon={Package2} title={t("materialRequisition.empty.title")} description={t("materialRequisition.empty.description")} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Package2 size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("materialRequisition.noFilterResults")}</p>
-          </div>
-        ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {[t("materialRequisition.col.id"), t("materialRequisition.col.productionOrder"), t("materialRequisition.col.jobCode"), t("materialRequisition.col.chargeTo"), t("materialRequisition.col.status"), t("materialRequisition.col.updatedAt")].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((m) => (
-              <tr
-                key={m.id}
-                tabIndex={0}
-                role="button"
-                aria-label={`${t("materialRequisition.openRow")} ${m.documentNumber}`}
-                onClick={() => onOpen(m.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(m.id); } }}
-                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-              >
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">
-                  {m.documentNumber}
-                  {/* เลขบนฟอร์มถูกพิมพ์ทับ — โชว์เลขรันของระบบไว้ข้าง ๆ ให้ค้นเจอทั้งสองทาง */}
-                  {m.documentNumber !== m.id && <span className="ml-1.5 font-normal text-muted-foreground">({m.id})</span>}
-                </td>
-                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{m.productionOrderId || "—"}</td>
-                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{m.jobCode || "—"}</td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
-                  {m.chargeTo || "—"}
-                  {m.chargeWorkTypeName && <span className="block text-xs">{m.chargeWorkTypeName}</span>}
-                </td>
-                <td className="px-4 py-3.5">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[m.status]}`}>
-                    {statusLabel[m.status]}
-                  </span>
-                  {m.hasOutstanding && (
-                    <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
-                      {t("materialRequisition.outstandingBadge")}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+        {filtered.length > 0 && (
+          <ListPagination page={paged.current} pageCount={paged.pageCount} from={paged.from} to={paged.to} total={filtered.length} onPage={setPage} />
         )}
-      </div>
+      </ListCard>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { ProductionOrderList } from "./ProductionOrderList";
 import { ProductionOrderDocument } from "./ProductionOrderDocument";
 import { ScopeOfWorkSourcePickerDialog } from "../project/ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
+import { btn } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
@@ -97,8 +98,8 @@ export function ProductionOrderPage({
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
-        <div className="space-y-3 w-full max-w-3xl">
+      <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
+        <div className="space-y-3 w-full">
           <span className="sr-only">{t("productionOrder.loading")}</span>
           {[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" aria-hidden="true" />)}
         </div>
@@ -110,7 +111,7 @@ export function ProductionOrderPage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{t("productionOrder.loadError")}</p>
-        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("productionOrder.retry")}
         </button>
       </div>
@@ -123,11 +124,8 @@ export function ProductionOrderPage({
         productionOrders={items}
         onOpen={open}
         headerAction={canCreate ? (
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-          >
-            <Plus size={15} /> {t("productionOrder.createBtn")}
+          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+            <Plus size={16} /> {t("productionOrder.createBtn")}
           </button>
         ) : undefined}
       />

@@ -8,6 +8,7 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { btn } from "../../components/ui/styles";
 
 // หน้าจัดการโครงการแบบแยกอิสระ สลับระหว่างมุมมองรายการและรายละเอียดของแต่ละโครงการ
 // Standalone Project management page, switching between the list view and a per-project detail view.
@@ -136,10 +137,7 @@ export function ProjectPage({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">{t("project.loadError")}</p>
-        <button
-          onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
-        >
+        <button type="button" onClick={loadList} className={btn.secondary}>
           {t("project.retry")}
         </button>
       </div>
@@ -153,11 +151,8 @@ export function ProjectPage({
         currentUserId={currentUserId}
         onOpen={openProject}
         headerAction={canCreate ? (
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-          >
-            <Plus size={15} /> {t("project.createBtn")}
+          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+            <Plus size={16} /> {t("project.createBtn")}
           </button>
         ) : undefined}
       />

@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, ShoppingCart, PackageMinus, ShoppingBag } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowLeft, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, PackageMinus, ShoppingBag, Send, Info, ArrowRight, type LucideIcon } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -18,8 +18,7 @@ import {
 import { createPurchaseOrder } from "../../lib/purchaseOrder";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { createProductRequest } from "../../lib/productRequest";
-import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -30,7 +29,7 @@ import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { Combobox } from "../../components/Combobox";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
-import { getRevisionNumber } from "../../lib/revisionDiff";
+import { getRevisionNumber, getRevisionRoot } from "../../lib/revisionDiff";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
@@ -41,6 +40,17 @@ import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCar
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { KitBreakdown } from "../../components/KitBreakdown";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
+import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field, surface, table } from "../../components/ui/styles";
+import {
+  ApprovalStatusPill, ChoiceDialog, PersonRow, RailSummaryCard, StageTag, StepHint, SummaryBox,
+  rejectButtonClass,
+} from "./docShared";
+import { useApprovalFlow } from "./useApprovalFlow";
+import { purchaseRequestProgress, type PurchaseRequestStepKey } from "./purchaseRequestSteps";
 
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
@@ -146,6 +156,8 @@ export function PurchaseRequestDocument({
   /** บรรทัดที่ติ๊กไว้รอเปิดใบสั่งซื้อ — เป็น state ของหน้าจอล้วน ไม่เคยถูกบันทึก */
   const [buySelection, setBuySelection] = useState<string[]>([]);
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
+  /** ตัวเลือกในกล่อง "ออกใบสั่งซื้อ" — เลือกแล้วต้องกดยืนยัน (ดีไซน์ใหม่ 2026-09-30 เดิมกดแล้วสร้างทันที) */
+  const [buyChoice, setBuyChoice] = useState<"remaining" | "selected">("remaining");
   const [creatingPo, setCreatingPo] = useState(false);
   const [purchasingBusy, setPurchasingBusy] = useState(false);
   /** หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว — ส่งไปกับการกดบันทึก ไม่ใช่ฟิลด์ที่เก็บบนใบ */
@@ -270,6 +282,21 @@ export function PurchaseRequestDocument({
 
   const docTour = useModuleTour("purchaseRequestDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
+  // ขั้นอนุมัติ (ส่งขออนุมัติ / อนุมัติ / ไม่อนุมัติ / ถอน) — hook จึงต้องอยู่เหนือ early return ด้านล่าง
+  // เรียก route ด้วย `purchaseRequestId` ของหน้า ไม่ใช่ `doc.id` เพราะตอนนี้ doc อาจยังโหลดไม่เสร็จ
+  const approvalFlow = useApprovalFlow<PurchaseRequest>({
+    status: doc?.status ?? "Draft",
+    canEdit: !!doc && canEdit,
+    canApprove: !!doc && canFinalize,
+    onSubmit: () => submitPurchaseRequestApproval(purchaseRequestId),
+    onApprove: () => approvePurchaseRequest(purchaseRequestId),
+    onReject: (c) => rejectPurchaseRequest(purchaseRequestId, c),
+    onWithdraw: () => withdrawPurchaseRequestApproval(purchaseRequestId),
+    onUpdated: (updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toUpdateFields(updated)); },
+    showToast,
+    summary: doc ? <SummaryBox primary={doc.id} secondary={doc.jobCode ? `${t("purchaseRequestDoc.jobCodePrefix")} ${doc.jobCode}` : undefined} aside={t("ui.itemCount").replace("{n}", String(doc.lines.length))} /> : undefined,
+  });
+
   useEffect(() => {
     if (!showPrint) return;
     const reset = () => setShowPrint(false);
@@ -278,19 +305,22 @@ export function PurchaseRequestDocument({
     return () => window.removeEventListener("afterprint", reset);
   }, [showPrint]);
 
+  // หน้าว่างระหว่างโหลด / โหลดไม่สำเร็จ — ยังมีลิงก์ "← ใบขอซื้อทั้งหมด" แบบเดียวกับหัวเอกสาร
+  const backLink = (
+    <button type="button" onClick={() => requestLeave(onBack)} className="self-start text-[13px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+      <ArrowLeft size={14} /> {t("purchaseRequestDoc.backToAll")}
+    </button>
+  );
+
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("purchaseRequestDoc.backToList")}
-          </button>
-        </div>
+        <div className="bg-card border-b border-border px-4 md:px-8 py-3.5 flex">{backLink}</div>
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <AlertTriangle size={20} className="text-[#e05252]" />
+          <AlertTriangle size={20} className="text-[#b93636]" />
           <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            <RotateCw size={12} /> {t("purchaseRequest.retry")}
+          <button type="button" onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className={btn.secondary}>
+            <RotateCw size={16} /> {t("purchaseRequest.retry")}
           </button>
         </div>
       </div>
@@ -300,14 +330,10 @@ export function PurchaseRequestDocument({
   if (!doc || !draft) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("purchaseRequestDoc.backToList")}
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-2.5 p-6">
+        <div className="bg-card border-b border-border px-4 md:px-8 py-3.5 flex">{backLink}</div>
+        <div className="flex flex-col items-center justify-center gap-2.5 p-6" role="status" aria-live="polite">
           <Loader2 size={20} className="text-muted-foreground animate-spin" />
-          <p className="text-xs text-muted-foreground">{t("purchaseRequestDoc.loadingDocument")}</p>
+          <p className="text-[13px] text-muted-foreground">{t("purchaseRequestDoc.loadingDocument")}</p>
         </div>
       </div>
     );
@@ -365,6 +391,10 @@ export function PurchaseRequestDocument({
 
   const addProduct = (product: Product) => {
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankPurchaseRequestLine({ id: product.id, code: product.code, name: product.name, unit: product.unit })] });
+  };
+  /** เลือกหลายรายการในกล่องเดียวแล้วกดยืนยัน (ดีไซน์ใหม่ 2026-09-30) — ต่อท้ายตามลำดับที่ติ๊ก */
+  const addProducts = (list: Product[]) => {
+    setDraft((prev) => prev && { ...prev, lines: [...prev.lines, ...list.map((product) => blankPurchaseRequestLine({ id: product.id, code: product.code, name: product.name, unit: product.unit }))] });
   };
   const addFreeLine = () => {
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankPurchaseRequestLine()] });
@@ -548,57 +578,141 @@ export function PurchaseRequestDocument({
     }
   };
 
+  // ── ค่าที่หน้าจอแบบใหม่ใช้ (ดีไซน์ใหม่ 2026-09-30) ─────────────────────────────────────────────
+  const progress = purchaseRequestProgress(doc, purchasedLines);
+  const stepLabel: Record<PurchaseRequestStepKey, string> = {
+    draft: t("approval.step.draft"),
+    pending: t("approval.step.pending"),
+    approved: t("approval.step.final"),
+    store: doc.storeStage === "closed" ? t("purchaseRequestDoc.step.storeClosed") : t("purchaseRequestDoc.step.store"),
+    purchasing: t("purchaseRequestDoc.step.purchasing"),
+    po: progress.toBuy > 0 ? `${t("purchaseRequestDoc.step.po")} ${progress.ordered} / ${progress.toBuy}` : t("purchaseRequestDoc.step.po"),
+  };
+  const deptLabel = t(PURCHASE_REQUEST_CODE_LABEL_KEY[purchaseRequestCodeOf(doc)]);
+  const dateText = (iso: string) => (iso ? formatQuoteDateThai(iso) : "");
+  const itemsText = (n: number) => t("ui.itemCount").replace("{n}", String(n));
+  const summaryBox = (secondary?: ReactNode) => (
+    <SummaryBox primary={doc.id} secondary={secondary ?? (doc.jobCode ? `${t("purchaseRequestDoc.jobCodePrefix")} ${doc.jobCode} · ${deptLabel}` : deptLabel)} aside={itemsText(doc.lines.length)} />
+  );
+
+  /**
+   * ปุ่มขั้นถัดไปบนหัวเอกสาร — ตัวแรกที่ผู้ใช้คนนี้ทำได้เป็นปุ่มหลัก ที่เหลือเป็นปุ่มรอง
+   * เงื่อนไขของแต่ละปุ่มลอกมาจากการ์ดเดิมทุกข้อ (การ์ดออกใบสั่งซื้อ / การ์ดฝ่ายจัดซื้อ) · เซิร์ฟเวอร์ยังคุมสิทธิ์จริง
+   *
+   * ออกใบสั่งซื้อ: ซ่อนระหว่างจัดซื้อยังไม่อนุมัติ (`review`) และเมื่อออกครบทุกบรรทัดแล้ว — เดิมเป็นปุ่มจาง
+   * ตอนนี้กล่อง "ขั้นต่อไป" บอกเหตุผลแทน
+   */
+  const buyActionVisible = buyCardVisible && doc.purchasingStage !== "review" && remainingLines.length > 0;
+  const purchasingApproveVisible = purchasingCardVisible && doc.purchasingStage !== "approved" && doc.storeStage !== "pending";
+  const pullVisible = purchasingCardVisible && doc.purchasingStage !== "approved" && doc.storeStage === "pending";
+  const openBuyDialog = () => {
+    setBuyChoice(selectedRemaining.length > 0 ? "selected" : "remaining");
+    setBuyDialogOpen(true);
+  };
+  type HeaderAction = { key: string; label: string; icon: LucideIcon; onClick: () => void; busy?: boolean };
+  const headerActions = ([
+    approvalFlow.canSubmit && { key: "submit", label: t("approval.submit"), icon: Send, onClick: approvalFlow.submit, busy: approvalFlow.busy === "submit" },
+    approvalFlow.canDecide && { key: "approve", label: t("approval.approve"), icon: CheckCircle2, onClick: approvalFlow.approve, busy: approvalFlow.busy === "approve" },
+    buyActionVisible && { key: "buy", label: t("purchaseRequestDoc.buy.create"), icon: ShoppingBag, onClick: openBuyDialog, busy: creatingPo },
+    purchasingApproveVisible && { key: "purchasingApprove", label: t("purchaseRequestDoc.purchasing.approve"), icon: CheckCircle2, onClick: () => setConfirmPurchasingApprove(true), busy: purchasingBusy },
+    pullVisible && { key: "pull", label: t("purchaseRequestDoc.purchasing.pull"), icon: PackageMinus, onClick: () => setConfirmPurchasingPull(true), busy: purchasingBusy },
+  ] as (HeaderAction | false)[]).filter((a): a is HeaderAction => !!a);
+  const [primaryAction, ...otherActions] = headerActions;
+  const actionButton = (a: HeaderAction, primary: boolean) => {
+    const Icon = a.icon;
+    return (
+      <button key={a.key} type="button" onClick={a.onClick} disabled={!!a.busy || approvalFlow.busy !== null} className={primary ? btn.primary : btn.secondary}>
+        {a.busy ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />} {a.label}
+      </button>
+    );
+  };
+
+  /** ข้อความบนหัวข้างป้ายสถานะ: สถานะบันทึกอัตโนมัติขณะแก้ได้ · ใบที่ถูกล็อกบอกว่าล็อกเพราะอะไร */
+  const headerMeta = autoSaveEditable
+    ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
+    : doc.status === "PendingApproval"
+      ? <><Lock size={14} /> {t("purchaseRequest.shared.lockedPending")}</>
+      : doc.purchasingStage === "approved"
+        ? <><Lock size={14} /> {t("purchaseRequestDoc.lockedPurchasing")}</>
+        : undefined;
+
+  /** กล่อง "ขั้นต่อไป" บนคอลัมน์ขวา — ข้อความเดิมของแถบสถานะ/การ์ดต่าง ๆ ย้ายมารวมที่นี่ */
+  const nextStep: { tone: "info" | "waiting"; text: string } =
+    doc.status === "Draft"
+      ? { tone: "info", text: t((doc.rejectionComment ?? "").trim() ? "approval.step.hint.draftRejected" : "approval.step.hint.draft") }
+      : doc.status === "PendingApproval"
+        ? { tone: "waiting", text: t("approval.step.hint.pending").replace("{approver}", t("purchaseRequestDoc.approverLabel")) }
+        : doc.storeStage === "pending"
+          ? { tone: canIssueStock ? "info" : "waiting", text: pullVisible ? `${t("purchaseRequestDoc.store.hintPending")} · ${t("purchaseRequestDoc.purchasing.pullHelp")}` : t("purchaseRequestDoc.store.hintPending") }
+          : doc.storeStage === "closed"
+            ? { tone: "info", text: t("purchaseRequestDoc.store.hintClosed") }
+            : doc.purchasingStage === "review"
+              ? { tone: purchasingCardVisible ? "info" : "waiting", text: purchasingCardVisible ? t("purchaseRequestDoc.purchasing.help") : t("purchaseRequestDoc.buy.needApproval") }
+              : progress.current >= progress.steps.length
+                ? { tone: "info", text: t("purchaseRequestDoc.buy.summaryAll").replace("{total}", String(progress.toBuy)) }
+                : buyCardVisible
+                  ? { tone: "info", text: t("purchaseRequestDoc.hint.buy") }
+                  : { tone: "waiting", text: t("purchaseRequestDoc.store.hintForwarded") };
+
+  const signatories = [
+    ["requestedBy", "requestedAt", t("purchaseRequestDoc.field.requestedBy")],
+    ["approvedBy", "approvedAt", t("purchaseRequestDoc.field.approvedBy")],
+    ["purchasingDeptBy", "purchasingDeptAt", t("purchaseRequestDoc.field.purchasingDeptBy")],
+  ] as const;
+
+  const lastBatchSummary = cancelBatchTarget
+    ? cancelBatchTarget.lines.map((bl) => {
+      const line = doc.lines.find((l) => l.id === bl.lineId);
+      return `${line?.description ?? bl.lineId} ${bl.qty.toLocaleString()} ${line?.unit ?? ""}`.trim();
+    }).join(" · ")
+    : "";
+
+  const buyMode = buyCardVisible;
+
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {t("purchaseRequestDoc.backToList")}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">{doc.id}</span>
-        <span className="text-xs text-muted-foreground">{t(PURCHASE_REQUEST_CODE_LABEL_KEY[purchaseRequestCodeOf(doc)])}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${doc.status === "Draft" ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
-          {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
-        </span>
-
-        <div data-tour="prdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <TourReplayButton onClick={docTour.start} />
-          {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-          {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
-            </button>
-          )}
-          {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-              {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("purchaseRequestDoc.print")}
-            </button>
-          )}
-          {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("purchaseRequestDoc.saveDraft")}
-            </button>
-          )}
-          <DocumentApprovalActions
-            status={doc.status}
-            canEdit={canEdit}
-            canApprove={canFinalize}
-            onSubmit={() => submitPurchaseRequestApproval(doc.id)}
-            onApprove={() => approvePurchaseRequest(doc.id)}
-            onReject={(c) => rejectPurchaseRequest(doc.id, c)}
-            onWithdraw={() => withdrawPurchaseRequestApproval(doc.id)}
-            onUpdated={(updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toUpdateFields(updated)); }}
-            showToast={showToast}
-          />
-          {canDelete && (
-            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Trash2 size={13} /> {t("purchaseRequestDoc.delete")}
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20 print:hidden">
+        <DocumentHeader
+          backLabel={t("purchaseRequestDoc.backToAll")}
+          onBack={() => requestLeave(onBack)}
+          number={doc.id}
+          status={<><ApprovalStatusPill status={doc.status} /><StageTag tone="grey">{deptLabel}</StageTag></>}
+          meta={headerMeta}
+          actions={
+            <div data-tour="prdoc-actions" className="flex items-center gap-2.5 flex-wrap">
+              <TourReplayButton variant="title" onClick={docTour.start} />
+              {canPrint && (
+                <button type="button" onClick={handlePrint} disabled={printing} className={btn.secondary}>
+                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("purchaseRequestDoc.print")}
+                </button>
+              )}
+              {/* ปุ่ม "บันทึกร่าง" คงไว้ตามเจ้าของสั่ง (2026-09-30) แม้บอร์ดจะไม่มี — บันทึกอัตโนมัติยังทำงานอยู่ด้วย */}
+              {editable && (
+                <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("purchaseRequestDoc.saveDraft")}
+                </button>
+              )}
+              {otherActions.map((a) => actionButton(a, false))}
+              {approvalFlow.canDecide && (
+                <button type="button" onClick={approvalFlow.reject} disabled={approvalFlow.busy !== null} className={rejectButtonClass}>
+                  {t("approval.reject")}
+                </button>
+              )}
+              <MoreMenu
+                items={[
+                  canEdit && isFinal && { key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch, hint: t("purchaseRequestDoc.rewriteHint"), disabled: rewriting, onSelect: () => setConfirmRewrite(true) },
+                  purchasingCardVisible && doc.purchasingStage === "approved" && { key: "reopen", label: t("purchaseRequestDoc.purchasing.reopen"), icon: Undo2, hint: t("purchaseRequestDoc.reopenHint"), disabled: purchasingBusy, onSelect: () => setConfirmPurchasingReopen(true) },
+                  approvalFlow.canWithdraw && { key: "withdraw", label: t("approval.withdraw"), icon: Undo2, hint: t("purchaseRequest.shared.withdrawHint"), disabled: approvalFlow.busy !== null, onSelect: approvalFlow.withdraw },
+                  canDelete && { key: "delete", label: t("purchaseRequestDoc.deleteConfirmTitle"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+                ]}
+              />
+              {primaryAction && actionButton(primaryAction, true)}
+            </div>
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
+      <div className="px-4 md:px-8 py-6 flex flex-col gap-5 print:hidden">
         {isDraftStatus && draftBackup.recovered && draftBackup.recoveredAt !== null && (
           <DraftRecoveryBanner
             savedAt={draftBackup.recoveredAt}
@@ -612,399 +726,412 @@ export function PurchaseRequestDocument({
           />
         )}
 
-        {/* ขั้น Final ของใบขอซื้อไม่ได้จบที่ "อนุมัติแล้ว" อีกแล้วตั้งแต่ 2026-09-09 — ยังต้องผ่านสโตร์
-            แล้วถึงจัดซื้อ · ใช้ช่อง finalHint ที่แถบมีอยู่แล้ว ไม่เพิ่มสถานะที่ 4 ให้ทั้งระบบ */}
-        <DocumentStatusStepper
-          status={doc.status}
-          rejectionComment={doc.rejectionComment ?? ""}
-          approverLabel={t("purchaseRequestDoc.approverLabel")}
-          approvedByUserId={doc.approvedByUserId}
-          approvedByName={doc.approvedBy}
-          approvedAt={doc.approvedAt}
-          finalHint={
-            doc.storeStage === "pending" ? t("purchaseRequestDoc.store.hintPending")
-            : doc.storeStage === "forwarded" ? t("purchaseRequestDoc.store.hintForwarded")
-            : doc.storeStage === "closed" ? t("purchaseRequestDoc.store.hintClosed")
-            : undefined
-          }
+        {/* ขั้น Final ของใบขอซื้อไม่ได้จบที่ "อนุมัติแล้ว" ตั้งแต่ 2026-09-09 — ยังต้องผ่านสโตร์แล้วถึงจัดซื้อ
+            แถบนี้แสดงครบ 6 ขั้น คำนวณจากฟิลด์ที่มีอยู่ (ดู purchaseRequestSteps.ts) ไม่เพิ่มสถานะใหม่ให้ทั้งระบบ */}
+        <DocumentStepper
+          steps={progress.steps.map((k) => ({ label: stepLabel[k] }))}
+          current={progress.current}
+          ariaLabel={t("purchaseRequest.shared.stepsAria")}
         />
-        {/* ออกใบสั่งซื้อจากใบขอซื้อ (2026-09-21) — เจ้าของข้อ 7: ใบขอซื้อใบเดียว "อาจจะเปิดซื้อจาก
-            หลายบริษัทก็ได้ คือที่ติ้กไปแล้วก็เวลาจะเปิด PO ก็จะมีให้เลือกว่าจะเอาทั้งหมดหรือเอาแค่ที่ติ๊ก"
+        <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
-            การติ๊กเป็นแค่ state ของหน้าจอ ไม่ใช่สถานะอนุมัติรายบรรทัดที่เก็บลงฐานข้อมูล (เจ้าของยืนยัน)
-            ส่วน "ซื้อไปแล้วหรือยัง" มาจาก purchasedLines ที่เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง ไม่ใช่ธงบนใบนี้
-            ลบใบสั่งซื้อทิ้งแล้วบรรทัดจึงกลับมาซื้อได้เอง */}
-        {buyCardVisible && (
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-3">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                  <ShoppingBag size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.buy.create")}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {orderedCount >= buyableLines.length
-                    ? t("purchaseRequestDoc.buy.summaryAll").replace("{total}", String(buyableLines.length))
-                    : t("purchaseRequestDoc.buy.summary")
-                        .replace("{done}", String(orderedCount))
-                        .replace("{total}", String(buyableLines.length))}
-                </p>
-              </div>
-              <button
-                onClick={() => setBuyDialogOpen(true)}
-                disabled={creatingPo || remainingLines.length === 0 || doc.purchasingStage === "review"}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
-              >
-                {creatingPo ? <Loader2 size={13} className="animate-spin" /> : <ShoppingBag size={13} />}
-                {t("purchaseRequestDoc.buy.create")}
-              </button>
-            </div>
-
-            {doc.purchasingStage === "review" && (
-              <p className="text-xs text-[#a75d1a]">{t("purchaseRequestDoc.buy.needApproval")}</p>
-            )}
-            {/* ฉบับแก้ไขเริ่มนับรายการที่ซื้อแล้วใหม่ (บรรทัดคง id เดิม แต่ใบสั่งซื้อยังชี้ฉบับก่อน) —
-                เลือกยอมรับตามความหมายของ Rewrite ทั้งระบบ แต่ต้องเตือนไม่ให้ซื้อซ้ำโดยไม่รู้ตัว */}
-            {isRevision && orderedCount === 0 && (
-              <p className="text-xs text-[#a75d1a] flex items-start gap-1.5">
-                <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {t("purchaseRequestDoc.buy.rewriteWarning")}
-              </p>
-            )}
-
-            <ul className="space-y-1">
-              {buyableLines.map((line) => {
-                const orderedIn = purchasedLines[line.id] ?? [];
-                const ordered = orderedIn.length > 0;
-                return (
-                  <li key={line.id} className="flex items-start gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={!ordered && buySelection.includes(line.id)}
-                      disabled={ordered}
-                      onChange={(e) => setBuySelection((prev) => (e.target.checked ? [...prev, line.id] : prev.filter((x) => x !== line.id)))}
-                      aria-label={line.description}
-                      className="mt-0.5 accent-[#c9a84c] disabled:opacity-40"
-                    />
-                    <span className={ordered ? "line-through text-muted-foreground" : "text-foreground"}>
-                      {line.description} · {(line.qtyRequested ?? 0).toLocaleString()} {line.unit}
-                    </span>
-                    {ordered && (
-                      <span className="text-muted-foreground whitespace-nowrap">
-                        — {t("purchaseRequestDoc.buy.alreadyOrdered")}: {orderedIn.join(", ")}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-        {/* การ์ดของฝ่ายจัดซื้อ (2026-09-21) — ขั้นสุดท้ายของใบก่อนออกใบสั่งซื้อ
-            อยู่เหนือกล่องแก้ไขสีส้ม เพราะเป็นปุ่มที่จบงานของการแก้ ไม่ใช่ส่วนหนึ่งของการแก้ */}
-        {purchasingCardVisible && (
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <ShoppingCart size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.purchasing.title")}
-            </h2>
-            {doc.purchasingStage === "approved" ? (
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="flex items-start gap-2">
-                  <Lock size={15} className="text-[#3f8f5f] mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-[#3f8f5f]">{t("purchaseRequestDoc.purchasing.approvedBanner")}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("purchaseRequestDoc.purchasing.approvedBy")
-                        .replace("{name}", doc.purchasingDeptBy || "")
-                        .replace("{date}", doc.purchasingDeptAt ? formatQuoteDateThai(doc.purchasingDeptAt) : "")}
-                    </p>
-                  </div>
-                </div>
-                {/* ปุ่มถอนโชว์เสมอ — เซิร์ฟเวอร์เป็นคนบอกว่าถอนไม่ได้เพราะออกใบสั่งซื้อไปแล้วกี่ใบ
-                    หน้านี้ไม่ได้โหลดรายการใบสั่งซื้อมา การเดาเองแล้วซ่อนปุ่มจะผิดได้ง่ายกว่า */}
-                <button
-                  onClick={() => setConfirmPurchasingReopen(true)}
-                  disabled={purchasingBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white text-muted-foreground rounded-lg font-medium hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
-                >
-                  <Undo2 size={13} /> {t("purchaseRequestDoc.purchasing.reopen")}
-                </button>
-              </div>
-            ) : doc.storeStage === "pending" ? (
-              /* ยังรอสโตร์ — เซิร์ฟเวอร์ปฏิเสธการอนุมัติในขั้นนี้ ปุ่มที่ถูกต้องคือ "ดึงมาที่จัดซื้อ" */
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <p className="text-xs text-muted-foreground flex-1 min-w-[16rem]">{t("purchaseRequestDoc.purchasing.pullHelp")}</p>
-                <button
-                  onClick={() => setConfirmPurchasingPull(true)}
-                  disabled={purchasingBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c9a84c]/50 text-[#a7841a] rounded-lg font-medium hover:bg-[#c9a84c]/10 transition-colors disabled:opacity-50"
-                >
-                  {purchasingBusy ? <Loader2 size={13} className="animate-spin" /> : <PackageMinus size={13} />}
-                  {t("purchaseRequestDoc.purchasing.pull")}
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <p className="text-xs text-muted-foreground flex-1 min-w-[16rem]">{t("purchaseRequestDoc.purchasing.help")}</p>
-                <button
-                  onClick={() => setConfirmPurchasingApprove(true)}
-                  disabled={purchasingBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
-                >
-                  {purchasingBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                  {t("purchaseRequestDoc.purchasing.approve")}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
         {/* จัดซื้อกำลังแก้ใบที่หัวหน้าเซ็นไปแล้ว — ต้องเห็นชัดว่าไม่ใช่การแก้ใบร่างธรรมดา */}
         {purchasingEditMode && (
-          <div className="bg-[#e08a3c]/8 border border-[#e08a3c]/30 rounded-xl p-4 space-y-2">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={15} className="text-[#a75d1a] mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-[#a75d1a]">{t("purchaseRequestDoc.purchasingEdit.title")}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseRequestDoc.purchasingEdit.help")}</p>
+          <div className="rounded-xl bg-[#fdf3e0] border border-[#efd3a0] px-4 py-3.5 flex gap-3">
+            <AlertTriangle size={18} className="text-[#8a5a00] flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 flex flex-col gap-2.5">
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm font-semibold text-[#6b4600]">{t("purchaseRequestDoc.purchasingEdit.title")}</p>
+                <p className="text-[13px] text-[#6b4600] leading-relaxed">{t("purchaseRequestDoc.purchasingEdit.help")}</p>
               </div>
+              <input
+                value={purchasingEditNote}
+                onChange={(e) => setPurchasingEditNote(e.target.value)}
+                placeholder={t("purchaseRequestDoc.purchasingEdit.notePlaceholder")}
+                aria-label={t("purchaseRequestDoc.purchasingEdit.notePlaceholder")}
+                className={`${field.input} w-full`}
+              />
+              {(doc.purchasingEdits ?? []).length > 0 && (
+                <ul className="flex flex-col gap-1">
+                  {(doc.purchasingEdits ?? []).map((e, i) => (
+                    <li key={`${e.at}-${i}`} className="text-xs text-[#6b4600]">
+                      <span className="tabular-nums">{formatQuoteDateThai(e.at.slice(0, 10))}</span> · {e.byName}
+                      {e.note.trim() ? ` — ${e.note}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <input
-              value={purchasingEditNote}
-              onChange={(e) => setPurchasingEditNote(e.target.value)}
-              placeholder={t("purchaseRequestDoc.purchasingEdit.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-card border border-[#c3ccda] bg-white rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            {(doc.purchasingEdits ?? []).length > 0 && (
-              <ul className="space-y-1 pt-1">
-                {(doc.purchasingEdits ?? []).map((e, i) => (
-                  <li key={`${e.at}-${i}`} className="text-xs text-muted-foreground">
-                    <span className="font-mono">{formatQuoteDateThai(e.at.slice(0, 10))}</span> · {e.byName}
-                    {e.note.trim() ? ` — ${e.note}` : ""}
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         )}
-        <RejectionNotice comment={doc.rejectionComment ?? ""} />
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold">{t("purchaseRequestDoc.title")}</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">{t("purchaseRequestDoc.jobCodePrefix")} {doc.jobCode}</p>
-          </div>
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* ผู้จำหน่าย / โทร.ผู้จำหน่าย / เครดิต / ขนส่งโดย ถูกถอดออก 2026-08-31 ตามที่เจ้าของสั่ง
-                — คนขอซื้อไม่ใช่คนกรอกช่องพวกนี้ ฝ่ายจัดซื้อกรอกตอนออกใบสั่งซื้อจากทะเบียนผู้ขาย */}
-            <div>
-              <label htmlFor="pr-issueDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.issueDate")}</label>
-              <input id="pr-issueDate" type="date" disabled={!editable} value={draft.issueDate}
-                onChange={(e) => setDraft({ ...draft, issueDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="pr-neededByDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.neededByDate")}</label>
-              <input id="pr-neededByDate" type="date" disabled={!editable} value={draft.neededByDate}
-                onChange={(e) => setDraft({ ...draft, neededByDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
 
-            <div className="sm:col-span-2">
-              <label htmlFor="pr-deliveryLocation" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryLocation")}</label>
-              <input id="pr-deliveryLocation" disabled={!editable} value={draft.deliveryLocation}
-                onChange={(e) => setDraft({ ...draft, deliveryLocation: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="pr-deliveryContact" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryContact")}</label>
-              <input id="pr-deliveryContact" disabled={!editable} value={draft.deliveryContact}
-                onChange={(e) => setDraft({ ...draft, deliveryContact: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="pr-deliveryPhone" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryPhone")}</label>
-              <input id="pr-deliveryPhone" disabled={!editable} value={draft.deliveryPhone}
-                onChange={(e) => setDraft({ ...draft, deliveryPhone: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="pr-headerRemark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.headerRemark")}</label>
-              <textarea id="pr-headerRemark" rows={3} disabled={!editable} value={draft.headerRemark}
-                onChange={(e) => setDraft({ ...draft, headerRemark: e.target.value })}
-                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-70" />
-            </div>
-          </div>
-        </div>
+        <DocumentColumns
+          main={
+            <>
+              <SectionCard title={t("purchaseRequestDoc.infoTitle")}>
+                {/* ผู้จำหน่าย / โทร.ผู้จำหน่าย / เครดิต / ขนส่งโดย ถูกถอดออก 2026-08-31 ตามที่เจ้าของสั่ง
+                    — คนขอซื้อไม่ใช่คนกรอกช่องพวกนี้ ฝ่ายจัดซื้อกรอกตอนออกใบสั่งซื้อจากทะเบียนผู้ขาย */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
+                  <ReadonlyField label={t("purchaseRequest.col.jobCode")} value={doc.jobCode} mono />
+                  <ReadonlyField label={t("purchaseRequest.code.label")} value={<><span className="font-mono">{purchaseRequestCodeOf(doc)}</span> — {deptLabel}</>} />
+                  {editable ? (
+                    <>
+                      <Field label={t("purchaseRequestDoc.field.issueDate")} htmlFor="pr-issueDate">
+                        <input id="pr-issueDate" type="date" value={draft.issueDate} onChange={(e) => setDraft({ ...draft, issueDate: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("purchaseRequestDoc.field.neededByDate")} htmlFor="pr-neededByDate">
+                        <input id="pr-neededByDate" type="date" value={draft.neededByDate} onChange={(e) => setDraft({ ...draft, neededByDate: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("purchaseRequestDoc.field.deliveryContact")} htmlFor="pr-deliveryContact">
+                        <input id="pr-deliveryContact" value={draft.deliveryContact} onChange={(e) => setDraft({ ...draft, deliveryContact: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("purchaseRequestDoc.field.deliveryPhone")} htmlFor="pr-deliveryPhone">
+                        <input id="pr-deliveryPhone" value={draft.deliveryPhone} onChange={(e) => setDraft({ ...draft, deliveryPhone: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("purchaseRequestDoc.field.deliveryLocation")} htmlFor="pr-deliveryLocation" className="sm:col-span-3">
+                        <input id="pr-deliveryLocation" value={draft.deliveryLocation} onChange={(e) => setDraft({ ...draft, deliveryLocation: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("purchaseRequestDoc.field.headerRemark")} htmlFor="pr-headerRemark" className="sm:col-span-3">
+                        <textarea id="pr-headerRemark" rows={3} value={draft.headerRemark} onChange={(e) => setDraft({ ...draft, headerRemark: e.target.value })} className={`${field.textarea} w-full resize-y`} />
+                      </Field>
+                    </>
+                  ) : (
+                    <>
+                      <ReadonlyField label={t("purchaseRequestDoc.field.issueDate")} value={dateText(doc.issueDate)} />
+                      <ReadonlyField label={t("purchaseRequestDoc.field.neededByDate")} value={dateText(doc.neededByDate)} />
+                      <ReadonlyField label={t("purchaseRequestDoc.field.deliveryContact")} value={doc.deliveryContact} />
+                      <ReadonlyField label={t("purchaseRequestDoc.field.deliveryPhone")} value={doc.deliveryPhone} />
+                      <ReadonlyField label={t("purchaseRequestDoc.field.deliveryLocation")} value={doc.deliveryLocation} className="sm:col-span-3" />
+                      <ReadonlyField label={t("purchaseRequestDoc.field.headerRemark")} value={doc.headerRemark} className="sm:col-span-3 whitespace-pre-line" />
+                    </>
+                  )}
+                </div>
+              </SectionCard>
 
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-          <div data-tour="prdoc-addline" className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-sm font-semibold text-foreground">{t("purchaseRequestDoc.linesTitle")}</h2>
+              {/* ไฟล์แนบ — เจ้าของสั่งไว้ 2026-09-02 ("ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย")
+                  ใช้ระบบแนบไฟล์กลางตัวเดียวกับใบสั่งงาน · ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้
+                  เพราะใบเสนอราคาผู้ขาย/แคตตาล็อกมักตามมาหลังใบอนุมัติแล้ว */}
+              <DocumentAttachmentsCard
+                attachments={doc.attachments ?? []}
+                disabled={!canEdit}
+                onUpload={async (file) => { const updated = await uploadPurchaseRequestAttachment(doc.id, file); setDoc(updated); }}
+                onDelete={async (attachmentId) => { const updated = await deletePurchaseRequestAttachment(doc.id, attachmentId); setDoc(updated); }}
+              />
+
+              {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
+                  ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+              {isRevision && (
+                <SectionCard title={<span id="pr-revisionNote-heading">{t("docRevision.noteTitle")}</span>} subtitle={t("docRevision.noteHelp")}>
+                  <textarea
+                    rows={4}
+                    disabled={!editable}
+                    aria-labelledby="pr-revisionNote-heading"
+                    value={draft.revisionNote}
+                    onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+                    placeholder={t("docRevision.notePlaceholder")}
+                    className={`${field.textarea} w-full resize-y`}
+                  />
+                </SectionCard>
+              )}
+            </>
+          }
+          rail={
+            <>
+              {isFinal && doc.storeStage !== "pending" && doc.storeStage !== "closed" && progress.toBuy > 0 ? (
+                <RailSummaryCard
+                  label={t("purchaseRequestDoc.summary.ordered")}
+                  value={`${progress.ordered} / ${progress.toBuy}`}
+                  valueNote={t("purchaseRequestDoc.summary.unit")}
+                  progress={{ value: progress.ordered, max: progress.toBuy, label: t("purchaseRequestDoc.summary.ordered") }}
+                  rows={[
+                    { label: t("purchaseRequestDoc.summary.toBuy"), value: itemsText(progress.toBuy) },
+                    { label: t("purchaseRequestDoc.summary.fromStock"), value: itemsText(progress.fromStock) },
+                    { label: t("purchaseRequestDoc.summary.poList"), value: progress.purchaseOrders.length > 0 ? <span className="font-mono text-[12.5px]">{progress.purchaseOrders.join(", ")}</span> : "—" },
+                  ]}
+                />
+              ) : (
+                <RailSummaryCard
+                  label={t("purchaseRequestDoc.summary.requestLines")}
+                  value={String(draft.lines.length)}
+                  valueNote={t("purchaseRequestDoc.summary.unit")}
+                  rows={[
+                    { label: t("purchaseRequest.col.jobCode"), value: doc.jobCode ? <span className="font-mono text-[12.5px]">{doc.jobCode}</span> : "—" },
+                    { label: t("purchaseRequestDoc.field.neededByDate"), value: dateText(draft.neededByDate) || "—" },
+                    ...(isFinal && doc.storeStage === "closed" ? [{ label: t("purchaseRequestDoc.summary.fromStock"), value: itemsText(progress.fromStock) }] : []),
+                  ]}
+                />
+              )}
+
+              <RailCard title={t("purchaseRequestDoc.signatoriesTitle")}>
+                {editable ? (
+                  signatories.map(([nameField, dateField, label]) => (
+                    <div key={nameField} className="flex flex-col gap-1.5">
+                      <label htmlFor={`pr-${nameField}`} className={field.label}>{label}</label>
+                      <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-2">
+                        <input id={`pr-${nameField}`} value={draft[nameField]} onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })} className={`${field.input} w-full min-w-0`} />
+                        <input type="date" aria-label={`${t("materialRequisitionDoc.field.date")} — ${label}`} value={draft[dateField]} onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })} className={`${field.input} w-full min-w-0 px-2`} />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  signatories.map(([nameField, dateField, label]) => (
+                    <PersonRow key={nameField} role={label} name={doc[nameField]} date={dateText(doc[dateField])} />
+                  ))
+                )}
+                {doc.purchasingStage === "approved" && (
+                  <div className="px-3 py-2.5 rounded-lg bg-[#e6f4ec] text-[#14603b] text-[13px] flex items-start gap-2">
+                    <Lock size={14} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      {t("purchaseRequestDoc.purchasing.approvedBanner")}
+                      {(doc.purchasingDeptBy || doc.purchasingDeptAt) && (
+                        <span className="block text-xs mt-0.5">
+                          {t("purchaseRequestDoc.purchasing.approvedBy")
+                            .replace("{name}", doc.purchasingDeptBy || "")
+                            .replace("{date}", doc.purchasingDeptAt ? formatQuoteDateThai(doc.purchasingDeptAt) : "")}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </RailCard>
+
+              <StepHint tone={nextStep.tone} title={t("purchaseRequest.shared.nextStep")}>{nextStep.text}</StepHint>
+            </>
+          }
+        />
+
+        {/* รายการ + ช่องติ๊กออกใบสั่งซื้อ (2026-09-30 รวมการ์ด "ออกใบสั่งซื้อ" เดิมเข้ามาในตารางนี้)
+            เจ้าของข้อ 7 (2026-09-21): ใบขอซื้อใบเดียว "อาจจะเปิดซื้อจากหลายบริษัทก็ได้ คือที่ติ้กไปแล้วก็เวลาจะเปิด PO
+            ก็จะมีให้เลือกว่าจะเอาทั้งหมดหรือเอาแค่ที่ติ๊ก" · การติ๊กเป็น state ของหน้าจอล้วน ไม่ได้บันทึก ·
+            "ซื้อไปแล้วหรือยัง" มาจาก purchasedLines ที่เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง ลบใบสั่งซื้อทิ้งแล้วบรรทัดกลับมาซื้อได้เอง */}
+        <section className={surface.card}>
+          <div data-tour="prdoc-addline" className={`${surface.cardHead} flex-wrap`}>
+            <h2 className={surface.cardTitle}>{t("purchaseRequestDoc.linesTitle")}</h2>
+            <span className="flex-1 text-[13px] text-muted-foreground">
+              {buyMode
+                ? t("purchaseRequestDoc.lines.summaryBuy").replace("{n}", String(doc.lines.length)).replace("{buy}", String(progress.toBuy)).replace("{done}", String(progress.ordered))
+                : itemsText(draft.lines.length)}
+            </span>
+            {buyMode && remainingLines.length > 0 && (
+              <span className="text-[13px] text-[#3d5173]" role="status" aria-live="polite">
+                {t("purchaseRequestDoc.lines.selected").replace("{n}", String(selectedRemaining.length))}
+              </span>
+            )}
             {editable && (
               <div className="flex items-center gap-2">
-                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <Plus size={13} /> {t("purchaseRequestDoc.addFromCatalog")}
+                <button type="button" onClick={() => openProductPicker()} className={btn.secondarySm}>
+                  <Plus size={15} /> {t("purchaseRequestDoc.addFromCatalog")}
                 </button>
-                <button onClick={addFreeLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <Plus size={13} /> {t("purchaseRequestDoc.addFreeLine")}
+                <button type="button" onClick={addFreeLine} className={btn.secondarySm}>
+                  <Plus size={15} /> {t("purchaseRequestDoc.addFreeLine")}
                 </button>
               </div>
             )}
           </div>
           <div data-tour="prdoc-lines">
-          {draft.lines.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">{t("purchaseRequestDoc.linesEmpty")}</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    {[
-                      t("purchaseRequestDoc.col.productCode"), t("purchaseRequestDoc.col.description"), t("purchaseRequestDoc.col.unit"),
-                      t("purchaseRequestDoc.col.warehouseRemaining"), t("purchaseRequestDoc.col.qtyRequested"), t("purchaseRequestDoc.col.neededByDate"),
-                      t("purchaseRequestDoc.col.department"), t("purchaseRequestDoc.col.costCode"), "",
-                    ].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.lines.map((line) => {
-                    const isCatalogLine = !!line.productId;
-                    return (
-                      <Fragment key={line.id}>
-                      <tr className="border-b border-border/50">
-                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{line.productCode}</td>
-                        <td className="px-3 py-2 min-w-[200px]">
-                          {isCatalogLine ? (
-                            <span className="text-xs text-foreground">
-                              {line.description}
-                              <KitBreakdown productId={line.productId} qty={line.qtyRequested} kits={kits} />
-                            </span>
-                          ) : (
-                            <input disabled={!editable} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
-                              placeholder={t("purchaseRequestDoc.freeDescriptionPlaceholder")}
-                              className="w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {isCatalogLine ? (
-                            <span className="text-xs text-muted-foreground">{line.unit}</span>
-                          ) : (
-                            <input disabled={!editable} value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })}
-                              className="w-16 text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input disabled={!editable} value={line.warehouseRemainingQty} onChange={(e) => updateLine(line.id, { warehouseRemainingQty: e.target.value })}
-                            className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input type="number" disabled={!editable} value={line.qtyRequested ?? ""} onChange={(e) => updateLine(line.id, { qtyRequested: e.target.value === "" ? null : Number(e.target.value) })}
-                            className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input type="date" disabled={!editable} value={line.neededByDate} onChange={(e) => updateLine(line.id, { neededByDate: e.target.value })}
-                            className="w-32 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {/* พิมพ์รหัสเองได้เหมือนเดิม แต่พิมพ์ไม่กี่ตัวก็ขึ้นรายการจากทะเบียนให้เลือก */}
-                          <Combobox
-                            disabled={!editable}
-                            value={line.departmentCode}
-                            onChange={(next) => updateLine(line.id, { departmentCode: next })}
-                            options={codeComboboxOptions(codeEntries, "department")}
-                            ariaLabel={t("purchaseRequestDoc.col.department")}
-                            className="w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
-                          />
-                        </td>
-                        {/* รหัสบัญชี — เก็บและ sanitize มาตั้งแต่ 2026-08-27 แต่ไม่เคยมีช่องกรอก
-                            จนกระทั่งมีทะเบียนรหัสให้เลือก (ฟิลด์ตายที่เพิ่งได้ใช้จริง) */}
-                        <td className="px-2 py-1.5">
-                          <Combobox
-                            disabled={!editable}
-                            value={line.costCode}
-                            onChange={(next) => updateLine(line.id, { costCode: next })}
-                            options={codeComboboxOptions(codeEntries, "account")}
-                            ariaLabel={t("purchaseRequestDoc.col.costCode")}
-                            className="w-28 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {editable && (
-                            <button onClick={() => removeLine(line.id)} title={t("purchaseRequestDoc.removeLine")} className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
-                              <X size={13} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                      {/* บรรทัดรายละเอียดย่อย — แถวของตัวเองใต้รายการหลัก เยื้องเข้ามาเหมือนใบสั่งผลิต
-                          ซ่อนทั้งแถวเมื่อเอกสารล็อกแล้วและไม่มีบรรทัดย่อย จะได้ไม่มีแถวว่างเปล่าคั่นตาราง */}
-                      {((line.subDetails ?? []).length > 0 || editable) && (
-                        <tr className="border-b border-border/50">
-                          <td />
-                          <td colSpan={7} className="px-3 pb-2 space-y-1">
-                            {(line.subDetails ?? []).map((sd, i) => (
-                              <div key={i} className="flex items-center gap-2 pl-4">
-                                <CornerDownRight size={12} className="text-muted-foreground flex-shrink-0" />
+            {draft.lines.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">{t("purchaseRequestDoc.linesEmpty")}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className={`w-full ${editable ? "min-w-[1080px]" : "min-w-[960px]"}`}>
+                  <thead>
+                    <tr className={table.head}>
+                      {buyMode && <th className={`${table.th} w-10`}><span className="sr-only">{t("purchaseRequestDoc.buy.columnLabel")}</span></th>}
+                      <th className={`${table.th} w-8`}>#</th>
+                      <th className={table.th}>{t("purchaseRequestDoc.col.productCode")}</th>
+                      <th className={table.th}>{t("purchaseRequestDoc.col.description")}</th>
+                      <th className={table.th}>{t("purchaseRequestDoc.col.unit")}</th>
+                      <th className={`${table.th} text-right`}>{t("purchaseRequestDoc.col.warehouseRemaining")}</th>
+                      <th className={`${table.th} text-right`}>{t("purchaseRequestDoc.col.qtyRequested")}</th>
+                      <th className={table.th}>{t("purchaseRequestDoc.col.neededByDate")}</th>
+                      <th className={table.th}>{t("purchaseRequestDoc.col.department")}</th>
+                      <th className={table.th}>{t("purchaseRequestDoc.col.costCode")}</th>
+                      {buyMode && <th className={table.th}>{t("purchaseRequestDoc.buy.columnLabel")}</th>}
+                      {editable && <th className={`${table.th} w-10`}><span className="sr-only">{t("purchaseRequestDoc.removeLine")}</span></th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draft.lines.map((line, idx) => {
+                      const isCatalogLine = !!line.productId;
+                      const fromStock = line.storeDecision === "stock";
+                      const orderedIn = purchasedLines[line.id] ?? [];
+                      const ordered = orderedIn.length > 0;
+                      const ticked = !ordered && !fromStock && buySelection.includes(line.id);
+                      const subDetails = line.subDetails ?? [];
+                      return (
+                        <tr key={line.id} className={`border-b border-[#eef1f6] align-top ${ticked ? "bg-[#f4f7fc]" : "bg-white"}`}>
+                          {buyMode && (
+                            <td className={`${table.td} py-3.5`}>
+                              {!fromStock && (
                                 <input
-                                  disabled={!editable} value={sd}
-                                  onChange={(e) => updateLine(line.id, { subDetails: (line.subDetails ?? []).map((x, j) => (j === i ? e.target.value : x)) })}
-                                  placeholder={t("purchaseRequestDoc.subDetailPlaceholder")}
-                                  className="flex-1 min-w-[160px] text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
+                                  type="checkbox"
+                                  checked={ticked || ordered}
+                                  disabled={ordered}
+                                  onChange={(e) => setBuySelection((prev) => (e.target.checked ? [...prev, line.id] : prev.filter((x) => x !== line.id)))}
+                                  aria-label={line.description}
+                                  className="w-[18px] h-[18px] mt-0.5 accent-[#0b1d3a] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                                 />
-                                {editable && (
-                                  <button onClick={() => updateLine(line.id, { subDetails: (line.subDetails ?? []).filter((_, j) => j !== i) })}
-                                    title={t("purchaseRequestDoc.removeSubDetail")}
-                                    className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
-                                    <X size={11} />
+                              )}
+                            </td>
+                          )}
+                          <td className={`${table.td} py-3.5 text-[13px] text-muted-foreground tabular-nums`}>{idx + 1}</td>
+                          <td className={`${table.td} py-3.5 font-mono text-[13px] whitespace-nowrap ${line.productCode ? "text-foreground" : "text-[#8a97ad]"}`}>{line.productCode || "—"}</td>
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} min-w-[240px]`}>
+                            <div className="flex flex-col gap-1.5 min-w-0">
+                              {isCatalogLine || !editable ? (
+                                <span className="text-sm font-medium text-foreground">
+                                  {line.description || <span className="text-[#8a97ad]">—</span>}
+                                  <KitBreakdown productId={line.productId} qty={line.qtyRequested} kits={kits} />
+                                </span>
+                              ) : (
+                                <input value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
+                                  placeholder={t("purchaseRequestDoc.freeDescriptionPlaceholder")}
+                                  aria-label={t("purchaseRequestDoc.col.description")}
+                                  className={`${field.cell} w-full`} />
+                              )}
+                              {/* บรรทัดรายละเอียดย่อย — พิมพ์เยื้องใต้รายการหลัก · ใบที่ล็อกแล้วแสดงเป็นหัวข้อย่อย */}
+                              {editable ? subDetails.map((sd, i) => (
+                                <div key={i} className="flex items-center gap-1.5">
+                                  <CornerDownRight size={14} className="text-[#a3aec2] flex-shrink-0" />
+                                  <input
+                                    value={sd}
+                                    onChange={(e) => updateLine(line.id, { subDetails: subDetails.map((x, j) => (j === i ? e.target.value : x)) })}
+                                    placeholder={t("purchaseRequestDoc.subDetailPlaceholder")}
+                                    aria-label={t("purchaseRequestDoc.subDetailPlaceholder")}
+                                    className={`${field.cell} flex-1 min-w-0 text-[13px]`}
+                                  />
+                                  <button type="button" onClick={() => updateLine(line.id, { subDetails: subDetails.filter((_, j) => j !== i) })}
+                                    title={t("purchaseRequestDoc.removeSubDetail")} aria-label={t("purchaseRequestDoc.removeSubDetail")}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] flex-shrink-0">
+                                    <X size={14} />
                                   </button>
-                                )}
-                              </div>
-                            ))}
-                            {editable && (
-                              <button onClick={() => updateLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })}
-                                className="flex items-center gap-1.5 pl-4 text-xs text-foreground transition-colors">
-                                <Plus size={11} /> {t("purchaseRequestDoc.addSubDetail")}
-                              </button>
-                            )}
-                            {/* บรรทัดที่พิมพ์เอง (ไม่มี productId) = สินค้าที่ยังไม่มีในคลัง — ให้ขอรหัสจากสโตร์ได้ตรงนี้
-                                ปุ่มไม่ขึ้นกับสถานะเอกสาร เพราะการขอรหัสไม่ได้แก้เนื้อหาใบขอซื้อ */}
-                            {canRequestProductCode && !line.productId && line.description.trim() !== "" && (
-                              <button
-                                onClick={() => void requestProductCode(line)}
-                                disabled={requestingCodeFor === line.id}
-                                title={t("purchaseRequestDoc.requestCodeHint")}
-                                className="flex items-center gap-1.5 pl-4 text-xs text-[#c9a84c] hover:text-[#b8973f] transition-colors disabled:opacity-60">
-                                {requestingCodeFor === line.id ? <Loader2 size={11} className="animate-spin" /> : <PackagePlus size={11} />}
-                                {t("purchaseRequestDoc.requestCode")}
-                              </button>
+                                </div>
+                              )) : subDetails.map((sd, i) => (
+                                <span key={i} className="text-[12.5px] text-muted-foreground flex gap-1.5"><span aria-hidden="true">•</span>{sd}</span>
+                              ))}
+                              {editable && (
+                                <button type="button" onClick={() => updateLine(line.id, { subDetails: [...subDetails, ""] })} className={`${btn.text} self-start h-8 text-[13px]`}>
+                                  <Plus size={14} /> {t("purchaseRequestDoc.addSubDetail")}
+                                </button>
+                              )}
+                              {/* บรรทัดที่พิมพ์เอง (ไม่มี productId) = สินค้าที่ยังไม่มีในคลัง — ขอรหัสจากสโตร์ได้ตรงนี้
+                                  ปุ่มไม่ขึ้นกับสถานะเอกสาร เพราะการขอรหัสไม่ได้แก้เนื้อหาใบขอซื้อ */}
+                              {canRequestProductCode && !line.productId && line.description.trim() !== "" && (
+                                <button type="button" onClick={() => void requestProductCode(line)} disabled={requestingCodeFor === line.id}
+                                  title={t("purchaseRequestDoc.requestCodeHint")} className={`${btn.text} self-start h-8 text-[13px]`}>
+                                  {requestingCodeFor === line.id ? <Loader2 size={14} className="animate-spin" /> : <PackagePlus size={14} />}
+                                  {t("purchaseRequestDoc.requestCode")}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-sm text-[#3d5173]`}>
+                            {isCatalogLine || !editable ? line.unit : (
+                              <input value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })} aria-label={t("purchaseRequestDoc.col.unit")} className={`${field.cell} w-20`} />
                             )}
                           </td>
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm text-[#3d5173]`}>
+                            {editable ? (
+                              <input value={line.warehouseRemainingQty} onChange={(e) => updateLine(line.id, { warehouseRemainingQty: e.target.value })} aria-label={t("purchaseRequestDoc.col.warehouseRemaining")} className={`${field.cell} w-20 text-right tabular-nums`} />
+                            ) : (line.warehouseRemainingQty || <span className="text-[#8a97ad]">—</span>)}
+                          </td>
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm font-semibold`}>
+                            {editable ? (
+                              <input type="number" value={line.qtyRequested ?? ""} onChange={(e) => updateLine(line.id, { qtyRequested: e.target.value === "" ? null : Number(e.target.value) })} aria-label={t("purchaseRequestDoc.col.qtyRequested")} className={`${field.cell} w-24 text-right tabular-nums`} />
+                            ) : (line.qtyRequested ?? 0).toLocaleString()}
+                          </td>
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-sm text-[#3d5173] whitespace-nowrap`}>
+                            {editable ? (
+                              <input type="date" value={line.neededByDate} onChange={(e) => updateLine(line.id, { neededByDate: e.target.value })} aria-label={t("purchaseRequestDoc.col.neededByDate")} className={`${field.cell} w-[150px]`} />
+                            ) : (dateText(line.neededByDate) || <span className="text-[#8a97ad]">—</span>)}
+                          </td>
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
+                            {/* พิมพ์รหัสเองได้เหมือนเดิม แต่พิมพ์ไม่กี่ตัวก็ขึ้นรายการจากทะเบียนให้เลือก */}
+                            {editable ? (
+                              <Combobox
+                                value={line.departmentCode}
+                                onChange={(next) => updateLine(line.id, { departmentCode: next })}
+                                options={codeComboboxOptions(codeEntries, "department")}
+                                ariaLabel={t("purchaseRequestDoc.col.department")}
+                                className={`${field.cell} w-24 font-mono`}
+                              />
+                            ) : (line.departmentCode || <span className="text-[#8a97ad]">—</span>)}
+                          </td>
+                          {/* รหัสบัญชี — เก็บและ sanitize มาตั้งแต่ 2026-08-27 แต่ไม่เคยมีช่องกรอก
+                              จนกระทั่งมีทะเบียนรหัสให้เลือก (ฟิลด์ตายที่เพิ่งได้ใช้จริง) */}
+                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
+                            {editable ? (
+                              <Combobox
+                                value={line.costCode}
+                                onChange={(next) => updateLine(line.id, { costCode: next })}
+                                options={codeComboboxOptions(codeEntries, "account")}
+                                ariaLabel={t("purchaseRequestDoc.col.costCode")}
+                                className={`${field.cell} w-28 font-mono`}
+                              />
+                            ) : (line.costCode || <span className="text-[#8a97ad]">—</span>)}
+                          </td>
+                          {buyMode && (
+                            <td className={`${table.td} py-3.5`}>
+                              {fromStock ? (
+                                <StageTag tone="green">{t("purchaseRequest.stage.closed")}</StageTag>
+                              ) : ordered ? (
+                                <span className="font-mono text-[13px] font-medium text-[#1a5fb4]" title={t("purchaseRequestDoc.buy.alreadyOrdered")}>{orderedIn.join(", ")}</span>
+                              ) : (
+                                <span className="text-[13px] text-[#8a97ad]">{t("purchaseRequestDoc.buy.notYet")}</span>
+                              )}
+                            </td>
+                          )}
+                          {editable && (
+                            <td className={`${table.td} py-2`}>
+                              <button type="button" onClick={() => removeLine(line.id)} title={t("purchaseRequestDoc.removeLine")} aria-label={t("purchaseRequestDoc.removeLine")}
+                                className="w-9 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors">
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          )}
                         </tr>
-                      )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {buyMode && (
+            <div className="px-6 pt-3 pb-4 flex flex-col gap-1.5">
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Info size={14} className="flex-shrink-0" /> {t("purchaseRequestDoc.lines.footer")}
+              </p>
+              {doc.purchasingStage === "review" && (
+                <p className="text-xs text-[#8a5a00] flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="flex-shrink-0" /> {t("purchaseRequestDoc.buy.needApproval")}
+                </p>
+              )}
+              {/* ฉบับแก้ไขเริ่มนับรายการที่ซื้อแล้วใหม่ (บรรทัดคง id เดิม แต่ใบสั่งซื้อยังชี้ฉบับก่อน) —
+                  เลือกยอมรับตามความหมายของ Rewrite ทั้งระบบ แต่ต้องเตือนไม่ให้ซื้อซ้ำโดยไม่รู้ตัว */}
+              {isRevision && orderedCount === 0 && (
+                <p className="text-xs text-[#8a5a00] flex items-start gap-1.5">
+                  <AlertTriangle size={14} className="mt-px flex-shrink-0" /> {t("purchaseRequestDoc.buy.rewriteWarning")}
+                </p>
+              )}
             </div>
           )}
-          </div>
-        </div>
+        </section>
 
         {/*
           การ์ดของสโตร์ (2026-09-09) — ไหลงานที่เจ้าของสั่ง: อนุมัติ → สโตร์เช็คของ → มีของ = จ่ายจบ /
-          ไม่มี = ส่งต่อจัดซื้อ · ลอกโครงมาจากการ์ด "จ่ายของ (สโตร์)" ของใบเบิก ไม่ได้ออกแบบใหม่
-          ไม่ถูกพิมพ์ลงกระดาษ เพราะฟอร์ม FM-PU-05 ไม่มีส่วนนี้
+          ไม่มี = ส่งต่อจัดซื้อ · ไม่ถูกพิมพ์ลงกระดาษ เพราะฟอร์ม FM-PU-05 ไม่มีส่วนนี้
         */}
         {storeCardVisible && (
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                  <PackageCheck size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.store.title")}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseRequestDoc.store.help")}</p>
+          <section className={surface.card}>
+            <div className="px-6 py-4 border-b border-[#eef1f6] flex items-start gap-4 flex-wrap">
+              <div className="flex-1 min-w-[16rem] flex flex-col gap-1">
+                <h2 className={surface.cardTitle}>{t("purchaseRequestDoc.store.title")}</h2>
+                <p className="text-[13px] text-muted-foreground leading-relaxed">{t("purchaseRequestDoc.store.help")}</p>
               </div>
               {doc.storeReviewedAt && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[12.5px] text-[#1b7f4f] inline-flex items-center gap-1.5 pt-0.5">
+                  <CheckCircle2 size={14} />
                   {t("purchaseRequestDoc.store.reviewedBy")
                     .replace("{name}", doc.storeReviewedByName ?? "")
                     .replace("{date}", formatQuoteDateThai(doc.storeReviewedAt))}
@@ -1013,16 +1140,15 @@ export function PurchaseRequestDocument({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem]">
+              <table className="w-full min-w-[760px]">
                 <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    {[
-                      t("purchaseRequestDoc.col.description"), t("purchaseRequestDoc.col.qtyRequested"),
-                      t("purchaseRequestDoc.store.col.onHand"), t("purchaseRequestDoc.store.col.decision"),
-                      t("purchaseRequestDoc.store.col.issued"), t("purchaseRequestDoc.store.col.issueNow"),
-                    ].map((h, i) => (
-                      <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("purchaseRequestDoc.col.description")}</th>
+                    <th className={`${table.th} text-right`}>{t("purchaseRequestDoc.col.qtyRequested")}</th>
+                    <th className={`${table.th} text-right`}>{t("purchaseRequestDoc.store.col.onHand")}</th>
+                    <th className={table.th}>{t("purchaseRequestDoc.store.col.decision")}</th>
+                    <th className={`${table.th} text-right`}>{t("purchaseRequestDoc.store.col.issued")}</th>
+                    <th className={`${table.th} text-right`}>{t("purchaseRequestDoc.store.col.issueNow")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1032,173 +1158,126 @@ export function PurchaseRequestDocument({
                     const outstanding = storeOutstandingQtyOf(doc, line);
                     const decision = storeDecisions[line.id];
                     const short = decision === "stock" && stock !== undefined && outstanding > stock;
+                    const canIssueLine = decision === "stock" && !!line.productId && outstanding > 0;
+                    const whyNot = outstanding <= 0 ? t("purchaseRequestDoc.store.whyDone")
+                      : !line.productId ? t("purchaseRequestDoc.store.noProductCode")
+                      : t("purchaseRequestDoc.store.whyNotStock");
                     return (
-                      <tr key={line.id} className="border-b border-border/50">
-                        <td className="px-3 py-2 text-xs text-foreground">
-                          {line.description}
-                          <KitBreakdown productId={line.productId} qty={Number(issueQty[line.id] ?? "") || null} kits={kits} />
-                          {!line.productId && (
-                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 whitespace-nowrap">
-                              {t("purchaseRequestDoc.store.noProductCode")}
+                      <tr key={line.id} className="border-b border-[#eef1f6] bg-white">
+                        <td className={`${table.td} py-2.5`}>
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="text-sm font-medium text-foreground">
+                              {line.description}
+                              <KitBreakdown productId={line.productId} qty={Number(issueQty[line.id] ?? "") || null} kits={kits} />
                             </span>
-                          )}
-                          {short && (
-                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 whitespace-nowrap">
-                              <AlertTriangle size={10} /> {t("purchaseRequestDoc.store.shortBy").replace("{n}", (outstanding - (stock ?? 0)).toLocaleString())}
-                            </span>
-                          )}
+                            {!line.productId && <span className="text-xs text-[#8a5a00]">{t("purchaseRequestDoc.store.noProductCode")}</span>}
+                            {short && (
+                              <span className="text-xs text-[#8a5a00] inline-flex items-center gap-1">
+                                <AlertTriangle size={12} /> {t("purchaseRequestDoc.store.shortBy").replace("{n}", (outstanding - (stock ?? 0)).toLocaleString())}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{(line.qtyRequested ?? 0).toLocaleString()} {line.unit}</td>
-                        <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${short ? "text-[#a75d1a]" : "text-muted-foreground"}`}>
+                        <td className={`${table.td} text-right tabular-nums text-sm whitespace-nowrap`}>{(line.qtyRequested ?? 0).toLocaleString()} {line.unit}</td>
+                        <td className={`${table.td} text-right tabular-nums text-sm whitespace-nowrap ${short ? "text-[#8a5a00] font-semibold" : stock === undefined ? "text-[#8a97ad]" : "text-foreground"}`}>
                           {stock === undefined ? "—" : stock.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <div className="flex items-center gap-1" role="group" aria-label={t("purchaseRequestDoc.store.col.decision")}>
-                            {(["stock", "purchase"] as const).map((value) => (
-                              <button
-                                key={value}
-                                onClick={() => setStoreDecisions((prev) => ({ ...prev, [line.id]: value }))}
-                                className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${decision === value
-                                  ? "bg-[#0b1d3a] text-white border-[#c9a84c] font-semibold"
-                                  : "border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40"}`}
- >
- {value === "stock" ? t("purchaseRequestDoc.store.decisionStock") : t("purchaseRequestDoc.store.decisionPurchase")}
- </button>
- ))}
- </div>
- </td>
- <td className="px-3 py-2 text-xs font-mono text-foreground whitespace-nowrap">{issued.toLocaleString()}</td>
- <td className="px-2 py-1.5">
- <input
- type="number"
- disabled={decision !== "stock" || !line.productId || outstanding <= 0}
- value={issueQty[line.id] ?? ""}
- onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
- placeholder={outstanding > 0 ? String(outstanding) : ""}
- className="w-20 text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded px-1.5 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-50"
- />
- </td>
- </tr>
- );
- })}
- </tbody>
- </table>
- </div>
+                        <td className={`${table.td} whitespace-nowrap`}>
+                          <span role="radiogroup" aria-label={`${t("purchaseRequestDoc.store.col.decision")} — ${line.description}`} className="inline-flex bg-[#eef1f6] rounded-lg p-[3px] gap-0.5">
+                            {(["stock", "purchase"] as const).map((value) => {
+                              const on = decision === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={on}
+                                  onClick={() => setStoreDecisions((prev) => ({ ...prev, [line.id]: value }))}
+                                  className={`h-[30px] px-3 rounded-md text-[13px] transition-colors ${on
+                                    ? `bg-white font-semibold shadow-[0_1px_2px_rgba(11,29,58,0.12)] ${value === "stock" ? "text-[#1b7f4f]" : "text-[#8a5a00]"}`
+                                    : "font-medium text-muted-foreground hover:text-foreground"}`}
+                                >
+                                  {value === "stock" ? t("purchaseRequestDoc.store.decisionStock") : t("purchaseRequestDoc.store.decisionPurchase")}
+                                </button>
+                              );
+                            })}
+                          </span>
+                        </td>
+                        <td className={`${table.td} text-right tabular-nums text-sm`}>{issued.toLocaleString()}</td>
+                        <td className={`${table.td} py-2.5 text-right`}>
+                          {canIssueLine ? (
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              value={issueQty[line.id] ?? ""}
+                              onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                              placeholder={String(outstanding)}
+                              aria-label={`${t("purchaseRequestDoc.store.col.issueNow")} — ${line.description}`}
+                              className={`${field.cell} w-[100px] text-right tabular-nums`}
+                            />
+                          ) : (
+                            <span className="text-[#8a97ad]" title={whyNot}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
- <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
- <div className="sm:col-span-2">
- <label htmlFor="pr-store-remark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.remark")}</label>
- <input id="pr-store-remark" value={storeRemark} onChange={(e) => setStoreRemark(e.target.value)}
- className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
- </div>
- <div>
- <label htmlFor="pr-store-issuedate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issuedDate")}</label>
- <input id="pr-store-issuedate" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)}
- className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
- </div>
- </div>
- <div>
- <label htmlFor="pr-store-issueremark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issueRemark")}</label>
- <input id="pr-store-issueremark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)}
- className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
- </div>
+            <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start border-b border-[#eef1f6]">
+              <Field label={t("purchaseRequestDoc.store.remark")} htmlFor="pr-store-remark" className="sm:col-span-3">
+                <input id="pr-store-remark" value={storeRemark} onChange={(e) => setStoreRemark(e.target.value)} className={`${field.input} w-full`} />
+              </Field>
+              <Field label={t("purchaseRequestDoc.store.issuedDate")} htmlFor="pr-store-issuedate">
+                <input id="pr-store-issuedate" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={`${field.input} w-full`} />
+              </Field>
+              <Field label={t("purchaseRequestDoc.store.issueRemark")} htmlFor="pr-store-issueremark" className="sm:col-span-2">
+                <input id="pr-store-issueremark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)} className={`${field.input} w-full`} />
+              </Field>
+              <div className="sm:col-span-3 flex items-center justify-end gap-2.5 flex-wrap">
+                <button type="button" onClick={() => void saveStoreReview()} disabled={savingReview} className={btn.secondary}>
+                  {savingReview ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} {t("purchaseRequestDoc.store.saveReview")}
+                </button>
+                <button type="button" onClick={() => void saveStoreIssue()} disabled={savingIssue} className={btn.secondary}>
+                  {savingIssue ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />} {t("purchaseRequestDoc.store.saveIssue")}
+                </button>
+              </div>
+            </div>
 
- <div className="flex items-center gap-2 flex-wrap">
- <button onClick={() => void saveStoreReview()} disabled={savingReview}
- className="flex items-center gap-1.5 px-4 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-60">
- {savingReview ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} {t("purchaseRequestDoc.store.saveReview")}
- </button>
- <button onClick={() => void saveStoreIssue()} disabled={savingIssue}
- className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
- {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseRequestDoc.store.saveIssue")}
- </button>
- </div>
-
- {issueBatches.length > 0 && (
- <div className="border-t border-border pt-3 space-y-2">
- <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
- <History size={13} /> {t("purchaseRequestDoc.store.historyTitle")}
- </h3>
- {issueBatches.map((batch) => (
- <div key={batch.id} className="flex items-start justify-between gap-3 rounded-lg px-3 py-2">
- <div className="min-w-0">
- <p className="text-xs text-foreground">
- {t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(batch.seq))}
- <span className="text-muted-foreground font-mono ml-2">{formatQuoteDateThai(batch.issuedDate)}</span>
- </p>
- <p className="text-xs text-muted-foreground mt-0.5">
- {batch.lines.map((bl) => {
- const line = doc.lines.find((l) => l.id === bl.lineId);
- return `${line?.description ?? bl.lineId} ${bl.qty.toLocaleString()} ${line?.unit ?? ""}`;
+            {issueBatches.length > 0 && (
+              <div className="px-6 pt-4 pb-5 flex flex-col gap-2.5">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <History size={16} className="text-muted-foreground" /> {t("purchaseRequestDoc.store.historyTitle")}
+                </h3>
+                {issueBatches.map((batch) => (
+                  <div key={batch.id} className="px-3.5 py-3 border border-border rounded-lg flex items-center gap-4">
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                      <span className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">{t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(batch.seq))}</span>
+                        <span className="text-[13px] text-muted-foreground">{formatQuoteDateThai(batch.issuedDate)}</span>
+                      </span>
+                      <span className="text-[13px] text-[#3d5173]">
+                        {batch.lines.map((bl) => {
+                          const line = doc.lines.find((l) => l.id === bl.lineId);
+                          return `${line?.description ?? bl.lineId} ${bl.qty.toLocaleString()} ${line?.unit ?? ""}`;
                         }).join(" · ")}
                         {batch.remark.trim() ? ` — ${batch.remark}` : ""}
-                      </p>
+                      </span>
                     </div>
                     {batch.id === lastBatch?.id && (
-                      <button onClick={() => setCancelBatchTarget(batch)}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors whitespace-nowrap">
-                        <Undo2 size={11} /> {t("purchaseRequestDoc.store.cancelBatch")}
+                      <button type="button" onClick={() => setCancelBatchTarget(batch)}
+                        className="h-9 px-2.5 rounded-lg text-[#b93636] text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-[#fcebeb] transition-colors whitespace-nowrap flex-shrink-0">
+                        <Undo2 size={14} /> {t("purchaseRequestDoc.store.cancelBatch")}
                       </button>
                     )}
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </section>
         )}
-
-        {/* ไฟล์แนบ — เจ้าของสั่งไว้ 2026-09-02 ("ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย")
-            ใช้ระบบแนบไฟล์กลางตัวเดียวกับใบสั่งงาน · ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้
-            เพราะใบเสนอราคาผู้ขาย/แคตตาล็อกมักตามมาหลังใบอนุมัติแล้ว */}
-        <DocumentAttachmentsCard
-          attachments={doc.attachments ?? []}
-          disabled={!canEdit}
-          onUpload={async (file) => { const updated = await uploadPurchaseRequestAttachment(doc.id, file); setDoc(updated); }}
-          onDelete={async (attachmentId) => { const updated = await deletePurchaseRequestAttachment(doc.id, attachmentId); setDoc(updated); }}
-        />
-
-        {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
-            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
-        {getRevisionNumber(doc.id) > 0 && (
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
-            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
-            <textarea
-              rows={4}
-              disabled={!editable}
-              value={draft.revisionNote}
-              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
-              placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
-            />
-          </div>
-        )}
-
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">{t("purchaseRequestDoc.signatoriesTitle")}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-            {([
-              ["requestedBy", "requestedAt", t("purchaseRequestDoc.field.requestedBy")],
-              ["approvedBy", "approvedAt", t("purchaseRequestDoc.field.approvedBy")],
-              ["purchasingDeptBy", "purchasingDeptAt", t("purchaseRequestDoc.field.purchasingDeptBy")],
-            ] as const).map(([nameField, dateField, label]) => (
-              <div key={nameField} className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor={`pr-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
-                  <input id={`pr-${nameField}`} disabled={!editable} value={draft[nameField]}
-                    onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })}
-                    className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-                </div>
-                <div>
-                  <label htmlFor={`pr-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
-                  <input id={`pr-${dateField}`} type="date" disabled={!editable} value={draft[dateField]}
-                    onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })}
-                    className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       <PurchaseRequestPrintDocument purchaseRequest={doc} companyHeader={companyHeader} />
@@ -1209,15 +1288,26 @@ export function PurchaseRequestDocument({
         categories={categories}
         preferCategoryNames={MATERIAL_CATEGORY_NAMES}
         showStock
+        multiSelect
         onSelect={addProduct}
+        onSelectMany={addProducts}
         onClose={() => setPickerOpen(false)}
       />
+
+      {approvalFlow.dialogs}
 
       <ConfirmDialog
         open={cancelBatchTarget !== null}
         title={t("purchaseRequestDoc.store.cancelConfirmTitle")}
         message={t("purchaseRequestDoc.store.cancelConfirmBody")}
         danger
+        summary={cancelBatchTarget ? (
+          <SummaryBox
+            monoPrimary={false}
+            primary={`${t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(cancelBatchTarget.seq))} · ${formatQuoteDateThai(cancelBatchTarget.issuedDate)}`}
+            secondary={lastBatchSummary}
+          />
+        ) : undefined}
         busy={cancellingBatch}
         confirmLabel={t("purchaseRequestDoc.store.cancelBatch")}
         onConfirm={() => { if (cancelBatchTarget) void cancelStoreIssue(cancelBatchTarget); }}
@@ -1227,7 +1317,9 @@ export function PurchaseRequestDocument({
         open={confirmDelete}
         title={t("purchaseRequestDoc.deleteConfirmTitle")}
         message={t("purchaseRequestDoc.deleteConfirmMessage")}
+        confirmLabel={t("purchaseRequestDoc.deleteConfirmTitle")}
         danger
+        summary={summaryBox()}
         busy={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
@@ -1237,46 +1329,48 @@ export function PurchaseRequestDocument({
         title={t("purchaseRequestDoc.purchasing.approveConfirmTitle")}
         message={t("purchaseRequestDoc.purchasing.approveConfirmBody")}
         confirmLabel={t("purchaseRequestDoc.purchasing.approve")}
+        summary={summaryBox()}
         busy={purchasingBusy}
         onConfirm={() => void runPurchasingStage("approve")}
         onCancel={() => setConfirmPurchasingApprove(false)}
       />
-      {/* เลือกว่ารอบนี้จะเอารายการไหน — ทำเป็นกล่องเฉพาะกิจเพราะ ConfirmDialog รับปุ่มยืนยันได้แค่ปุ่มเดียว */}
+      {/* ออกใบสั่งซื้อ: เลือก "ทุกรายการที่ยังไม่ได้ซื้อ" หรือ "เฉพาะที่ติ๊กไว้" แล้วกดยืนยัน
+          (ดีไซน์ใหม่ 2026-09-30 — เดิมกดตัวเลือกแล้วสร้างใบสั่งซื้อทันที) */}
       {buyDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setBuyDialogOpen(false)} />
-          <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("purchaseRequestDoc.buy.dialogTitle")}</h2>
-            <p className="text-xs text-muted-foreground leading-relaxed">{t("purchaseRequestDoc.buy.dialogBody")}</p>
-            <div className="space-y-2 pt-1">
-              <button
-                onClick={() => void createPurchaseOrderFromRequest(null)}
-                disabled={creatingPo || remainingLines.length === 0}
-                className="w-full text-left px-3 py-2 text-xs border border-border rounded-lg hover:border-[#c9a84c]/50 transition-colors disabled:opacity-50"
-              >
-                {t("purchaseRequestDoc.buy.optionRemaining").replace("{n}", String(remainingLines.length))}
-              </button>
-              <button
-                onClick={() => void createPurchaseOrderFromRequest(selectedRemaining)}
-                disabled={creatingPo || selectedRemaining.length === 0}
-                className="w-full text-left px-3 py-2 text-xs border border-border rounded-lg hover:border-[#c9a84c]/50 transition-colors disabled:opacity-50"
-              >
-                {t("purchaseRequestDoc.buy.optionSelected").replace("{n}", String(selectedRemaining.length))}
-              </button>
-            </div>
-            <div className="flex justify-end pt-1">
-              <button onClick={() => setBuyDialogOpen(false)} disabled={creatingPo} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ChoiceDialog<"remaining" | "selected">
+          title={t("purchaseRequestDoc.buy.dialogTitle")}
+          description={t("purchaseRequestDoc.buy.dialogBody")}
+          icon={ShoppingBag}
+          options={[
+            {
+              key: "remaining",
+              label: t("purchaseRequestDoc.buy.optionRemaining").replace("{n}", String(remainingLines.length)),
+              items: remainingLines.map((l) => ({ label: l.description, qty: `${(l.qtyRequested ?? 0).toLocaleString()} ${l.unit}` })),
+              disabled: remainingLines.length === 0,
+            },
+            {
+              key: "selected",
+              label: t("purchaseRequestDoc.buy.optionSelected").replace("{n}", String(selectedRemaining.length)),
+              items: remainingLines.filter((l) => selectedRemaining.includes(l.id)).map((l) => ({ label: l.description, qty: `${(l.qtyRequested ?? 0).toLocaleString()} ${l.unit}` })),
+              disabled: selectedRemaining.length === 0,
+            },
+          ]}
+          value={buyChoice}
+          onChange={setBuyChoice}
+          confirmLabel={t("purchaseRequestDoc.buy.confirm").replace("{n}", String(buyChoice === "selected" ? selectedRemaining.length : remainingLines.length))}
+          confirmIcon={ArrowRight}
+          confirmDisabled={buyChoice === "selected" ? selectedRemaining.length === 0 : remainingLines.length === 0}
+          busy={creatingPo}
+          onConfirm={() => void createPurchaseOrderFromRequest(buyChoice === "selected" ? selectedRemaining : null)}
+          onCancel={() => setBuyDialogOpen(false)}
+        />
       )}
       <ConfirmDialog
         open={confirmPurchasingPull}
         title={t("purchaseRequestDoc.purchasing.pullConfirmTitle")}
         message={t("purchaseRequestDoc.purchasing.pullConfirmBody")}
         confirmLabel={t("purchaseRequestDoc.purchasing.pull")}
+        summary={summaryBox()}
         busy={purchasingBusy}
         onConfirm={() => void runPurchasingStage("pull")}
         onCancel={() => setConfirmPurchasingPull(false)}
@@ -1286,6 +1380,12 @@ export function PurchaseRequestDocument({
         title={t("purchaseRequestDoc.purchasing.reopenConfirmTitle")}
         message={t("purchaseRequestDoc.purchasing.reopenConfirmBody")}
         confirmLabel={t("purchaseRequestDoc.purchasing.reopen")}
+        tone="warning"
+        summary={summaryBox(
+          doc.purchasingDeptBy || doc.purchasingDeptAt
+            ? `${t("purchaseRequestDoc.purchasing.stageBadge")} ${t("purchaseRequestDoc.purchasing.approvedBy").replace("{name}", doc.purchasingDeptBy || "").replace("{date}", doc.purchasingDeptAt ? formatQuoteDateThai(doc.purchasingDeptAt) : "")}`
+            : undefined,
+        )}
         busy={purchasingBusy}
         onConfirm={() => void runPurchasingStage("reopen")}
         onCancel={() => setConfirmPurchasingReopen(false)}
@@ -1295,6 +1395,19 @@ export function PurchaseRequestDocument({
         title={t("docRevision.rewriteConfirmTitle")}
         message={t("docRevision.rewriteConfirmBody")}
         confirmLabel={t("docRevision.rewrite")}
+        summary={
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{t("purchaseRequest.shared.rewriteOriginal")}</span>
+              <span className="font-mono text-[13px] font-medium text-foreground">{doc.id}</span>
+            </span>
+            <ArrowRight size={16} className="text-[#8a97ad] flex-shrink-0" />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">{t("purchaseRequest.shared.rewriteNext")}</span>
+              <span className="font-mono text-[13px] font-semibold text-[#1a5fb4]">{getRevisionRoot(doc.id)}-R…</span>
+            </span>
+          </div>
+        }
         busy={rewriting}
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}

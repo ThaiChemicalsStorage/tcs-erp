@@ -1,25 +1,20 @@
 import { useState, type ReactNode } from "react";
-import { Hammer, Search, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
-import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import type { JobOrderSummary, JobOrderStatus } from "../../lib/jobOrder";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
-import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
+import { ApprovalPill, ListDateRangeSelect, paginate, rowOpenProps, useApprovalStatusLabel } from "../project/projectUi";
 
-const FILTER_ALL = "all";
+type TabKey = "all" | JobOrderStatus;
 
-const statusStyle: Record<JobOrderStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
-
-// แสดงตารางรายการใบสั่งงาน พร้อมตัวกรองสถานะและช่องค้นหา
-// Renders the Job Order list table with a status filter and search box.
+// แสดงตารางรายการใบสั่งงาน พร้อมแท็บสถานะ ช่องค้นหา และตัวกรองช่วงวันที่ (ดีไซน์ใหม่ 2026-09-30)
+// Renders the Job Order list: status tabs with counts, search + date-range toolbar, paged table.
 export function JobOrderList({
   jobOrders,
   currentUserId,
@@ -33,111 +28,103 @@ export function JobOrderList({
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
-  const statusLabel: Record<JobOrderStatus, string> = { Draft: t("materialRequisition.status.draft"), PendingApproval: t("materialRequisition.status.pendingApproval"), Final: t("materialRequisition.status.final") };
+  const statusLabel = useApprovalStatusLabel();
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="jo-filters"]', popover: { title: t("tour.jo.filters.title"), description: t("tour.jo.filters.desc"), side: "bottom" } },
     { element: '[data-tour="jo-table"]', popover: { title: t("tour.jo.table.title"), description: t("tour.jo.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("jobOrder", currentUserId, tourSteps);
-  const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  const [tab, setTab] = useState<TabKey>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
   const items = jobOrders.map((j) => ({ ...j, jobCode: j.jobCode ?? "", status: j.status ?? "Draft" }));
+  const tabs: { key: TabKey; label: string; count: number }[] = [
+    { key: "all", label: t("quotation.filterAll"), count: items.length },
+    ...(["Draft", "PendingApproval", "Final"] as const).map((s) => ({ key: s, label: statusLabel(s), count: items.filter((j) => j.status === s).length })),
+  ];
   const dateRangeResolved = resolveRange(dateRange);
   const filtered = items
     .filter((d) => isWithinRange(d.updatedAt, dateRangeResolved))
-    .filter((j) => filterStatus === FILTER_ALL || j.status === filterStatus)
+    .filter((j) => tab === "all" || j.status === tab)
     .filter((j) => !normalizedSearch || [j.id, j.jobCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
+  const paged = paginate(filtered, page);
+  const resetPage = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPage(1); };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("jobOrder.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("jobOrder.pageSubtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {headerAction}
-          <TourReplayButton onClick={tour.start} />
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={
+          <span className="inline-flex items-center gap-2">
+            {t("nav.group.project")}
+            <span className="text-[#c3ccda]" aria-hidden="true">·</span>
+            <span className="font-mono text-xs" title={t("project.list.formCode")}>{t("jobOrder.pageSubtitle")}</span>
+          </span>
+        }
+        title={t("jobOrder.pageTitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={headerAction}
+      />
 
-      <div data-tour="jo-filters" className="flex items-center gap-3 flex-wrap">
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("jobOrder.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
-            </button>
+      <ListCard>
+        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("jobOrder.list.tabsAria")} />
+        <div data-tour="jo-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={resetPage(setSearchQuery)}
+            searchPlaceholder={t("jobOrder.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+          </ListToolbar>
+        </div>
+
+        <div data-tour="jo-table" className="min-w-0">
+          {items.length === 0 ? (
+            <ListEmpty title={t("jobOrder.empty.title")} hint={t("jobOrder.empty.description")} />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("jobOrder.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px]">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("jobOrder.col.id")}</th>
+                    <th className={table.th}>{t("jobOrder.col.jobCode")}</th>
+                    <th className={table.th}>{t("jobOrder.col.status")}</th>
+                    <th className={table.th}>{t("jobOrder.col.updatedAt")}</th>
+                    <th className={`${table.th} w-10`} aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {paged.rows.map((j) => (
+                    <tr
+                      key={j.id}
+                      {...rowOpenProps(() => onOpen(j.id), `${t("jobOrder.openRow")} ${j.id}`)}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} ${table.code} whitespace-nowrap`}>{j.id}</td>
+                      <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{j.jobCode || <span className="text-[#8a97ad]">—</span>}</td>
+                      <td className={table.td}><ApprovalPill status={j.status} /></td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(j.updatedAt)}</td>
+                      <td className={table.td}>
+                        <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as JobOrderStatus]}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <div data-tour="jo-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        {items.length === 0 ? (
-          <EmptyState icon={Hammer} title={t("jobOrder.empty.title")} description={t("jobOrder.empty.description")} compact />
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Hammer size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t("jobOrder.noFilterResults")}</p>
-          </div>
-        ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {[t("jobOrder.col.id"), t("jobOrder.col.jobCode"), t("jobOrder.col.status"), t("jobOrder.col.updatedAt")].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((j) => (
-              <tr
-                key={j.id}
-                tabIndex={0}
-                role="button"
-                aria-label={`${t("jobOrder.openRow")} ${j.id}`}
-                onClick={() => onOpen(j.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(j.id); } }}
-                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-              >
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{j.id}</td>
-                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{j.jobCode || "—"}</td>
-                <td className="px-4 py-3.5">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[j.status]}`}>
-                    {statusLabel[j.status]}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(j.updatedAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+        {filtered.length > 0 && (
+          <ListPagination page={paged.current} pageCount={paged.pageCount} from={paged.from} to={paged.to} total={filtered.length} onPage={setPage} />
         )}
-      </div>
+      </ListCard>
     </div>
   );
 }

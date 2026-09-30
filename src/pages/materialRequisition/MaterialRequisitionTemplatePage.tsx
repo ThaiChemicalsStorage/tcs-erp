@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, X, LayoutTemplate, Pencil, Trash2, Loader2, Save, RotateCw } from "lucide-react";
+import { Plus, X, Trash2, Loader2, RotateCw, ChevronRight } from "lucide-react";
 import {
   type MaterialRequisitionTemplate, type MaterialRequisitionTemplateLine,
   fetchMaterialRequisitionTemplates, createMaterialRequisitionTemplate,
@@ -9,22 +9,25 @@ import {
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import { ProductPickerModal } from "../products/ProductPickerModal";
-import { EmptyState } from "../../components/EmptyState";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { PageHeader } from "../../components/PageHeader";
 import { Toast } from "../../components/Toast";
+import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListToolbar } from "../../components/ui/ListPage";
+import { Drawer } from "../../components/ui/Overlays";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { paginate, rowOpenProps, rowRemoveBtn } from "../project/projectUi";
 
 /**
  * หน้าทะเบียนเทมเพลตใบเบิกและใบคืนวัสดุ — เจ้าของสั่ง 2026-09-02:
  * *"เทมเพลตใบเบิกและคืนวัสดุ สร้างหน้าเพิ่มขึ้นมาเป็นเป็นหน้าเทมเพลต"*
  *
  * เทมเพลตหนึ่งตัวคือ "ชุดรายการที่ตั้งชื่อไว้" ที่หน้าใบเบิกกดเรียกมาเติมทั้งชุดได้ในคลิกเดียว
- * โครงหน้าลอกจาก `pages/vendors/VendorsPage.tsx` (รายการ + ฟอร์มในกล่อง + ยืนยันก่อนลบ) ส่วนตัวเลือก
- * สินค้าใช้ `ProductPickerModal` ตัวเดียวกับที่หน้าใบเบิกใช้ กรองด้วยหมวดวัสดุชุดเดียวกัน — คนใช้จึงเห็น
- * แคตตาล็อกหน้าตาเดิมทั้งสองที่
+ * ดีไซน์ใหม่ 2026-09-30: รายการเป็นตาราง (ทั้งแถวกดเปิด) · ฟอร์มแก้ไขย้ายจากกล่องกลางจอมาเป็นแผงด้านข้าง (Drawer)
+ * ลบเทมเพลตอยู่ในเมนู "เพิ่มเติม" ท้ายแผง · ตัวเลือกสินค้าติ๊กได้หลายรายการ (`ProductPickerModal` โหมด multiSelect)
  *
  * **สิทธิ์**: ไม่มีสิทธิ์ชุดใหม่ ดูได้ด้วย `materialRequisition:view` แก้ทะเบียนด้วย
  * `materialRequisition:edit` — เหตุผลอยู่ใน `api/_lib/materialRequisitionTemplateHandler.ts`
@@ -42,13 +45,15 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
 
-  /** `"new"` = กำลังสร้างตัวใหม่ · object = กำลังแก้ตัวนั้น · null = ปิดฟอร์ม */
+  /** `"new"` = กำลังสร้างตัวใหม่ · object = กำลังแก้ตัวนั้น · null = ปิดแผง */
   const [editing, setEditing] = useState<MaterialRequisitionTemplate | "new" | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [nameError, setNameError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MaterialRequisitionTemplate | null>(null);
@@ -76,21 +81,26 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
       || tpl.description.toLowerCase().includes(q)
       || tpl.lines.some((l) => l.productName.toLowerCase().includes(q) || l.productCode.toLowerCase().includes(q)));
   }, [templates, search]);
+  const paged = paginate(filtered, page);
 
-  const openNew = () => { setEditing("new"); setDraft(EMPTY_DRAFT); };
+  const openNew = () => { setEditing("new"); setDraft(EMPTY_DRAFT); setNameError(false); };
   const openEdit = (tpl: MaterialRequisitionTemplate) => {
     setEditing(tpl);
     setDraft({ name: tpl.name, description: tpl.description, lines: tpl.lines.map((l) => ({ ...l })) });
+    setNameError(false);
   };
 
-  const addProduct = (product: Product) => {
-    const categoryName = categories.find((c) => c.id === product.categoryId)?.name ?? "";
-    setDraft((prev) => ({ ...prev, lines: [...prev.lines, blankTemplateLine(product, categoryName)] }));
-    setPickerOpen(false);
+  /** เพิ่มหลายตัวจากตัวเลือกสินค้าทีเดียว — ตัดส่วนที่เกินเพดานรายการต่อเทมเพลตทิ้งพร้อมบอก */
+  const addProducts = (picked: Product[]) => {
+    const room = Math.max(0, MAX_TEMPLATE_LINES - draft.lines.length);
+    const accepted = picked.slice(0, room);
+    const categoryName = (p: Product) => categories.find((c) => c.id === p.categoryId)?.name ?? "";
+    setDraft((prev) => ({ ...prev, lines: [...prev.lines, ...accepted.map((p) => blankTemplateLine(p, categoryName(p)))] }));
+    if (accepted.length < picked.length) toast.show(t("mrTemplate.lineLimitReached").replace("{n}", String(MAX_TEMPLATE_LINES)));
   };
 
   const save = async () => {
-    if (!draft.name.trim()) { toast.show(t("mrTemplate.errorNameRequired")); return; }
+    if (!draft.name.trim()) { setNameError(true); toast.show(t("mrTemplate.errorNameRequired")); return; }
     setSaving(true);
     try {
       const saved = editing === "new" || editing === null
@@ -112,6 +122,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
     try {
       await deleteMaterialRequisitionTemplate(deleteTarget.id);
       setTemplates((prev) => prev.filter((x) => x.id !== deleteTarget.id));
+      if (editing !== null && editing !== "new" && editing.id === deleteTarget.id) setEditing(null);
       setDeleteTarget(null);
       toast.show(t("mrTemplate.deletedToast"));
     } catch (err) {
@@ -121,198 +132,210 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
     }
   };
 
-  const inputClass = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
+  const preview = (tpl: MaterialRequisitionTemplate) =>
+    `${tpl.lines.slice(0, 3).map((l) => l.productName).join(", ")}${tpl.lines.length > 3 ? " …" : ""}`;
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto">
-        <PageHeader
-          title={t("mrTemplate.pageTitle")}
-          description={t("mrTemplate.pageSubtitle")}
-          actions={canEdit ? (
-            <button
-              onClick={openNew}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
-            >
-              <Plus size={15} /> {t("mrTemplate.createBtn")}
-            </button>
-          ) : undefined}
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.project")}
+        title={t("mrTemplate.pageTitle")}
+        description={t("mrTemplate.pageSubtitle")}
+        actions={canEdit ? (
+          <button type="button" onClick={openNew} className={btn.primary}>
+            <Plus size={16} /> {t("mrTemplate.createBtn")}
+          </button>
+        ) : undefined}
+      />
+
+      <ListCard>
+        <ListToolbar
+          search={search}
+          onSearch={(v) => { setSearch(v); setPage(1); }}
+          searchPlaceholder={t("mrTemplate.searchPlaceholder")}
+          count={loading || loadError ? undefined : t("mrTemplate.templateCount").replace("{n}", String(filtered.length))}
         />
-
-        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2">
-          <Search size={14} className="text-muted-foreground flex-shrink-0" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("mrTemplate.searchPlaceholder")}
-            aria-label={t("mrTemplate.searchPlaceholder")}
-            className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
-          />
-        </div>
-
         {loading ? (
-          <div className="space-y-2">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}
+          <div className="px-5 py-4 space-y-2" role="status" aria-live="polite">
+            {[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <p className="text-sm text-muted-foreground">{t("mrTemplate.loadError")}</p>
-            <button onClick={retry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-              <RotateCw size={12} /> {t("materialRequisition.retry")}
-            </button>
-          </div>
+          <ListEmpty
+            title={t("mrTemplate.loadError")}
+            action={<button type="button" onClick={retry} className={btn.secondary}><RotateCw size={16} /> {t("materialRequisition.retry")}</button>}
+          />
         ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={LayoutTemplate}
+          <ListEmpty
             title={search.trim() ? t("mrTemplate.noMatchTitle") : t("mrTemplate.emptyTitle")}
-            description={search.trim() ? t("mrTemplate.noMatchDescription") : t("mrTemplate.emptyDescription")}
+            hint={search.trim() ? t("mrTemplate.noMatchDescription") : t("mrTemplate.emptyDescription")}
           />
         ) : (
-          <div className="space-y-2">
-            {filtered.map((tpl) => (
-              <div key={tpl.id} className="bg-card border border-[#c3ccda] bg-white rounded-xl px-4 py-3 flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground truncate">{tpl.name}</p>
-                  {tpl.description.trim() !== "" && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tpl.description}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("mrTemplate.lineCount").replace("{n}", String(tpl.lines.length))}
-                    {tpl.lines.length > 0 && <span className="ml-1.5">· {tpl.lines.slice(0, 3).map((l) => l.productName).join(", ")}{tpl.lines.length > 3 ? " …" : ""}</span>}
-                  </p>
-                </div>
-                {canEdit && (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button onClick={() => openEdit(tpl)} aria-label={t("mrTemplate.edit")} title={t("mrTemplate.edit")}
-                      className="p-1.5 rounded-lg text-foreground hover:bg-secondary transition-colors">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => setDeleteTarget(tpl)} aria-label={t("mrTemplate.delete")} title={t("mrTemplate.delete")}
-                      className="p-1.5 rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px]">
+              <thead>
+                <tr className={table.head}>
+                  <th className={`${table.th} w-[340px]`}>{t("mrTemplate.col.name")}</th>
+                  <th className={table.th}>{t("mrTemplate.linesTitle")}</th>
+                  <th className={`${table.th} text-right`}>{t("mrTemplate.col.count")}</th>
+                  <th className={`${table.th} w-10`} aria-hidden="true" />
+                </tr>
+              </thead>
+              <tbody>
+                {paged.rows.map((tpl) => {
+                  const cells = (
+                    <>
+                      <td className={`${table.td} max-w-[340px]`}>
+                        <span className="block text-sm font-semibold text-foreground truncate">{tpl.name}</span>
+                        {tpl.description.trim() !== "" && <span className="block text-xs text-muted-foreground truncate">{tpl.description}</span>}
+                      </td>
+                      <td className={`${table.td} max-w-0 w-full`}>
+                        <span className="block text-sm text-[#3d5173] truncate">{preview(tpl) || "—"}</span>
+                      </td>
+                      <td className={`${table.td} text-right tabular-nums text-sm text-[#3d5173] whitespace-nowrap`}>{t("mrTemplate.lineCount").replace("{n}", String(tpl.lines.length))}</td>
+                      <td className={table.td}>
+                        {canEdit && <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />}
+                      </td>
+                    </>
+                  );
+                  return canEdit ? (
+                    <tr key={tpl.id} {...rowOpenProps(() => openEdit(tpl), `${t("mrTemplate.edit")} ${tpl.name}`)}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}>
+                      {cells}
+                    </tr>
+                  ) : (
+                    <tr key={tpl.id} className={table.row}>{cells}</tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+        {!loading && !loadError && filtered.length > 0 && (
+          <ListPagination page={paged.current} pageCount={paged.pageCount} from={paged.from} to={paged.to} total={filtered.length} onPage={setPage} />
+        )}
+      </ListCard>
 
-      {editing !== null && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">
-                {editing === "new" ? t("mrTemplate.createBtn") : t("mrTemplate.edit")}
-              </h2>
-              <button onClick={() => setEditing(null)} aria-label={t("mrTemplate.close")} title={t("mrTemplate.close")}
-                className="text-foreground transition-colors">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3 overflow-y-auto">
-              <div>
-                <label htmlFor="mrt-name" className="text-xs text-muted-foreground block mb-1">{t("mrTemplate.field.name")}</label>
-                <input id="mrt-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={inputClass} />
-              </div>
-              <div>
-                <label htmlFor="mrt-desc" className="text-xs text-muted-foreground block mb-1">{t("mrTemplate.field.description")}</label>
-                <textarea id="mrt-desc" rows={2} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                  className={`${inputClass} resize-y leading-relaxed`} />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground">{t("mrTemplate.linesTitle")}</p>
-                <button
-                  onClick={() => setPickerOpen(true)}
-                  disabled={draft.lines.length >= MAX_TEMPLATE_LINES}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50"
-                >
-                  <Plus size={13} /> {t("mrTemplate.addLine")}
-                </button>
-              </div>
-
-              {draft.lines.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">{t("mrTemplate.noLines")}</p>
-              ) : (
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead className="bg-secondary">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">{t("mrTemplate.col.product")}</th>
-                        <th className="text-center px-3 py-2 font-medium text-muted-foreground w-20">{t("mrTemplate.col.unit")}</th>
-                        <th className="text-center px-3 py-2 font-medium text-muted-foreground w-24">{t("mrTemplate.col.qty")}</th>
-                        <th className="w-10" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {draft.lines.map((line, idx) => (
-                        <tr key={line.id} className="border-t border-border">
-                          <td className="px-3 py-2 text-foreground">
-                            {line.productCode && <span className="font-mono text-muted-foreground mr-1.5">{line.productCode}</span>}
-                            {line.productName}
-                          </td>
-                          <td className="px-3 py-2 text-center text-muted-foreground">{line.unit || "-"}</td>
-                          <td className="px-2 py-1.5">
-                            <input
-                              type="number"
-                              min={0}
-                              value={line.plannedQty ?? ""}
-                              aria-label={t("mrTemplate.col.qty")}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                const next = raw === "" ? null : Number(raw);
-                                setDraft((prev) => ({
-                                  ...prev,
-                                  lines: prev.lines.map((l, i) => (i === idx ? { ...l, plannedQty: Number.isFinite(next as number) ? next : null } : l)),
-                                }));
-                              }}
-                              className="w-full text-xs text-center text-foreground bg-white border border-[#c3ccda] rounded px-1.5 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
-                            />
-                          </td>
-                          <td className="px-2 py-1.5 text-center">
-                            <button
-                              onClick={() => setDraft((prev) => ({ ...prev, lines: prev.lines.filter((_, i) => i !== idx) }))}
-                              aria-label={t("mrTemplate.removeLine")}
-                              title={t("mrTemplate.removeLine")}
-                              className="p-1 rounded text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
-                            >
-                              <X size={13} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-              <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                {t("mrTemplate.cancel")}
-              </button>
-              <button onClick={() => void save()} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("mrTemplate.save")}
-              </button>
-            </div>
+      <Drawer
+        open={editing !== null}
+        busy={saving}
+        title={editing === "new" ? t("mrTemplate.createBtn") : (draft.name.trim() || editing?.name || "")}
+        subtitle={editing === "new" ? t("mrTemplate.drawerNewHint") : t("mrTemplate.drawerEditHint").replace("{n}", String(draft.lines.length))}
+        // Esc ถูกดักโดยทุกกล่องที่เปิดอยู่พร้อมกัน — ขณะตัวเลือกสินค้า/กล่องยืนยันลบเปิดทับอยู่ Esc ต้องปิดแค่กล่องบน
+        // ไม่ใช่ปิดแผงทิ้งไปพร้อมรายการที่ยังไม่ได้บันทึก
+        onClose={() => { if (!pickerOpen && !deleteTarget) setEditing(null); }}
+        footerLeft={editing !== null && editing !== "new" ? (
+          <MoreMenu
+            align="left"
+            items={[{
+              key: "delete", label: t("mrTemplate.delete"), hint: t("mrTemplate.deleteConfirmMessage"), icon: Trash2, danger: true,
+              onSelect: () => setDeleteTarget(editing),
+            }]}
+          />
+        ) : undefined}
+        footerRight={
+          <>
+            <button type="button" onClick={() => setEditing(null)} disabled={saving} className={btn.secondary}>{t("mrTemplate.cancel")}</button>
+            <button type="button" onClick={() => void save()} disabled={saving} className={btn.primary}>
+              {saving && <Loader2 size={16} className="animate-spin" />} {t("mrTemplate.save")}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-4">
+            <Field label={t("mrTemplate.field.name")} htmlFor="mrt-name" required error={nameError ? t("mrTemplate.errorNameRequired") : undefined}>
+              <input id="mrt-name" value={draft.name} aria-invalid={nameError || undefined}
+                onChange={(e) => { setDraft({ ...draft, name: e.target.value }); if (e.target.value.trim()) setNameError(false); }}
+                className={`${field.input} w-full`} />
+            </Field>
+            <Field label={t("mrTemplate.field.description")} htmlFor="mrt-desc">
+              <textarea id="mrt-desc" rows={2} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                className={`${field.textarea} w-full resize-y`} />
+            </Field>
           </div>
+          <div className="h-px bg-[#eef1f6]" />
+          <section className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <h3 className="flex-1 text-[15px] font-semibold text-foreground">{t("mrTemplate.linesTitle")}</h3>
+              <button type="button" onClick={() => setPickerOpen(true)} disabled={draft.lines.length >= MAX_TEMPLATE_LINES} className={btn.text}>
+                <Plus size={16} /> {t("mrTemplate.addLine")}
+              </button>
+            </div>
+            {draft.lines.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground py-6 text-center border border-dashed border-[#c3ccda] rounded-[10px]">{t("mrTemplate.noLines")}</p>
+            ) : (
+              <div className="border border-border rounded-[10px] overflow-hidden">
+                <div className="grid grid-cols-[minmax(0,1fr)_56px_104px_36px] gap-2 items-center h-9 pl-3.5 pr-2 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]">
+                  <span>{t("mrTemplate.col.product")}</span><span>{t("mrTemplate.col.unit")}</span><span className="text-right">{t("mrTemplate.col.qty")}</span><span />
+                </div>
+                {draft.lines.map((line, idx) => (
+                  <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_56px_104px_36px] gap-2 items-center min-h-[52px] py-1.5 pl-3.5 pr-2 border-b border-[#eef1f6] last:border-b-0">
+                    <span className="flex flex-col min-w-0 leading-snug">
+                      <span className="text-sm font-medium text-foreground truncate" title={line.productName}>{line.productName}</span>
+                      {line.productCode && <span className="font-mono text-xs text-muted-foreground">{line.productCode}</span>}
+                    </span>
+                    <span className="text-sm text-[#3d5173] truncate">{line.unit || "-"}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={line.plannedQty ?? ""}
+                      aria-label={`${t("mrTemplate.col.qty")} ${line.productName}`}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const next = raw === "" ? null : Number(raw);
+                        setDraft((prev) => ({
+                          ...prev,
+                          lines: prev.lines.map((l, i) => (i === idx ? { ...l, plannedQty: Number.isFinite(next as number) ? next : null } : l)),
+                        }));
+                      }}
+                      className={`${field.cell} w-full min-w-0 text-right tabular-nums`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDraft((prev) => ({ ...prev, lines: prev.lines.filter((_, i) => i !== idx) }))}
+                      aria-label={`${t("mrTemplate.removeLine")} ${line.productName}`}
+                      title={t("mrTemplate.removeLine")}
+                      className={rowRemoveBtn}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
-      )}
+      </Drawer>
 
-      <ProductPickerModal open={pickerOpen} products={products} categories={categories}
-        preferCategoryNames={MATERIAL_CATEGORY_NAMES} showStock
-        onSelect={addProduct} onClose={() => setPickerOpen(false)} />
+      <ProductPickerModal
+        open={pickerOpen}
+        products={products}
+        categories={categories}
+        preferCategoryNames={MATERIAL_CATEGORY_NAMES}
+        showStock
+        multiSelect
+        subtitle={t("mrTemplate.pickerHint")}
+        onSelect={(p) => addProducts([p])}
+        onSelectMany={addProducts}
+        onClose={() => setPickerOpen(false)}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
         title={t("mrTemplate.deleteConfirmTitle")}
         message={t("mrTemplate.deleteConfirmMessage")}
+        confirmLabel={t("mrTemplate.delete")}
         danger
         busy={deleting}
+        summary={deleteTarget && (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <span className="text-[13px] font-semibold text-foreground truncate">{deleteTarget.name}</span>
+              {deleteTarget.description.trim() !== "" && <span className="text-[13px] text-[#3d5173] truncate">{deleteTarget.description}</span>}
+            </div>
+            <span className="text-[13px] text-[#3d5173] whitespace-nowrap">{t("mrTemplate.lineCount").replace("{n}", String(deleteTarget.lines.length))}</span>
+          </div>
+        )}
         onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleteTarget(null)}
       />

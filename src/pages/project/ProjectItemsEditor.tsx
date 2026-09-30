@@ -5,20 +5,10 @@ import { createMaterialRequisition } from "../../lib/materialRequisition";
 import { createJobOrder } from "../../lib/jobOrder";
 import { createPurchaseRequest } from "../../lib/purchaseRequest";
 import { ApiError } from "../../lib/apiClient";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { btn, table } from "../../components/ui/styles";
+import { ProjectItemStatusPill, Tag } from "./projectUi";
 import { useI18n } from "../../lib/i18n";
-
-const sourcingStyle: Record<ProjectItemSourcingMethod, string> = {
-  unassigned: "bg-muted text-muted-foreground border border-border",
-  requisition: "bg-[#1a5fb4]/10 text-[#1a5fb4] border border-[#1a5fb4]/20",
-  jobOrder: "bg-[#7c4dbb]/10 text-[#7c4dbb] border border-[#7c4dbb]/20",
-  purchaseRequest: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-};
-const statusStyle: Record<ProjectItem["itemStatus"], string> = {
-  pending: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  documentCreated: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  fulfilled: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-  cancelled: "bg-[#e05252]/10 text-[#e05252] border border-[#e05252]/20",
-};
 
 /**
  * The 3-branch sourcing-assignment table — one row per Scope of Work item. Each "Create..." button
@@ -26,6 +16,9 @@ const statusStyle: Record<ProjectItem["itemStatus"], string> = {
  * first" step needed — creation itself atomically sets sourcingMethod/itemStatus, see
  * api/_lib/projectHandler.ts's linkProjectItemToSubDocument()). All 3 branches navigate into a real
  * document page (Stage 5 — Material Requisition, Job Order, and Purchase Request all have one).
+ *
+ * ดีไซน์ใหม่ 2026-09-30: การ์ดเต็มความกว้าง · สาขาการจัดหาเป็นป้ายเหลี่ยม ("ยังไม่กำหนด" เป็นตัวอักษรจาง) ·
+ * ช่องการดำเนินการบอกชนิดเอกสาร + เลขที่เป็นลิงก์สีน้ำเงิน
  */
 export function ProjectItemsEditor({
   project,
@@ -52,12 +45,6 @@ export function ProjectItemsEditor({
     requisition: t("project.sourcing.requisition"),
     jobOrder: t("project.sourcing.jobOrder"),
     purchaseRequest: t("project.sourcing.purchaseRequest"),
-  };
-  const statusLabel: Record<ProjectItem["itemStatus"], string> = {
-    pending: t("project.itemStatus.pending"),
-    documentCreated: t("project.itemStatus.documentCreated"),
-    fulfilled: t("project.itemStatus.fulfilled"),
-    cancelled: t("project.itemStatus.cancelled"),
   };
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
 
@@ -97,96 +84,91 @@ export function ProjectItemsEditor({
     }
   };
 
+  /** เอกสารย่อยที่รายการนี้ผูกอยู่ — ชนิด + เลขที่ + ทางเปิด */
+  const linkedDoc = (item: ProjectItem): { kind: string; id: string; open: (id: string) => void } | null => {
+    if (item.sourcingMethod === "requisition" && item.materialRequisitionId) return { kind: t("project.items.docKind.requisition"), id: item.materialRequisitionId, open: onOpenMaterialRequisition };
+    if (item.sourcingMethod === "jobOrder" && item.jobOrderId) return { kind: t("project.items.docKind.jobOrder"), id: item.jobOrderId, open: onOpenJobOrder };
+    if (item.sourcingMethod === "purchaseRequest" && item.purchaseRequestId) return { kind: t("project.items.docKind.purchaseRequest"), id: item.purchaseRequestId, open: onOpenPurchaseRequest };
+    return null;
+  };
+
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground">{t("project.items.title")}</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">{t("project.items.subtitle")}</p>
-      </div>
+    <SectionCard
+      title={t("project.items.title")}
+      subtitle={t("project.items.subtitle")}
+      actions={<span className="text-[13px] text-muted-foreground">{t("ui.itemCount").replace("{n}", String(project.items.length))}</span>}
+      bodyClassName=""
+    >
       {project.items.length === 0 ? (
         <div className="py-10 text-center text-sm text-muted-foreground">{t("project.items.emptyScope")}</div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[900px]">
             <thead>
-              <tr className="border-b border-border bg-muted/40">
-                {[t("project.items.col.item"), t("project.items.col.quantity"), t("project.items.col.sourcing"), t("project.items.col.status"), t("project.items.col.action")].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                ))}
+              <tr className={table.head}>
+                <th className={table.th}>{t("project.items.col.item")}</th>
+                <th className={`${table.th} text-right`}>{t("project.items.col.quantity")}</th>
+                <th className={table.th}>{t("project.items.col.sourcing")}</th>
+                <th className={table.th}>{t("project.items.col.status")}</th>
+                <th className={table.th}>{t("project.items.col.action")}</th>
               </tr>
             </thead>
             <tbody>
               {project.items.map((item) => {
                 const busy = busyItemId === item.id;
+                const doc = linkedDoc(item);
+                const busyIcon = (icon: typeof Package) => {
+                  const Icon = icon;
+                  return busy ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />;
+                };
                 return (
-                  <tr key={item.id} className="border-b border-border/50">
-                    <td className="px-4 py-3.5 align-top">
-                      <p className="text-sm text-foreground font-medium">{item.name}</p>
+                  <tr key={item.id} className="border-b border-[#eef1f6] last:border-b-0">
+                    <td className={`${table.td} py-3 min-w-[240px]`}>
+                      <span className="block text-sm font-medium text-foreground leading-snug">{item.name}</span>
                       {item.specifications.length > 0 && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{item.specifications.join(" · ")}</p>
+                        <span className="block text-xs text-muted-foreground mt-0.5 leading-snug">{item.specifications.join(" · ")}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 align-top text-xs font-mono text-muted-foreground whitespace-nowrap">
+                    <td className={`${table.td} py-3 text-right tabular-nums text-[#3d5173] whitespace-nowrap`}>
                       {item.quantity ?? "—"} {item.unit}
                     </td>
-                    <td className="px-4 py-3.5 align-top">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${sourcingStyle[item.sourcingMethod]}`}>
-                        {sourcingLabel[item.sourcingMethod]}
-                      </span>
+                    <td className={`${table.td} py-3`}>
+                      {item.sourcingMethod === "unassigned"
+                        ? <span className="text-[13px] text-[#8a97ad] whitespace-nowrap">{sourcingLabel.unassigned}</span>
+                        : <Tag>{sourcingLabel[item.sourcingMethod]}</Tag>}
                     </td>
-                    <td className="px-4 py-3.5 align-top">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${statusStyle[item.itemStatus]}`}>
-                        {statusLabel[item.itemStatus]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 align-top">
+                    <td className={`${table.td} py-3`}><ProjectItemStatusPill status={item.itemStatus} /></td>
+                    <td className={`${table.td} py-3`}>
                       {item.itemStatus === "pending" ? (
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {canCreateMaterialRequisition && (
-                            <button
-                              onClick={() => handleCreateRequisition(item)}
-                              disabled={busy}
-                              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#1a5fb4]/40 transition-all disabled:opacity-60"
-                            >
-                              {busy ? <Loader2 size={12} className="animate-spin" /> : <Package size={12} />} {t("project.items.createRequisition")}
+                            <button type="button" onClick={() => void handleCreateRequisition(item)} disabled={busy} className={btn.secondarySm}>
+                              {busyIcon(Package)} {t("project.items.createRequisition")}
                             </button>
                           )}
                           {canCreateJobOrder && (
-                            <button
-                              onClick={() => handleCreateJobOrder(item)}
-                              disabled={busy}
-                              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#7c4dbb]/40 transition-all disabled:opacity-60"
-                            >
-                              {busy ? <Loader2 size={12} className="animate-spin" /> : <Hammer size={12} />} {t("project.items.createJobOrder")}
+                            <button type="button" onClick={() => void handleCreateJobOrder(item)} disabled={busy} className={btn.secondarySm}>
+                              {busyIcon(Hammer)} {t("project.items.createJobOrder")}
                             </button>
                           )}
                           {canCreatePurchaseRequest && (
-                            <button
-                              onClick={() => handleCreatePurchaseRequest(item)}
-                              disabled={busy}
-                              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#e08a3c]/40 transition-all disabled:opacity-60"
-                            >
-                              {busy ? <Loader2 size={12} className="animate-spin" /> : <ShoppingCart size={12} />} {t("project.items.createPurchaseRequest")}
+                            <button type="button" onClick={() => void handleCreatePurchaseRequest(item)} disabled={busy} className={btn.secondarySm}>
+                              {busyIcon(ShoppingCart)} {t("project.items.createPurchaseRequest")}
                             </button>
                           )}
                           {!canCreateMaterialRequisition && !canCreateJobOrder && !canCreatePurchaseRequest && (
-                            <span className="text-xs text-muted-foreground">{t("project.items.noPermission")}</span>
+                            <span className="text-[13px] text-muted-foreground">{t("project.items.noPermission")}</span>
                           )}
                         </div>
-                      ) : item.sourcingMethod === "requisition" && item.materialRequisitionId ? (
-                        <button onClick={() => onOpenMaterialRequisition(item.materialRequisitionId)} className="flex items-center gap-1 text-xs font-mono text-[#c9a84c] hover:underline">
-                          {item.materialRequisitionId} <ArrowRight size={11} />
-                        </button>
-                      ) : item.sourcingMethod === "jobOrder" && item.jobOrderId ? (
-                        <button onClick={() => onOpenJobOrder(item.jobOrderId)} className="flex items-center gap-1 text-xs font-mono text-[#c9a84c] hover:underline">
-                          {item.jobOrderId} <ArrowRight size={11} />
-                        </button>
-                      ) : item.sourcingMethod === "purchaseRequest" && item.purchaseRequestId ? (
-                        <button onClick={() => onOpenPurchaseRequest(item.purchaseRequestId)} className="flex items-center gap-1 text-xs font-mono text-[#c9a84c] hover:underline">
-                          {item.purchaseRequestId} <ArrowRight size={11} />
-                        </button>
+                      ) : doc ? (
+                        <span className="flex items-center gap-2 text-[13px] text-muted-foreground whitespace-nowrap">
+                          {doc.kind}
+                          <button type="button" onClick={() => doc.open(doc.id)} className="font-mono text-[13px] font-medium text-[#1a5fb4] hover:underline inline-flex items-center gap-1">
+                            {doc.id} <ArrowRight size={13} />
+                          </button>
+                        </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-[13px] text-[#8a97ad]">—</span>
                       )}
                     </td>
                   </tr>
@@ -196,6 +178,6 @@ export function ProjectItemsEditor({
           </table>
         </div>
       )}
-    </div>
+    </SectionCard>
   );
 }

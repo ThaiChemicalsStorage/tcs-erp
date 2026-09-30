@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, RotateCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { RotateCw, Trash2, Loader2, AlertTriangle, Building2, Info, CheckCircle2, Undo2, ArrowRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import {
   type Project, type ProjectStatus,
@@ -9,18 +9,21 @@ import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
+import { DocumentHeader, DocumentStepper, DocumentColumns, NextStepHint } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { btn } from "../../components/ui/styles";
 import { ProjectItemsEditor } from "./ProjectItemsEditor";
+import { NoteBox, ProjectStatusPill, RailSummaryCard, useProjectStatusLabel } from "./projectUi";
+import { projectStatusMoves, summarizeProjectItems } from "./projectSummary";
 import { useI18n } from "../../lib/i18n";
 
-const statusStyle: Record<ProjectStatus, string> = {
-  Planning: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  InProgress: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Completed: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
-const STATUS_OPTIONS: ProjectStatus[] = ["Planning", "InProgress", "Completed"];
+const STATUS_ORDER: ProjectStatus[] = ["Planning", "InProgress", "Completed"];
 
-// หน้ารายละเอียดโครงการ: ข้อมูลหัวเรื่อง (ลูกค้า/รหัสงาน) และตารางแบ่งสาขาการจัดหารายการ
-// Project detail view: header info (customer/job code) and the 3-branch sourcing item table.
+// หน้ารายละเอียดโครงการ (ดีไซน์ใหม่ 2026-09-30): หัวเอกสาร + ขั้นตอนสถานะ · ข้อมูลโครงการและสรุปการจัดหา ·
+// ตารางแบ่งสาขาการจัดหาเต็มความกว้าง
+// Project detail view: document header + status stepper, project info with sourcing tiles, rail summary,
+// and the full-width 3-branch sourcing item table.
 export function ProjectDocument({
   projectId,
   currentUserId,
@@ -53,11 +56,7 @@ export function ProjectDocument({
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
-  const statusLabel: Record<ProjectStatus, string> = {
-    Planning: t("project.status.planning"),
-    InProgress: t("project.status.inProgress"),
-    Completed: t("project.status.completed"),
-  };
+  const statusLabel = useProjectStatusLabel();
   const [project, setProject] = useState<Project | null>(null);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -78,7 +77,7 @@ export function ProjectDocument({
   }, [projectId, reloadKey, t]);
 
   const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="projectdoc-actions"]', popover: { title: t("tour.projectdoc.actions.title"), description: t("tour.projectdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="projectdoc-actions"]', popover: { title: t("tour.projectdoc.actions.title"), description: t("project.tour.actionsDesc"), side: "bottom" } },
     { element: '[data-tour="projectdoc-header"]', popover: { title: t("tour.projectdoc.header.title"), description: t("tour.projectdoc.header.desc"), side: "bottom" } },
     { element: '[data-tour="projectdoc-items"]', popover: { title: t("tour.projectdoc.items.title"), description: t("tour.projectdoc.items.desc"), side: "top" } },
   ];
@@ -124,93 +123,154 @@ export function ProjectDocument({
     }
   };
 
-  if (loadError) {
+  const back = backLabel ?? t("project.doc.backToAll");
+
+  if (loadError || !project) {
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {backLabel ?? t("project.doc.backToList")}
-          </button>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader backLabel={back} onBack={onBack} number={t("project.doc.title")} mono={false} />
         </div>
-        <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <AlertTriangle size={20} className="text-[#e05252]" />
-          <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
-            <RotateCw size={12} /> {t("project.retry")}
-          </button>
-        </div>
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+            <AlertTriangle size={20} className="text-[#b93636]" />
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <button type="button" onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className={btn.secondary}>
+              <RotateCw size={16} /> {t("project.retry")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2.5 p-10" role="status">
+            <Loader2 size={20} className="text-muted-foreground animate-spin" />
+            <p className="text-[13px] text-muted-foreground">{t("project.doc.loadingDocument")}</p>
+          </div>
+        )}
       </div>
     );
   }
 
-  if (!project) {
-    return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {backLabel ?? t("project.doc.backToList")}
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-2.5 p-6">
-          <Loader2 size={20} className="text-muted-foreground animate-spin" />
-          <p className="text-xs text-muted-foreground">{t("project.doc.loadingDocument")}</p>
-        </div>
-      </div>
-    );
-  }
+  const summary = summarizeProjectItems(project.items);
+  const moves = projectStatusMoves(project.status);
+  const currentIndex = STATUS_ORDER.indexOf(project.status);
+  const moveLabel = (to: ProjectStatus) => STATUS_ORDER.indexOf(to) < currentIndex
+    ? t("project.doc.moveBack").replace("{status}", statusLabel(to))
+    : t("project.doc.moveTo").replace("{status}", statusLabel(to));
+  const stepperCurrent = project.status === "Completed" ? STATUS_ORDER.length : currentIndex;
+
+  const tiles: { key: "unassigned" | "requisition" | "jobOrder" | "purchaseRequest"; label: string }[] = [
+    { key: "unassigned", label: t("project.sourcing.unassigned") },
+    { key: "requisition", label: t("project.sourcing.requisition") },
+    { key: "jobOrder", label: t("project.sourcing.jobOrder") },
+    { key: "purchaseRequest", label: t("project.sourcing.purchaseRequest") },
+  ];
+  const itemsUnit = t("project.picker.project.itemsUnit");
 
   return (
     <div className="doc-form flex-1 overflow-y-auto">
-      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> {backLabel ?? t("project.doc.backToList")}
-        </button>
-        <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#866d28] font-mono font-semibold">{project.scopeNumber}</span>
-        {canEdit ? (
-          <select
-            value={project.status}
-            onChange={(e) => handleStatusChange(e.target.value as ProjectStatus)}
-            disabled={statusSaving}
-            className={`text-xs font-medium rounded-full px-2.5 py-1 outline-none disabled:opacity-60 ${statusStyle[project.status]}`}
-          >
-            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{statusLabel[s]}</option>)}
-          </select>
-        ) : (
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[project.status]}`}>
-            {statusLabel[project.status]}
-          </span>
-        )}
-
-        <div data-tour="projectdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <TourReplayButton onClick={docTour.start} />
-          {canEdit && (
-            <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
-              {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />} {t("project.doc.refresh")}
-            </button>
-          )}
-          {canDelete && (
-            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-              <Trash2 size={13} /> {t("project.doc.delete")}
-            </button>
-          )}
-        </div>
+      <div className="sticky top-0 z-20">
+        <DocumentHeader
+          backLabel={back}
+          onBack={onBack}
+          number={project.scopeNumber}
+          status={<ProjectStatusPill status={project.status} />}
+          meta={
+            <>
+              <span className="truncate max-w-[360px]" title={project.customerCompanyName}>{project.customerCompanyName}</span>
+              {refreshing && <Loader2 size={14} className="animate-spin" aria-label={t("project.doc.refresh")} />}
+            </>
+          }
+          actions={
+            <div data-tour="projectdoc-actions" className="flex items-center gap-2.5 flex-wrap">
+              <TourReplayButton variant="title" onClick={docTour.start} />
+              <MoreMenu
+                items={[
+                  canEdit && {
+                    key: "refresh", label: t("project.doc.refresh"), hint: t("project.doc.refreshHint"), icon: RotateCw,
+                    disabled: refreshing, onSelect: () => void handleRefresh(),
+                  },
+                  ...moves.others.map((to) => canEdit && {
+                    key: `status-${to}`, label: moveLabel(to), icon: STATUS_ORDER.indexOf(to) < currentIndex ? Undo2 : ArrowRight,
+                    disabled: statusSaving, onSelect: () => void handleStatusChange(to),
+                  }),
+                  canDelete && { key: "delete", label: t("project.doc.deleteConfirmTitle"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+                ]}
+              />
+              {canEdit && moves.next && (
+                <button type="button" onClick={() => void handleStatusChange(moves.next!)} disabled={statusSaving} className={btn.primary}>
+                  {statusSaving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  {moveLabel(moves.next)}
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
-      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto">
-        <div data-tour="projectdoc-header" className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold">{t("project.doc.title")}</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">{t("project.doc.scopeOfWorkPrefix")} {project.scopeNumber}</p>
-          </div>
-          <div className="p-6 space-y-2.5">
-            <div>
-              <label htmlFor="project-customer" className="text-xs text-muted-foreground block mb-1">{t("project.doc.customerLabel")}</label>
-              <input id="project-customer" readOnly className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={project.customerCompanyName} />
+      <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
+        <DocumentStepper
+          steps={STATUS_ORDER.map((s) => ({ label: statusLabel(s) }))}
+          current={stepperCurrent}
+          ariaLabel={t("project.doc.stepsAria")}
+        />
+
+        <DocumentColumns
+          main={
+            <div data-tour="projectdoc-header">
+              <SectionCard title={t("project.doc.infoTitle")}>
+                <div className="flex flex-col gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+                    <div className="sm:col-span-2 flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0">
+                        <Building2 size={18} />
+                      </span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-xs text-muted-foreground">{t("project.doc.customerLabel")}</span>
+                        <span className="text-sm font-medium text-foreground break-words">{project.customerCompanyName || "—"}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-xs text-muted-foreground">{t("project.doc.scopeOfWorkPrefix")}</span>
+                      <span className="font-mono text-sm font-medium text-foreground break-all">{project.scopeNumber}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    <span className="text-[13px] font-medium text-[#26395a]">{t("project.doc.sourcingBreakdown")}</span>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {tiles.map((tile) => (
+                        <div key={tile.key} className={`px-3.5 py-3 rounded-[10px] flex flex-col gap-0.5 ${tile.key === "unassigned" ? "border border-dashed border-[#c3ccda]" : "border border-border"}`}>
+                          <span className="text-[22px] font-semibold leading-tight tabular-nums text-foreground">{summary.bySourcing[tile.key]}</span>
+                          <span className="text-xs text-muted-foreground">{tile.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <NoteBox icon={<Info size={16} />}>{t("project.doc.snapshotNoteMenu")}</NoteBox>
+                </div>
+              </SectionCard>
             </div>
-            <p className="text-[10px] text-muted-foreground leading-relaxed pt-2">{t("project.doc.snapshotNote")}</p>
-          </div>
-        </div>
+          }
+          rail={
+            <>
+              <RailSummaryCard
+                label={t("project.itemStatus.fulfilled")}
+                value={`${summary.byStatus.fulfilled} / ${summary.total}`}
+                unit={itemsUnit}
+                progress={summary.progress}
+                rows={[
+                  { label: t("project.itemStatus.documentCreated"), value: `${summary.byStatus.documentCreated} ${itemsUnit}` },
+                  { label: t("project.itemStatus.pending"), value: `${summary.byStatus.pending} ${itemsUnit}` },
+                  { label: t("project.itemStatus.fulfilled"), value: `${summary.byStatus.fulfilled} ${itemsUnit}` },
+                  ...(summary.byStatus.cancelled > 0 ? [{ label: t("project.itemStatus.cancelled"), value: `${summary.byStatus.cancelled} ${itemsUnit}` }] : []),
+                ]}
+              />
+              {summary.byStatus.pending > 0 ? (
+                <NextStepHint title={t("project.doc.nextStep")}>{t("project.doc.nextStepPending")}</NextStepHint>
+              ) : summary.total > 0 && summary.byStatus.fulfilled === summary.total && project.status !== "Completed" ? (
+                <NextStepHint title={t("project.doc.nextStep")}>{t("project.doc.nextStepComplete")}</NextStepHint>
+              ) : null}
+            </>
+          }
+        />
 
         <div data-tour="projectdoc-items">
           <ProjectItemsEditor
@@ -230,8 +290,20 @@ export function ProjectDocument({
         open={confirmDelete}
         title={t("project.doc.deleteConfirmTitle")}
         message={t("project.doc.deleteConfirmMessage")}
+        confirmLabel={t("project.doc.deleteConfirmTitle")}
         danger
         busy={deleting}
+        summary={
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <span className="font-mono text-[13px] font-medium text-foreground">{project.scopeNumber}</span>
+              <span className="text-[13px] text-[#3d5173] truncate">{project.customerCompanyName}</span>
+            </div>
+            <span className="text-[13px] text-[#3d5173] whitespace-nowrap">
+              {t("project.doc.deleteSummary").replace("{n}", String(project.items.length)).replace("{docs}", String(summary.subDocumentCount))}
+            </span>
+          </div>
+        }
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
       />
