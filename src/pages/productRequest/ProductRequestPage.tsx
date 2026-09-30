@@ -27,7 +27,7 @@ const STATUS_STYLE: Record<ProductRequestStatus, string> = {
   Rejected: "bg-[#e05252]/15 text-[#a33]",
 };
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
 export function ProductRequestPage({
   currentUserId, canCreate, canReview, onProductsChanged, initialProductRequestId, onProductRequestIdConsumed,
@@ -175,13 +175,13 @@ export function ProductRequestPage({
       <div className="p-3 sm:p-6 space-y-4 max-w-6xl mx-auto">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            <h1 className="text-xl font-semibold text-foreground">
               {t("productRequest.title")}
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">{t("productRequest.subtitle")}</p>
           </div>
           {canCreate && (
-            <button onClick={() => setCreateOpen(true)} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors">
+            <button onClick={() => setCreateOpen(true)} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <PackagePlus size={15} /> {t("productRequest.createBtn")}
             </button>
           )}
@@ -297,7 +297,7 @@ export function ProductRequestPage({
                 {t("common.cancel")}
               </button>
               <button onClick={() => void submitCreate()} disabled={busy || !draft.name.trim()}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {busy && <Loader2 size={12} className="animate-spin" />} {t("productRequest.submit")}
               </button>
             </div>

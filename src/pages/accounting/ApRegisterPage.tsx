@@ -85,7 +85,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:overflow-visible print:p-0">
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("apRegister.title")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("apRegister.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("apRegister.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -95,12 +95,12 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
               type="month"
               value={month}
               onChange={(e) => { if (e.target.value) setMonth(e.target.value); }}
-              className="h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
           </label>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
           >
             <Printer size={13} /> {t("accounting.monthly.printBtn")}
           </button>
@@ -115,7 +115,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <p className="text-sm text-muted-foreground">{t("apRegister.loadError")}</p>
           <button onClick={() => setAttempt((a) => a + 1)}
-            className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
             {t("accounting.monthly.retry")}
           </button>
         </div>

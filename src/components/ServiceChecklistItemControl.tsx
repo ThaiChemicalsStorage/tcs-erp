@@ -99,7 +99,7 @@ export function ServiceChecklistItemControl({
               disabled={disabled}
               placeholder={t("service.checklist.measurementPlaceholder")}
               className={`h-9 w-full px-3 text-sm bg-secondary border rounded-lg outline-none transition-colors disabled:opacity-60 ${
-                error ? "border-[#e05252]/60" : "border-border focus:border-[#c9a84c]/50"
+                error ? "border-[#e05252]/60" : "border-border focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
               }`}
             />
           </td>
@@ -162,7 +162,7 @@ export function ServiceChecklistItemControl({
                 className={`w-full px-3 py-2 text-sm rounded-lg outline-none transition-colors disabled:opacity-60 resize-y ${
                   isAbnormal
                     ? "bg-[#e05252]/5 border border-[#e05252]/25 focus:border-[#e05252]/60"
-                    : "bg-secondary border border-border focus:border-[#c9a84c]/50"
+                    : "bg-white border border-[#c3ccda] focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
                 }`}
               />
               <PhotoAttachments
@@ -216,73 +216,73 @@ function CheckboxCell({
 // add button. `required` (Abnormal only) shows the red "at least 1 required" hint; Normal items
 // can still attach photos, just optionally.
 function PhotoAttachments({
-  photos, disabled, disabledReason, onUpload, onDelete, required,
+ photos, disabled, disabledReason, onUpload, onDelete, required,
 }: {
-  photos: ServiceChecklistItemPhoto[];
-  disabled: boolean;
-  disabledReason?: string;
-  onUpload?: (file: File) => Promise<void>;
-  onDelete?: (photoId: string) => Promise<void>;
-  required?: boolean;
+ photos: ServiceChecklistItemPhoto[];
+ disabled: boolean;
+ disabledReason?: string;
+ onUpload?: (file: File) => Promise<void>;
+ onDelete?: (photoId: string) => Promise<void>;
+ required?: boolean;
 }) {
-  const { t } = useI18n();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const inactive = disabled || !onUpload;
+ const { t } = useI18n();
+ const inputRef = useRef<HTMLInputElement>(null);
+ const [uploading, setUploading] = useState(false);
+ const [deletingId, setDeletingId] = useState<string | null>(null);
+ const inactive = disabled || !onUpload;
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file || !onUpload) return;
-    setUploading(true);
-    try {
-      await onUpload(file);
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
+ const handleFile = async (file: File | undefined) => {
+ if (!file || !onUpload) return;
+ setUploading(true);
+ try {
+ await onUpload(file);
+ } finally {
+ setUploading(false);
+ if (inputRef.current) inputRef.current.value = "";
+ }
+ };
 
-  return (
-    <div>
-      <p className="text-xs font-medium text-[#a75d1a] mb-1.5">
-        {t("service.checklist.photosLabel")} {required && photos.length === 0 && <span className="text-[#e05252]">*{t("service.checklist.photoRequired")}</span>}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {photos.map((p) => (
-          <div key={p.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted group">
-            {/* object-contain so the thumbnail matches what the printed report and the customer's
-                approval page actually show. With cover, a portrait photo previewed as a cropped
-                square here while printing as something different — the engineer had no way to see
-                what the customer would end up looking at. */}
-            <img src={p.url} alt={p.fileName} className="w-full h-full object-contain" />
-            {onDelete && !disabled && (
-              <button
-                type="button"
-                title={t("service.checklist.deletePhoto")}
-                aria-label={t("service.checklist.deletePhoto")}
-                disabled={deletingId === p.id}
-                onClick={async () => {
-                  setDeletingId(p.id);
-                  try { await onDelete(p.id); } finally { setDeletingId(null); }
-                }}
-                className="absolute top-0.5 right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#0b1d3a]/70 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity disabled:opacity-60"
-              >
-                {deletingId === p.id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
-              </button>
-            )}
-          </div>
-        ))}
-        <button
-          type="button"
-          title={disabledReason ?? t("service.checklist.addPhoto")}
-          disabled={inactive || uploading}
-          onClick={() => inputRef.current?.click()}
-          className="w-16 h-16 flex flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 disabled:hover:border-border"
-        >
-          {uploading ? <Loader2 size={16} className="animate-spin" /> : inactive ? <ImageOff size={16} /> : <ImagePlus size={16} />}
-          <span className="text-[9px]">{t("service.checklist.addPhoto")}</span>
-        </button>
-        {/* No `capture` attribute on purpose. `capture="environment"` told mobile browsers to open
+ return (
+ <div>
+ <p className="text-xs font-medium text-[#a75d1a] mb-1.5">
+ {t("service.checklist.photosLabel")} {required && photos.length === 0 && <span className="text-[#e05252]">*{t("service.checklist.photoRequired")}</span>}
+ </p>
+ <div className="flex flex-wrap gap-2">
+ {photos.map((p) => (
+ <div key={p.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-[#c3ccda] bg-white group">
+ {/* object-contain so the thumbnail matches what the printed report and the customer's
+ approval page actually show. With cover, a portrait photo previewed as a cropped
+ square here while printing as something different — the engineer had no way to see
+ what the customer would end up looking at. */}
+ <img src={p.url} alt={p.fileName} className="w-full h-full object-contain" />
+ {onDelete && !disabled && (
+ <button
+ type="button"
+ title={t("service.checklist.deletePhoto")}
+ aria-label={t("service.checklist.deletePhoto")}
+ disabled={deletingId === p.id}
+ onClick={async () => {
+ setDeletingId(p.id);
+ try { await onDelete(p.id); } finally { setDeletingId(null); }
+ }}
+ className="absolute top-0.5 right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-[#0b1d3a]/70 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity disabled:opacity-60"
+ >
+ {deletingId === p.id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+ </button>
+ )}
+ </div>
+ ))}
+ <button
+ type="button"
+ title={disabledReason ?? t("service.checklist.addPhoto")}
+ disabled={inactive || uploading}
+ onClick={() => inputRef.current?.click()}
+ className="w-16 h-16 flex flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50 disabled:hover:border-border"
+ >
+ {uploading ? <Loader2 size={16} className="animate-spin" /> : inactive ? <ImageOff size={16} /> : <ImagePlus size={16} />}
+ <span className="text-[9px]">{t("service.checklist.addPhoto")}</span>
+ </button>
+ {/* No `capture` attribute on purpose. `capture="environment"` told mobile browsers to open
             the camera *directly*, which skipped the file picker entirely — an engineer could only
             shoot a new photo and never attach one already in the phone's gallery (reported
             2026-08-26). Plain `accept="image/*"` gives the normal picker, which still offers the

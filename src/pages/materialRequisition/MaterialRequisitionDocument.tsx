@@ -74,7 +74,7 @@ function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields
   };
 }
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
 const cellInputCls = "w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
 
 // หน้าแก้ไขใบเบิกและใบคืนวัสดุ: ข้อมูลหัวเรื่อง ตารางรายการจากแคตตาล็อก การจ่ายของโดยสโตร์ และการคืนวัสดุ
@@ -373,14 +373,14 @@ export function MaterialRequisitionDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
           </button>
         </div>
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
           <AlertTriangle size={20} className="text-[#e05252]" />
           <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
             <RotateCw size={12} /> {t("materialRequisition.retry")}
           </button>
         </div>
@@ -392,7 +392,7 @@ export function MaterialRequisitionDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
           </button>
         </div>
@@ -634,17 +634,17 @@ export function MaterialRequisitionDocument({
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
             </button>
           )}
           {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("materialRequisitionDoc.print")}
             </button>
           )}
           {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("materialRequisitionDoc.saveDraft")}
             </button>
           )}
@@ -712,7 +712,7 @@ export function MaterialRequisitionDocument({
             </div>
           ) : null
         )}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold">{isStoreDoc ? t("storeDocs.issueTitle") : t("materialRequisitionDoc.title")}</h1>
             {isStoreDoc && doc.issueCode && (
@@ -805,13 +805,13 @@ export function MaterialRequisitionDocument({
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div data-tour="mrdoc-addline" className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisitionDoc.linesTitle")}</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.linesTitle")}</h2>
             {editable && (
               <div className="flex items-center gap-2">
-                <button onClick={openTemplatePicker} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={openTemplatePicker} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <LayoutTemplate size={13} /> {t("materialRequisitionDoc.useTemplate")}
                 </button>
-                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("materialRequisitionDoc.addLine")}
                 </button>
               </div>
@@ -917,7 +917,7 @@ export function MaterialRequisitionDocument({
               value={draft.revisionNote}
               onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
               placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
             />
           </div>
         )}
@@ -1041,7 +1041,7 @@ export function MaterialRequisitionDocument({
                     {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                     {t("materialRequisitionDoc.saveIssueRound").replace("{n}", String(nextIssueSeq))}
                   </button>
-                  <button onClick={() => openProductPicker("issue")} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                  <button onClick={() => openProductPicker("issue")} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                     <Plus size={13} /> {t("materialRequisitionDoc.addIssueLine")}
                   </button>
                 </div>
@@ -1052,7 +1052,7 @@ export function MaterialRequisitionDocument({
 
         {/* ประวัติรอบการจ่าย — ทุกคนที่เปิดใบได้เห็น เพราะเป็นตัวตอบว่าของออกไปเมื่อไหร่ให้ใคร */}
         {issueBatches.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <History size={15} className="text-muted-foreground" />
               <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.batchesTitle")}</h2>
@@ -1062,7 +1062,7 @@ export function MaterialRequisitionDocument({
               {issueBatches.map((batch, idx) => {
                 const isLast = idx === issueBatches.length - 1;
                 return (
-                  <div key={batch.id} className="border border-border rounded-lg px-3 py-2.5">
+                  <div key={batch.id} className="border border-[#c3ccda] bg-white rounded-lg px-3 py-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-xs text-foreground">
                         <span className="font-semibold">{t("materialRequisitionDoc.batchLabel").replace("{n}", String(batch.seq))}</span>
@@ -1103,8 +1103,8 @@ export function MaterialRequisitionDocument({
           <Undo2 size={15} className="mt-0.5 flex-shrink-0" /> {isStoreDoc ? t("storeDocs.returnViaReceipt") : t("storeDocs.deptViaStore")}
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisitionDoc.signatoriesTitle")}</h2>
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-3">{t("materialRequisitionDoc.signatoriesTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
             {([
               ["preparedBy", "preparedAt", t("materialRequisitionDoc.field.preparedBy")],
@@ -1117,13 +1117,13 @@ export function MaterialRequisitionDocument({
                   <label htmlFor={`mr-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
                   <input id={`mr-${nameField}`} disabled={!editable} value={draft[nameField]}
                     onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })}
-                    className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                    className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                 </div>
                 <div>
                   <label htmlFor={`mr-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
                   <input id={`mr-${dateField}`} type="date" disabled={!editable} value={draft[dateField]}
                     onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })}
-                    className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                    className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                 </div>
               </div>
             ))}
@@ -1151,11 +1151,11 @@ export function MaterialRequisitionDocument({
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print:hidden">
           <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col p-5 gap-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+              <h2 className="text-base font-semibold text-foreground">
                 {t("materialRequisitionDoc.useTemplateTitle")}
               </h2>
               <button onClick={() => setTemplatePickerOpen(false)} aria-label={t("mrTemplate.close")} title={t("mrTemplate.close")}
-                className="text-muted-foreground hover:text-foreground transition-colors">
+                className="text-foreground transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -1170,7 +1170,7 @@ export function MaterialRequisitionDocument({
                 <div className="space-y-1.5">
                   {templates.map((tpl) => (
                     <button key={tpl.id} onClick={() => applyTemplate(tpl)}
-                      className="w-full text-left px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors">
+                      className="w-full text-left px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white/60 hover:bg-secondary/40 hover:border-[#c3ccda] hover:shadow-sm transition-colors">
                       <p className="text-sm font-medium text-foreground truncate">{tpl.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {t("mrTemplate.lineCount").replace("{n}", String(tpl.lines.length))}

@@ -35,7 +35,7 @@ function LanguageField() {
             type="button"
             onClick={() => setLang(o.key)}
             className={`px-3.5 py-1.5 text-xs rounded-md font-medium transition-all ${
-              lang === o.key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+              lang === o.key ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {o.label}
@@ -72,7 +72,7 @@ function useSavedFlash() {
   return [saved, () => setSaved(true)] as const;
 }
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 const readOnlyCls = "w-full text-sm text-[#4c6488] bg-muted border border-border rounded-lg px-3 py-2 outline-none cursor-default";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
@@ -246,14 +246,14 @@ export function SettingsPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("settings.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("settings.pageSubtitle")}</p>
         </div>
         <button
           onClick={tour.start}
           title={t("tour.replay")}
           aria-label={t("tour.replay")}
-          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all"
         >
           <HelpCircle size={15} />
         </button>
@@ -265,7 +265,7 @@ export function SettingsPage({
             key={tabDef.key}
             onClick={() => setTab(tabDef.key)}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-medium transition-all whitespace-nowrap ${
-              tab === tabDef.key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+              tab === tabDef.key ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <tabDef.icon size={13} /> {tabDef.label}
@@ -352,7 +352,7 @@ export function SettingsPage({
 
           {profileError && <p role="alert" className="text-xs text-[#e05252]">{profileError}</p>}
           <div className="flex items-center gap-3 pt-1">
-            <button onClick={saveProfile} disabled={profileSaving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            <button onClick={saveProfile} disabled={profileSaving} className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               {t("common.saveChanges")}
             </button>
             <SavedNote show={profileSaved} />
@@ -431,7 +431,7 @@ export function SettingsPage({
           </div>
 
           <div className="flex items-center gap-3 pt-1">
-            <button onClick={saveCompany} disabled={companySaving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            <button onClick={saveCompany} disabled={companySaving} className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               {t("common.saveChanges")}
             </button>
             <SavedNote show={companySaved} />
@@ -443,7 +443,7 @@ export function SettingsPage({
       {tab === "security" && (
         <>
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
-          <h2 id={securityHeadingId} className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.security.title")}</h2>
+          <h2 id={securityHeadingId} className="text-xs font-semibold text-foreground">{t("settings.security.title")}</h2>
           <div className="space-y-4">
             <div>
               <label htmlFor={currentPwId} className={labelCls}>{t("settings.security.currentLabel")}</label>
@@ -462,7 +462,7 @@ export function SettingsPage({
           </div>
           {pwError && <p role="alert" className="text-xs text-[#e05252]">{pwError}</p>}
           <div className="flex items-center gap-3 pt-1">
-            <button onClick={savePassword} disabled={pwSaving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            <button onClick={savePassword} disabled={pwSaving} className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               {t("settings.security.submit")}
             </button>
             <SavedNote show={pwSaved} />

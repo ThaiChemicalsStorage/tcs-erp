@@ -79,14 +79,14 @@ export function ScopeOfWorkList({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>Scope of Work</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">Scope of Work</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("scopeOfWork.pageSubtitle")}</p>
         </div>
         <button
           onClick={tour.start}
           title={t("tour.replay")}
           aria-label={t("tour.replay")}
-          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
         >
           <HelpCircle size={15} />
         </button>
@@ -120,7 +120,7 @@ export function ScopeOfWorkList({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("scopeOfWork.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -131,7 +131,7 @@ export function ScopeOfWorkList({
           <select
             value={filterJobType}
             onChange={(e) => setFilterJobType(e.target.value)}
-            className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           >
             <option value={FILTER_ALL}>{t("scopeOfWork.filterJobTypeAll")}</option>
             {jobTypesInList.map((code) => (
@@ -141,7 +141,7 @@ export function ScopeOfWorkList({
           <select
             value={filterSalesperson}
             onChange={(e) => setFilterSalesperson(e.target.value)}
-            className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           >
             <option value={FILTER_ALL}>{t("scopeOfWork.filterSalespersonAll")}</option>
             {salespeopleInList.map((name) => (
@@ -153,7 +153,7 @@ export function ScopeOfWorkList({
           <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
             {[FILTER_ALL, "Draft", "PendingApproval", "Final"].map((s) => (
               <button key={s} onClick={() => setFilterStatus(s)}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
                 {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as ScopeOfWorkStatus] ?? s}
               </button>
             ))}
@@ -217,7 +217,7 @@ export function ScopeOfWorkList({
                     onOpen(s.id);
                   }
                 }}
-                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 focus-visible:bg-secondary/30"
+                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
               >
                 <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{s.scopeNumber}</td>
                 <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[220px] truncate" title={s.customerName}>{s.customerName}</td>

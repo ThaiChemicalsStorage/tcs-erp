@@ -49,7 +49,7 @@ export function RequisitionSourcePicker({ inputId, selectedId, selectedNumber, o
         placeholder={selectedNumber || placeholder}
         ariaLabel={placeholder}
         emptyMessage={t("storeDocs.sourceNoMatch")}
-        className={`w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg pl-3 pr-9 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70${selectedId ? " placeholder:text-foreground" : ""}`}
+        className={`w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg pl-3 pr-9 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70${selectedId ? " placeholder:text-foreground" : ""}`}
       />
       {selectedId && !disabled && (
         <button type="button" onClick={() => onSelect("")} aria-label={t("storeDocs.sourceClear")} title={t("storeDocs.sourceClear")}

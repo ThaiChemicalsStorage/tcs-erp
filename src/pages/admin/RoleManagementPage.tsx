@@ -140,7 +140,7 @@ export function RoleManagementPage({
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-2 mb-5">
-            <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            <h2 className="text-lg font-semibold text-foreground">
               {view === "create" ? t("roles.createNew") : view === "view" ? `${t("roles.viewTitlePrefix")}${editingRole?.name}` : t("roles.editTitle")}
             </h2>
             {readOnly && (
@@ -158,11 +158,11 @@ export function RoleManagementPage({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor={nameId} className="text-xs font-medium text-foreground block mb-1.5">{t("roles.nameLabel")}</label>
-                <input id={nameId} disabled={nameLocked} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                <input id={nameId} disabled={nameLocked} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
                 <label htmlFor={descriptionId} className="text-xs font-medium text-foreground block mb-1.5">{t("roles.descriptionLabel")}</label>
-                <input id={descriptionId} disabled={readOnly} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+                <input id={descriptionId} disabled={readOnly} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
             </div>
 
@@ -220,7 +220,7 @@ export function RoleManagementPage({
                 {readOnly ? t("common.close") : t("common.cancel")}
               </button>
               {!readOnly && (
-                <button type="submit" className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("common.save")}</button>
+                <button type="submit" className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">{t("common.save")}</button>
               )}
             </div>
           </form>
@@ -238,11 +238,11 @@ export function RoleManagementPage({
             onClick={tour.start}
             title={t("tour.replay")}
             aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
           </button>
-          <button data-tour="roles-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <button data-tour="roles-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
             <Plus size={15} /> {t("roles.createNew")}
           </button>
         </div>
@@ -250,11 +250,11 @@ export function RoleManagementPage({
 
       <div data-tour="roles-list" className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {roles.map((r) => (
-          <div key={r.key} className="bg-card border border-border rounded-xl p-4">
+          <div key={r.key} className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4">
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 {r.isSuperAdmin && <ShieldCheck size={14} className="text-[#c9a84c]" />}
-                <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{r.name}</p>
+                <p className="text-sm font-semibold text-foreground">{r.name}</p>
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => startEdit(r)} title={r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} aria-label={`${r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} ${r.name}`} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>

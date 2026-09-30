@@ -30,7 +30,7 @@ import { ReceiveBatchDialog } from "./ReceiveBatchDialog";
 import { ReceivingReportPrintDocument } from "./ReceivingReportPrintDocument";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 
-const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+const inputCls = "w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg text-foreground outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 
 /**
  * payload เดียวที่ใช้ทั้งกดบันทึกเองและบันทึกอัตโนมัติ — รอบการรับไม่เคยอยู่ในนี้
@@ -364,12 +364,12 @@ export function ReceivingReportDocument({
           <input type="number" min={0} value={line.discount ?? ""}
             aria-label={`${t("receivingReportDoc.col.discount")} ${line.description}`}
             onChange={(e) => setLine(line.id, { discount: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })}
-            className="w-full px-2 py-1 text-xs text-right font-mono bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 text-foreground" />
+            className="w-full px-2 py-1 text-xs text-right font-mono bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 text-foreground" />
         </div>
         <div className="w-16 shrink-0">
           <select value={mode} aria-label={`${t("receivingReportDoc.discountMode")} ${line.description}`}
             onChange={(e) => setLine(line.id, { discountMode: e.target.value === "amount" ? "amount" : "percent" })}
-            className="w-full px-1 py-1 text-xs bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 text-foreground">
+            className="w-full px-1 py-1 text-xs bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 text-foreground">
             <option value="percent">%</option>
             <option value="amount">{t("receivingReportDoc.discountBaht")}</option>
           </select>
@@ -446,32 +446,32 @@ export function ReceivingReportDocument({
             {canEdit && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             {canReceive && isOpen && (
               <button onClick={() => void openReceive()} disabled={busy || pendingLines.length === 0}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 <PackagePlus size={13} /> {t("receivingReportDoc.receiveBtn")}
               </button>
             )}
             {canEdit && (
               <button onClick={save} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("receivingReportDoc.save")}
               </button>
             )}
             {canReceive && (
               <button onClick={() => void toggleStatus()} disabled={busy || (!isOpen && pendingLines.length === 0)}
                 title={!isOpen && pendingLines.length === 0 ? t("receivingReportDoc.reopenBlocked") : undefined}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                 {isOpen ? <><CheckCircle2 size={13} /> {t("receivingReportDoc.closeBtn")}</> : <><LockOpen size={13} /> {t("receivingReportDoc.reopenBtn")}</>}
               </button>
             )}
             {canPrint && (
               <button onClick={() => void handlePrint(null)} disabled={printing}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                 {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("receivingReportDoc.print")}
               </button>
             )}
             {canDelete && draft.batches.length === 0 && (
               <button onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all">
                 <Trash2 size={13} /> {t("receivingReportDoc.delete")}
               </button>
             )}
@@ -486,7 +486,7 @@ export function ReceivingReportDocument({
               { label: t("receivingReportDoc.kpi.received"), value: totals.receivedValue, tone: "text-[#207e52]" },
               { label: t("receivingReportDoc.kpi.outstanding"), value: totals.outstandingValue, tone: totals.outstandingValue > 0 ? "text-[#a75d1a]" : "text-muted-foreground" },
             ].map((k) => (
-              <div key={k.label} className="bg-card border border-border rounded-xl p-4">
+              <div key={k.label} className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4">
                 <p className="text-xs text-muted-foreground">{k.label}</p>
                 <p className={`text-xl font-semibold font-mono mt-1 ${k.tone}`}>{fmt(k.value)}</p>
               </div>
@@ -494,7 +494,7 @@ export function ReceivingReportDocument({
           </div>
 
           <section className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReportDoc.sectionHeader")}</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("receivingReportDoc.sectionHeader")}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label={t("receivingReportDoc.documentNumber")}>
                 <input className={inputCls} disabled={!canEdit} value={draft.documentNumber}
@@ -509,9 +509,9 @@ export function ReceivingReportDocument({
                 <div className="block">
                   <span className="text-xs font-medium text-muted-foreground block mb-1.5">{t("receivingReportDoc.purchaseOrder")}</span>
                   <div className="flex flex-wrap items-center gap-1.5 min-h-[38px]">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono bg-secondary border border-border text-foreground">{draft.purchaseOrderNumber}</span>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono bg-white border border-[#c3ccda] text-foreground">{draft.purchaseOrderNumber}</span>
                     {extraPos.map((p) => (
-                      <span key={p.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono bg-secondary border border-border text-foreground">
+                      <span key={p.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-mono bg-white border border-[#c3ccda] text-foreground">
                         {p.number}
                         {canEdit && !poHasReceipts(p.id) && (
                           <button onClick={() => setConfirmRemovePo(p)} disabled={busy}
@@ -524,7 +524,7 @@ export function ReceivingReportDocument({
                     ))}
                     {canEdit && isOpen && (
                       <button onClick={() => setAddPoOpen(true)} disabled={busy}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs border border-dashed border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs border border-dashed border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                         <Plus size={12} /> {t("receivingReportDoc.addPo.button")}
                       </button>
                     )}
@@ -580,8 +580,8 @@ export function ReceivingReportDocument({
           </section>
 
           {/* เงื่อนไขบิล (2026-09-24) — ประเภทราคา · ส่วนลด · เครดิต/ครบกำหนด · ผู้ออกบิล แก้ได้ทุกใบ เป็นค่าตั้งต้นของรอบรับ */}
-          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReportDoc.termsTitle")}</h2>
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
+            <h2 className="text-base font-semibold text-foreground">{t("receivingReportDoc.termsTitle")}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label={t("receivingReportDoc.priceType")}>
                 <select className={inputCls} disabled={!canEdit} value={priceType}
@@ -639,13 +639,13 @@ export function ReceivingReportDocument({
           {blank && (
             <section className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-b border-border">
-                <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReportDoc.linesTitle")}</h2>
+                <h2 className="text-sm font-semibold text-foreground">{t("receivingReportDoc.linesTitle")}</h2>
                 {canEdit && (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setProductPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                    <button onClick={() => setProductPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                       <Plus size={13} /> {t("receivingReportDoc.addFromCatalog")}
                     </button>
-                    <button onClick={() => setDraft((d) => d && { ...d, lines: [...d.lines, blankReceivingReportLine()] })} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                    <button onClick={() => setDraft((d) => d && { ...d, lines: [...d.lines, blankReceivingReportLine()] })} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                       <Plus size={13} /> {t("receivingReportDoc.addTyped")}
                     </button>
                   </div>
@@ -772,56 +772,56 @@ export function ReceivingReportDocument({
                     <div>
                       <p className="text-xs text-muted-foreground">{t("receivingReportDoc.priceType")}</p>
                       <p className="text-sm text-foreground">{t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(b)])}{b.discountAmt ? ` · ${t("receivingReportDoc.summary.discount")} ${fmt(b.discountAmt)}` : ""}</p>
-                    </div>
-                    {b.dueDate && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDate")}</p>
-                        <p className="text-sm font-mono text-foreground">{formatQuoteDateThai(b.dueDate)}</p>
-                      </div>
-                    )}
-                    <div className="ml-auto text-right">
-                      <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.total")}</p>
-                      <p className="text-sm font-mono font-semibold text-[#c9a84c]">{fmt(b.total)}</p>
-                    </div>
-                    {/* ใบพิมพ์ FM-ST-01 คือหนึ่งบิลต่อหนึ่งใบ — พิมพ์เฉพาะรอบนี้ได้ (2026-09-23) */}
-                    {canPrint && (
-                      <button onClick={() => void handlePrint(b.id)} disabled={printing}
-                        title={t("receivingReportDoc.printBatch")} aria-label={t("receivingReportDoc.printBatch")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-                        <Printer size={12} /> {t("receivingReportDoc.printBatch")}
-                      </button>
-                    )}
-                    {/* ยกเลิกได้เฉพาะรอบล่าสุด — ต้นทุนถัวเฉลี่ยเดินไปตามลำดับการรับ ถอนรอบกลางย้อนไม่ได้ */}
-                    {canReceive && idx === draft.batches.length - 1 && (
-                      <button onClick={() => setConfirmReverse(b.id)} disabled={busy}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all disabled:opacity-60">
-                        <RotateCcw size={12} /> {t("receivingReportDoc.reverseBtn")}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+ </div>
+ {b.dueDate && (
+ <div>
+ <p className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDate")}</p>
+ <p className="text-sm font-mono text-foreground">{formatQuoteDateThai(b.dueDate)}</p>
+ </div>
+ )}
+ <div className="ml-auto text-right">
+ <p className="text-xs text-muted-foreground">{t("receivingReportDoc.receive.total")}</p>
+ <p className="text-sm font-mono font-semibold text-[#c9a84c]">{fmt(b.total)}</p>
+ </div>
+ {/* ใบพิมพ์ FM-ST-01 คือหนึ่งบิลต่อหนึ่งใบ — พิมพ์เฉพาะรอบนี้ได้ (2026-09-23) */}
+ {canPrint && (
+ <button onClick={() => void handlePrint(b.id)} disabled={printing}
+ title={t("receivingReportDoc.printBatch")} aria-label={t("receivingReportDoc.printBatch")}
+ className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
+ <Printer size={12} /> {t("receivingReportDoc.printBatch")}
+ </button>
+ )}
+ {/* ยกเลิกได้เฉพาะรอบล่าสุด — ต้นทุนถัวเฉลี่ยเดินไปตามลำดับการรับ ถอนรอบกลางย้อนไม่ได้ */}
+ {canReceive && idx === draft.batches.length - 1 && (
+ <button onClick={() => setConfirmReverse(b.id)} disabled={busy}
+ className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all disabled:opacity-60">
+ <RotateCcw size={12} /> {t("receivingReportDoc.reverseBtn")}
+ </button>
+ )}
+ </li>
+ ))}
+ </ul>
+ )}
+ </section>
 
-          <DocumentAttachmentsCard
-            attachments={draft.attachments ?? []}
-            disabled={!canEdit}
-            onUpload={async (file) => {
-              const updated = await uploadReceivingReportAttachment(draft.id, file);
-              setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
-              setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
-            }}
-            onDelete={async (attachmentId) => {
-              const updated = await deleteReceivingReportAttachment(draft.id, attachmentId);
-              setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
-              setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
-            }}
-          />
-        </div>
-      </div>
+ <DocumentAttachmentsCard
+ attachments={draft.attachments ?? []}
+ disabled={!canEdit}
+ onUpload={async (file) => {
+ const updated = await uploadReceivingReportAttachment(draft.id, file);
+ setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+ setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+ }}
+ onDelete={async (attachmentId) => {
+ const updated = await deleteReceivingReportAttachment(draft.id, attachmentId);
+ setDraft((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+ setDoc((p) => (p ? { ...p, attachments: updated.attachments } : updated));
+ }}
+ />
+ </div>
+ </div>
 
-      {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
+ {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
           (บั๊กเดิมของหกโมดูลที่แก้ไปเมื่อ 2026-09-02: เรนเดอร์เฉพาะตอนกดปุ่ม แล้ว Ctrl+P ได้กระดาษเปล่า) */}
       <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} printInfo={printInfo} batchId={printBatchId ?? undefined} />
 

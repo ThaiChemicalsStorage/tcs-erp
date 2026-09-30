@@ -115,7 +115,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 className="text-lg font-semibold text-foreground">
             {t("accounting.manual.title")}
           </h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
@@ -132,7 +132,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
             <select
               value={docType}
               onChange={(e) => setDocType(e.target.value as "AR" | "IV")}
-              className="w-full h-9 px-2 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="w-full h-9 px-2 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             >
               <option value="AR">{t(DOC_TYPE_LABEL_KEY.AR)}</option>
               <option value="IV">{t(DOC_TYPE_LABEL_KEY.IV)}</option>
@@ -144,7 +144,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
               <select
                 value={paymentType}
                 onChange={(e) => setPaymentType(e.target.value as "" | "Cash" | "Credit")}
-                className="flex-1 h-9 px-2 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="flex-1 h-9 px-2 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
               >
                 <option value="">{t("accounting.manual.paymentType.none")}</option>
                 <option value="Cash">{t("accounting.manual.paymentType.cash")}</option>
@@ -156,7 +156,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
                   value={days}
                   onChange={(e) => setDays(e.target.value)}
                   placeholder={t("accounting.manual.field.daysPlaceholder")}
-                  className="w-20 h-9 px-2 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                  className="w-20 h-9 px-2 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                 />
               )}
             </div>
@@ -170,31 +170,31 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.companyName")}</label>
-            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.taxId")}</label>
-            <input value={taxId} onChange={(e) => setTaxId(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={taxId} onChange={(e) => setTaxId(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.address")}</label>
-            <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.branch")}</label>
-            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder={t("accounting.manual.field.branchPlaceholder")} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder={t("accounting.manual.field.branchPlaceholder")} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.contactName")}</label>
-            <input value={contactName} onChange={(e) => setContactName(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={contactName} onChange={(e) => setContactName(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.phone")}</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.email")}</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
         </div>
 
@@ -208,27 +208,27 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
                   value={l.description}
                   onChange={(e) => updateLine(l.key, { description: e.target.value })}
                   placeholder={t("accounting.manual.line.description")}
-                  className="flex-1 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                  className="flex-1 h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                 />
                 <input
                   type="number"
                   value={l.qty}
                   onChange={(e) => updateLine(l.key, { qty: e.target.value })}
                   placeholder={t("accounting.manual.line.qty")}
-                  className="w-20 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                  className="w-20 h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                 />
                 <input
                   value={l.unit}
                   onChange={(e) => updateLine(l.key, { unit: e.target.value })}
                   placeholder={t("accounting.manual.line.unit")}
-                  className="w-20 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                  className="w-20 h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                 />
                 <input
                   type="number"
                   value={l.unitPrice}
                   onChange={(e) => updateLine(l.key, { unitPrice: e.target.value })}
                   placeholder={t("accounting.manual.line.unitPrice")}
-                  className="w-28 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                  className="w-28 h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                 />
                 <button onClick={() => removeLine(l.key)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.manual.line.remove")}>
                   <Trash2 size={14} />
@@ -243,7 +243,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
                     value={sd}
                     onChange={(e) => updateSubDetail(l.key, i, e.target.value)}
                     placeholder={t("accounting.manual.line.subDetailPlaceholder")}
-                    className="flex-1 h-8 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                    className="flex-1 h-8 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                   />
                   <button onClick={() => removeSubDetail(l.key, i)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.manual.line.removeSubDetail")}>
                     <Trash2 size={12} />
@@ -268,7 +268,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
             onChange={(e) => setRemarksText(e.target.value)}
             rows={3}
             placeholder={t("accounting.manual.field.remarksPlaceholder")}
-            className="w-full px-3 py-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
+            className="w-full px-3 py-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y"
           />
         </div>
 
@@ -279,7 +279,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
           <button
             onClick={() => void handleSubmit()}
             disabled={busy}
-            className="px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50"
+            className="px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
           >
             {busy ? t("accounting.manual.btn.issuingBusy") : t("accounting.manual.btn.issue")}
           </button>

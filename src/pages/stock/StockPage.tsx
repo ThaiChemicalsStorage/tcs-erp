@@ -196,7 +196,7 @@ export function StockPage({
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:overflow-visible">
       <div className="print:hidden">
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stock.title")}</h1>
+        <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("stock.title")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("stock.subtitle")}</p>
       </div>
 
@@ -226,7 +226,7 @@ export function StockPage({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("stock.search.placeholder")}
-          className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+          className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
         />
         {search && (
           <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -237,14 +237,14 @@ export function StockPage({
         <button
           onClick={() => window.print()}
           disabled={filtered.length === 0 || cardProduct !== null}
-          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-50"
         >
           <Printer size={13} /> {t("stock.printCountSheet")}
         </button>
         <button
           onClick={() => void exportListXlsx()}
           disabled={filtered.length === 0 || exporting}
-          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-50"
         >
           <Sheet size={13} /> {t("stock.export.excel")}
         </button>
@@ -252,21 +252,21 @@ export function StockPage({
           onClick={() => setListPrinting(true)}
           disabled={filtered.length === 0 || cardProduct !== null || listPrinting}
           title={t("stock.export.pdfHint")}
-          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-50"
         >
           <FileText size={13} /> {t("stock.export.pdf")}
         </button>
         {canAdjust && (
           <button
             onClick={() => setImportOpen(true)}
-            className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+            className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all"
           >
             <FileSpreadsheet size={13} /> {t("stock.import.button")}
           </button>
         )}
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
+      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden print:hidden">
         {activeProducts.length === 0 ? (
           <EmptyState icon={Boxes} title={t("stock.empty.title")} description={t("stock.empty.description")} compact />
         ) : filtered.length === 0 ? (
@@ -320,7 +320,7 @@ export function StockPage({
                           disabled={savingReorderId === p.id}
                           aria-label={`${t("stock.table.reorderPoint")} — ${p.name}`}
                           onBlur={(e) => void saveReorderPoint(p, e.target.value)}
-                          className="w-20 h-8 px-2 text-xs font-mono text-center text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-50"
+                          className="w-20 h-8 px-2 text-xs font-mono text-center text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-50"
                         />
                       ) : (
                         <span className="text-xs font-mono text-muted-foreground">{(p.reorderPoint ?? 0) || "—"}</span>
@@ -439,7 +439,7 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-xl w-full max-w-md p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stock.dialog.adjustTitle")} — {product.name}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("stock.dialog.adjustTitle")} — {product.name}</h2>
           <p className="text-xs text-muted-foreground mt-0.5 font-mono">{t("stock.dialog.currentBalancePrefix")} {product.stockQty.toLocaleString("th-TH")} {product.unit}</p>
         </div>
 
@@ -448,7 +448,7 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
             <button
               key={k}
               onClick={() => setKind(k)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${kind === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${kind === k ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}
             >
               {t(STOCK_MOVEMENT_KIND_LABEL_KEY[k])}
             </button>
@@ -462,7 +462,7 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
             value={qty}
             onChange={(e) => setQty(e.target.value)}
             placeholder={kind === "adjust" ? t("stock.dialog.field.adjustPlaceholder") : "0"}
-            className="h-9 w-full px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 w-full px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
         </label>
 
@@ -476,7 +476,7 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
               value={unitCost}
               onChange={(e) => setUnitCost(e.target.value)}
               placeholder={(product.avgCost ?? 0) > 0 ? money(product.avgCost ?? 0) : "0.00"}
-              className="h-9 w-full px-3 text-sm font-mono text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 w-full px-3 text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             <span className="block">{t("stock.dialog.unitCostHint")}</span>
           </label>
@@ -489,7 +489,7 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={kind === "receive" ? t("stock.dialog.placeholder.receive") : kind === "deduct" ? t("stock.dialog.placeholder.deduct") : t("stock.dialog.placeholder.adjust")}
-            className="h-9 w-full px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 w-full px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
         </label>
 
@@ -497,7 +497,7 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button onClick={onCancel} disabled={busy} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">{t("stock.dialog.cancel")}</button>
-          <button onClick={() => void handleSave()} disabled={busy} className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-medium hover:brightness-95 transition-all disabled:opacity-50">
+          <button onClick={() => void handleSave()} disabled={busy} className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-medium hover:brightness-95 transition-all disabled:opacity-50">
             {busy ? t("stock.dialog.saving") : t("stock.dialog.save")}
           </button>
         </div>

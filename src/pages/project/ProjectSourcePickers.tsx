@@ -17,9 +17,8 @@ import { useI18n } from "../../lib/i18n";
 const dialogShell = "fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4";
 const dialogPanel = "bg-card border border-border rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3";
 const dialogHeading = "text-lg font-semibold text-foreground";
-const headingFont = { fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" };
-const rowButton = "w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
-const searchBox = "flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 flex-shrink-0";
+const rowButton = "w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white/60 hover:bg-secondary/40 hover:bg-[#f4f6fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+const searchBox = "flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 flex-shrink-0 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors";
 const searchInput = "bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full";
 
 function SkeletonRows() {
@@ -110,7 +109,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
     <div className={dialogShell}>
       <div className={dialogPanel}>
         <div className="flex items-center justify-between">
-          <h2 className={dialogHeading} style={headingFont}>{t(forProduction ? "productionOrder.picker.scope.title" : "project.picker.scope.title")}</h2>
+          <h2 className={dialogHeading}>{t(forProduction ? "productionOrder.picker.scope.title" : "project.picker.scope.title")}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("project.picker.close")}>
             <X size={18} />
           </button>
@@ -165,7 +164,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
                 <button
                   onClick={() => { setBusyId(pickedScope.id); onSelect(pickedScope.id, [...checkedItems]); }}
                   disabled={busyId !== null || (scopeItems.length > 0 && checkedItems.size === 0)}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {busyId !== null && <Loader2 size={12} className="animate-spin" />} {t("project.picker.item.confirm")}
                 </button>
@@ -307,7 +306,7 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
     <div className={dialogShell}>
       <div className={dialogPanel}>
         <div className="flex items-center justify-between">
-          <h2 className={dialogHeading} style={headingFont}>{title}</h2>
+          <h2 className={dialogHeading}>{title}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("project.picker.close")}>
             <X size={18} />
           </button>
@@ -395,7 +394,7 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
                 {multiSelect && pendingItems.length > 0 && <button
                   onClick={() => { setBusy(true); onSelect(picked.id, [...checked]); }}
                   disabled={busy || checked.size === 0}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {busy && <Loader2 size={12} className="animate-spin" />} {t("project.picker.item.confirm")}
                 </button>}
@@ -476,7 +475,7 @@ export function ProductionOrderSourcePickerDialog({ title, onClose, onSelect }: 
     <div className={dialogShell}>
       <div className={dialogPanel}>
         <div className="flex items-center justify-between">
-          <h2 className={dialogHeading} style={headingFont}>{title}</h2>
+          <h2 className={dialogHeading}>{title}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("project.picker.close")}>
             <X size={18} />
           </button>

@@ -260,7 +260,7 @@ function FailedNote({ onRetry }: { onRetry: () => void }) {
     <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-[#e05252]/25 bg-[#e05252]/5 text-sm">
       <AlertTriangle size={16} className="text-[#d22626] flex-shrink-0" />
       <span className="flex-1 text-foreground">{t("dashboard.dept.loadError")}</span>
-      <button onClick={onRetry} className="px-2.5 py-1 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">{t("dashboard.dept.retry")}</button>
+      <button onClick={onRetry} className="px-2.5 py-1 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">{t("dashboard.dept.retry")}</button>
     </div>
   );
 }

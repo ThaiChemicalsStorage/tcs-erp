@@ -9,7 +9,7 @@ export function NotificationSummary({ summary }: { summary: NotificationSummaryD
   const byType = Object.entries(summary.byType);
   return (
     <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-0.5 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+      <h2 className="text-base font-semibold text-foreground mb-0.5 flex items-center gap-1.5">
         <Bell size={15} /> {t("dashboard.notifications.title")}
       </h2>
       <p className="text-[10px] text-muted-foreground mb-4">{t("dashboard.notifications.personalNote")}</p>

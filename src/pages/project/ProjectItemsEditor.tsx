@@ -100,7 +100,7 @@ export function ProjectItemsEditor({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("project.items.title")}</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("project.items.title")}</h2>
         <p className="text-xs text-muted-foreground mt-0.5">{t("project.items.subtitle")}</p>
       </div>
       {project.items.length === 0 ? (

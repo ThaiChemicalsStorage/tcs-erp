@@ -121,7 +121,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
     }
   };
 
-  const inputClass = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+  const inputClass = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -132,14 +132,14 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
           actions={canEdit ? (
             <button
               onClick={openNew}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
             >
               <Plus size={15} /> {t("mrTemplate.createBtn")}
             </button>
           ) : undefined}
         />
 
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
             value={search}
@@ -157,7 +157,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
         ) : loadError ? (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
             <p className="text-sm text-muted-foreground">{t("mrTemplate.loadError")}</p>
-            <button onClick={retry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={retry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
               <RotateCw size={12} /> {t("materialRequisition.retry")}
             </button>
           </div>
@@ -170,7 +170,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
         ) : (
           <div className="space-y-2">
             {filtered.map((tpl) => (
-              <div key={tpl.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-start gap-3">
+              <div key={tpl.id} className="bg-card border border-[#c3ccda] bg-white rounded-xl px-4 py-3 flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-foreground truncate">{tpl.name}</p>
                   {tpl.description.trim() !== "" && (
@@ -184,7 +184,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
                 {canEdit && (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button onClick={() => openEdit(tpl)} aria-label={t("mrTemplate.edit")} title={t("mrTemplate.edit")}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                      className="p-1.5 rounded-lg text-foreground hover:bg-secondary transition-colors">
                       <Pencil size={14} />
                     </button>
                     <button onClick={() => setDeleteTarget(tpl)} aria-label={t("mrTemplate.delete")} title={t("mrTemplate.delete")}
@@ -201,13 +201,13 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
 
       {editing !== null && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+              <h2 className="text-lg font-semibold text-foreground">
                 {editing === "new" ? t("mrTemplate.createBtn") : t("mrTemplate.edit")}
               </h2>
               <button onClick={() => setEditing(null)} aria-label={t("mrTemplate.close")} title={t("mrTemplate.close")}
-                className="text-muted-foreground hover:text-foreground transition-colors">
+                className="text-foreground transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -228,7 +228,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
                 <button
                   onClick={() => setPickerOpen(true)}
                   disabled={draft.lines.length >= MAX_TEMPLATE_LINES}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50"
                 >
                   <Plus size={13} /> {t("mrTemplate.addLine")}
                 </button>
@@ -269,7 +269,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
                                   lines: prev.lines.map((l, i) => (i === idx ? { ...l, plannedQty: Number.isFinite(next as number) ? next : null } : l)),
                                 }));
                               }}
-                              className="w-full text-xs text-center text-foreground bg-secondary border border-border rounded px-1.5 py-1 outline-none focus:border-[#c9a84c]/50"
+                              className="w-full text-xs text-center text-foreground bg-white border border-[#c3ccda] rounded px-1.5 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
                             />
                           </td>
                           <td className="px-2 py-1.5 text-center">
@@ -295,7 +295,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
                 {t("mrTemplate.cancel")}
               </button>
               <button onClick={() => void save()} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("mrTemplate.save")}
               </button>
             </div>

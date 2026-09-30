@@ -243,7 +243,7 @@ export function SignaturePad({
             onClick={() => switchMode("draw")}
             disabled={disabled}
             className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all disabled:cursor-not-allowed ${
-              mode === "draw" ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+              mode === "draw" ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <PenLine size={11} /> {t("signaturePad.modeDraw")}
@@ -253,7 +253,7 @@ export function SignaturePad({
             onClick={() => switchMode("upload")}
             disabled={disabled}
             className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all disabled:cursor-not-allowed ${
-              mode === "upload" ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+              mode === "upload" ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Upload size={11} /> {t("signaturePad.modeUpload")}
@@ -323,7 +323,7 @@ export function SignaturePad({
             disabled={disabled}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("signaturePad.signerNamePlaceholder")}
-            className="h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+            className="h-9 w-full px-3 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
           />
         </div>
       )}
@@ -334,7 +334,7 @@ export function SignaturePad({
             type="button"
             onClick={clear}
             disabled={disabled || !hasValue}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Eraser size={12} /> {t("signaturePad.clear")}
           </button>
@@ -342,7 +342,7 @@ export function SignaturePad({
             type="button"
             onClick={() => { void confirm(); }}
             disabled={disabled || !hasValue || (requireName && !name.trim())}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={12} /> {t("signaturePad.confirm")}
           </button>

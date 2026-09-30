@@ -14,31 +14,33 @@
      through to whatever Thai font the OS picked, which the owner reported as a hard-to-read odd font.
      Digits and Latin still render in JetBrains Mono; only the Thai glyphs change. */
   --font-mono: 'JetBrains Mono', 'Noto Sans Thai', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* 2026-09-30 redesign (phase 1): page #f4f6fa, hairline #e3e8f0, secondary text #5f7293, focus blue #1a5fb4,
+     primary action navy — values from the approved REDESIGN canvas (see DESIGN.md). */
   /* 2026-08-07: briefly warm cream for a few hours, reverted the same day per direct user
      request ("ทำกลับไปธีมขาวเหมือนเดิม") — these are the original cool near-white values. */
-  --background: #f4f6fb;
+  --background: #f4f6fa;
   --foreground: #0b1d3a;
   --card: #ffffff;
   --card-foreground: #0b1d3a;
   --popover: #ffffff;
   --popover-foreground: #0b1d3a;
-  --primary: #c9a84c;
+  --primary: #0b1d3a;
   --primary-foreground: #ffffff;
-  --secondary: #e8edf7;
-  --secondary-foreground: #1a3a6b;
-  --muted: #eef1f8;
-  --muted-foreground: #5a7299;
+  --secondary: #eef1f6;
+  --secondary-foreground: #3d5173;
+  --muted: #eef1f6;
+  --muted-foreground: #5f7293;
   --accent: #f0c040;
   --accent-foreground: #0b1d3a;
   --destructive: #e05252;
   --destructive-foreground: #ffffff;
-  --border: rgba(11, 29, 58, 0.1);
+  --border: #e3e8f0;
   --input: #eef1f8;
   --input-background: #eef1f8;
   --switch-background: #c5d0e4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #c9a84c;
+  --ring: #1a5fb4;
   --chart-1: #c9a84c;
   --chart-2: #1a5fb4;
   --chart-3: #2aa36b;
@@ -46,12 +48,12 @@
   --chart-5: #7c4dbb;
   --radius: 0.5rem;
   --sidebar: #0b1d3a;
-  --sidebar-foreground: #a8bed8;
+  --sidebar-foreground: #c5d3e8;
   --sidebar-primary: #c9a84c;
   --sidebar-primary-foreground: #0b1d3a;
-  --sidebar-accent: #132540;
+  --sidebar-accent: rgba(255, 255, 255, 0.06);
   --sidebar-accent-foreground: #e8edf5;
-  --sidebar-border: rgba(201, 168, 76, 0.15);
+  --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #c9a84c;
 }
 

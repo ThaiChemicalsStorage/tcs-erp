@@ -55,29 +55,29 @@ export function SignInPage({
         {view === "sent" ? (
           <div role="status" className="space-y-3">
             <MailCheck size={28} className="text-[#207e52]" />
-            <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("signin.forgot.sentTitle")}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">{t("signin.forgot.sentTitle")}</h1>
             <p className="text-sm text-muted-foreground">{t("signin.forgot.sentBody")}</p>
           </div>
         ) : (
           <>
-            <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("signin.forgot.title")}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">{t("signin.forgot.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1 mb-7">{t("signin.forgot.subtitle")}</p>
             <form onSubmit={submitForgot} className="space-y-4">
               <div>
                 <label htmlFor={forgotIdentifierId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.identifierLabel")}</label>
                 <input id={forgotIdentifierId} type="text" value={forgotIdentifier} onChange={(e) => setForgotIdentifier(e.target.value)} autoFocus
                   placeholder={t("signin.identifierPlaceholder")}
-                  className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                  className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
               </div>
               <div>
                 <label htmlFor={forgotNoteId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.forgot.noteLabel")}</label>
                 <textarea id={forgotNoteId} rows={2} value={forgotNote} onChange={(e) => setForgotNote(e.target.value)} maxLength={500}
                   placeholder={t("signin.forgot.notePlaceholder")}
-                  className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y" />
+                  className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y" />
               </div>
               {forgotError && <p role="alert" className="text-xs text-[#e05252]">{forgotError}</p>}
               <button type="submit" disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 <KeyRound size={15} /> {submitting ? t("signin.forgot.sending") : t("signin.forgot.submit")}
               </button>
             </form>
@@ -103,7 +103,7 @@ export function SignInPage({
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("signin.title")}</h1>
+      <h1 className="text-2xl font-semibold text-foreground">{t("signin.title")}</h1>
       <p className="text-sm text-muted-foreground mt-1 mb-7">{t("signin.subtitle")}</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -117,7 +117,7 @@ export function SignInPage({
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder={t("signin.identifierPlaceholder")}
-              className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg pl-9 pr-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg pl-9 pr-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
           </div>
         </div>
@@ -131,7 +131,7 @@ export function SignInPage({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg pl-3 pr-10 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg pl-3 pr-10 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             <button
               type="button"
@@ -158,7 +158,7 @@ export function SignInPage({
         <button
           type="submit"
           disabled={submitting}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60"
         >
           <LogIn size={15} /> {submitting ? t("signin.submitting") : t("signin.submit")}
         </button>

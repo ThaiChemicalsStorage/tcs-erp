@@ -103,7 +103,7 @@ export function DeliveryOrderDepartmentRouting({
         <button
           onClick={() => void send()}
           disabled={saving || !dirty}
-          className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
         >
           {saving ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {t("deliveryOrderDept.send")}
         </button>

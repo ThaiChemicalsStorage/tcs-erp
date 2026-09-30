@@ -200,7 +200,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
                   >
                     <FileSpreadsheet size={13} className="text-[#c9a84c]" /> {exportingXlsx ? t("dashboard.export.xlsx.loading") : t("dashboard.export.xlsx")}
                   </button>
-                  <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
                     <Download size={13} /> {t("dashboard.export.csv")}
                   </button>
                 </div>
@@ -209,7 +209,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
                 onClick={tour.start}
                 title={t("tour.replay")}
                 aria-label={t("tour.replay")}
-                className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+                className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
               >
                 <HelpCircle size={14} />
               </button>
@@ -244,7 +244,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
         </div>
       )}
 
-      <div {...tabPanelProps("dashboard", tab)} className="space-y-6 outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/40 rounded-lg">
+      <div {...tabPanelProps("dashboard", tab)} className="space-y-6 outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded-lg">
         {tab === "overview" && (
           <OverviewTab
             visibleTabs={visibleTabs}

@@ -21,7 +21,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="relative">
-          <p className="text-white text-3xl font-semibold leading-snug mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <p className="text-white text-3xl font-semibold leading-snug mb-4">
             {t("auth.brand.headline1")}<br />{t("auth.brand.headline2")}
           </p>
           <p className="text-[#a8bed8] text-sm leading-relaxed mb-8 max-w-sm">

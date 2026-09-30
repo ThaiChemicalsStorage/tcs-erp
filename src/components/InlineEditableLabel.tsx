@@ -101,7 +101,7 @@ export function InlineEditableLabel({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEditing(); }
       }}
-      className={`text-left rounded-sm hover:bg-[#c9a84c]/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#c9a84c]/60 transition-colors ${className}`}
+      className={`text-left rounded-sm hover:bg-[#c9a84c]/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#1a5fb4]/40 transition-colors ${className}`}
     >
       {value}
     </button>

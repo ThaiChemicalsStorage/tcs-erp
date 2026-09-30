@@ -185,10 +185,11 @@ body {
     background-color: var(--card);
   }
   .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):not(:disabled, [readonly]):not([class*="e05252"]) {
-    border-color: rgba(11, 29, 58, 0.32);
+    border-color: #c3ccda;
   }
   .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):not(:disabled, [readonly]):not([class*="e05252"]):focus {
-    border-color: #c9a84c;
+    border-color: #1a5fb4;
+    box-shadow: 0 0 0 3px rgba(26, 95, 180, 0.18);
   }
   .doc-form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"]), select, textarea):not([data-field-box] *):is(:disabled, [readonly]) {
     background-color: transparent;
@@ -204,10 +205,11 @@ body {
      กรอบนอกได้หน้าตาช่องกรอกได้ และช่องพิมพ์ข้างในถูกยกเว้นจากกฎข้างบน ไม่งั้นจะเป็นกรอบซ้อนสองชั้น */
   .doc-form [data-field-box] {
     background-color: var(--card);
-    border-color: rgba(11, 29, 58, 0.32);
+    border-color: #c3ccda;
   }
   .doc-form [data-field-box]:focus-within {
-    border-color: #c9a84c;
+    border-color: #1a5fb4;
+    box-shadow: 0 0 0 3px rgba(26, 95, 180, 0.18);
   }
   /* ช่องวันที่ที่กรอกไม่ได้และยังว่าง — ไม่ต้องโชว์ "mm/dd/yyyy" ซึ่งอ่านเหมือนช่องที่ยังต้องกรอก */
   .doc-form input[type="date"]:is(:disabled, [readonly])[value=""] {

@@ -282,14 +282,14 @@ export function PurchaseRequestDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("purchaseRequestDoc.backToList")}
           </button>
         </div>
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
           <AlertTriangle size={20} className="text-[#e05252]" />
           <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
             <RotateCw size={12} /> {t("purchaseRequest.retry")}
           </button>
         </div>
@@ -301,7 +301,7 @@ export function PurchaseRequestDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("purchaseRequestDoc.backToList")}
           </button>
         </div>
@@ -565,17 +565,17 @@ export function PurchaseRequestDocument({
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
             </button>
           )}
           {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("purchaseRequestDoc.print")}
             </button>
           )}
           {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("purchaseRequestDoc.saveDraft")}
             </button>
           )}
@@ -635,7 +635,7 @@ export function PurchaseRequestDocument({
             ส่วน "ซื้อไปแล้วหรือยัง" มาจาก purchasedLines ที่เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง ไม่ใช่ธงบนใบนี้
             ลบใบสั่งซื้อทิ้งแล้วบรรทัดจึงกลับมาซื้อได้เอง */}
         {buyCardVisible && (
-          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-3">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -652,7 +652,7 @@ export function PurchaseRequestDocument({
               <button
                 onClick={() => setBuyDialogOpen(true)}
                 disabled={creatingPo || remainingLines.length === 0 || doc.purchasingStage === "review"}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
               >
                 {creatingPo ? <Loader2 size={13} className="animate-spin" /> : <ShoppingBag size={13} />}
                 {t("purchaseRequestDoc.buy.create")}
@@ -701,7 +701,7 @@ export function PurchaseRequestDocument({
         {/* การ์ดของฝ่ายจัดซื้อ (2026-09-21) — ขั้นสุดท้ายของใบก่อนออกใบสั่งซื้อ
             อยู่เหนือกล่องแก้ไขสีส้ม เพราะเป็นปุ่มที่จบงานของการแก้ ไม่ใช่ส่วนหนึ่งของการแก้ */}
         {purchasingCardVisible && (
-          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-3">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
               <ShoppingCart size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.purchasing.title")}
             </h2>
@@ -723,7 +723,7 @@ export function PurchaseRequestDocument({
                 <button
                   onClick={() => setConfirmPurchasingReopen(true)}
                   disabled={purchasingBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border text-muted-foreground rounded-lg font-medium hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white text-muted-foreground rounded-lg font-medium hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-50"
                 >
                   <Undo2 size={13} /> {t("purchaseRequestDoc.purchasing.reopen")}
                 </button>
@@ -747,7 +747,7 @@ export function PurchaseRequestDocument({
                 <button
                   onClick={() => setConfirmPurchasingApprove(true)}
                   disabled={purchasingBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#d8ba62] transition-colors disabled:opacity-50"
                 >
                   {purchasingBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
                   {t("purchaseRequestDoc.purchasing.approve")}
@@ -770,7 +770,7 @@ export function PurchaseRequestDocument({
               value={purchasingEditNote}
               onChange={(e) => setPurchasingEditNote(e.target.value)}
               placeholder={t("purchaseRequestDoc.purchasingEdit.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-card border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="w-full text-xs text-foreground bg-card border border-[#c3ccda] bg-white rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             {(doc.purchasingEdits ?? []).length > 0 && (
               <ul className="space-y-1 pt-1">
@@ -797,51 +797,51 @@ export function PurchaseRequestDocument({
               <label htmlFor="pr-issueDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.issueDate")}</label>
               <input id="pr-issueDate" type="date" disabled={!editable} value={draft.issueDate}
                 onChange={(e) => setDraft({ ...draft, issueDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div>
               <label htmlFor="pr-neededByDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.neededByDate")}</label>
               <input id="pr-neededByDate" type="date" disabled={!editable} value={draft.neededByDate}
                 onChange={(e) => setDraft({ ...draft, neededByDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
 
             <div className="sm:col-span-2">
               <label htmlFor="pr-deliveryLocation" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryLocation")}</label>
               <input id="pr-deliveryLocation" disabled={!editable} value={draft.deliveryLocation}
                 onChange={(e) => setDraft({ ...draft, deliveryLocation: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div>
               <label htmlFor="pr-deliveryContact" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryContact")}</label>
               <input id="pr-deliveryContact" disabled={!editable} value={draft.deliveryContact}
                 onChange={(e) => setDraft({ ...draft, deliveryContact: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div>
               <label htmlFor="pr-deliveryPhone" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryPhone")}</label>
               <input id="pr-deliveryPhone" disabled={!editable} value={draft.deliveryPhone}
                 onChange={(e) => setDraft({ ...draft, deliveryPhone: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="pr-headerRemark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.headerRemark")}</label>
               <textarea id="pr-headerRemark" rows={3} disabled={!editable} value={draft.headerRemark}
                 onChange={(e) => setDraft({ ...draft, headerRemark: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-70" />
             </div>
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
           <div data-tour="prdoc-addline" className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequestDoc.linesTitle")}</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("purchaseRequestDoc.linesTitle")}</h2>
             {editable && (
               <div className="flex items-center gap-2">
-                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("purchaseRequestDoc.addFromCatalog")}
                 </button>
-                <button onClick={addFreeLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={addFreeLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("purchaseRequestDoc.addFreeLine")}
                 </button>
               </div>
@@ -960,7 +960,7 @@ export function PurchaseRequestDocument({
                             ))}
                             {editable && (
                               <button onClick={() => updateLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })}
-                                className="flex items-center gap-1.5 pl-4 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                className="flex items-center gap-1.5 pl-4 text-xs text-foreground transition-colors">
                                 <Plus size={11} /> {t("purchaseRequestDoc.addSubDetail")}
                               </button>
                             )}
@@ -995,7 +995,7 @@ export function PurchaseRequestDocument({
           ไม่ถูกพิมพ์ลงกระดาษ เพราะฟอร์ม FM-PU-05 ไม่มีส่วนนี้
         */}
         {storeCardVisible && (
-          <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -1059,77 +1059,77 @@ export function PurchaseRequestDocument({
                                 key={value}
                                 onClick={() => setStoreDecisions((prev) => ({ ...prev, [line.id]: value }))}
                                 className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${decision === value
-                                  ? "bg-[#c9a84c] text-[#0b1d3a] border-[#c9a84c] font-semibold"
+                                  ? "bg-[#0b1d3a] text-white border-[#c9a84c] font-semibold"
                                   : "border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40"}`}
-                              >
-                                {value === "stock" ? t("purchaseRequestDoc.store.decisionStock") : t("purchaseRequestDoc.store.decisionPurchase")}
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-xs font-mono text-foreground whitespace-nowrap">{issued.toLocaleString()}</td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            disabled={decision !== "stock" || !line.productId || outstanding <= 0}
-                            value={issueQty[line.id] ?? ""}
-                            onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
-                            placeholder={outstanding > 0 ? String(outstanding) : ""}
-                            className="w-20 text-xs font-mono text-foreground bg-secondary border border-border rounded px-1.5 py-1 outline-none focus:border-[#c9a84c]/50 disabled:opacity-50"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+ >
+ {value === "stock" ? t("purchaseRequestDoc.store.decisionStock") : t("purchaseRequestDoc.store.decisionPurchase")}
+ </button>
+ ))}
+ </div>
+ </td>
+ <td className="px-3 py-2 text-xs font-mono text-foreground whitespace-nowrap">{issued.toLocaleString()}</td>
+ <td className="px-2 py-1.5">
+ <input
+ type="number"
+ disabled={decision !== "stock" || !line.productId || outstanding <= 0}
+ value={issueQty[line.id] ?? ""}
+ onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
+ placeholder={outstanding > 0 ? String(outstanding) : ""}
+ className="w-20 text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded px-1.5 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-50"
+ />
+ </td>
+ </tr>
+ );
+ })}
+ </tbody>
+ </table>
+ </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <label htmlFor="pr-store-remark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.remark")}</label>
-                <input id="pr-store-remark" value={storeRemark} onChange={(e) => setStoreRemark(e.target.value)}
-                  className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-              </div>
-              <div>
-                <label htmlFor="pr-store-issuedate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issuedDate")}</label>
-                <input id="pr-store-issuedate" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)}
-                  className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="pr-store-issueremark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issueRemark")}</label>
-              <input id="pr-store-issueremark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)}
-                className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-            </div>
+ <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+ <div className="sm:col-span-2">
+ <label htmlFor="pr-store-remark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.remark")}</label>
+ <input id="pr-store-remark" value={storeRemark} onChange={(e) => setStoreRemark(e.target.value)}
+ className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
+ </div>
+ <div>
+ <label htmlFor="pr-store-issuedate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issuedDate")}</label>
+ <input id="pr-store-issuedate" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)}
+ className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
+ </div>
+ </div>
+ <div>
+ <label htmlFor="pr-store-issueremark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issueRemark")}</label>
+ <input id="pr-store-issueremark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)}
+ className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
+ </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => void saveStoreReview()} disabled={savingReview}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c9a84c]/40 transition-colors disabled:opacity-60">
-                {savingReview ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} {t("purchaseRequestDoc.store.saveReview")}
-              </button>
-              <button onClick={() => void saveStoreIssue()} disabled={savingIssue}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
-                {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseRequestDoc.store.saveIssue")}
-              </button>
-            </div>
+ <div className="flex items-center gap-2 flex-wrap">
+ <button onClick={() => void saveStoreReview()} disabled={savingReview}
+ className="flex items-center gap-1.5 px-4 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-60">
+ {savingReview ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} {t("purchaseRequestDoc.store.saveReview")}
+ </button>
+ <button onClick={() => void saveStoreIssue()} disabled={savingIssue}
+ className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
+ {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseRequestDoc.store.saveIssue")}
+ </button>
+ </div>
 
-            {issueBatches.length > 0 && (
-              <div className="border-t border-border pt-3 space-y-2">
-                <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <History size={13} /> {t("purchaseRequestDoc.store.historyTitle")}
-                </h3>
-                {issueBatches.map((batch) => (
-                  <div key={batch.id} className="flex items-start justify-between gap-3 bg-secondary/40 rounded-lg px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-xs text-foreground">
-                        {t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(batch.seq))}
-                        <span className="text-muted-foreground font-mono ml-2">{formatQuoteDateThai(batch.issuedDate)}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {batch.lines.map((bl) => {
-                          const line = doc.lines.find((l) => l.id === bl.lineId);
-                          return `${line?.description ?? bl.lineId} ${bl.qty.toLocaleString()} ${line?.unit ?? ""}`;
+ {issueBatches.length > 0 && (
+ <div className="border-t border-border pt-3 space-y-2">
+ <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+ <History size={13} /> {t("purchaseRequestDoc.store.historyTitle")}
+ </h3>
+ {issueBatches.map((batch) => (
+ <div key={batch.id} className="flex items-start justify-between gap-3 rounded-lg px-3 py-2">
+ <div className="min-w-0">
+ <p className="text-xs text-foreground">
+ {t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(batch.seq))}
+ <span className="text-muted-foreground font-mono ml-2">{formatQuoteDateThai(batch.issuedDate)}</span>
+ </p>
+ <p className="text-xs text-muted-foreground mt-0.5">
+ {batch.lines.map((bl) => {
+ const line = doc.lines.find((l) => l.id === bl.lineId);
+ return `${line?.description ?? bl.lineId} ${bl.qty.toLocaleString()} ${line?.unit ?? ""}`;
                         }).join(" · ")}
                         {batch.remark.trim() ? ` — ${batch.remark}` : ""}
                       </p>
@@ -1169,13 +1169,13 @@ export function PurchaseRequestDocument({
               value={draft.revisionNote}
               onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
               placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
             />
           </div>
         )}
 
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequestDoc.signatoriesTitle")}</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-3">{t("purchaseRequestDoc.signatoriesTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
             {([
               ["requestedBy", "requestedAt", t("purchaseRequestDoc.field.requestedBy")],
@@ -1187,13 +1187,13 @@ export function PurchaseRequestDocument({
                   <label htmlFor={`pr-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
                   <input id={`pr-${nameField}`} disabled={!editable} value={draft[nameField]}
                     onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })}
-                    className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                    className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                 </div>
                 <div>
                   <label htmlFor={`pr-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
                   <input id={`pr-${dateField}`} type="date" disabled={!editable} value={draft[dateField]}
                     onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })}
-                    className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                    className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                 </div>
               </div>
             ))}

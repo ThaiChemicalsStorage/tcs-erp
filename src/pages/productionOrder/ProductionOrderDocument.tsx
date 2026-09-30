@@ -22,7 +22,7 @@ import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
@@ -287,22 +287,22 @@ export function ProductionOrderDocument({
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
             </button>
           )}
           {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("productionOrderDoc.print")}
             </button>
           )}
           {editable && (
-            <button onClick={() => setConfirmRefresh(true)} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => setConfirmRefresh(true)} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />} {t("productionOrderDoc.refreshFromScope")}
             </button>
           )}
           {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("productionOrderDoc.saveDraft")}
             </button>
           )}
@@ -349,7 +349,7 @@ export function ProductionOrderDocument({
         />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold">{t("productionOrderDoc.title")}</h1>
             <p className="text-[#a8bed8] text-xs mt-1">{t("productionOrderDoc.jobCodePrefix")} {doc.jobCode} · {doc.customerCompanyName}</p>
@@ -370,7 +370,7 @@ export function ProductionOrderDocument({
 {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย) เท่านั้น
             ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
         {getRevisionNumber(doc.id) > 0 && (
-          <div className="bg-card border border-border rounded-xl p-4">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4">
             <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
             <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
             <textarea
@@ -379,12 +379,12 @@ export function ProductionOrderDocument({
               value={draft.revisionNote}
               onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
               placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
             />
           </div>
         )}
 
-        <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4 space-y-2">
           <h2 className="text-sm font-semibold text-foreground mb-1">{t("productionOrderDoc.linesHeading")}</h2>
           {draft.lines.length === 0 && <p className="text-xs text-muted-foreground">{t("productionOrderDoc.noLines")}</p>}
 
@@ -400,7 +400,7 @@ export function ProductionOrderDocument({
                   disabled={!editable} value={l.description}
                   onChange={(e) => updateLine(l.id, { description: e.target.value })}
                   placeholder={l.isSectionHeader ? t("productionOrderDoc.line.headerPlaceholder") : t("productionOrderDoc.line.descriptionPlaceholder")}
-                  className={`flex-1 h-9 px-2 text-xs bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 disabled:opacity-70 ${l.isSectionHeader ? "font-semibold" : ""}`}
+                  className={`flex-1 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70 ${l.isSectionHeader ? "font-semibold" : ""}`}
                 />
                 {/* บรรทัดหัวข้อไม่มีจำนวน/หน่วย ตามฟอร์มจริง — ซ่อนช่องไปเลยจะได้ไม่สับสน */}
                 {!l.isSectionHeader && (
@@ -409,13 +409,13 @@ export function ProductionOrderDocument({
                       type="number" disabled={!editable} value={l.qty ?? ""}
                       onChange={(e) => updateLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })}
                       placeholder={t("productionOrderDoc.line.qty")}
-                      className="w-20 h-9 px-2 text-xs bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 disabled:opacity-70"
+                      className="w-20 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
                     />
                     <input
                       disabled={!editable} value={l.unit}
                       onChange={(e) => updateLine(l.id, { unit: e.target.value })}
                       placeholder={t("productionOrderDoc.line.unit")}
-                      className="w-20 h-9 px-2 text-xs bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 disabled:opacity-70"
+                      className="w-20 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
                     />
                   </>
                 )}
@@ -423,7 +423,7 @@ export function ProductionOrderDocument({
                   disabled={!editable} value={l.remark}
                   onChange={(e) => updateLine(l.id, { remark: e.target.value })}
                   placeholder={t("productionOrderDoc.line.remark")}
-                  className="w-32 h-9 px-2 text-xs bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 disabled:opacity-70"
+                  className="w-32 h-9 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
                 />
                 {editable && (
                   <button onClick={() => setLines((lines) => lines.filter((x) => x.id !== l.id))} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("productionOrderDoc.line.remove")}>
@@ -439,7 +439,7 @@ export function ProductionOrderDocument({
                     disabled={!editable} value={sd}
                     onChange={(e) => updateLine(l.id, { subDetails: l.subDetails.map((x, j) => (j === i ? e.target.value : x)) })}
                     placeholder={t("productionOrderDoc.line.subDetailPlaceholder")}
-                    className="flex-1 h-8 px-2 text-xs bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 disabled:opacity-70"
+                    className="flex-1 h-8 px-2 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-70"
                   />
                   {editable && (
                     <button onClick={() => updateLine(l.id, { subDetails: l.subDetails.filter((_, j) => j !== i) })} className="text-muted-foreground hover:text-[#e05252] transition-colors">
@@ -492,7 +492,7 @@ export function ProductionOrderDocument({
           {/* หลังอนุมัติแล้วปุ่ม "บันทึกฉบับร่าง" ด้านบนหายไป สามช่องล่างจึงต้องมีปุ่มบันทึกของตัวเอง */}
           {!editable && canEdit && (
             <div className="pt-1">
-              <button onClick={() => { void saveSignatories(); }} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+              <button onClick={() => { void saveSignatories(); }} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("productionOrderDoc.saveSignatories")}
               </button>
               <p className="text-xs text-muted-foreground mt-1.5">{t("productionOrderDoc.saveSignatoriesHint")}</p>

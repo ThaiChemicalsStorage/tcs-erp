@@ -43,7 +43,7 @@ function TemplatePreviewModal({ target, full, onClose }: {
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.preview")}: {target.templateName}</h2>
+          <h2 id={titleId} className="text-sm font-semibold text-foreground">{t("templates.action.preview")}: {target.templateName}</h2>
           <button onClick={onClose} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
         </div>
         {full ? <TemplatePreview template={full} /> : (
@@ -72,13 +72,13 @@ function TemplateDuplicateModal({ target, code, onCodeChange, duplicating, onCon
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.duplicate")}</h2>
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1">{t("templates.action.duplicate")}</h2>
         <p className="text-xs text-muted-foreground mb-3">{t("templates.duplicate.prompt").replace("{name}", target.templateName)}</p>
         <label htmlFor={codeInputId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")}</label>
-        <input id={codeInputId} autoFocus value={code} onChange={(e) => onCodeChange(e.target.value)} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors mb-4" />
+        <input id={codeInputId} autoFocus value={code} onChange={(e) => onCodeChange(e.target.value)} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors mb-4" />
         <div className="flex items-center justify-end gap-2">
           <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-          <button onClick={onConfirm} disabled={duplicating || !code.trim()} className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+          <button onClick={onConfirm} disabled={duplicating || !code.trim()} className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
             {t("templates.action.duplicate")}
           </button>
         </div>
@@ -274,7 +274,7 @@ export function TemplateManagementPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("templates.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("templates.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -282,17 +282,17 @@ export function TemplateManagementPage({
             onClick={tour.start}
             title={t("tour.replay")}
             aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
           </button>
           {canImport && (
-            <button data-tour="templates-import" onClick={handleImport} disabled={importing} title={t("templates.importFromExcelHint")} className="flex items-center gap-2 px-3.5 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button data-tour="templates-import" onClick={handleImport} disabled={importing} title={t("templates.importFromExcelHint")} className="flex items-center gap-2 px-3.5 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} {t("templates.importFromExcel")}
             </button>
           )}
           {canCreate && (
-            <button data-tour="templates-create" onClick={() => setView("create")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button data-tour="templates-create" onClick={() => setView("create")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Plus size={15} /> {t("templates.addNew")}
             </button>
           )}
@@ -301,20 +301,20 @@ export function TemplateManagementPage({
 
       {templates.length > 0 && (
         <div data-tour="templates-toolbar" className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-64 focus-within:border-[#c9a84c]/40 transition-colors">
+          <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-64 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("templates.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
           </div>
-          <select value={jobTypeFilter} onChange={(e) => setJobTypeFilter(e.target.value)} className="text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none">
+          <select value={jobTypeFilter} onChange={(e) => setJobTypeFilter(e.target.value)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
             <option value="all">{t("templates.filter.allJobTypes")}</option>
             {uniqueJobTypeCodes.map((code) => <option key={code} value={code}>{code}</option>)}
           </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
             <option value="all">{t("customers.filter.all")}</option>
             <option value="active">{t("customers.filter.active")}</option>
             <option value="inactive">{t("customers.filter.inactive")}</option>
           </select>
-          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as SourceFilter)} className="text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none">
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as SourceFilter)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
             <option value="all">{t("templates.filter.allSources")}</option>
             <option value="excel_import">{t("templates.source.excelImport")}</option>
             <option value="manual">{t("templates.source.manual")}</option>
@@ -326,7 +326,7 @@ export function TemplateManagementPage({
         </div>
       )}
 
-      <div data-tour="templates-list" className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="templates-list" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
         {loading ? (
           <div role="status" aria-live="polite" className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" /> {t("common.loading")}
@@ -334,7 +334,7 @@ export function TemplateManagementPage({
         ) : loadError ? (
           <div role="alert" className="flex flex-col items-center justify-center py-16 gap-3">
             <p className="text-sm text-muted-foreground">{t("templates.loadError")}</p>
-            <button onClick={load} className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("quotation.wizard.retry")}</button>
+            <button onClick={load} className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">{t("quotation.wizard.retry")}</button>
           </div>
         ) : templates.length === 0 ? (
           <EmptyState icon={FileStack} title={t("templates.empty.title")} description={t("templates.empty.sub")} actionLabel={canCreate ? t("templates.addNew") : undefined} onAction={canCreate ? () => setView("create") : undefined} compact />

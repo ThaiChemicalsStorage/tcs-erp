@@ -70,11 +70,11 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
   return (
     <div className="bg-card border border-border rounded-xl p-5 print:hidden">
       <div className="flex items-start justify-between gap-3 mb-3">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+        <h2 className="text-sm font-semibold text-foreground">
           {installmentTitle(installment)}
         </h2>
         {onPrint && (
-          <button onClick={onPrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all flex-shrink-0">
+          <button onClick={onPrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all flex-shrink-0">
             <Printer size={13} /> พิมพ์ใบส่งมอบงวดนี้
           </button>
         )}
@@ -87,7 +87,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
             disabled={numbersDisabled}
             value={installment.documentNumber}
             onChange={(e) => onChange({ ...installment, documentNumber: e.target.value })}
-            className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+            className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
           />
         </div>
         <div>
@@ -98,7 +98,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
             type="date"
             value={installment.issueDate}
             onChange={(e) => onChange({ ...installment, issueDate: e.target.value })}
-            className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+            className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
           />
         </div>
       </div>
@@ -107,7 +107,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
       {items.length === 0 ? (
         <p className="text-xs text-muted-foreground italic mb-3">Scope of Work นี้ยังไม่มีรายการสินค้า</p>
       ) : (
-        <div role="group" aria-labelledby={itemsHeadingId} className="border border-border/70 rounded-lg divide-y divide-border/60 mb-3">
+        <div role="group" aria-labelledby={itemsHeadingId} className="border border-[#c3ccda] bg-white/70 rounded-lg divide-y divide-border/60 mb-3">
           {items.map((item) => {
             const checked = installment.itemIds.includes(item.id);
             return (
@@ -139,7 +139,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, numbersDisa
         rows={2}
         value={installment.remark}
         onChange={(e) => onChange({ ...installment, remark: e.target.value })}
-        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60"
+        className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60"
       />
     </div>
   );
@@ -305,14 +305,14 @@ export function DeliveryOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {backLabel}
           </button>
         </div>
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
           <AlertTriangle size={20} className="text-[#e05252]" />
           <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
             <RotateCw size={12} /> ลองใหม่
           </button>
         </div>
@@ -323,7 +323,7 @@ export function DeliveryOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {backLabel}
           </button>
         </div>
@@ -424,7 +424,7 @@ export function DeliveryOrderDocument({
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {backLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -441,22 +441,22 @@ export function DeliveryOrderDocument({
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {editable && (
-            <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               <RotateCw size={13} /> อัปเดตข้อมูลจาก Scope of Work
             </button>
           )}
           {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               <Save size={13} /> บันทึกร่าง
             </button>
           )}
           {canEdit && !isDraft && (
-            <button onClick={saveNumbers} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={saveNumbers} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               <Save size={13} /> บันทึกเลขที่/วันที่
             </button>
           )}
           {canEdit && isDraft && (
-            <button onClick={() => setConfirmAction("submit")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors">
+            <button onClick={() => setConfirmAction("submit")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Send size={13} /> ส่งขออนุมัติ
             </button>
           )}
@@ -471,12 +471,12 @@ export function DeliveryOrderDocument({
             </>
           )}
           {deliveryOrder.status === "PendingApproval" && canEdit && (
-            <button onClick={() => setConfirmAction("withdraw")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={() => setConfirmAction("withdraw")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground transition-colors">
               ถอนคำขอ
             </button>
           )}
           {deliveryOrder.status === "Final" && canCreate && (
-            <button onClick={() => setConfirmAction("rewrite")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={() => setConfirmAction("rewrite")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
               <GitBranch size={13} /> แก้ไข (สร้างฉบับใหม่)
             </button>
           )}
@@ -504,7 +504,7 @@ export function DeliveryOrderDocument({
 
         <DocumentStatusStepper status={deliveryOrder.status} approverLabel={t("deliveryOrderDoc.approverLabel")} />
 
-        <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold">ใบส่งมอบสินค้าและบริการ</h1>
             <p className="text-[#a8bed8] text-xs mt-1">Scope of Work {deliveryOrder.scopeNumber}</p>
@@ -512,7 +512,7 @@ export function DeliveryOrderDocument({
           <div className="p-6 space-y-2.5">
             <div>
               <label htmlFor="do-customerCompanyName" className="text-xs text-muted-foreground block mb-1">เรียน (จากใบเสนอราคา)</label>
-              <input id="do-customerCompanyName" readOnly className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={deliveryOrder.customerCompanyName} />
+              <input id="do-customerCompanyName" readOnly className="w-full text-sm font-medium text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none opacity-80" value={deliveryOrder.customerCompanyName} />
             </div>
             {deliveryOrder.customerAddress.trim() && (
               <p className="text-xs text-muted-foreground whitespace-pre-line pl-1">{deliveryOrder.customerAddress}</p>

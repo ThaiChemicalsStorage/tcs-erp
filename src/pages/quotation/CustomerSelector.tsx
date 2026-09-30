@@ -68,7 +68,7 @@ export function CustomerSelector({
 
   return (
     <div ref={containerRef} className="relative">
-      <div data-field-box="" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/50 transition-colors">
+      <div data-field-box="" className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
         <Search size={14} className="text-muted-foreground flex-shrink-0" />
         <input
           id={inputId}

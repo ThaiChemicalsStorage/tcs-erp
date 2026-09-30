@@ -17,7 +17,7 @@ function StageCard({ stage, onStageClick }: { stage: PipelineStage; onStageClick
   return (
     <button
       onClick={() => onStageClick(status)}
-      className="flex-1 min-w-[136px] bg-card border border-border rounded-xl p-3.5 text-left hover:border-[#c9a84c]/40 hover:shadow-md transition-all"
+      className="flex-1 min-w-[136px] bg-card border border-border rounded-xl p-3.5 text-left hover:border-[#c3ccda] hover:shadow-sm hover:shadow-md transition-all"
     >
       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${statusStyle[status]}`}>
         {t(statusLabelKey[status])}

@@ -121,7 +121,7 @@ export function ProductList({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("products.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("products.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("products.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -129,24 +129,24 @@ export function ProductList({
             onClick={tour.start}
             title={t("tour.replay")}
             aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
           </button>
-          <button data-tour="products-import" onClick={onImport} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
+          <button data-tour="products-import" onClick={onImport} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all">
             <Upload size={15} /> {t("products.importFromFile")}
           </button>
-          <button data-tour="products-categories" onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
+          <button data-tour="products-categories" onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all">
             <Tags size={15} /> {t("products.manageCategories")}
           </button>
-          <button data-tour="products-create" onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <button data-tour="products-create" onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
             <Plus size={15} /> {t("products.addNew")}
           </button>
         </div>
       </div>
 
       <div data-tour="products-toolbar" className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
+        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
             type="text"
@@ -159,7 +159,7 @@ export function ProductList({
         <select
           value={categoryFilter}
           onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-          className="text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none"
+          className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none"
         >
           <option value={ALL_CATEGORIES}>{t("products.allCategories")}</option>
           {categories.map((c) => (
@@ -260,7 +260,7 @@ export function ProductList({
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={clampedPage === 1}
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                  className="p-1.5 rounded-lg border border-[#c3ccda] bg-white text-muted-foreground hover:text-foreground hover:bg-[#f4f6fa] disabled:opacity-40 disabled:pointer-events-none transition-all"
                 >
                   <ChevronLeft size={14} />
                 </button>
@@ -268,7 +268,7 @@ export function ProductList({
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={clampedPage === totalPages}
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 disabled:opacity-40 disabled:pointer-events-none transition-all"
+                  className="p-1.5 rounded-lg border border-[#c3ccda] bg-white text-muted-foreground hover:text-foreground hover:bg-[#f4f6fa] disabled:opacity-40 disabled:pointer-events-none transition-all"
                 >
                   <ChevronRight size={14} />
                 </button>

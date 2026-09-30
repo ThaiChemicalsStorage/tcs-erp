@@ -89,7 +89,7 @@ export function DocumentApprovalActions<T>({
         <button
           onClick={() => void run("withdraw", onWithdraw, t("approval.withdrawn"), t("approval.errorWithdraw"))}
           disabled={busy !== null}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60"
         >
           {busy === "withdraw" ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />} {t("approval.withdraw")}
         </button>

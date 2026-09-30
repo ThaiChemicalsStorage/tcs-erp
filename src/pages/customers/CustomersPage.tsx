@@ -151,7 +151,7 @@ export function CustomersPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("customers.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("customers.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("customers.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -159,12 +159,12 @@ export function CustomersPage({
             onClick={tour.start}
             title={t("tour.replay")}
             aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
           </button>
           {canCreate && (
-            <button data-tour="customers-create" onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button data-tour="customers-create" onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Plus size={15} /> {t("customers.addNew")}
             </button>
           )}
@@ -173,7 +173,7 @@ export function CustomersPage({
 
       {customers.length > 0 && (
         <div data-tour="customers-toolbar" className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
+          <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input
               type="text" value={search} onChange={(e) => setSearch(e.target.value)}
@@ -181,7 +181,7 @@ export function CustomersPage({
               className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
             />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none">
             <option value="all">{t("customers.filter.all")}</option>
             <option value="active">{t("customers.filter.active")}</option>
             <option value="inactive">{t("customers.filter.inactive")}</option>
@@ -333,7 +333,7 @@ function CustomerFormModal({
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id={titleId} className="text-sm font-semibold text-foreground">
             {t("customers.form.title")}
           </h2>
           <button onClick={onCancel} disabled={saving} className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"><X size={16} /></button>
@@ -342,43 +342,43 @@ function CustomerFormModal({
         <div className="space-y-3">
           <div>
             <label htmlFor="customer-companyName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
-            <input {...field("companyName")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input {...field("companyName")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
               <label htmlFor="customer-contactName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
-              <input {...field("contactName")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              <input {...field("contactName")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
             </div>
             <div>
               <label htmlFor="customer-phone" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
-              <input {...field("phone")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              <input {...field("phone")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
             </div>
           </div>
           <div>
             <label htmlFor="customer-email" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
-            <input {...field("email")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input {...field("email")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label htmlFor="customer-address" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
-            <input {...field("address")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input {...field("address")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div>
             <label htmlFor="customer-taxId" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
-            <input {...field("taxId")} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input {...field("taxId")} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
               <label htmlFor="customer-deliveryMethod" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
-              <input {...field("deliveryMethod")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              <input {...field("deliveryMethod")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
             </div>
             <div>
               <label htmlFor="customer-projectName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
-              <input {...field("projectName")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              <input {...field("projectName")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
             </div>
           </div>
           <div>
             <label htmlFor="customer-deliveryAddress" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
-            <input {...field("deliveryAddress")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <input {...field("deliveryAddress")} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
           <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
             <input type="checkbox" checked={draft.isActive} onChange={(e) => setDraft((d) => ({ ...d, isActive: e.target.checked }))} className="w-4 h-4 rounded border-border accent-[#c9a84c]" />
@@ -393,7 +393,7 @@ function CustomerFormModal({
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60"
+            className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-60"
           >
             {t("customers.form.save")}
           </button>

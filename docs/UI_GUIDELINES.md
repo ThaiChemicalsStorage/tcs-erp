@@ -2,6 +2,20 @@
 
 The design system is navy + gold, editorial/professional in tone, entirely hand-built with Tailwind v4 utility classes — **no component library** (no shadcn, Radix, MUI). Match these patterns exactly when building new pages; don't invent new visual language.
 
+## REDESIGN (2026-09-30) — recipes to copy
+
+The approved redesign replaced the gold-button / grey-field look everywhere (phase 1). Copy these exact recipes;
+DESIGN.md has the full rules. Older sections below that say "gold primary" or "`bg-secondary` field" describe the
+pre-redesign look.
+- **Primary button:** `bg-[#0b1d3a] text-white hover:bg-[#1a2f55] rounded-lg font-semibold` (h-10 px-4 text-sm on page headers) — one per screen, right-most.
+- **Secondary button:** `border border-[#c3ccda] bg-white text-foreground hover:bg-[#f4f6fa] rounded-lg`.
+- **Field:** `bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20`; label above, `text-[13px] font-medium text-[#26395a]`.
+- **Search box with icon:** the wrapper takes the field recipe with `focus-within:` instead of `focus:`.
+- **Status pill:** `StatusBadge` (26px, dot + label).
+- **Dialogs:** `ConfirmDialog` / `PromptDialog` (480px, icon circle, footer under a divider).
+- **Navigation:** `NAV_GROUPS` + `NAV_GROUP_ICONS` in `App.tsx` — every group needs an icon; new items need only a label.
+- **Topbar user menu:** `components/UserMenu.tsx` (What's New lives here).
+
 ## Design Tokens (`src/styles/theme.css`)
 
 CSS custom properties, exposed to Tailwind via `@theme inline` (so `bg-background`, `text-foreground`, etc. work directly as utility classes):

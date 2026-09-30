@@ -20,7 +20,7 @@ import { useI18n } from "../../lib/i18n";
 /** "issue" (2026-09-03 รอบสอง) = หน้าตัดเบิกเครื่องมือที่เจ้าของสั่ง — จ่าย/รับคืนให้ทีมโดยตรง */
 type Tab = "issue" | "holdings" | "report";
 
-const selectCls = "h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const selectCls = "h-9 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
 /** วันแรกของเดือนนี้ตามเวลาเครื่อง — ค่าตั้งต้นของช่วงรายงาน */
 function firstOfMonth(): string {
@@ -110,31 +110,31 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
   const rangeLabel = from || to ? `${printDate(from)} – ${printDate(to)}` : "";
 
   const teamsHolding = new Set(holdings.map((h) => `${h.departmentId}|${h.teamId}`)).size;
-  const piecesHeld = holdings.reduce((sum, h) => sum + h.held, 0);
+ const piecesHeld = holdings.reduce((sum, h) => sum + h.held, 0);
 
-  return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:overflow-visible">
-      <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("toolControl.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("toolControl.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowPrint(true)}
-            disabled={loading || (tab === "holdings" ? holdings.length === 0 : rows.length === 0)}
-            className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
-          >
-            <Printer size={13} /> {t("toolControl.print")}
-          </button>
-          <TourReplayButton onClick={tour.start} />
-        </div>
-      </div>
+ return (
+ <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:overflow-visible">
+ <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
+ <div>
+ <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("toolControl.title")}</h1>
+ <p className="text-sm text-muted-foreground mt-0.5">{t("toolControl.subtitle")}</p>
+ </div>
+ <div className="flex items-center gap-2">
+ <button
+ onClick={() => setShowPrint(true)}
+ disabled={loading || (tab === "holdings" ? holdings.length === 0 : rows.length === 0)}
+ className="h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50"
+ >
+ <Printer size={13} /> {t("toolControl.print")}
+ </button>
+ <TourReplayButton onClick={tour.start} />
+ </div>
+ </div>
 
-      <div data-tour="tool-tabs" className="flex items-center gap-1 border-b border-border print:hidden" role="tablist">
-        {((canIssue ? ["issue", "holdings", "report"] : ["holdings", "report"]) as Tab[]).map((k) => (
-          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-            className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === k ? "border-[#c9a84c] text-foreground font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+ <div data-tour="tool-tabs" className="flex items-center gap-1 border-b border-border print:hidden" role="tablist">
+ {((canIssue ? ["issue", "holdings", "report"] : ["holdings", "report"]) as Tab[]).map((k) => (
+ <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+ className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === k ? "border-[#c9a84c] text-foreground font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             {t(k === "issue" ? "toolControl.tab.issue" : k === "holdings" ? "toolControl.tab.holdings" : "toolControl.tab.report")}
           </button>
         ))}
@@ -204,7 +204,7 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
+      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden print:hidden">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-xs text-muted-foreground" role="status" aria-live="polite">
             <Loader2 size={14} className="animate-spin" /> {t("toolControl.loading")}
@@ -212,7 +212,7 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
         ) : current?.error ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <p className="text-sm text-muted-foreground">{t("toolControl.loadError")}</p>
-            <button onClick={() => setRetryToken((n) => n + 1)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={() => setRetryToken((n) => n + 1)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
               <RotateCw size={12} /> {t("toolControl.retry")}
             </button>
           </div>

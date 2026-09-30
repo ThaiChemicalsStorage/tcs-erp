@@ -200,14 +200,14 @@ export function JobOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
           </button>
         </div>
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
           <AlertTriangle size={20} className="text-[#e05252]" />
           <p className="text-sm text-muted-foreground">{loadError}</p>
-          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
             <RotateCw size={12} /> {t("jobOrder.retry")}
           </button>
         </div>
@@ -219,7 +219,7 @@ export function JobOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
           </button>
         </div>
@@ -293,7 +293,7 @@ export function JobOrderDocument({
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -306,17 +306,17 @@ export function JobOrderDocument({
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {canEdit && doc.status === "Final" && (
-            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
             </button>
           )}
           {canPrint && (
-            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("jobOrderDoc.print")}
             </button>
           )}
           {editable && (
-            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("jobOrderDoc.saveDraft")}
             </button>
           )}
@@ -362,7 +362,7 @@ export function JobOrderDocument({
           approvedAt={doc.approvedAt}
         />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold">{t("jobOrderDoc.title")}</h1>
             <p className="text-[#a8bed8] text-xs mt-1">{t("jobOrderDoc.jobCodePrefix")} {doc.jobCode}</p>
@@ -372,14 +372,14 @@ export function JobOrderDocument({
               <label htmlFor="jo-customerName" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.customerName")}</label>
               <input id="jo-customerName" disabled={!editable} value={draft.customerName}
                 onChange={(e) => setDraft({ ...draft, customerName: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div />
             <div>
               <label htmlFor="jo-fromSite" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.fromSite")}</label>
               <input id="jo-fromSite" disabled={!editable} value={draft.fromSite}
                 onChange={(e) => setDraft({ ...draft, fromSite: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div>
               <label htmlFor="jo-toSite" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.toSite")}</label>
@@ -387,7 +387,7 @@ export function JobOrderDocument({
                   และมี option สำรองสำหรับค่าเก่าที่พิมพ์ไว้ก่อนมี dropdown แบบเดียวกับหน้าจัดการผู้ใช้ จะได้ไม่หายเงียบ */}
               <select id="jo-toSite" disabled={!editable} value={draft.toSite}
                 onChange={(e) => setDraft({ ...draft, toSite: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70">
+                className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70">
                 <option value="">{t("jobOrderDoc.field.toSitePlaceholder")}</option>
                 {departments.filter((d) => d.isActive).map((d) => (
                   <option key={d.id} value={d.name}>{d.name}</option>
@@ -401,13 +401,13 @@ export function JobOrderDocument({
               <label htmlFor="jo-startDate" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.startDate")}</label>
               <input id="jo-startDate" type="date" disabled={!editable} value={draft.startDate}
                 onChange={(e) => setDraft({ ...draft, startDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
             <div>
               <label htmlFor="jo-finishDate" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.finishDate")}</label>
               <input id="jo-finishDate" type="date" disabled={!editable} value={draft.finishDate}
                 onChange={(e) => setDraft({ ...draft, finishDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
             </div>
           </div>
         </div>
@@ -415,7 +415,7 @@ export function JobOrderDocument({
         {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
             ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
         {getRevisionNumber(doc.id) > 0 && (
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5">
             <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
             <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
             <textarea
@@ -424,22 +424,22 @@ export function JobOrderDocument({
               value={draft.revisionNote}
               onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
               placeholder={t("docRevision.notePlaceholder")}
-              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60"
             />
           </div>
         )}
 
-        <div data-tour="jodoc-lines" className="bg-card border border-border rounded-xl overflow-hidden">
+        <div data-tour="jodoc-lines" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.linesTitle")}</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("jobOrderDoc.linesTitle")}</h2>
             {editable && (
               <div className="flex items-center gap-2">
-                <button onClick={() => addLine()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => addLine()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("jobOrderDoc.addLine")}
                 </button>
                 {/* บรรทัดต่อ — ฟอร์ม FM-PJ-01 ตัวจริงมีแถวที่ไม่มีเลขลำดับแต่มีจำนวน/หน่วยของตัวเอง
                     เช่น "1 Flexible Joint" แล้วตามด้วย "Ø 650 | 15 | PCS" (ยืนยันจากตัวอย่างจริง 2026-08-31) */}
-                <button onClick={() => addLine(true)} title={t("jobOrderDoc.continuationHint")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => addLine(true)} title={t("jobOrderDoc.continuationHint")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <CornerDownRight size={13} /> {t("jobOrderDoc.addContinuationLine")}
                 </button>
               </div>
@@ -539,7 +539,7 @@ export function JobOrderDocument({
         </div>
 
         <div data-tour="jodoc-checklist" className="bg-card border border-border rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.scopeChecklistTitle")}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("jobOrderDoc.scopeChecklistTitle")}</h2>
           {draft.scopeChecklist.map((group) => (
             <ChecklistGroupCard
               key={group.key}
@@ -562,14 +562,14 @@ export function JobOrderDocument({
         />
 
         <div className="bg-card border border-border rounded-xl p-5">
-          <label htmlFor="jo-outOfScope" className="text-sm font-semibold text-foreground block mb-2" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.outOfScopeTitle")}</label>
+          <label htmlFor="jo-outOfScope" className="text-sm font-semibold text-foreground block mb-2">{t("jobOrderDoc.outOfScopeTitle")}</label>
           <textarea id="jo-outOfScope" disabled={!editable} rows={3} value={draft.outOfScope}
             onChange={(e) => setDraft({ ...draft, outOfScope: e.target.value })}
-            className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+            className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.signatoriesTitle")}</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-3">{t("jobOrderDoc.signatoriesTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
             {([
               ["requestedBy", "requestedAt", t("jobOrderDoc.field.requestedBy")],
@@ -581,13 +581,13 @@ export function JobOrderDocument({
                   <label htmlFor={`jo-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
                   <input id={`jo-${nameField}`} disabled={!editable} value={draft[nameField]}
                     onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })}
-                    className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                    className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                 </div>
                 <div>
                   <label htmlFor={`jo-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
                   <input id={`jo-${dateField}`} type="date" disabled={!editable} value={draft[dateField]}
                     onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })}
-                    className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                    className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                 </div>
               </div>
             ))}

@@ -14,7 +14,7 @@ import {
 } from "../../lib/materialRequisition";
 
 const FILTER_ALL = "all";
-const inputCls = "h-9 w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "h-9 w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
 /**
  * **หน้าตัดของของสโตร์** (2026-09-10) — เจ้าของสั่ง *"เพิ่มหน้าตัดของ ของสโตร์มา แยกออกมาจากใบ"*
@@ -198,7 +198,7 @@ export function StoreIssueInboxPage({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("storeIssue.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
           {searchQuery && (
             <button onClick={() => setSearchQuery("")} aria-label={t("storeIssue.clearSearch")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -209,7 +209,7 @@ export function StoreIssueInboxPage({
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
           {([FILTER_ALL, "project", "production", "store"] as const).map((d) => (
             <button key={d} onClick={() => setFilterDept(d)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterDept === d ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterDept === d ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {d === FILTER_ALL ? t("quotation.filterAll") : departmentLabel(d)}
             </button>
           ))}
@@ -229,16 +229,16 @@ export function StoreIssueInboxPage({
       ) : loadError ? (
         <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center gap-3 py-16 text-center">
           <p className="text-sm text-muted-foreground">{t("storeIssue.loadError")}</p>
-          <button onClick={() => void loadQueue()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={() => void loadQueue()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
             {t("materialRequisition.retry")}
           </button>
         </div>
       ) : queue.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl">
           <EmptyState icon={PackageCheck} title={t("storeIssue.empty.title")} description={t("storeIssue.empty.description")} compact />
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-16 gap-3">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl flex flex-col items-center justify-center py-16 gap-3">
           <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
             <PackageMinus size={20} className="text-muted-foreground" />
           </div>
@@ -253,78 +253,78 @@ export function StoreIssueInboxPage({
                 <button
                   onClick={() => (open ? closeRow() : openRow(m.id))}
                   aria-expanded={open}
-                  className="w-full flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left hover:bg-secondary/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50"
+                  className="w-full flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left hover:bg-secondary/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40"
                 >
                   <ChevronDown size={15} className={`text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
-                  <span className="text-xs font-mono text-[#c9a84c] font-semibold">{m.documentNumber}</span>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">
-                    {departmentLabel(m.ownerDepartment)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {[m.productionOrderId || m.jobCode, m.customerName, [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") || "—"}
-                  </span>
-                  <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
-                    {t("storeIssue.outstandingLines").replace("{n}", String(m.outstandingLineCount ?? 0))}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</span>
-                </button>
+ <span className="text-xs font-mono text-[#c9a84c] font-semibold">{m.documentNumber}</span>
+ <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">
+ {departmentLabel(m.ownerDepartment)}
+ </span>
+ <span className="text-xs text-muted-foreground">
+ {[m.productionOrderId || m.jobCode, m.customerName, [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") || "—"}
+ </span>
+ <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
+ {t("storeIssue.outstandingLines").replace("{n}", String(m.outstandingLineCount ?? 0))}
+ </span>
+ <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</span>
+ </button>
 
-                {open && (
-                  <div className="border-t border-border px-5 py-4 space-y-3">
-                    {detailLoading ? (
-                      <div className="space-y-2" role="status" aria-live="polite">
-                        <span className="sr-only">{t("storeIssue.loadingDoc")}</span>
-                        {[...Array(2)].map((_, i) => <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
-                      </div>
-                    ) : detailError || detail?.doc.id !== m.id ? (
-                      <div className="flex flex-col items-center gap-2 py-6 text-center">
-                        <p className="text-sm text-muted-foreground">{t("storeIssue.loadDocError")}</p>
-                        <button onClick={() => openRow(m.id)}
-                          className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                          {t("materialRequisition.retry")}
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs text-muted-foreground">
-                            {t("storeIssue.roundHint").replace("{n}", String(issueBatchesOf(detail.doc).length + 1))}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <button onClick={fillIssuable}
-                              className="px-2.5 py-1 text-[11px] border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                              {t("storeIssue.fillIssuable")}
-                            </button>
-                            {onOpenDocument && (
-                              <button onClick={() => onOpenDocument(m.id, m.ownerDepartment)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                                <ExternalLink size={12} /> {t("storeIssue.openDocument")}
-                              </button>
-                            )}
-                          </div>
-                        </div>
+ {open && (
+ <div className="border-t border-border px-5 py-4 space-y-3">
+ {detailLoading ? (
+ <div className="space-y-2" role="status" aria-live="polite">
+ <span className="sr-only">{t("storeIssue.loadingDoc")}</span>
+ {[...Array(2)].map((_, i) => <div key={i} className="h-9 rounded-lg animate-pulse" aria-hidden="true" />)}
+ </div>
+ ) : detailError || detail?.doc.id !== m.id ? (
+ <div className="flex flex-col items-center gap-2 py-6 text-center">
+ <p className="text-sm text-muted-foreground">{t("storeIssue.loadDocError")}</p>
+ <button onClick={() => openRow(m.id)}
+ className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+ {t("materialRequisition.retry")}
+ </button>
+ </div>
+ ) : (
+ <>
+ <div className="flex flex-wrap items-center justify-between gap-2">
+ <p className="text-xs text-muted-foreground">
+ {t("storeIssue.roundHint").replace("{n}", String(issueBatchesOf(detail.doc).length + 1))}
+ </p>
+ <div className="flex items-center gap-2">
+ <button onClick={fillIssuable}
+ className="px-2.5 py-1 text-[11px] border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+ {t("storeIssue.fillIssuable")}
+ </button>
+ {onOpenDocument && (
+ <button onClick={() => onOpenDocument(m.id, m.ownerDepartment)}
+ className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+ <ExternalLink size={12} /> {t("storeIssue.openDocument")}
+ </button>
+ )}
+ </div>
+ </div>
 
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="border-b border-border bg-muted/40">
-                                {[
-                                  t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.issued"),
-                                  t("materialRequisitionDoc.col.outstanding"), t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.issueNow"),
-                                ].map((h) => (
-                                  <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {detail.doc.lines.map((line) => {
-                                const stock = detail.stock[line.productId];
-                                const outstanding = outstandingQtyOf(line);
-                                const typed = Number(issueQty[line.id] ?? "");
-                                // เตือนที่ช่องก่อนโดนเซิร์ฟเวอร์ปฏิเสธ — เกินค้างเบิก หรือของในคลังไม่พอ
-                                const bad = Number.isFinite(typed) && typed > 0 && (typed > outstanding || (stock !== undefined && typed > stock));
-                                return (
-                                  <tr key={line.id} className={`border-b border-border/50 ${outstanding <= 0 ? "opacity-50" : ""}`}>
+ <div className="overflow-x-auto">
+ <table className="w-full">
+ <thead>
+ <tr className="border-b border-border ">
+ {[
+ t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.issued"),
+ t("materialRequisitionDoc.col.outstanding"), t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.issueNow"),
+ ].map((h) => (
+ <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+ ))}
+ </tr>
+ </thead>
+ <tbody>
+ {detail.doc.lines.map((line) => {
+ const stock = detail.stock[line.productId];
+ const outstanding = outstandingQtyOf(line);
+ const typed = Number(issueQty[line.id] ?? "");
+ // เตือนที่ช่องก่อนโดนเซิร์ฟเวอร์ปฏิเสธ — เกินค้างเบิก หรือของในคลังไม่พอ
+ const bad = Number.isFinite(typed) && typed > 0 && (typed > outstanding || (stock !== undefined && typed > stock));
+ return (
+ <tr key={line.id} className={`border-b border-border/50 ${outstanding <= 0 ? "opacity-50" : ""}`}>
                                     <td className="px-3 py-2 text-xs text-foreground"><span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
                                     <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{(line.plannedQty ?? 0).toLocaleString()} {line.unit}</td>
                                     <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{issuedQtyOf(line).toLocaleString()}</td>
@@ -362,7 +362,7 @@ export function StoreIssueInboxPage({
                         </div>
 
                         <button onClick={() => void submitIssue()} disabled={saving}
-                          className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+                          className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                           {saving ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
                           {t("storeIssue.submit")}
                         </button>

@@ -133,7 +133,7 @@ export function JobOrderPage({
         <p className="text-sm text-muted-foreground">{t("jobOrder.loadError")}</p>
         <button
           onClick={loadList}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
         >
           {t("jobOrder.retry")}
         </button>
@@ -150,7 +150,7 @@ export function JobOrderPage({
         headerAction={canCreate ? (
           <button
             onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
           >
             <Plus size={15} /> {t("jobOrder.createBtn")}
           </button>

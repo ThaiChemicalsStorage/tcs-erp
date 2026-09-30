@@ -3,11 +3,32 @@ interface BrandMarkProps {
   variant?: "mark" | "full";
   theme?: "dark" | "light";
   className?: string;
+  /** "sidebar" = แถบเมนูซ้ายแบบใหม่ (2026-09-30): โลโก้ในวงกลมขาว + ชื่อสองบรรทัดตัวหนังสือปกติ
+   *  ค่าเริ่มต้นคงหน้าตาเดิมไว้ — ใบพิมพ์ทุกใบใช้คอมโพเนนต์นี้ ห้ามเปลี่ยนตาม */
+  appearance?: "classic" | "sidebar";
 }
 
 // แสดงโลโก้และชื่อแบรนด์ของแอป ใช้ร่วมกันทุกจุดที่ต้องโชว์โลโก้
 // Renders the app's brand mark/logo, shared across every place the logo appears
-export function BrandMark({ size = 32, variant = "full", theme = "dark", className }: BrandMarkProps) {
+export function BrandMark({ size = 32, variant = "full", theme = "dark", className, appearance = "classic" }: BrandMarkProps) {
+  if (appearance === "sidebar") {
+    return (
+      <div className={`flex items-center gap-2.5 min-w-0 ${className ?? ""}`}>
+        <img
+          src="/logo.png"
+          alt="Thai Chemicals Storage ERP"
+          style={{ width: size, height: size }}
+          className="object-contain flex-shrink-0 bg-white rounded-full"
+        />
+        {variant === "full" && (
+          <div className="min-w-0 flex flex-col leading-tight">
+            <span className="text-sm font-semibold text-white truncate" title="Thai Chemicals Storage">Thai Chemicals Storage</span>
+            <span className="text-xs text-[#8fa6c8] truncate">ระบบองค์กร</span>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className={`flex items-center gap-2.5 min-w-0 ${className ?? ""}`}>
       <img

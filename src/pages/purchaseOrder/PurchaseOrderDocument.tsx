@@ -28,8 +28,8 @@ import { createReceivingReport, fetchReceivingReportsByPurchaseOrder, type Recei
 import { ReceiveCodeDialog } from "../receivingReport/ReceivingReportCreateDialog";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 
-const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
-const cellCls = "px-2 py-1.5 text-sm bg-transparent border border-transparent rounded focus:bg-secondary focus:border-[#c9a84c]/50 outline-none w-full transition-colors disabled:opacity-60";
+const inputCls = "w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg text-foreground outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+const cellCls = "px-2 py-1.5 text-sm bg-transparent border border-transparent rounded focus:bg-secondary focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 outline-none w-full transition-colors disabled:opacity-60";
 
 /** payload เดียวที่ใช้ทั้งกดบันทึกเอง บันทึกอัตโนมัติ ตรวจงานค้าง และเก็บร่างในเครื่อง */
 function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
@@ -282,7 +282,7 @@ export function PurchaseOrderDocument({
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("purchaseOrder.loadError")}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("purchaseOrderDoc.backToList")}</button>
+        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-foreground">{t("purchaseOrderDoc.backToList")}</button>
       </div>
     );
   }
@@ -299,7 +299,7 @@ export function PurchaseOrderDocument({
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
         {/* แถบเครื่องมือ */}
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b border-border bg-card sticky top-0 z-10">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ArrowLeft size={15} /> {t("purchaseOrderDoc.backToList")}
           </button>
           <span className="text-sm font-mono font-semibold text-[#866d28] ml-2">{draft.documentNumber || draft.id}</span>
@@ -323,7 +323,7 @@ export function PurchaseOrderDocument({
 
             {editable && (
               <button onClick={save} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("purchaseOrderDoc.saveDraft")}
               </button>
             )}
@@ -331,13 +331,13 @@ export function PurchaseOrderDocument({
                 ไม่ใช่ canEdit · ต่างจาก Rewrite ตรงที่ไม่ได้ออกเลขที่เอกสารใหม่ */}
             {draft.status === "Final" && canApprove && (
               <button onClick={() => { setRevertReason(""); setConfirmRevert(true); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                 <Undo2 size={13} /> {t("purchaseOrderDoc.revert")}
               </button>
             )}
             {draft.status === "Final" && canEdit && (
               <button onClick={() => setConfirmRewrite(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                 <GitBranch size={13} /> {t("purchaseOrderDoc.rewrite")}
               </button>
             )}
@@ -345,19 +345,19 @@ export function PurchaseOrderDocument({
                 แทนที่จะสร้างใบที่สองแล้วไปชน 409 ที่ฐานข้อมูล */}
             {canReceiveGoods && draft.status === "Final" && (
               <button onClick={() => void openReceivingReport()} disabled={receiving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                 {receiving ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseOrderDoc.receiveGoods")}
               </button>
             )}
             {canPrint && (
               <button onClick={() => { void logPurchaseOrderPrinted(draft.id).catch(() => {}); setShowPrint(true); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                 <Printer size={13} /> {t("purchaseOrderDoc.print")}
               </button>
             )}
             {canDelete && draft.status !== "Final" && (
               <button onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-[#e05252] hover:bg-[#e05252]/10 transition-all">
                 <Trash2 size={13} /> {t("purchaseOrderDoc.delete")}
               </button>
             )}
@@ -388,8 +388,8 @@ export function PurchaseOrderDocument({
           {draft.rejectionComment ? <RejectionNotice comment={draft.rejectionComment} /> : null}
 
           {/* หัวเอกสาร */}
-          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseOrderDoc.sectionHeader")}</h2>
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
+            <h2 className="text-base font-semibold text-foreground">{t("purchaseOrderDoc.sectionHeader")}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label={t("purchaseOrderDoc.documentNumber")}>
                 <input className={inputCls} disabled={!editable} value={draft.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} />
@@ -415,8 +415,8 @@ export function PurchaseOrderDocument({
           </section>
 
           {/* ผู้ขาย */}
-          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseOrderDoc.sectionVendor")}</h2>
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
+            <h2 className="text-base font-semibold text-foreground">{t("purchaseOrderDoc.sectionVendor")}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={t("purchaseOrderDoc.vendorName")}>
                 <Combobox
@@ -478,12 +478,12 @@ export function PurchaseOrderDocument({
           </section>
 
           {/* รายการ */}
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4">
-              <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseOrderDoc.sectionLines")}</h2>
+              <h2 className="text-base font-semibold text-foreground">{t("purchaseOrderDoc.sectionLines")}</h2>
               {editable && (
                 <button onClick={() => set("lines", [...draft.lines, blankPurchaseOrderLine(newId("poline"))])}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("purchaseOrderDoc.addLine")}
                 </button>
               )}
@@ -544,28 +544,28 @@ export function PurchaseOrderDocument({
                       <td className="px-1 py-1 w-32">
                         <div className="flex items-center gap-1">
                           <input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.discount ?? ""}
-                            aria-label={t("purchaseOrderDoc.col.discount")}
-                            onChange={(e) => setLine(l.id, { discount: e.target.value === "" ? null : Number(e.target.value) })} />
-                          <button type="button" disabled={!editable}
-                            onClick={() => setLine(l.id, { discountMode: l.discountMode === "amount" ? "percent" : "amount" })}
-                            title={t("purchaseOrderDoc.discountModeToggle")}
-                            aria-label={t("purchaseOrderDoc.discountModeToggle")}
-                            className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-colors disabled:opacity-50">
-                            {l.discountMode === "amount" ? "฿" : "%"}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs font-mono text-foreground whitespace-nowrap">{fmt(purchaseOrderLineTotal(l))}</td>
-                      {/* ยกเลิกรายการ (2026-09-21) — **คนละเรื่องกับปุ่มลบ** ลบ = บรรทัดที่ไม่เคยสั่ง
-                          (พิมพ์ผิด) · ยกเลิก = สั่งไปแล้วแต่ถอน ซึ่งยังต้องพิมพ์บนใบให้ผู้ขายเห็น
-                          จึงเก็บปุ่มลบไว้ด้วย ไม่ได้แทนที่กัน */}
-                      <td className="px-2 py-1 w-8">
-                        {editable && (
-                          <button
-                            onClick={() => setLine(l.id, { cancelled: !l.cancelled, ...(l.cancelled ? { cancelRemark: "" } : {}) })}
-                            aria-label={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
-                            title={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
-                            className={`opacity-50 hover:opacity-100 focus-visible:opacity-100 transition-opacity ${l.cancelled ? "text-[#c9a84c]" : "text-muted-foreground"}`}
+ aria-label={t("purchaseOrderDoc.col.discount")}
+ onChange={(e) => setLine(l.id, { discount: e.target.value === "" ? null : Number(e.target.value) })} />
+ <button type="button" disabled={!editable}
+ onClick={() => setLine(l.id, { discountMode: l.discountMode === "amount" ? "percent" : "amount" })}
+ title={t("purchaseOrderDoc.discountModeToggle")}
+ aria-label={t("purchaseOrderDoc.discountModeToggle")}
+ className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-[#c3ccda] bg-white rounded hover:text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-50">
+ {l.discountMode === "amount" ? "฿" : "%"}
+ </button>
+ </div>
+ </td>
+ <td className="px-3 py-2 text-right text-xs font-mono text-foreground whitespace-nowrap">{fmt(purchaseOrderLineTotal(l))}</td>
+ {/* ยกเลิกรายการ (2026-09-21) — **คนละเรื่องกับปุ่มลบ** ลบ = บรรทัดที่ไม่เคยสั่ง
+ (พิมพ์ผิด) · ยกเลิก = สั่งไปแล้วแต่ถอน ซึ่งยังต้องพิมพ์บนใบให้ผู้ขายเห็น
+ จึงเก็บปุ่มลบไว้ด้วย ไม่ได้แทนที่กัน */}
+ <td className="px-2 py-1 w-8">
+ {editable && (
+ <button
+ onClick={() => setLine(l.id, { cancelled: !l.cancelled, ...(l.cancelled ? { cancelRemark: "" } : {}) })}
+ aria-label={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
+ title={t(l.cancelled ? "purchaseOrderDoc.uncancelLine" : "purchaseOrderDoc.cancelLine")}
+ className={`opacity-50 hover:opacity-100 focus-visible:opacity-100 transition-opacity ${l.cancelled ? "text-[#c9a84c]" : "text-muted-foreground"}`}
                           >
                             <Ban size={13} />
                           </button>
@@ -590,21 +590,21 @@ export function PurchaseOrderDocument({
               {/* ส่วนลดท้ายใบ — คิดจากยอดหลังหักส่วนลดรายบรรทัดแล้ว และคิดก่อน VAT */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.docDiscount")}</span>
-                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 disabled:opacity-60"
+                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60"
                   disabled={!editable} value={draft.discount ?? ""} aria-label={t("purchaseOrderDoc.docDiscount")}
                   onChange={(e) => set("discount", e.target.value === "" ? null : Number(e.target.value))} />
                 <button type="button" disabled={!editable}
                   onClick={() => set("discountMode", draft.discountMode === "amount" ? "percent" : "amount")}
                   title={t("purchaseOrderDoc.discountModeToggle")}
                   aria-label={t("purchaseOrderDoc.discountModeToggle")}
-                  className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-colors disabled:opacity-50">
+                  className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-colors disabled:opacity-50">
                   {draft.discountMode === "amount" ? "฿" : "%"}
                 </button>
                 <span className="text-xs font-mono text-muted-foreground w-28 text-right">-{fmt(totals.discountAmt)}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.vatRate")}</span>
-                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 disabled:opacity-60"
+                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60"
                   disabled={!editable} value={draft.vatRate ?? ""} aria-label={t("purchaseOrderDoc.vatRate")}
                   onChange={(e) => set("vatRate", e.target.value === "" ? null : Number(e.target.value))} />
                 <span className="text-xs font-mono text-muted-foreground w-28 text-right">{fmt(totals.vatAmt)}</span>
@@ -614,7 +614,7 @@ export function PurchaseOrderDocument({
           </section>
 
           {/* หมายเหตุ + ลงนาม */}
-          <section className="bg-card border border-border rounded-xl p-5 space-y-4">
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={t("purchaseOrderDoc.orderedBy")}>
                 <input className={inputCls} disabled={!editable} value={draft.orderedBy} onChange={(e) => set("orderedBy", e.target.value)} />
@@ -699,14 +699,14 @@ export function PurchaseOrderDocument({
             <textarea
               autoFocus rows={2} value={revertReason} onChange={(e) => setRevertReason(e.target.value)}
               placeholder={t("purchaseOrderDoc.revertReasonPlaceholder")}
-              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             <div className="flex items-center justify-end gap-2">
               <button onClick={() => setConfirmRevert(false)} disabled={reverting} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
                 {t("common.cancel")}
               </button>
               <button onClick={() => void handleRevert()} disabled={reverting}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#d8ba62] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#d8ba62] transition-colors disabled:opacity-60">
                 {reverting && <Loader2 size={12} className="animate-spin" />} {t("purchaseOrderDoc.revert")}
               </button>
             </div>

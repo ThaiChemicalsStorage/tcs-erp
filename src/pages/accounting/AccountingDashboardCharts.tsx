@@ -73,7 +73,7 @@ export function ArTrendChart({ trend }: { trend: ArDashboardTrendPoint[] }) {
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
           {(["monthly", "quarterly"] as TrendGrouping[]).map((g) => (
             <button key={g} onClick={() => setGrouping(g)}
-              className={`px-2 py-1 text-[10px] rounded-md font-medium transition-all ${grouping === g ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-2 py-1 text-[10px] rounded-md font-medium transition-all ${grouping === g ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {g === "monthly" ? t("accountingDashboard.chart.trend.monthly") : t("accountingDashboard.chart.trend.quarterly")}
             </button>
           ))}

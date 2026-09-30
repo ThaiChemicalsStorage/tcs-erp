@@ -87,7 +87,7 @@ export function ReceivingReportCreateDialog({
       >
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReport.create.title")}</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("receivingReport.create.title")}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">{t("receivingReport.create.subtitle")}</p>
           </div>
           <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -110,7 +110,7 @@ export function ReceivingReportCreateDialog({
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("receivingReport.picker.searchPlaceholder")}
               aria-label={t("receivingReport.picker.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
           </div>
         </div>
@@ -153,7 +153,7 @@ export function ReceivingReportCreateDialog({
             <button
               onClick={() => void submit()}
               disabled={source === null || busy}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
             >
               {busy && <Loader2 size={13} className="animate-spin" />} {t("receivingReport.create.submit")}
             </button>
@@ -185,14 +185,14 @@ export function ReceiveCodeDialog({
       <div ref={panelRef} role="dialog" aria-modal="true" aria-label={t("receivingReport.create.codeOnlyTitle")}
         className="relative w-full max-w-lg bg-card border border-border rounded-xl shadow-xl overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <h2 className="flex-1 text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("receivingReport.create.codeOnlyTitle")}</h2>
+          <h2 className="flex-1 text-base font-semibold text-foreground">{t("receivingReport.create.codeOnlyTitle")}</h2>
           <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
         </div>
         <div className="p-5"><ReceiveCodeOptions value={code} onChange={setCode} /></div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
           <button onClick={onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
           <button onClick={() => void submit()} disabled={busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50">
+            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
             {busy && <Loader2 size={13} className="animate-spin" />} {t("receivingReport.create.submit")}
           </button>
         </div>

@@ -144,6 +144,9 @@ export function GlobalSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const chipRailRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  /** ช่องค้นหาบนแถบบน — จอกว้างเปิดแผงเป็นดรอปดาวน์ใต้ช่องนี้ (ดีไซน์ใหม่ 2026-09-30) */
+  const boxRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const trimmedQuery = query.trim();
   const ready = trimmedQuery.length >= MIN_QUERY_LENGTH;
@@ -191,6 +194,14 @@ export function GlobalSearch({
 
   const openPanel = useCallback((trigger: HTMLElement | null) => {
     triggerRef.current = trigger;
+    const box = boxRef.current;
+    if (box && box.offsetParent !== null && window.matchMedia("(min-width: 1024px)").matches) {
+      const rect = box.getBoundingClientRect();
+      const width = Math.min(Math.max(rect.width, 640), window.innerWidth - rect.left - 16);
+      setAnchor({ top: rect.bottom + 6, left: rect.left, width });
+    } else {
+      setAnchor(null);
+    }
     setRecents(loadRecentDocs(currentUserId));
     setOpen(true);
   }, [currentUserId]);
@@ -465,7 +476,7 @@ export function GlobalSearch({
         aria-selected={isActive}
         onClick={() => activate(hit)}
         onMouseMove={() => setActiveIndex(index)}
-        className={`w-full text-left px-4 py-2 transition-colors ${isActive ? "bg-[#c9a84c]/10" : "hover:bg-secondary/50"}`}
+        className={`w-full text-left px-4 py-2 transition-colors ${isActive ? "bg-[#e8f0fb]" : "hover:bg-[#f4f6fa]"}`}
       >
         <div className="flex items-baseline justify-between gap-3">
           <p className={`text-sm font-medium text-foreground truncate ${view.mono ? "font-mono" : ""}`}>
@@ -499,108 +510,109 @@ export function GlobalSearch({
                 return (
                   <button
                     key={`${r.category}-${r.id}`}
-                    onClick={() => openRecent(r)}
-                    className="w-full text-left px-1 py-1.5 flex items-center gap-2.5 rounded-md hover:bg-secondary/50 transition-colors"
-                  >
-                    <Icon size={13} className="text-muted-foreground flex-shrink-0" />
-                    <span className="text-sm text-foreground font-mono truncate">{r.label}</span>
-                    <span className="text-xs text-muted-foreground truncate ml-auto flex-shrink-0">
-                      {t(SEARCH_CATEGORY_LABEL_KEY[r.category] as TranslationKey)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <div>
-            <GroupHeading icon={<Search size={11} />} label={t("search.legendTitle")} />
-            <p className="px-1 text-xs text-muted-foreground leading-relaxed mb-2">{t("search.legendHelp")}</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 px-1">
-              {NUMBER_LEGEND.map((l) => (
-                <div key={l.prefix} className="flex items-center gap-2 min-w-0">
-                  <code className="text-xs font-mono text-[#866d28] bg-[#c9a84c]/10 border border-[#c9a84c]/20 rounded px-1.5 py-0.5 flex-shrink-0">
-                    {l.prefix}
-                  </code>
-                  <span className="text-xs text-muted-foreground truncate">{t(l.key)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
+ onClick={() => openRecent(r)}
+ className="w-full text-left px-1 py-1.5 flex items-center gap-2.5 rounded-md hover:bg-secondary/50 transition-colors"
+ >
+ <Icon size={13} className="text-muted-foreground flex-shrink-0" />
+ <span className="text-sm text-foreground font-mono truncate">{r.label}</span>
+ <span className="text-xs text-muted-foreground truncate ml-auto flex-shrink-0">
+ {t(SEARCH_CATEGORY_LABEL_KEY[r.category] as TranslationKey)}
+ </span>
+ </button>
+ );
+ })}
+ </div>
+ )}
+ <div>
+ <GroupHeading icon={<Search size={11} />} label={t("search.legendTitle")} />
+ <p className="px-1 text-xs text-muted-foreground leading-relaxed mb-2">{t("search.legendHelp")}</p>
+ <div className="grid grid-cols-2 gap-x-4 gap-y-1 px-1">
+ {NUMBER_LEGEND.map((l) => (
+ <div key={l.prefix} className="flex items-center gap-2 min-w-0">
+ <code className="text-xs font-mono text-[#866d28] bg-[#c9a84c]/10 border border-[#c9a84c]/20 rounded px-1.5 py-0.5 flex-shrink-0">
+ {l.prefix}
+ </code>
+ <span className="text-xs text-muted-foreground truncate">{t(l.key)}</span>
+ </div>
+ ))}
+ </div>
+ </div>
+ </div>
+ );
+ }
 
-    if (error) {
-      return (
-        <div className="flex flex-col items-center gap-2 py-10 px-4 text-center">
-          <AlertTriangle size={18} className="text-[#e05252]" />
-          <p className="text-xs text-muted-foreground">{t("search.error")}</p>
-          <button
-            onClick={retry}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
-          >
-            <RotateCw size={12} /> {t("search.retry")}
-          </button>
-        </div>
-      );
-    }
+ if (error) {
+ return (
+ <div className="flex flex-col items-center gap-2 py-10 px-4 text-center">
+ <AlertTriangle size={18} className="text-[#e05252]" />
+ <p className="text-xs text-muted-foreground">{t("search.error")}</p>
+ <button
+ onClick={retry}
+ className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all"
+ >
+ <RotateCw size={12} /> {t("search.retry")}
+ </button>
+ </div>
+ );
+ }
 
-    if (!hasAnyResults) {
-      return loading ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 size={16} className="text-muted-foreground animate-spin" />
-        </div>
-      ) : (
-        <div className="text-center py-10 px-4">
-          <p className="text-sm text-foreground">{t("search.noResults").replace("{query}", trimmedQuery)}</p>
-          <p className="text-xs text-muted-foreground mt-1.5">{t("search.noResultsHelper")}</p>
-        </div>
-      );
-    }
+ if (!hasAnyResults) {
+ return loading ? (
+ <div className="flex items-center justify-center py-10">
+ <Loader2 size={16} className="text-muted-foreground animate-spin" />
+ </div>
+ ) : (
+ <div className="text-center py-10 px-4">
+ <p className="text-sm text-foreground">{t("search.noResults").replace("{query}", trimmedQuery)}</p>
+ <p className="text-xs text-muted-foreground mt-1.5">{t("search.noResultsHelper")}</p>
+ </div>
+ );
+ }
 
-    const exact = results?.exact;
-    const pinned = groupStart.pinnedCount > 0 ? flatItems[0] : null;
+ const exact = results?.exact;
+ const pinned = groupStart.pinnedCount > 0 ? flatItems[0] : null;
 
-    return (
-      <>
-        {pinned && exact && (
-          <div className="pt-2 pb-1 border-b border-border">
-            <GroupHeading icon={<CornerDownLeft size={11} />} label={t("search.exactMatch")} accent />
-            {renderRow(pinned, 0)}
-          </div>
-        )}
-        <div className="py-1">
-          {SEARCH_CATEGORY_ORDER.map((category) => {
-            const start = groupStart.map.get(category);
-            if (start === undefined) return null;
-            const rows = flatItems.slice(start).filter((h) => h.category === category);
-            const Icon = CATEGORY_ICON[category];
-            return (
-              <div key={category} className="py-1">
-                <GroupHeading icon={<Icon size={11} />} label={t(SEARCH_CATEGORY_LABEL_KEY[category] as TranslationKey)} />
-                {rows.map((hit, i) => renderRow(hit, start + i))}
-              </div>
-            );
-          })}
-        </div>
-      </>
-    );
-  };
+ return (
+ <>
+ {pinned && exact && (
+ <div className="pt-2 pb-1 border-b border-border">
+ <GroupHeading icon={<CornerDownLeft size={11} />} label={t("search.exactMatch")} accent />
+ {renderRow(pinned, 0)}
+ </div>
+ )}
+ <div className="py-1">
+ {SEARCH_CATEGORY_ORDER.map((category) => {
+ const start = groupStart.map.get(category);
+ if (start === undefined) return null;
+ const rows = flatItems.slice(start).filter((h) => h.category === category);
+ const Icon = CATEGORY_ICON[category];
+ return (
+ <div key={category} className="py-1">
+ <GroupHeading icon={<Icon size={11} />} label={t(SEARCH_CATEGORY_LABEL_KEY[category] as TranslationKey)} />
+ {rows.map((hit, i) => renderRow(hit, start + i))}
+ </div>
+ );
+ })}
+ </div>
+ </>
+ );
+ };
 
-  const activeRowId = hasAnyResults ? `global-search-option-${activeIndex}` : undefined;
+ const activeRowId = hasAnyResults ? `global-search-option-${activeIndex}` : undefined;
 
   return (
     <>
       {/* ทางเข้าเหมือนเดิมทุกอย่าง — ช่องบนแถบบนที่ lg ขึ้นไป, ปุ่มไอคอนบนจอแคบ */}
-      <div className="hidden lg:flex items-center ml-auto">
+      <div className="hidden lg:flex items-center min-w-0">
         <button
+          ref={boxRef}
           onClick={(e) => openPanel(e.currentTarget)}
           aria-label={t("topbar.searchAria")}
-          className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 text-left hover:border-[#c9a84c]/40 focus-visible:border-[#c9a84c]/60 focus-visible:outline-none transition-colors"
+          className="flex items-center gap-2.5 h-10 w-[min(440px,36vw)] px-3 bg-[#f8f9fc] border border-[#d6dce6] rounded-lg text-left hover:border-[#c3ccda] focus-visible:border-[#1a5fb4] focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/20 focus-visible:outline-none transition-colors"
         >
-          <Search size={14} className="text-muted-foreground flex-shrink-0" />
+          <Search size={16} className="text-muted-foreground flex-shrink-0" />
           <span className="text-sm text-muted-foreground truncate flex-1">{t("topbar.searchPlaceholder")}</span>
-          <kbd className="hidden xl:inline-block text-[10px] font-mono text-muted-foreground border border-border rounded px-1.5 py-0.5 flex-shrink-0">
+          <kbd className="hidden xl:inline-flex items-center h-[22px] text-xs font-mono text-muted-foreground border border-[#d6dce6] bg-white rounded-[5px] px-1.5 flex-shrink-0">
             Ctrl K
           </kbd>
         </button>
@@ -609,20 +621,23 @@ export function GlobalSearch({
       <button
         onClick={(e) => openPanel(e.currentTarget)}
         aria-label={t("topbar.searchAria")}
-        className="lg:hidden ml-auto text-muted-foreground hover:text-foreground transition-colors p-2"
+        className="lg:hidden text-foreground transition-colors p-2"
       >
         <Search size={18} />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:pt-[10vh] sm:px-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => close()} aria-hidden="true" />
+        <div className={`fixed inset-0 z-50 flex flex-col ${anchor ? "" : "sm:items-center sm:pt-[10vh] sm:px-4"}`}>
+          <div className={`absolute inset-0 ${anchor ? "" : "bg-[#0b1d3a]/40"}`} onClick={() => close()} aria-hidden="true" />
           <div
             id="global-search-panel"
             role="dialog"
             aria-modal="true"
             aria-label={t("topbar.searchAria")}
-            className="search-panel-in relative flex flex-col w-full h-full bg-card overflow-hidden sm:h-auto sm:w-[46rem] sm:max-w-full sm:max-h-[72vh] sm:rounded-xl sm:border sm:border-border sm:shadow-xl"
+            style={anchor ? { position: "absolute", top: anchor.top, left: anchor.left, width: anchor.width } : undefined}
+            className={`search-panel-in relative flex flex-col bg-card overflow-hidden ${anchor
+              ? "max-h-[72vh] rounded-xl border border-border shadow-[0_12px_28px_-8px_rgba(11,29,58,0.22)]"
+              : "w-full h-full sm:h-auto sm:w-[46rem] sm:max-w-full sm:max-h-[72vh] sm:rounded-xl sm:border sm:border-border sm:shadow-xl"}`}
           >
             {/* แถบพิมพ์ */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
@@ -647,7 +662,7 @@ export function GlobalSearch({
               <button
                 onClick={() => close()}
                 aria-label={t("search.close")}
-                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                className="text-foreground transition-colors flex-shrink-0"
               >
                 <X size={16} />
               </button>
@@ -721,8 +736,8 @@ function Chip({ label, count, active, onClick }: { label: string; count: number;
       aria-pressed={active}
       className={`flex items-center gap-1.5 flex-shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
         active
-          ? "bg-[#c9a84c]/10 text-[#866d28] border-[#c9a84c]/20"
-          : "bg-transparent text-muted-foreground border-border hover:border-[#c9a84c]/40 hover:text-foreground"
+          ? "bg-[#0b1d3a] text-white border-[#0b1d3a]"
+          : "bg-white text-[#3d5173] border-[#d6dce6] hover:bg-[#f4f6fa] hover:text-foreground"
       }`}
     >
       {label}

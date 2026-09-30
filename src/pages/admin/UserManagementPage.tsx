@@ -16,7 +16,7 @@ import { useDialogA11y } from "../../hooks/useDialogA11y";
 
 type View = "list" | "create" | "edit";
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 const labelCls = "text-xs font-medium text-foreground block mb-1.5";
 
 interface UserFormState {
@@ -59,7 +59,7 @@ function ResetPasswordModal({ target, value, onChange, error, onConfirm, onCance
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("users.resetPasswordTitle")}</h2>
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1">{t("users.resetPasswordTitle")}</h2>
         <p className="text-xs text-muted-foreground mb-4">{t("users.resetPasswordFor").replace("{name}", target.fullName)}</p>
         <div className="space-y-3">
           <div>
@@ -74,7 +74,7 @@ function ResetPasswordModal({ target, value, onChange, error, onConfirm, onCance
         </div>
         <div className="flex items-center justify-end gap-2 mt-4">
           <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-          <button onClick={onConfirm} className="px-3.5 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("users.resetAction")}</button>
+          <button onClick={onConfirm} className="px-3.5 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">{t("users.resetAction")}</button>
         </div>
       </div>
     </div>
@@ -299,7 +299,7 @@ export function UserManagementPage({
     return (
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-lg font-semibold text-foreground mb-5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 className="text-lg font-semibold text-foreground mb-5">
             {view === "create" ? t("users.createTitle") : t("users.editTitle")}
           </h2>
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
@@ -382,8 +382,8 @@ export function UserManagementPage({
             )}
             {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button type="button" onClick={() => { setView("list"); setEditingId(null); }} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-              <button type="submit" className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("common.save")}</button>
+              <button type="button" onClick={() => { setView("list"); setEditingId(null); }} className="px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button type="submit" className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">{t("common.save")}</button>
             </div>
           </form>
         </div>
@@ -394,7 +394,7 @@ export function UserManagementPage({
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div data-tour="users-search" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
+        <div data-tour="users-search" className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-full sm:w-72">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("users.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
         </div>
@@ -403,17 +403,17 @@ export function UserManagementPage({
             onClick={tour.start}
             title={t("tour.replay")}
             aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
           </button>
-          <button data-tour="users-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <button data-tour="users-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
             <Plus size={15} /> {t("users.addNew")}
           </button>
         </div>
       </div>
 
-      <div data-tour="users-table" className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="users-table" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

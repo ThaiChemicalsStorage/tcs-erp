@@ -229,15 +229,15 @@ export function TemplateEditorView({
             <div className="space-y-2.5">
               <div>
                 <label htmlFor={codeId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")} <span className="text-[#e05252]">*</span></label>
-                <input id={codeId} value={draft.templateCode} onChange={(e) => setDraft((d) => ({ ...d, templateCode: e.target.value.toUpperCase() }))} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                <input id={codeId} value={draft.templateCode} onChange={(e) => setDraft((d) => ({ ...d, templateCode: e.target.value.toUpperCase() }))} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
               </div>
               <div>
                 <label htmlFor={nameId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.name")} <span className="text-[#e05252]">*</span></label>
-                <input id={nameId} value={draft.templateName} onChange={(e) => setDraft((d) => ({ ...d, templateName: e.target.value }))} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                <input id={nameId} value={draft.templateName} onChange={(e) => setDraft((d) => ({ ...d, templateName: e.target.value }))} className="w-full text-sm font-medium text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
               </div>
               <div>
                 <label htmlFor={descriptionId} className="text-xs text-muted-foreground block mb-1">{t("templates.form.description")}</label>
-                <textarea id={descriptionId} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} rows={3} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y" />
+                <textarea id={descriptionId} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} rows={3} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y" />
               </div>
             </div>
           </div>
@@ -254,7 +254,7 @@ export function TemplateEditorView({
                       const jt = jobTypes.find((j) => j.code === e.target.value);
                       setDraft((d) => ({ ...d, jobTypeCode: e.target.value, jobTypeName: jt?.name ?? d.jobTypeName }));
                     }}
-                    className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none"
+                    className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none"
                   >
                     <option value="">—</option>
                     {jobTypes.filter((jt) => jt.isActive).map((jt) => <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>)}
@@ -262,7 +262,7 @@ export function TemplateEditorView({
                 </div>
                 <div>
                   <label htmlFor={versionId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.version")}</label>
-                  <input id={versionId} value={draft.version} onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                  <input id={versionId} value={draft.version} onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
                 </div>
               </div>
               <div className="pt-1">
@@ -304,13 +304,13 @@ export function TemplateEditorView({
                   className="flex-1 text-sm font-semibold text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-2 py-1.5 transition-colors"
                   style={SERIF}
                 />
-                <button onClick={() => moveSection(sIdx, -1)} disabled={sIdx === 0} title={t("quotation.lineItems.moveUp")} aria-label={t("quotation.lineItems.moveUp")} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={14} /></button>
-                <button onClick={() => moveSection(sIdx, 1)} disabled={sIdx === draft.sections.length - 1} title={t("quotation.lineItems.moveDown")} aria-label={t("quotation.lineItems.moveDown")} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={14} /></button>
+                <button onClick={() => moveSection(sIdx, -1)} disabled={sIdx === 0} title={t("quotation.lineItems.moveUp")} aria-label={t("quotation.lineItems.moveUp")} className="p-1.5 text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={14} /></button>
+                <button onClick={() => moveSection(sIdx, 1)} disabled={sIdx === draft.sections.length - 1} title={t("quotation.lineItems.moveDown")} aria-label={t("quotation.lineItems.moveDown")} className="p-1.5 text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={14} /></button>
                 <button onClick={() => deleteSection(section.id)} title={t("common.delete")} aria-label={t("common.delete")} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={14} /></button>
               </div>
 
               {section.items.length > 0 && (
-                <div className="overflow-x-auto rounded-lg border border-border">
+                <div className="overflow-x-auto rounded-lg border border-[#c3ccda] bg-white">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/20">
@@ -343,10 +343,10 @@ export function TemplateEditorView({
               )}
 
               <div className="flex items-center gap-2">
-                <button onClick={() => setProductPickerFor(section.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => setProductPickerFor(section.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Package size={12} /> {t("templates.form.selectProduct")}
                 </button>
-                <button onClick={() => addItem(section.id, emptyItem(0))} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => addItem(section.id, emptyItem(0))} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <PencilLine size={12} /> {t("templates.form.addCustomItem")}
                 </button>
               </div>
@@ -355,7 +355,7 @@ export function TemplateEditorView({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border bg-muted/30">
           <p className="text-sm font-semibold text-foreground flex items-center gap-2" style={SERIF}>
             <ScrollText size={14} className="text-[#c9a84c]" /> {t("templates.preview.terms")}
@@ -371,7 +371,7 @@ export function TemplateEditorView({
               <div className="space-y-1.5">
                 {termsOfType(type).map(({ term, i }) => (
                   <div key={i} className="flex items-center gap-2">
-                    <input value={term.text} onChange={(e) => updateTermText(i, e.target.value)} className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                    <input value={term.text} onChange={(e) => updateTermText(i, e.target.value)} className="flex-1 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
                     <button onClick={() => deleteTerm(i)} title={t("common.delete")} aria-label={t("common.delete")} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={13} /></button>
                   </div>
                 ))}
@@ -382,7 +382,7 @@ export function TemplateEditorView({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5">
         <label htmlFor={internalNotesId} className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5" style={SERIF}>
           <StickyNote size={13} className="text-[#e08a3c]" /> {t("templates.form.internalNotes")}
         </label>
@@ -392,15 +392,15 @@ export function TemplateEditorView({
           value={draft.internalNotes.join("\n")}
           onChange={(e) => setDraft((d) => ({ ...d, internalNotes: linesToArray(e.target.value) }))}
           rows={3}
-          className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
+          className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y"
         />
       </div>
 
       {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
 
       <div className="flex items-center justify-end gap-2 pt-2 pb-6 border-t border-border">
-        <button onClick={onCancel} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors mt-3">{t("common.cancel")}</button>
-        <button onClick={() => void handleSave()} disabled={saving} className="px-4 py-2 text-sm rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60 mt-3">
+        <button onClick={onCancel} className="px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground transition-colors mt-3">{t("common.cancel")}</button>
+        <button onClick={() => void handleSave()} disabled={saving} className="px-4 py-2 text-sm rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-60 mt-3">
           {saving ? <Loader2 size={14} className="animate-spin" /> : t("templates.form.save")}
         </button>
       </div>
@@ -451,7 +451,7 @@ function ItemEditor({
           <select
             value={item.itemType}
             onChange={(e) => onChange((it) => ({ ...it, itemType: e.target.value as TemplateItem["itemType"] }))}
-            className="w-full text-xs text-muted-foreground bg-transparent border border-border rounded px-1.5 py-1 outline-none appearance-none"
+            className="w-full text-xs text-muted-foreground bg-transparent border border-[#c3ccda] bg-white rounded px-1.5 py-1 outline-none appearance-none"
           >
             <option value="item">{t("templates.itemType.item")}</option>
             <option value="subItem">{t("templates.itemType.subItem")}</option>

@@ -44,41 +44,43 @@ function PromptDialogForm({
   };
 
   const displayError = externalError || blankError;
-  const inputClass = `w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors ${mono ? "font-mono" : ""}`;
+  const inputClass = `w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors ${mono ? "font-mono" : ""}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h2>
-        {message && <p className="text-xs text-muted-foreground mb-4 leading-relaxed">{message}</p>}
-        <label className="text-xs text-muted-foreground block mb-1.5">{label} {requiredMessage && <span className="text-[#e05252]">*</span>}</label>
-        {multiline ? (
-          <textarea
-            autoFocus
-            rows={3}
-            className={`${inputClass} resize-none leading-relaxed`}
-            value={value}
-            onChange={(e) => { setValue(e.target.value); setBlankError(""); }}
-            placeholder={placeholder}
-          />
-        ) : (
-          <input
-            autoFocus
-            className={inputClass}
-            value={value}
-            onChange={(e) => { setValue(e.target.value); setBlankError(""); }}
-            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-            placeholder={placeholder}
-          />
-        )}
-        {displayError && <p className="text-xs text-[#e05252] mt-1.5">{displayError}</p>}
-        <div className="flex items-center justify-end gap-2 mt-4">
-          <button onClick={onCancel} disabled={busy} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">{cancelLabel}</button>
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={busy ? undefined : onCancel} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] w-full max-w-[480px] flex flex-col">
+        <div className="px-6 pt-6">
+          <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug mb-1">{title}</h2>
+          {message && <p className="text-sm text-[#3d5173] mb-4 leading-relaxed">{message}</p>}
+          <label className="text-[13px] font-medium text-[#26395a] block mb-1.5">{label} {requiredMessage && <span className="text-[#b93636]">*</span>}</label>
+          {multiline ? (
+            <textarea
+              autoFocus
+              rows={3}
+              className={`${inputClass} resize-none leading-relaxed`}
+              value={value}
+              onChange={(e) => { setValue(e.target.value); setBlankError(""); }}
+              placeholder={placeholder}
+            />
+          ) : (
+            <input
+              autoFocus
+              className={inputClass}
+              value={value}
+              onChange={(e) => { setValue(e.target.value); setBlankError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+              placeholder={placeholder}
+            />
+          )}
+          {displayError && <p className="text-xs text-[#b93636] mt-1.5">{displayError}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-2.5 px-6 py-4 mt-6 border-t border-[#eef1f6]">
+          <button onClick={onCancel} disabled={busy} className="h-10 px-4 text-sm font-medium border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-60">{cancelLabel}</button>
           <button
             onClick={submit}
             disabled={busy}
-            className="px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
+            className="h-10 px-4 text-sm rounded-lg font-semibold transition-colors bg-[#0b1d3a] text-white hover:bg-[#1a2f55] disabled:opacity-60"
           >
             {confirmLabel}
           </button>

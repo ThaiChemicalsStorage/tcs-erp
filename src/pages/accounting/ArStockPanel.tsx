@@ -125,7 +125,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
         {/* ฝั่งซ้าย: ดูใบ (read-only) */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{doc.docNo}</h2>
+            <h2 className="text-lg font-semibold text-foreground">{doc.docNo}</h2>
             <span className="text-xs font-mono text-muted-foreground">{formatArDocDate(doc.docDate)}</span>
           </div>
           <div className="text-sm text-foreground font-medium">{doc.customerSnapshot.companyName}</div>
@@ -156,7 +156,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
 
         {/* ฝั่งขวา: ตัดสต๊อก */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.stockPanel.deductHeading")}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("accounting.stockPanel.deductHeading")}</h2>
 
           {canAdjust && doc.status === "issued" && (
             <div className="space-y-2">
@@ -167,7 +167,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
                     <select
                       value={l.productId}
                       onChange={(e) => updateLine(l.key, { productId: e.target.value })}
-                      className="h-9 flex-1 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                      className="h-9 flex-1 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                     >
                       <option value="">{t("accounting.stockPanel.selectProduct")}</option>
                       {products.filter((p) => !p.archived).map((p) => (
@@ -179,7 +179,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
                       value={l.qty}
                       onChange={(e) => updateLine(l.key, { qty: e.target.value })}
                       placeholder={t("accounting.stockPanel.line.qtyPlaceholder")}
-                      className="h-9 w-24 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+                      className="h-9 w-24 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                     />
                     <span className="text-xs text-muted-foreground w-10 whitespace-nowrap">{product?.unit ?? ""}</span>
                     <button onClick={() => removeLine(l.key)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.stockPanel.line.remove")}>
@@ -195,7 +195,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
               <button
                 onClick={() => void handleDeduct()}
                 disabled={busy}
-                className="w-full h-9 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-medium hover:brightness-95 transition-all disabled:opacity-50"
+                className="w-full h-9 text-xs bg-[#0b1d3a] text-white rounded-lg font-medium hover:brightness-95 transition-all disabled:opacity-50"
               >
                 {busy ? t("accounting.stockPanel.btn.savingBusy") : t("accounting.stockPanel.btn.deduct")}
               </button>

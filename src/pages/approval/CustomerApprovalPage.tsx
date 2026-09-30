@@ -110,7 +110,7 @@ export default function CustomerApprovalPage() {
 
         {/* ข้อมูลงาน */}
         <section className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ข้อมูลงานบริการ</h2>
+          <h2 className="text-sm font-semibold mb-3">ข้อมูลงานบริการ</h2>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             {/* Field order matches the editor form (ServiceReportEditor.tsx) so the same record
                 reads the same way to the engineer who filled it in and the customer who receives
@@ -142,7 +142,7 @@ export default function CustomerApprovalPage() {
 
         {/* ผลการตรวจเช็ค */}
         <section className="bg-card border border-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ผลการตรวจเช็ค</h2>
+          <h2 className="text-sm font-semibold mb-3">ผลการตรวจเช็ค</h2>
           <div className="space-y-4">
             {report.templateSnapshot.sections.map((section) => {
               const sectionValue = report.checklist.find((s) => s.key === section.key);
@@ -218,7 +218,7 @@ export default function CustomerApprovalPage() {
         {pending && (
           <section className="bg-card border border-border rounded-xl p-5 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>การอนุมัติรายงาน</h2>
+              <h2 className="text-sm font-semibold">การอนุมัติรายงาน</h2>
               <p className="text-xs text-muted-foreground mt-0.5">กรุณาตรวจสอบรายงานด้านบน แล้วลงลายเซ็นเพื่ออนุมัติ หรือแจ้งเหตุผลหากไม่อนุมัติ (ลิงก์ใช้ได้ถึง {approval.expiresAt.slice(0, 10)})</p>
             </div>
 
@@ -237,7 +237,7 @@ export default function CustomerApprovalPage() {
                   <button
                     onClick={() => signature && submit({ decision: "approved", signatureDataUrl: signature.dataUrl, signedName: signature.name })}
                     disabled={!signature || submitting}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {submitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} อนุมัติรายงาน
                   </button>
@@ -261,7 +261,7 @@ export default function CustomerApprovalPage() {
                     id="reject-name" type="text" value={rejectName}
                     onChange={(e) => setRejectName(e.target.value)}
                     placeholder={report.customerSnapshot.contactName || "ชื่อ-นามสกุล"}
-                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c]/50 focus:outline-none"
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -269,7 +269,7 @@ export default function CustomerApprovalPage() {
                   <textarea
                     id="reject-reason" rows={4} value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
-                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:border-[#c9a84c]/50 focus:outline-none"
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 focus:outline-none"
                   />
                 </div>
                 {submitError && <p role="alert" className="text-xs text-[#e05252]">{submitError}</p>}

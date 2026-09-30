@@ -710,7 +710,7 @@ export function ServiceReportEditor({
     );
   }
 
-  const inputClass = "h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60";
+  const inputClass = "h-9 w-full px-3 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60";
   const labelClass = "text-xs font-medium text-muted-foreground mb-1 block";
   const companyHeader: CompanyHeaderInfo = {
     name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
@@ -784,11 +784,11 @@ export function ServiceReportEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all">
             <ArrowLeft size={15} />
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-foreground leading-tight flex items-center gap-2" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            <h1 className="text-xl font-semibold text-foreground leading-tight flex items-center gap-2">
               {isNew ? t("service.newReport") : report?.id}
               {!isNew && report && (
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[report.status]}`}>
@@ -810,17 +810,17 @@ export function ServiceReportEditor({
               : <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
           )}
           {!isNew && report && canPrint && (
-            <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
               <Printer size={14} /> {t("service.print")}
             </button>
           )}
           {isNew && (
-            <button onClick={handleCreate} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+            <button onClick={handleCreate} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
               <Save size={14} /> {saving ? t("service.saving") : t("service.createDraft")}
             </button>
           )}
           {!isNew && report && isEditable && (
-            <button onClick={handleSaveDraft} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-lg text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handleSaveDraft} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               <Save size={14} /> {saving ? t("service.saving") : t("service.saveDraft")}
             </button>
           )}
@@ -830,7 +830,7 @@ export function ServiceReportEditor({
             </button>
           )}
           {!isNew && report && report.status === "Completed" && canEdit && (
-            <button onClick={handleReopen} disabled={actionBusy} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-lg text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handleReopen} disabled={actionBusy} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
               <RotateCcw size={14} /> {t("service.reopen")}
             </button>
           )}
@@ -863,7 +863,7 @@ export function ServiceReportEditor({
       )}
 
       {isNew && (
-        <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4 space-y-2">
           <label className={labelClass}>{t("service.form.template")}</label>
           <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className={inputClass}>
             <option value="">{t("service.form.selectTemplate")}</option>
@@ -873,7 +873,7 @@ export function ServiceReportEditor({
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
           <label className={labelClass}>{t("service.form.customer")}</label>
           <CustomerSelector
@@ -943,15 +943,15 @@ export function ServiceReportEditor({
           <input value={form.onSiteContactPhone} disabled={!isEditable} onChange={(e) => setField("onSiteContactPhone", e.target.value)} className={inputClass} />
         </div>
         <div className="md:col-span-2"><label className={labelClass}>{t("service.form.overallCustomerSummary")}</label>
-          <textarea value={form.overallCustomerSummary} disabled={!isEditable} onChange={(e) => setField("overallCustomerSummary", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 resize-y" />
+          <textarea value={form.overallCustomerSummary} disabled={!isEditable} onChange={(e) => setField("overallCustomerSummary", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 resize-y" />
         </div>
         <div className="md:col-span-2"><label className={labelClass}>{t("service.form.overallRemark")}</label>
-          <textarea value={form.overallRemark} disabled={!isEditable} onChange={(e) => setField("overallRemark", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 resize-y" />
+          <textarea value={form.overallRemark} disabled={!isEditable} onChange={(e) => setField("overallRemark", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60 resize-y" />
         </div>
       </div>
 
       {displaySections.length > 0 && (
-        <div data-tour="servicedoc-checklist" className="bg-card border border-border rounded-xl overflow-hidden">
+        <div data-tour="servicedoc-checklist" className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
               <Wrench size={14} className="text-[#c9a84c]" />
@@ -1195,7 +1195,7 @@ export function ServiceReportEditor({
                 type="button"
                 onClick={handleSendApproval}
                 disabled={sendingApproval || saving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send size={12} /> {sendingApproval ? "กำลังส่ง..." : report.customerApproval ? "ส่งให้ลูกค้าอนุมัติอีกครั้ง" : "ส่งให้ลูกค้าอนุมัติ (ลิงก์/LINE)"}
               </button>
@@ -1227,7 +1227,7 @@ export function ServiceReportEditor({
             <button
               type="button"
               onClick={() => { void copyApprovalLink(approvalResult.url); }}
-              className="px-3 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors whitespace-nowrap"
+              className="px-3 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors whitespace-nowrap"
             >
               {approvalLinkCopied ? "คัดลอกแล้ว ✓" : "คัดลอกลิงก์"}
             </button>
@@ -1248,7 +1248,7 @@ export function ServiceReportEditor({
                   type="button"
                   onClick={handleCreatePairing}
                   disabled={pairingBusy}
-                  className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50"
                 >
                   {pairingBusy ? "กำลังออกรหัส..." : "ออกรหัสจับคู่ LINE"}
                 </button>

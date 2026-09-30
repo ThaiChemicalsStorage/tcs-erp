@@ -41,40 +41,40 @@ const EXPORT_BATCH = 500;
 /** งานพิมพ์ของหน้านี้ (2026-09-24) — รายงานประวัติ หรือการ์ดสต๊อกของสินค้าที่ติดตามอยู่ */
 type PrintJob = { kind: "list"; sheet: ExportSheet } | { kind: "card"; product: Product; rows: StockHistoryRow[] };
 
-const exportBtnCls = "h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50";
+const exportBtnCls = "h-9 flex items-center gap-1.5 px-3 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50";
 /** แท็บติดตามรายสินค้าดึงครั้งเดียวไม่เกินนี้ — เกินแล้วบอกผู้ใช้ให้ย่อช่วงวันที่ */
 const TRACE_LIMIT = 500;
 
 const KINDS: StockMovementKind[] = ["receive", "deduct", "return", "adjust"];
 const SOURCE_TYPES: StockMovementSourceType[] = [
-  "material_requisition", "receiving_report", "store_receipt", "purchase_request", "tool_issue", "ar_document", "stock_import", "manual",
+ "material_requisition", "receiving_report", "store_receipt", "purchase_request", "tool_issue", "ar_document", "stock_import", "manual",
 ];
 const SOURCE_LABEL_KEY: Record<StockMovementSourceType, TranslationKey> = {
-  manual: "stockHistory.source.manual",
-  ar_document: "stockHistory.source.ar_document",
-  material_requisition: "stockHistory.source.material_requisition",
-  receiving_report: "stockHistory.source.receiving_report",
-  tool_issue: "stockHistory.source.tool_issue",
-  purchase_request: "stockHistory.source.purchase_request",
-  stock_import: "stockHistory.source.stock_import",
-  store_receipt: "stockHistory.source.store_receipt",
+ manual: "stockHistory.source.manual",
+ ar_document: "stockHistory.source.ar_document",
+ material_requisition: "stockHistory.source.material_requisition",
+ receiving_report: "stockHistory.source.receiving_report",
+ tool_issue: "stockHistory.source.tool_issue",
+ purchase_request: "stockHistory.source.purchase_request",
+ stock_import: "stockHistory.source.stock_import",
+ store_receipt: "stockHistory.source.store_receipt",
 };
 /** ป้ายประเภท — สูตร tinted pill ของ DESIGN.md: สีประจำ /10 · ขอบ /20 · ตัวอักษรสีเข้มของเฉดเดียวกัน */
 const KIND_PILL: Record<StockMovementKind, string> = {
-  receive: "bg-[#2aa36b]/10 text-[#207e52] border-[#2aa36b]/20",
-  deduct: "bg-[#e08a3c]/10 text-[#a75d1a] border-[#e08a3c]/20",
-  return: "bg-[#1f9d8a]/10 text-[#187c6d] border-[#1f9d8a]/20",
-  adjust: "bg-[#7c4dbb]/10 text-[#6a3fa6] border-[#7c4dbb]/20",
+ receive: "bg-[#2aa36b]/10 text-[#207e52] border-[#2aa36b]/20",
+ deduct: "bg-[#e08a3c]/10 text-[#a75d1a] border-[#e08a3c]/20",
+ return: "bg-[#1f9d8a]/10 text-[#187c6d] border-[#1f9d8a]/20",
+ adjust: "bg-[#7c4dbb]/10 text-[#6a3fa6] border-[#7c4dbb]/20",
 };
 
-const inputCls = "h-9 px-3 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "h-9 px-3 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 const thCls = "px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
 function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+ return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
 }
 function signed(n: number): string {
-  return n > 0 ? `+${fmt(n)}` : fmt(n);
+ return n > 0 ? `+${fmt(n)}` : fmt(n);
 }
 
 function KindPill({ kind }: { kind: StockMovementKind }) {
@@ -157,7 +157,7 @@ export function StockHistoryPage({
     {printJob?.kind === "card" && <StockCardPrintDocument product={printJob.product} movements={printJob.rows} companyHeader={companyHeader} printedAt={today} />}
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stockHistory.title")}</h1>
+        <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("stockHistory.title")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5">{t("stockHistory.subtitle")}</p>
       </div>
       <Tabs
@@ -273,7 +273,7 @@ function AllMovements({ onTrace, onPrint }: { onTrace: (productId: string) => vo
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit" role="group" aria-label={t("stockHistory.col.kind")}>
           {(["", ...KINDS] as const).map((k) => (
             <button key={k || "all"} onClick={() => { setKind(k); setPage(0); }} aria-pressed={kind === k}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${kind === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${kind === k ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {k === "" ? t("stockHistory.filter.allKinds") : t(STOCK_MOVEMENT_KIND_LABEL_KEY[k])}
             </button>
           ))}
@@ -305,11 +305,11 @@ function AllMovements({ onTrace, onPrint }: { onTrace: (productId: string) => vo
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
         {error ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16">
             <p className="text-sm text-muted-foreground">{t("stockHistory.loadError")}</p>
-            <button onClick={() => setRetry((n) => n + 1)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40">{t("stockHistory.retry")}</button>
+            <button onClick={() => setRetry((n) => n + 1)} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm">{t("stockHistory.retry")}</button>
           </div>
         ) : !loading && result && result.movements.length === 0 ? (
           <EmptyState icon={History} title={t("stockHistory.title")} description={t("stockHistory.empty")} compact />
@@ -338,56 +338,56 @@ function AllMovements({ onTrace, onPrint }: { onTrace: (productId: string) => vo
                     </td>
                     <td className="px-3 py-3"><KindPill kind={m.kind} /></td>
                     <td className={`px-3 py-3 text-xs font-mono text-right whitespace-nowrap font-semibold ${m.delta >= 0 ? "text-[#207e52]" : "text-[#c23f3f]"}`}>{signed(m.delta)}</td>
-                    <td className="px-3 py-3 text-xs font-mono text-right whitespace-nowrap">{m.amount !== undefined ? fmt(m.amount) : "—"}{m.unitCost !== undefined && <span className="block text-muted-foreground">@{fmt(m.unitCost)}</span>}</td>
-                    <td className="px-3 py-3 text-xs font-mono text-right">{fmt(m.balanceAfter)}</td>
-                    <td className="px-3 py-3 text-xs">
-                      <span className="block text-muted-foreground">{t(SOURCE_LABEL_KEY[m.sourceType] ?? "stockHistory.source.manual")}</span>
-                      <span className="font-mono text-foreground">{m.sourceLabel || m.reason || "—"}</span>
-                    </td>
-                    <td className="px-3 py-3 text-xs max-w-[220px]"><LinkCell row={m} /></td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground">{m.departmentName || "—"}{m.teamName && <span className="block">{m.teamName}</span>}</td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{m.createdByName || "—"}</td>
-                  </tr>
-                ))}
-                {loading && !result && (
-                  <tr><td colSpan={10} className="py-12 text-center text-xs text-muted-foreground" role="status">{t("stockHistory.loading")}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {total > 0 && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border text-xs text-muted-foreground">
-            <span>{t("stockHistory.pager").replace("{from}", fmt(page * PAGE_SIZE + 1)).replace("{to}", fmt(Math.min(total, (page + 1) * PAGE_SIZE))).replace("{total}", fmt(total))}</span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}
-                className="px-3 py-1.5 border border-border rounded-lg hover:text-foreground hover:border-[#c9a84c]/40 disabled:opacity-40">{t("stockHistory.prev")}</button>
-              <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * PAGE_SIZE >= total || loading}
-                className="px-3 py-1.5 border border-border rounded-lg hover:text-foreground hover:border-[#c9a84c]/40 disabled:opacity-40">{t("stockHistory.next")}</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+ <td className="px-3 py-3 text-xs font-mono text-right whitespace-nowrap">{m.amount !== undefined ? fmt(m.amount) : "—"}{m.unitCost !== undefined && <span className="block text-muted-foreground">@{fmt(m.unitCost)}</span>}</td>
+ <td className="px-3 py-3 text-xs font-mono text-right">{fmt(m.balanceAfter)}</td>
+ <td className="px-3 py-3 text-xs">
+ <span className="block text-muted-foreground">{t(SOURCE_LABEL_KEY[m.sourceType] ?? "stockHistory.source.manual")}</span>
+ <span className="font-mono text-foreground">{m.sourceLabel || m.reason || "—"}</span>
+ </td>
+ <td className="px-3 py-3 text-xs max-w-[220px]"><LinkCell row={m} /></td>
+ <td className="px-3 py-3 text-xs text-muted-foreground">{m.departmentName || "—"}{m.teamName && <span className="block">{m.teamName}</span>}</td>
+ <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{m.createdByName || "—"}</td>
+ </tr>
+ ))}
+ {loading && !result && (
+ <tr><td colSpan={10} className="py-12 text-center text-xs text-muted-foreground" role="status">{t("stockHistory.loading")}</td></tr>
+ )}
+ </tbody>
+ </table>
+ </div>
+ )}
+ {total > 0 && (
+ <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border text-xs text-muted-foreground">
+ <span>{t("stockHistory.pager").replace("{from}", fmt(page * PAGE_SIZE + 1)).replace("{to}", fmt(Math.min(total, (page + 1) * PAGE_SIZE))).replace("{total}", fmt(total))}</span>
+ <div className="flex items-center gap-2">
+ <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}
+ className="px-3 py-1.5 border border-[#c3ccda] bg-white rounded-lg hover:text-foreground hover:bg-[#f4f6fa] disabled:opacity-40">{t("stockHistory.prev")}</button>
+ <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * PAGE_SIZE >= total || loading}
+ className="px-3 py-1.5 border border-[#c3ccda] bg-white rounded-lg hover:text-foreground hover:bg-[#f4f6fa] disabled:opacity-40">{t("stockHistory.next")}</button>
+ </div>
+ </div>
+ )}
+ </div>
+ </div>
+ );
 }
 
 interface JobGroup {
-  key: string;
-  title: string;
-  sub: string;
-  out: number;
-  returned: number;
-  value: number;
-  rows: StockHistoryRow[];
+ key: string;
+ title: string;
+ sub: string;
+ out: number;
+ returned: number;
+ value: number;
+ rows: StockHistoryRow[];
 }
 
 /** ปลายทางของของที่ออกจากคลัง — งานก่อน แล้วค่อยเอกสาร/แผนก เพื่อให้คำตอบของ "ไปงานไหน" รวมกลุ่มได้จริง */
 function destinationOf(row: StockHistoryRow, noJob: string, directSale: string): { key: string; title: string; sub: string } {
-  const l = row.link;
-  if (row.sourceType === "ar_document") return { key: "__sale", title: directSale, sub: "" };
-  const job = l.jobCode || l.jobOrderCode || l.productionOrderId;
-  if (job) return { key: `job:${job}`, title: job, sub: [l.jobOrderCode !== job ? l.jobOrderCode : "", l.customerName].filter(Boolean).join(" · ") };
+ const l = row.link;
+ if (row.sourceType === "ar_document") return { key: "__sale", title: directSale, sub: "" };
+ const job = l.jobCode || l.jobOrderCode || l.productionOrderId;
+ if (job) return { key: `job:${job}`, title: job, sub: [l.jobOrderCode !== job ? l.jobOrderCode : "", l.customerName].filter(Boolean).join(" · ") };
   if (row.teamName || row.departmentName) {
     const who = [row.departmentName, row.teamName].filter(Boolean).join(" / ");
     return { key: `dept:${who}`, title: who, sub: noJob };
@@ -478,7 +478,7 @@ function ItemTrace({ products, productId, onProductChange, onPrint }: {
             options={options}
             placeholder={t("stockHistory.trace.pickPlaceholder")}
             ariaLabel={t("stockHistory.trace.pickProduct")}
-            className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50"
+            className="w-full h-9 px-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
             onPick={(opt) => {
               const p = products.find((x) => `${x.code} — ${x.name}` === opt.value);
               if (p) { onProductChange(p.id); setOpen(null); }
@@ -511,7 +511,7 @@ function ItemTrace({ products, productId, onProductChange, onPrint }: {
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <p className="text-xs font-mono text-muted-foreground">{product.code} · {unit}</p>
-                <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{product.name}</h2>
+                <h2 className="text-lg font-semibold text-foreground">{product.name}</h2>
               </div>
               <div className="flex gap-6 text-right">
                 <div><p className="text-xs text-muted-foreground">{t("stockHistory.trace.currentStock")}</p><p className="text-xl font-bold font-mono">{fmt(product.stockQty)} <span className="text-xs font-normal text-muted-foreground">{unit}</span></p></div>
@@ -549,7 +549,7 @@ function ItemTrace({ products, productId, onProductChange, onPrint }: {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
             <section className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border">
-                <h3 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stockHistory.trace.jobsTitle")}</h3>
+                <h3 className="text-sm font-semibold text-foreground">{t("stockHistory.trace.jobsTitle")}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{t("stockHistory.trace.jobsSummary").replace("{qty}", `${fmt(analysis.deduct - analysis.ret)} ${unit}`).replace("{n}", String(analysis.jobs.length))}</p>
               </div>
               {analysis.jobs.length === 0 ? (
@@ -590,7 +590,7 @@ function ItemTrace({ products, productId, onProductChange, onPrint }: {
 
             <section className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border">
-                <h3 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stockHistory.trace.receiptsTitle")}</h3>
+                <h3 className="text-sm font-semibold text-foreground">{t("stockHistory.trace.receiptsTitle")}</h3>
               </div>
               {analysis.receipts.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-muted-foreground">{t("stockHistory.trace.emptyGroup")}</p>
@@ -622,7 +622,7 @@ function ItemTrace({ products, productId, onProductChange, onPrint }: {
 
           <section className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3.5 border-b border-border">
-              <h3 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stockHistory.trace.ledgerTitle")}</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t("stockHistory.trace.ledgerTitle")}</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">

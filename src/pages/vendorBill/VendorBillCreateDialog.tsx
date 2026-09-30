@@ -56,7 +56,7 @@ export function VendorBillCreateDialog({ onCreate, onCancel }: {
         className="relative w-full max-w-lg bg-card border border-border rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("vendorBill.create.title")}</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("vendorBill.create.title")}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">{t("vendorBill.create.hint")}</p>
           </div>
           <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
@@ -66,7 +66,7 @@ export function VendorBillCreateDialog({ onCreate, onCancel }: {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
               placeholder={t("vendorBill.create.search")} aria-label={t("vendorBill.create.search")}
-              className="w-full h-9 pl-9 pr-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              className="w-full h-9 pl-9 pr-3 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           </div>
         </div>
         <div className="p-5 overflow-y-auto flex-1">

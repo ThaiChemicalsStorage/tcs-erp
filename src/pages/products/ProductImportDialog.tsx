@@ -114,7 +114,7 @@ export function ProductImportDialog({
         className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div>
-            <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            <h2 id={titleId} className="text-sm font-semibold text-foreground">
               {t("products.import.title")}
             </h2>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("products.import.subtitle")}</p>
@@ -233,44 +233,44 @@ export function ProductImportDialog({
                   <p className="text-xs font-semibold text-[#a75d1a]">{t("products.import.problemsTitle").replace("{n}", String(problems.length))}</p>
                   {problems.slice(0, 20).map((p) => (
                     <p key={`${p.rowNumber}-${p.message}`} className="text-xs text-[#a75d1a]">
-                      {t("products.import.problemRow").replace("{row}", String(p.rowNumber))} {p.message}
-                    </p>
-                  ))}
-                  {problems.length > 20 && (
-                    <p className="text-xs text-[#a75d1a]">{t("products.import.problemsTruncated").replace("{n}", String(problems.length - 20))}</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+ {t("products.import.problemRow").replace("{row}", String(p.rowNumber))} {p.message}
+ </p>
+ ))}
+ {problems.length > 20 && (
+ <p className="text-xs text-[#a75d1a]">{t("products.import.problemsTruncated").replace("{n}", String(problems.length - 20))}</p>
+ )}
+ </div>
+ )}
+ </>
+ )}
+ </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border p-4">
-          <button onClick={onClose} disabled={busy}
-            className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-            {done ? t("common.close") : t("common.cancel")}
-          </button>
-          {!done && (
-            <button
-              onClick={() => void confirmImport()}
-              disabled={busy || !preview || preview.toCreate.length === 0}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-50"
-            >
-              {importing ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
-              {preview ? t("products.import.confirm").replace("{n}", String(preview.toCreate.length)) : t("products.import.confirmEmpty")}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+ <div className="flex items-center justify-end gap-2 border-t border-border p-4">
+ <button onClick={onClose} disabled={busy}
+ className="px-3.5 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
+ {done ? t("common.close") : t("common.cancel")}
+ </button>
+ {!done && (
+ <button
+ onClick={() => void confirmImport()}
+ disabled={busy || !preview || preview.toCreate.length === 0}
+ className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
+ >
+ {importing ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+ {preview ? t("products.import.confirm").replace("{n}", String(preview.toCreate.length)) : t("products.import.confirmEmpty")}
+ </button>
+ )}
+ </div>
+ </div>
+ </div>
+ );
 }
 
 function Stat({ label, value, accent = false }: { label: string; value: number; accent?: boolean }) {
-  return (
-    <div className="bg-secondary border border-border rounded-lg px-3 py-2">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-lg font-mono font-bold ${accent ? "text-[#207e52]" : "text-foreground"}`}>{value.toLocaleString("th-TH")}</p>
+ return (
+ <div className=" border border-[#c3ccda] bg-white rounded-lg px-3 py-2">
+ <p className="text-xs text-muted-foreground">{label}</p>
+ <p className={`text-lg font-mono font-bold ${accent ? "text-[#207e52]" : "text-foreground"}`}>{value.toLocaleString("th-TH")}</p>
     </div>
   );
 }

@@ -102,14 +102,14 @@ export function NotificationBell({
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative text-muted-foreground hover:text-foreground transition-colors p-2"
+        className="relative w-10 h-10 rounded-lg flex items-center justify-center text-[#3d5173] hover:bg-[#f4f6fa] hover:text-foreground transition-colors"
         aria-label={t("notif.bellAria")}
         aria-haspopup="true"
         aria-expanded={open}
       >
         <Bell size={18} />
         {unread > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#e05252] text-white text-[9px] font-bold font-mono flex items-center justify-center leading-none">
+          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-[#b93636] text-white text-[11px] font-bold flex items-center justify-center leading-none">
             {badgeText}
           </span>
         )}
@@ -117,11 +117,11 @@ export function NotificationBell({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 w-96 max-w-[90vw] bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden flex flex-col max-h-[28rem]">
+          <div className="absolute right-0 top-full mt-2 w-[26rem] max-w-[90vw] bg-card border border-border rounded-xl shadow-[0_12px_28px_-8px_rgba(11,29,58,0.22)] z-20 overflow-hidden flex flex-col max-h-[32rem]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("notif.title")}</p>
+              <p className="text-[15px] font-semibold text-foreground">{t("notif.title")}</p>
               {unread > 0 && (
-                <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#866d28] hover:text-[#a07830] transition-colors">
+                <button onClick={onMarkAllRead} className="flex items-center gap-1 text-[13px] font-medium text-[#1a5fb4] hover:underline">
                   <Check size={12} /> {t("notif.markAllRead")}
                 </button>
               )}
@@ -146,12 +146,12 @@ export function NotificationBell({
                       openNotification(n);
                     }}
                   >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-secondary text-muted-foreground" : "bg-[#c9a84c]/15 text-[#c9a84c]"}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-secondary text-muted-foreground" : "bg-[#e8f0fb] text-[#1a5fb4]"}`}>
                       {TYPE_ICON[n.type]}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[#c9a84c] flex-shrink-0" />}
+                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[#1a5fb4] flex-shrink-0" />}
                         <p className={`text-xs truncate ${n.read ? "text-foreground" : "font-semibold text-foreground"}`} title={n.title}>{n.title}</p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>

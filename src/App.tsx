@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
+  type LucideIcon, PanelLeftClose, PanelLeftOpen, FileText, Users as UsersIcon, ShieldCheck, ScrollText, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
   Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags, History, FileStack, KeyRound,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
@@ -36,7 +36,7 @@ import { logAudit } from "./lib/auditLog";
 import { hasTourCompleted, markTourCompleted } from "./lib/tour";
 import { isStoreIssueDocumentId } from "./lib/storeCodes";
 import { NotificationBell } from "./components/NotificationBell";
-import { WhatsNewPanel } from "./components/WhatsNewPanel";
+import { UserMenu } from "./components/UserMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { BrandMark } from "./components/BrandMark";
@@ -128,7 +128,7 @@ function BootError({ onRetry }: { onRetry: () => void }) {
           <AlertTriangle size={22} className="text-[#e05252]" />
         </div>
         <p className="text-sm font-medium text-foreground">{t("boot.error.title")}</p>
-        <button onClick={onRetry} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+        <button onClick={onRetry} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
           <RotateCw size={14} /> {t("boot.error.retry")}
         </button>
       </div>
@@ -145,7 +145,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
         <AlertTriangle size={20} className="text-[#e05252]" />
         <p className="text-sm text-muted-foreground">{t("boot.sectionError")}</p>
-        <button onClick={onRetry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+        <button onClick={onRetry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
           <RotateCw size={12} /> {t("boot.error.retry")}
         </button>
       </div>
@@ -339,6 +339,20 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.admin", keys: ["users", "passwordResets", "roles", "departments", "auditLog"] },
 ];
 
+// ไอคอนหัวกลุ่มของแถบเมนูซ้าย (แถบแบบใหม่ 2026-09-30 — รายการในกลุ่มไม่มีไอคอนแล้ว)
+const NAV_GROUP_ICONS: Record<string, LucideIcon> = {
+  "nav.group.main": LayoutDashboard,
+  "nav.group.sales": FileText,
+  "nav.group.service": Wrench,
+  "nav.group.accounting": Calculator,
+  "nav.group.project": Briefcase,
+  "nav.group.production": Factory,
+  "nav.group.purchasing": ShoppingCart,
+  "nav.group.bd": BarChart3,
+  "nav.group.inventory": Boxes,
+  "nav.group.admin": ShieldCheck,
+};
+
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   dashboard: "nav.dashboard",
   pendingApprovals: "nav.pendingApprovals",
@@ -480,7 +494,10 @@ export default function App() {
   const templateCreateSeq = useRef(0);
   const [pageAction, setPageAction] = useState<{ nav: NavKey; action: "create" | "categories"; seq: number } | null>(null);
   const pageActionSeq = useRef(0);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // แถบเมนูซ้ายแบบใหม่ (2026-09-30) — กลุ่มพับได้ · กลุ่มของหน้าที่เปิดอยู่กางเองถ้าผู้ใช้ไม่ได้สั่งพับ
+  // navGroupToggles เก็บเฉพาะที่ผู้ใช้กดเอง · lastNavGroup = กลุ่มที่เพิ่งกดเข้ามา (ใบส่งมอบสินค้าอยู่ได้ 3 กลุ่ม)
+  const [navGroupToggles, setNavGroupToggles] = useState<Partial<Record<TranslationKey, boolean>>>({});
+  const [lastNavGroup, setLastNavGroup] = useState<TranslationKey | null>(null);
 
   const [company, setCompany] = useState<Company>(defaultCompany);
   const [products, setProducts] = useState<Product[]>([]);
@@ -567,13 +584,6 @@ export default function App() {
       trigger?.focus();
     };
   }, [mobileNavOpen]);
-
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setUserMenuOpen(false); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [userMenuOpen]);
 
   useEffect(() => {
     if (bootStatus !== "ready") return;
@@ -887,7 +897,6 @@ export default function App() {
     setQuotes([]);
     setResourceStatus(INITIAL_RESOURCE_STATUS);
     setBootStatus("signedOut");
-    setUserMenuOpen(false);
     setActiveNav("dashboard");
   };
 
@@ -906,6 +915,10 @@ export default function App() {
     rolesReady,
     settingsKey: "settings",
   });
+
+  const activeNavGroup = (lastNavGroup && NAV_GROUPS.find((g) => g.labelKey === lastNavGroup)?.keys.includes(effectiveNav))
+    ? lastNavGroup
+    : NAV_GROUPS.find((g) => g.keys.includes(effectiveNav))?.labelKey ?? null;
 
   // Mirrors the *rendered* page into the hash, not the requested one — so a role landing on (or
   // deep-linking to) a nav item hidden from it ends up with a URL matching what it's actually
@@ -1070,7 +1083,7 @@ export default function App() {
       <UnsavedChangesDialog {...navGuard.dialog} />
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#c9a84c] focus:text-[#0b1d3a] focus:rounded-lg focus:font-semibold focus:shadow-xl"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#0b1d3a] focus:text-white focus:rounded-lg focus:font-semibold focus:shadow-xl"
       >
         {t("nav.skipToContent")}
       </a>
@@ -1083,100 +1096,121 @@ export default function App() {
         role={mobileNavOpen ? "dialog" : undefined}
         aria-modal={mobileNavOpen ? true : undefined}
         aria-label={mobileNavOpen ? t("nav.openMenu") : undefined}
-        className={`fixed inset-y-0 left-0 z-40 w-64 md:static md:z-auto md:translate-x-0
+        className={`fixed inset-y-0 left-0 z-40 w-[248px] md:static md:z-auto md:translate-x-0
           ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}
-          ${sidebarOpen ? "md:w-64" : "md:w-16"}
-          flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out overflow-hidden print:hidden`}
+          ${sidebarOpen ? "md:w-[248px]" : "md:w-16"}
+          flex-shrink-0 flex flex-col bg-sidebar transition-all duration-300 ease-in-out overflow-hidden print:hidden`}
       >
-        <div className={`flex items-center border-b border-sidebar-border min-h-[72px] transition-all duration-300 ease-in-out ${navExpanded ? "gap-3 px-4 py-4" : "justify-center py-4"}`}>
-          <BrandMark size={30} variant={navExpanded ? "full" : "mark"} theme="dark" />
+        <div className={`flex items-center h-16 flex-shrink-0 border-b border-sidebar-border transition-all duration-300 ease-in-out ${navExpanded ? "gap-3 px-[18px]" : "justify-center"}`}>
+          <BrandMark size={34} variant={navExpanded ? "full" : "mark"} theme="dark" appearance="sidebar" />
           <button onClick={closeMobileNav} aria-label={t("nav.closeMenu")} className="md:hidden ml-auto text-sidebar-foreground hover:text-white transition-colors flex-shrink-0">
             <X size={18} />
           </button>
         </div>
-        <nav data-tour="sidebar-nav" className="sidebar-scroll flex-1 px-2 py-4 space-y-3 overflow-y-auto">
+        {/* แถบเมนูแบบใหม่ (2026-09-30): หัวกลุ่มพับได้ มีไอคอน · รายการในกลุ่มเป็นตัวหนังสือล้วนย่อหน้าเข้า
+            หน้าที่เปิดอยู่เป็นพื้นทอง — ตอนย่อแถบเหลือไอคอนกลุ่ม กดแล้วแถบกางออกพร้อมเปิดกลุ่มนั้น */}
+        <nav data-tour="sidebar-nav" className="sidebar-scroll flex-1 px-2.5 py-3 overflow-y-auto flex flex-col gap-0.5">
           {NAV_GROUPS.map((group) => {
             // เรียงตาม `group.keys` ไม่ใช่ลำดับใน `navItems` (แก้ 2026-09-10 — เจ้าของแจ้งว่า
-            // "ของผลิตเรียงมั่วหมดเลย") · `navItems` เรียงตามลำดับที่แต่ละโมดูลถูกสร้างขึ้นมา
-            // ซึ่งไม่ใช่ลำดับงานของแผนกไหนเลย ผลคือกลุ่มผลิตขึ้น ใบส่งมอบ → เทมเพลตใบเบิก ก่อน
-            // ใบสั่งผลิต · ลำดับที่ตั้งใจไว้อยู่ใน `NAV_GROUPS` มาตลอด แค่ไม่เคยถูกใช้
+            // "ของผลิตเรียงมั่วหมดเลย") · ลำดับที่ตั้งใจไว้อยู่ใน `NAV_GROUPS`
             const items = group.keys
               .map((key) => visibleNavItems.find((item) => item.key === key))
               .filter((item): item is NavItem => item !== undefined);
             if (items.length === 0) return null;
+            const GroupIcon = NAV_GROUP_ICONS[group.labelKey];
+            const isOpen = navExpanded && (navGroupToggles[group.labelKey] ?? group.labelKey === activeNavGroup);
+            const holdsActive = items.some((item) => item.key === activeNav);
+            const toggleGroup = () => {
+              if (!navExpanded) {
+                setSidebarOpen(true);
+                setNavGroupToggles((prev) => ({ ...prev, [group.labelKey]: true }));
+                return;
+              }
+              setNavGroupToggles((prev) => ({ ...prev, [group.labelKey]: !isOpen }));
+            };
             return (
-              <div key={group.labelKey} className="space-y-0.5">
-                {navExpanded && (
-                  <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">{t(group.labelKey)}</p>
+              <div key={group.labelKey}>
+                <button
+                  type="button"
+                  onClick={toggleGroup}
+                  aria-expanded={navExpanded ? isOpen : undefined}
+                  title={navExpanded ? undefined : t(group.labelKey)}
+                  aria-label={navExpanded ? undefined : t(group.labelKey)}
+                  className={`w-full h-10 px-2.5 rounded-lg flex items-center gap-2.5 text-sm font-semibold transition-colors min-w-0 ${
+                    !navExpanded && holdsActive
+                      ? "bg-[#c9a84c] text-[#0b1d3a] justify-center"
+                      : isOpen
+                        ? "bg-white/[0.04] text-white hover:bg-sidebar-accent"
+                        : `text-sidebar-foreground hover:bg-sidebar-accent hover:text-white ${navExpanded ? "" : "justify-center"}`
+                  }`}
+                >
+                  <GroupIcon size={18} className="flex-shrink-0" />
+                  {navExpanded && (
+                    <>
+                      <span className="flex-1 text-left truncate">{t(group.labelKey)}</span>
+                      {isOpen ? <ChevronDown size={14} className="text-[#8fa6c8] flex-shrink-0" /> : <ChevronRight size={14} className="text-[#8fa6c8] flex-shrink-0" />}
+                    </>
+                  )}
+                </button>
+                {isOpen && (
+                  <div className="flex flex-col gap-0.5 pl-7 pt-0.5 pb-1.5">
+                    {items.map(({ key, labelKey }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => { if (activeNav === key) { closeMobileNav(); return; } guardedNav(() => { setLastNavGroup(group.labelKey); setActiveNav(key); closeMobileNav(); }); }}
+                        aria-current={activeNav === key ? "page" : undefined}
+                        className={`w-full h-9 px-2.5 rounded-lg flex items-center text-sm text-left transition-colors min-w-0 ${
+                          activeNav === key
+                            ? "bg-[#c9a84c] text-[#0b1d3a] font-semibold cursor-default"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+                        }`}
+                      >
+                        <span className="truncate">{t(labelKey)}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
-                {items.map(({ key, icon: Icon, labelKey }) => (
-                  <button
-                    key={key}
-                    onClick={() => { if (activeNav === key) { closeMobileNav(); return; } guardedNav(() => { setActiveNav(key); closeMobileNav(); }); }}
-                    title={navExpanded ? undefined : t(labelKey)}
-                    aria-label={navExpanded ? undefined : t(labelKey)}
-                    aria-current={activeNav === key ? "page" : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 relative min-w-0
-                      ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25 cursor-default" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
-                    <Icon size={17} className="flex-shrink-0" />
-                    {navExpanded && <span className="text-sm truncate min-w-0">{t(labelKey)}</span>}
-                  </button>
-                ))}
               </div>
             );
           })}
         </nav>
-        <div className="px-2 py-3 border-t border-sidebar-border">
+        <div className="px-2.5 py-3 border-t border-sidebar-border">
           <button
             onClick={() => { if (activeNav === "settings") { closeMobileNav(); return; } guardedNav(() => { setActiveNav("settings"); closeMobileNav(); }); }}
             title={navExpanded ? undefined : t("nav.settings")}
             aria-label={navExpanded ? undefined : t("nav.settings")}
             aria-current={activeNav === "settings" ? "page" : undefined}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 border min-w-0 ${
-              activeNav === "settings" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25 cursor-default" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
+            className={`w-full h-10 px-2.5 rounded-lg flex items-center gap-2.5 text-sm font-semibold transition-colors min-w-0 ${navExpanded ? "" : "justify-center"} ${
+              activeNav === "settings" ? "bg-[#c9a84c] text-[#0b1d3a] cursor-default" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
             }`}>
-            <Settings size={17} className="flex-shrink-0" />
-            {navExpanded && <span className="text-sm truncate min-w-0">{t("nav.settings")}</span>}
+            <Settings size={18} className="flex-shrink-0" />
+            {navExpanded && <span className="truncate min-w-0">{t("nav.settings")}</span>}
           </button>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible print:block">
-        <header className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 border-b border-border bg-card min-h-[60px] md:min-h-[68px] relative print:hidden">
-          <button ref={mobileNavTriggerRef} onClick={() => setMobileNavOpen(true)} aria-label={t("nav.openMenu")} className="md:hidden text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+        <header className="h-16 flex-shrink-0 flex items-center gap-2 md:gap-4 px-3 md:pl-6 md:pr-6 border-b border-border bg-card relative print:hidden">
+          <button ref={mobileNavTriggerRef} onClick={() => setMobileNavOpen(true)} aria-label={t("nav.openMenu")} className="md:hidden w-10 h-10 rounded-lg flex items-center justify-center text-[#3d5173] hover:bg-[#f4f6fa] transition-colors flex-shrink-0">
             <Menu size={20} />
           </button>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} aria-label={sidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")} className="hidden md:block text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
-            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} aria-label={sidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")} className="hidden md:flex w-10 h-10 rounded-lg items-center justify-center text-[#3d5173] hover:bg-[#f4f6fa] transition-colors flex-shrink-0">
+            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>
-          {/* 2026-09-14: เจ้าของแจ้งว่าตรงซ้ายบนเป็น "ฟ้อนแปลกๆ" อ่านยาก — ชื่อหน้าเคยเป็น Playfair Display สีทอง
-              (ไม่มีตัวไทย ตกไปใช้ฟอนต์สำรอง) และถูกช่องค้นหาเบียดจนเหลือตัวอักษรเดียว ("องค์กร › ใ")
-              ตอนนี้ใช้ฟอนต์ตัวหนังสือปกติ สีทองเข้มที่อ่านผ่านคอนทราสต์ และกันพื้นที่ขั้นต่ำให้ชื่อหน้าอ่านได้เสมอ */}
-          <div className="hidden sm:flex items-center gap-1.5 text-sm min-w-[8rem] max-w-[18rem] flex-shrink-0">
-            <span className="text-muted-foreground flex-shrink-0">{t("topbar.org")}</span>
-            <ChevronRight size={13} className="text-muted-foreground flex-shrink-0" />
-            <span className="text-[#866d28] font-semibold truncate" title={t(NAV_LABEL_KEYS[effectiveNav])}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
-          </div>
           <GlobalSearch currentUserId={currentUser.id} onOpenResult={openSearchResult} />
-          {/* 2026-08-07: opens the web manual page (public/manual.html) — replaced the old PDF per
-              direct user request for the new document-style manual. That PDF is no longer served:
-              c2f91b5 moved it out of public/ as a data-exposure fix (public/ is served
-              unauthenticated) to reference/company/คู่มือการใช้งาน TCS ERP.pdf, where it still sits
-              on disk, gitignored. public/manual.html is now the ONLY live manual — edit it directly;
-              the old docs/manual/user-manual.html PDF source was deleted 2026-08-21. */}
+          <span className="flex-1" />
+          {/* 2026-08-07: opens the web manual page (public/manual.html) — the ONLY live manual. */}
           <a
             href="/manual.html"
             target="_blank"
             rel="noreferrer"
             aria-label={t("topbar.manual")}
-            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-full border border-[#c9a84c]/60 bg-[#c9a84c]/10 text-[#866d28] hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] transition-all text-xs font-semibold"
+            className="flex-shrink-0 h-10 px-2.5 sm:px-3 rounded-lg flex items-center gap-2 text-sm font-medium text-[#3d5173] hover:bg-[#f4f6fa] hover:text-foreground transition-colors"
           >
-            <BookOpen size={15} className="flex-shrink-0" />
+            <BookOpen size={18} className="flex-shrink-0" />
             <span className="hidden sm:inline whitespace-nowrap">{t("topbar.manual")}</span>
           </a>
-          <div className="flex-shrink-0">
-            <WhatsNewPanel currentUserId={currentUser.id} />
-          </div>
           <div data-tour="notification-bell" className="flex-shrink-0">
             <NotificationBell
               notifications={notifications}
@@ -1207,53 +1241,17 @@ export default function App() {
               }}
             />
           </div>
-          <div className="relative" data-tour="user-menu">
-            <button
-              onClick={() => setUserMenuOpen((v) => !v)}
-              aria-haspopup="true"
-              aria-expanded={userMenuOpen}
-              aria-label={`${currentUser.fullName} — ${t("nav.settings")}, ${t("topbar.help")}, ${t("topbar.logout")}`}
-              className="flex items-center gap-2.5 pl-3 border-l border-border"
-            >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-xs font-bold overflow-hidden">
-                {currentUser.profilePictureDataUrl ? (
-                  <img src={currentUser.profilePictureDataUrl} alt={currentUser.fullName} className="w-full h-full object-cover" />
-                ) : (
-                  initials(currentUser.fullName || "?")
-                )}
-              </div>
-              <div className="text-left hidden lg:block max-w-[140px]">
-                <p className="text-xs font-semibold text-foreground leading-tight truncate">{currentUser.fullName}</p>
-                <p className="text-[10px] text-muted-foreground font-mono truncate">{roleNameFor(currentUser, roles)}</p>
-              </div>
-              <ChevronDown size={14} className="text-muted-foreground hidden lg:block" />
-            </button>
-            {userMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden py-1">
-                  <button
-                    onClick={() => guardedNav(() => { setActiveNav("settings"); setUserMenuOpen(false); })}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground hover:bg-secondary/60 transition-colors"
-                  >
-                    <Settings size={14} className="text-muted-foreground" /> {t("nav.settings")}
-                  </button>
-                  <button
-                    onClick={() => guardedNav(() => { setUserMenuOpen(false); setActiveNav("dashboard"); setTimeout(() => tour.start(), 150); })}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground hover:bg-secondary/60 transition-colors"
-                  >
-                    <HelpCircle size={14} className="text-muted-foreground" /> {t("topbar.help")}
-                  </button>
-                  <button
-                    onClick={() => guardedNav(handleLogout)}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
-                  >
-                    <LogOut size={14} /> {t("topbar.logout")}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <span aria-hidden="true" className="hidden sm:block w-px h-7 bg-border flex-shrink-0" />
+          <UserMenu
+            currentUserId={currentUser.id}
+            fullName={currentUser.fullName}
+            roleName={roleNameFor(currentUser, roles)}
+            initials={initials(currentUser.fullName || "?")}
+            pictureUrl={currentUser.profilePictureDataUrl || undefined}
+            onSettings={() => guardedNav(() => setActiveNav("settings"))}
+            onHelp={() => guardedNav(() => { setActiveNav("dashboard"); setTimeout(() => tour.start(), 150); })}
+            onLogout={() => guardedNav(handleLogout)}
+          />
         </header>
 
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden outline-none print:overflow-visible print:block">
@@ -1382,7 +1380,7 @@ export default function App() {
 
       {showTourPrompt && (
         <div className="fixed bottom-6 right-6 z-50 w-80 bg-card border border-border rounded-xl shadow-2xl p-4 print:hidden">
-          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("onboarding.welcome.title")}</p>
+          <p className="text-sm font-semibold text-foreground">{t("onboarding.welcome.title")}</p>
           <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{t("onboarding.welcome.message")}</p>
           <div className="flex items-center justify-end gap-2 mt-3">
             <button
@@ -1393,7 +1391,7 @@ export default function App() {
             </button>
             <button
               onClick={() => guardedNav(() => { setActiveNav("dashboard"); setShowTourPrompt(false); setTimeout(() => tour.start(), 150); })}
-              className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+              className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
             >
               {t("onboarding.welcome.start")}
             </button>

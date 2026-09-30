@@ -68,7 +68,7 @@ export function PurchaseRequestPickerDialog({
       >
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseOrder.picker.title")}</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("purchaseOrder.picker.title")}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseOrder.picker.subtitle")}</p>
           </div>
           <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -84,7 +84,7 @@ export function PurchaseRequestPickerDialog({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("purchaseOrder.picker.searchPlaceholder")}
-              className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 w-full pl-9 pr-3 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
           </div>
         </div>
@@ -127,7 +127,7 @@ export function PurchaseRequestPickerDialog({
 
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
           {/* จัดซื้อบางครั้งซื้อโดยไม่มีใบขอซื้อ — ไม่บังคับให้ต้องมีต้นทางเสมอ */}
-          <button onClick={onBlank} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={onBlank} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
             <FileText size={13} /> {t("purchaseOrder.picker.blank")}
           </button>
           <button onClick={onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">

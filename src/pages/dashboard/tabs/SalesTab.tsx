@@ -123,7 +123,7 @@ export function SalesTab({ stats, onNavigateToQuotations, refreshAfterAction }: 
                     <li key={status} className={offRamp && i === MAIN_FLOW.length ? "pt-2 mt-2 border-t border-border" : ""}>
                       <button
                         onClick={() => onNavigateToQuotations({ status })}
-                        className="w-full grid grid-cols-[minmax(0,9.5rem)_minmax(0,1fr)_auto] items-center gap-3 py-1.5 px-1 rounded-lg text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 transition-colors"
+                        className="w-full grid grid-cols-[minmax(0,9.5rem)_minmax(0,1fr)_auto] items-center gap-3 py-1.5 px-1 rounded-lg text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors"
                       >
                         <span className={`text-sm truncate ${offRamp ? "text-muted-foreground" : status === "ปิดการขายสำเร็จ" ? "font-semibold text-foreground" : "text-foreground"}`}>{t(statusLabelKey[status])}</span>
                         <span className="h-[18px] rounded bg-muted overflow-hidden">
@@ -175,7 +175,7 @@ export function SalesTab({ stats, onNavigateToQuotations, refreshAfterAction }: 
               <ul className="-my-2">
                 {followUpRows.map((f) => (
                   <li key={f.id} className="border-b border-border/50 last:border-0">
-                    <button onClick={() => onNavigateToQuotations({ client: f.client })} className="w-full flex items-center gap-3 py-2.5 text-left rounded-lg hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 transition-colors">
+                    <button onClick={() => onNavigateToQuotations({ client: f.client })} className="w-full flex items-center gap-3 py-2.5 text-left rounded-lg hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors">
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-medium text-foreground truncate" title={f.client}>{f.client}</span>
                         <span className="block text-xs text-muted-foreground font-mono truncate">{f.id} · {fmtShort(f.amount)}</span>
@@ -232,7 +232,7 @@ export function SalesTab({ stats, onNavigateToQuotations, refreshAfterAction }: 
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5 max-w-xl">
-          <h2 className="text-base font-semibold text-foreground mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.interest.title")}</h2>
+          <h2 className="text-base font-semibold text-foreground mb-4">{t("dashboard.interest.title")}</h2>
           <div className="space-y-3">
             {[
               { label: t(interestLabelKey["น่าสนใจ"]), count: interestBreakdown.interested, color: "#2aa36b", icon: <ThumbsUp size={13} /> },

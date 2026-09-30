@@ -87,11 +87,11 @@ function ProductPickerModalForm({
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.pickFromCatalog")}</h2>
+          <h2 id={titleId} className="text-sm font-semibold text-foreground">{t("quotation.lineItems.pickFromCatalog")}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
         </div>
         <div className="px-5 py-3 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div data-field-box="" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/40 transition-colors flex-1">
+          <div data-field-box="" className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors flex-1">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input
               autoFocus
@@ -106,7 +106,7 @@ function ProductPickerModalForm({
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             aria-label={t("products.col.category")}
-            className="text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors sm:w-44"
+            className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors sm:w-44"
           >
             <option value="">{t("products.allCategories")}</option>
             {preferredCategories.length > 0 && otherCategories.length > 0 ? (

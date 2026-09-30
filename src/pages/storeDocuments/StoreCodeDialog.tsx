@@ -58,7 +58,7 @@ export function StoreCodeDialog(props: (
         className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-xl overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h2>
+            <h2 className="text-base font-semibold text-foreground">{title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">{t("storeDocs.pickHint")}</p>
             {props.context && <p className="text-xs font-medium text-[#866d28] mt-1">{props.context}</p>}
           </div>
@@ -67,7 +67,7 @@ export function StoreCodeDialog(props: (
         <div className="p-5 space-y-2">
           <label htmlFor={selectId} className="text-xs text-muted-foreground block">{t("storeDocs.pickLabel")}</label>
           <select id={selectId} value={code} onChange={(e) => setCode(e.target.value)} autoFocus
-            className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors">
+            className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors">
             <option value="">{t("storeDocs.pickPlaceholder")}</option>
             {groups.map((g) => (
               <optgroup key={g.label} label={g.label}>
@@ -86,7 +86,7 @@ export function StoreCodeDialog(props: (
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
           <button onClick={props.onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
           <button onClick={() => void submit()} disabled={!code || busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50">
+            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
             {busy && <Loader2 size={13} className="animate-spin" />} {t("storeDocs.create")}
           </button>
         </div>

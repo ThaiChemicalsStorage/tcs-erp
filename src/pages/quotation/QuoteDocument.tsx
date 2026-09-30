@@ -588,34 +588,34 @@ export function QuoteDocument({
               onClick={handlePrintClick}
               disabled={!validation.valid}
               title={!validation.valid ? BLOCKED_TOOLTIP : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!validation.valid ? "opacity-40 cursor-not-allowed hover:border-border hover:text-muted-foreground" : ""}`}
-            >
-              <Printer size={13} /> {t("quotation.printPdf")}
-            </button>
-          )}
-          {isDetail && permissions.canDuplicate && (
-            <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-              <Copy size={13} /> {t("quotation.duplicateAction")}
-            </button>
-          )}
-          {isDetail && permissions.canRewrite && (
-            <button onClick={handleRewriteClick} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-              <GitBranch size={13} /> {t("quotation.rewriteAction")}
-            </button>
-          )}
-          {isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && (
-            <button onClick={handleScopeOfWorkClick} disabled={scopeOfWorkBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-              <ClipboardList size={13} /> {existingScopeOfWork ? "เปิด / แก้ไข Scope of Work" : "สร้าง Scope of Work"}
-            </button>
-          )}
-          {!disabled && (
-            <button onClick={() => { void save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast")); }} disabled={savingBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-              <Save size={13} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
-            </button>
-          )}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all ${!validation.valid ? "opacity-40 cursor-not-allowed hover:border-border hover:text-muted-foreground" : ""}`}
+ >
+ <Printer size={13} /> {t("quotation.printPdf")}
+ </button>
+ )}
+ {isDetail && permissions.canDuplicate && (
+ <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+ <Copy size={13} /> {t("quotation.duplicateAction")}
+ </button>
+ )}
+ {isDetail && permissions.canRewrite && (
+ <button onClick={handleRewriteClick} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
+ <GitBranch size={13} /> {t("quotation.rewriteAction")}
+ </button>
+ )}
+ {isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && (
+ <button onClick={handleScopeOfWorkClick} disabled={scopeOfWorkBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
+ <ClipboardList size={13} /> {existingScopeOfWork ? "เปิด / แก้ไข Scope of Work" : "สร้าง Scope of Work"}
+ </button>
+ )}
+ {!disabled && (
+ <button onClick={() => { void save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast")); }} disabled={savingBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
+ <Save size={13} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
+ </button>
+ )}
 
-          {permissions.canSubmit && (
-            <button onClick={() => guardedWorkflowAction("submitted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+ {permissions.canSubmit && (
+ <button onClick={() => guardedWorkflowAction("submitted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Send size={13} /> {t("quotation.action.submitted")}
             </button>
           )}
@@ -723,7 +723,7 @@ export function QuoteDocument({
                 </div>
                 <div>
                   <RequiredFieldLabel htmlFor="quote-client">{t("quotation.field.clientName")}</RequiredFieldLabel>
-                  <input id="quote-client" disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
+                  <input id="quote-client" disabled={disabled} className="w-full text-sm font-medium text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
                   <FieldError message={validation.fieldErrors.client} />
                 </div>
                 <div>
@@ -733,25 +733,25 @@ export function QuoteDocument({
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-address">{t("quotation.field.address")}</RequiredFieldLabel>
-                  <input id="quote-address" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
+                  <input id="quote-address" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-taxId">{t("quotation.field.taxId")}</RequiredFieldLabel>
-                  <input id="quote-taxId" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
+                  <input id="quote-taxId" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-deliveryMethod">{t("quotation.field.deliveryMethod")}</RequiredFieldLabel>
-                    <input id="quote-deliveryMethod" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
+                    <input id="quote-deliveryMethod" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
                   </div>
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-project">{t("quotation.field.project")}</RequiredFieldLabel>
-                    <input id="quote-project" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
+                    <input id="quote-project" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
                   </div>
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-deliveryAddress">{t("quotation.field.deliveryAddress")}</RequiredFieldLabel>
-                  <input id="quote-deliveryAddress" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
+                  <input id="quote-deliveryAddress" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
                 </div>
               </div>
             </div>
@@ -761,28 +761,28 @@ export function QuoteDocument({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label htmlFor="quote-number" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
-                    <input id="quote-number" readOnly className="w-full text-sm font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
+                    <input id="quote-number" readOnly className="w-full text-sm font-mono text-[#c9a84c] font-medium bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
                   </div>
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-poRef">{t("quotation.field.poRef")}</RequiredFieldLabel>
-                    <input id="quote-poRef" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
+                    <input id="quote-poRef" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-issueDate" className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
-                    <input id="quote-issueDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+                    <input id="quote-issueDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
                     <FieldError message={validation.fieldErrors.issueDate} />
                   </div>
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-expiryDate" className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
-                    <input id="quote-expiryDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                    <input id="quote-expiryDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
                     <FieldError message={validation.fieldErrors.expiryDate} />
                   </div>
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-salesperson">{t("quotation.field.salesperson")}</RequiredFieldLabel>
-                  <input id="quote-salesperson" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
+                  <input id="quote-salesperson" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-paymentTerms">{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
@@ -790,7 +790,7 @@ export function QuoteDocument({
                   <Combobox
                     id="quote-paymentTerms"
                     disabled={disabled}
-                    className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                    className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
                     value={paymentTerms}
                     onChange={setPaymentTerms}
                     options={paymentTermsSuggestions}
@@ -802,7 +802,7 @@ export function QuoteDocument({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-jobType">{t("quotation.field.jobType")}</RequiredFieldLabel>
-                    <select id="quote-jobType" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
+                    <select id="quote-jobType" disabled={disabled} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
                       {mode === "new"
                         ? <option value="" disabled>{t("quotation.field.jobTypeSelectPrompt")}</option>
                         : <option value="">{t("quotation.field.jobTypeUnclassified")}</option>}
@@ -813,7 +813,7 @@ export function QuoteDocument({
                   </div>
                   <div>
                     <label htmlFor="quote-followUpDate" className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
-                    <input id="quote-followUpDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
+                    <input id="quote-followUpDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
                   </div>
                 </div>
                 {quotationTemplateId && (
@@ -859,12 +859,12 @@ export function QuoteDocument({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
           <div className="bg-card border border-border rounded-xl p-5">
-            <h2 id="quote-remarks-heading" className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.remarks")}</h2>
-            <textarea rows={5} disabled={disabled} aria-labelledby="quote-remarks-heading" className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60"
+            <h2 id="quote-remarks-heading" className="text-sm font-semibold text-foreground mb-3">{t("quotation.section.remarks")}</h2>
+            <textarea rows={5} disabled={disabled} aria-labelledby="quote-remarks-heading" className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60"
               value={remarks} onChange={(e) => setRemarks(e.target.value)} />
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.signatures")}</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-3">{t("quotation.section.signatures")}</h2>
             <div className="space-y-3">
               {signatureRoles.map(({ key, label }) => {
                 const isPreparer = key === "preparer";
@@ -898,7 +898,7 @@ export function QuoteDocument({
         {isDetail && quote && isRevisionQuote(quote.id) && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-              <h2 id="quote-revisionNote-heading" className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+              <h2 id="quote-revisionNote-heading" className="text-sm font-semibold text-foreground">
                 หมายเหตุการแก้ไข (Revision Note)
               </h2>
               <button
@@ -917,7 +917,7 @@ export function QuoteDocument({
               rows={6}
               disabled={disabled}
               aria-labelledby="quote-revisionNote-heading"
-              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
+              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
               value={revisionNote}
               onChange={(e) => setRevisionNote(e.target.value)}
               placeholder="เช่น • ลูกค้า: &quot;บริษัท A&quot; → &quot;บริษัท B&quot;"
@@ -927,7 +927,7 @@ export function QuoteDocument({
 
         {isDetail && quote!.approvalHistory.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
               <History size={13} /> {t("quotation.section.approvalHistory")}
             </h2>
             <div className="space-y-2.5">
@@ -1051,7 +1051,7 @@ function WorkflowActionDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{actionLabel}</h2>
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1">{actionLabel}</h2>
         <p className="text-xs text-muted-foreground mb-4">{forQuoteMessage}</p>
         <label className="text-xs text-muted-foreground block mb-1.5">
           {commentLabel} {commentRequired ? commentRequiredLabel : commentOptionalLabel}
@@ -1059,7 +1059,7 @@ function WorkflowActionDialog({
         <textarea
           autoFocus
           rows={3}
-          className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none"
+          className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none"
           value={actionComment}
           onChange={(e) => onActionCommentChange(e.target.value)}
         />
@@ -1069,7 +1069,7 @@ function WorkflowActionDialog({
           <button
             onClick={onConfirm}
             disabled={busy}
-            className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors disabled:opacity-60 ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
+            className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors disabled:opacity-60 ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#0b1d3a] text-white hover:bg-[#1a2f55]"}`}
           >
             {confirmLabel}
           </button>

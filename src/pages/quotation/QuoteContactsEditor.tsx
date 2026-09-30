@@ -2,7 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { type QuoteContact, blankContact, MAX_QUOTE_CONTACTS } from "../../lib/quotes";
 
-const inputCls = "w-full min-w-0 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60";
+const inputCls = "w-full min-w-0 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60";
 
 /**
  * รายชื่อผู้ติดต่อของใบเสนอราคา (2026-09-07) — เจ้าของขอให้ *"ทำเหมือนปุ่มเพิ่ม PO"* ของ Scope of Work

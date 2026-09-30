@@ -58,7 +58,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
     setError(result ?? "");
   };
 
-  const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors";
+  const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
   return (
     <AuthLayout>
@@ -66,7 +66,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
         <ShieldCheck size={18} className="text-[#866d28]" />
         <span className="text-[10px] font-mono uppercase tracking-widest text-[#866d28]">{t("setup.badge")}</span>
       </div>
-      <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("setup.title")}</h1>
+      <h1 className="text-2xl font-semibold text-foreground">{t("setup.title")}</h1>
       <p className="text-sm text-muted-foreground mt-1 mb-7">
         {t("setup.subtitle")}
       </p>
@@ -124,7 +124,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
         <button
           type="submit"
           disabled={submitting}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60"
         >
           <ShieldCheck size={15} /> {submitting ? t("setup.submitting") : t("setup.submit")}
         </button>

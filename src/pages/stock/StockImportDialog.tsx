@@ -97,7 +97,7 @@ export function StockImportDialog({ products, onClose, onImported }: {
         className="relative bg-card border border-border rounded-xl shadow-xl w-full max-w-3xl max-h-[88vh] flex flex-col">
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div>
-            <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stock.import.title")}</h2>
+            <h2 id={titleId} className="text-sm font-semibold text-foreground">{t("stock.import.title")}</h2>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("stock.import.subtitle")}</p>
           </div>
           <button onClick={onClose} disabled={busy} aria-label={t("common.close")}
@@ -211,7 +211,7 @@ export function StockImportDialog({ products, onClose, onImported }: {
               <label className="block">
                 <span className="text-xs text-muted-foreground block mb-1">{t("stock.import.note")}</span>
                 <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200}
-                  className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                  className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
               </label>
             </>
           )}
@@ -219,12 +219,12 @@ export function StockImportDialog({ products, onClose, onImported }: {
 
         <div className="flex items-center justify-end gap-2 border-t border-border p-4">
           <button onClick={onClose} disabled={busy}
-            className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            className="px-3.5 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-60">
             {done ? t("common.close") : t("common.cancel")}
           </button>
           {!done && (
             <button onClick={() => void confirmImport()} disabled={busy || changes.length === 0 || notFound.length > 0}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-50">
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
               {importing ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
               {preview ? t("stock.import.confirm").replace("{n}", fmt(changes.length)) : t("stock.import.confirmEmpty")}
             </button>

@@ -124,7 +124,7 @@ export function DepartmentManagementPage({
         <p className="text-xs text-muted-foreground">{t("departments.pageHint")}</p>
         <button
           onClick={() => { setCreatingDept(true); setNewDeptName(""); setError(""); }}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
         >
           <Plus size={15} /> {t("departments.addDepartment")}
         </button>
@@ -136,7 +136,7 @@ export function DepartmentManagementPage({
             id={newDeptId}
             autoFocus
             placeholder={t("departments.namePlaceholder")}
-            className="flex-1 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50"
+            className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
             value={newDeptName}
             onChange={(e) => setNewDeptName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submitNewDepartment(); if (e.key === "Escape") setCreatingDept(false); }}
@@ -166,7 +166,7 @@ export function DepartmentManagementPage({
                   <div className="flex-1 flex items-center gap-2">
                     <input
                       autoFocus
-                      className="flex-1 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50"
+                      className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
                       value={editDeptName}
                       onChange={(e) => setEditDeptName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") submitEditDept(d); if (e.key === "Escape") setEditingDeptId(null); }}
@@ -176,7 +176,7 @@ export function DepartmentManagementPage({
                   </div>
                 ) : (
                   <div className="flex-1 flex items-center gap-2">
-                    <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{d.name}</p>
+                    <p className="text-sm font-semibold text-foreground">{d.name}</p>
                     {!d.isActive && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">{t("departments.archivedBadge")}</span>
                     )}
@@ -217,7 +217,7 @@ export function DepartmentManagementPage({
                         id={newTeamId}
                         autoFocus
                         placeholder={t("departments.teamNamePlaceholder")}
-                        className="flex-1 text-sm text-foreground bg-card border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50"
+                        className="flex-1 text-sm text-foreground bg-card border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
                         value={newTeamName}
                         onChange={(e) => setNewTeamName(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") submitNewTeam(d.id); if (e.key === "Escape") setCreatingTeamFor(null); }}
@@ -237,7 +237,7 @@ export function DepartmentManagementPage({
                             <>
                               <input
                                 autoFocus
-                                className="flex-1 text-sm text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1 outline-none focus:border-[#c9a84c]/50"
+                                className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20"
                                 value={editTeamName}
                                 onChange={(e) => setEditTeamName(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === "Enter") submitEditTeam(tm); if (e.key === "Escape") setEditingTeamId(null); }}

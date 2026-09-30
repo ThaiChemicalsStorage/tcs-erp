@@ -112,7 +112,7 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("vendorBill.loadError")}</p>
-        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
           {t("vendorBill.retry")}
         </button>
       </div>
@@ -126,7 +126,7 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
         onOpen={open}
         headerAction={canCreate ? (
           <button onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors">
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors">
             <Plus size={14} /> {t("vendorBill.createBtn")}
           </button>
         ) : undefined}

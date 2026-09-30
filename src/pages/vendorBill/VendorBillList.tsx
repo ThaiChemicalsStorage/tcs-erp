@@ -26,7 +26,7 @@ export function VendorBillList({ vendorBills, onOpen, headerAction }: {
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("vendorBill.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("vendorBill.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("vendorBill.pageSubtitle")}</p>
         </div>
         {headerAction}
@@ -42,7 +42,7 @@ export function VendorBillList({ vendorBills, onOpen, headerAction }: {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("vendorBill.searchPlaceholder")}
             aria-label={t("vendorBill.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
           {searchQuery && (
             <button onClick={() => setSearchQuery("")} aria-label={t("vendorBill.clearSearch")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -79,7 +79,7 @@ export function VendorBillList({ vendorBills, onOpen, headerAction }: {
                     aria-label={`${t("vendorBill.openRow")} ${b.documentNumber}`}
                     onClick={() => onOpen(b.id)}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(b.id); } }}
-                    className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 focus-visible:bg-secondary/30"
+                    className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
                   >
                     <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{b.documentNumber}</td>
                     <td className="px-4 py-3.5 text-sm text-foreground max-w-[260px] truncate" title={b.vendorName}>{b.vendorName}</td>

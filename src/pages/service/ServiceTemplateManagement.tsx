@@ -83,7 +83,7 @@ export function ServiceTemplateManagement({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("serviceTemplates.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("serviceTemplates.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("serviceTemplates.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -96,7 +96,7 @@ export function ServiceTemplateManagement({
             {t("serviceTemplates.showArchived")}
           </button>
           {canCreate && (
-            <button onClick={() => setEditingId("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={() => setEditingId("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Plus size={15} /> {t("serviceTemplates.addNew")}
             </button>
           )}
@@ -241,18 +241,18 @@ function ServiceTemplateEditor({
     return <div className="flex-1 p-8 flex justify-center"><div className="h-10 w-10 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" /></div>;
   }
 
-  const inputClass = "h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60";
+  const inputClass = "h-9 w-full px-3 text-sm bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60";
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+        <h1 className="text-xl font-semibold text-foreground">
           {isNew ? t("serviceTemplates.addNew") : t("serviceTemplates.editTitle")}
         </h1>
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all">{t("serviceTemplates.cancel")}</button>
           {canEdit && (
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
               {saving ? t("service.saving") : t("serviceTemplates.save")}
             </button>
           )}
@@ -275,7 +275,7 @@ function ServiceTemplateEditor({
               <input
                 value={section.title} disabled={!canEdit} placeholder={t("serviceTemplates.form.sectionTitle")}
                 onChange={(e) => updateSection(sIdx, { title: e.target.value })}
-                className="flex-1 min-w-[180px] h-8 px-2.5 text-sm font-semibold bg-transparent border border-transparent hover:border-border focus:border-[#c9a84c]/50 rounded-lg outline-none transition-colors"
+                className="flex-1 min-w-[180px] h-8 px-2.5 text-sm font-semibold bg-transparent border border-transparent hover:border-border focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 rounded-lg outline-none transition-colors"
               />
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <input type="checkbox" checked={section.isOptionalAddon} disabled={!canEdit} onChange={(e) => updateSection(sIdx, { isOptionalAddon: e.target.checked })} />
@@ -297,7 +297,7 @@ function ServiceTemplateEditor({
                     <input
                       value={group.title} disabled={!canEdit} placeholder={t("serviceTemplates.form.groupTitle")}
                       onChange={(e) => updateGroup(sIdx, gIdx, { title: e.target.value })}
-                      className="flex-1 min-w-[160px] h-8 px-2.5 text-xs font-semibold uppercase tracking-wide bg-transparent border border-transparent hover:border-border focus:border-[#c9a84c]/50 rounded-lg outline-none transition-colors"
+                      className="flex-1 min-w-[160px] h-8 px-2.5 text-xs font-semibold uppercase tracking-wide bg-transparent border border-transparent hover:border-border focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 rounded-lg outline-none transition-colors"
                     />
                     {canEdit && (
                       <div className="flex items-center gap-1">
@@ -314,12 +314,12 @@ function ServiceTemplateEditor({
                         <input
                           value={item.label} disabled={!canEdit} placeholder={t("serviceTemplates.form.itemLabel")}
                           onChange={(e) => updateItem(sIdx, gIdx, iIdx, { label: e.target.value })}
-                          className="flex-1 h-8 px-2.5 text-xs bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                          className="flex-1 h-8 px-2.5 text-xs bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
                         />
                         <select
                           value={item.kind} disabled={!canEdit}
                           onChange={(e) => updateItem(sIdx, gIdx, iIdx, { kind: e.target.value as ServiceChecklistItemKind })}
-                          className="h-8 text-xs bg-secondary border border-border rounded-lg px-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+                          className="h-8 text-xs bg-white border border-[#c3ccda] rounded-lg px-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                         >
                           <option value="normalAbnormal">{t("serviceTemplates.form.kindNormalAbnormal")}</option>
                           <option value="measurement">{t("serviceTemplates.form.kindMeasurement")}</option>

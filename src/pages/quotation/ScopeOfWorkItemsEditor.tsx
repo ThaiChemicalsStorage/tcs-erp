@@ -75,10 +75,10 @@ export function ScopeOfWorkItemsEditor({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>รายการ Scope of Work</h2>
+        <h2 className="text-sm font-semibold text-foreground">รายการ Scope of Work</h2>
         {!disabled && (
           <div className="flex items-center gap-2">
-            <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+            <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all font-medium">
               <Plus size={12} /> เพิ่มหัวข้อ
             </button>
             <button onClick={addItem} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
@@ -198,7 +198,7 @@ export function ScopeOfWorkItemsEditor({
                                     value={sl.text}
                                     onChange={(e) => updateSpecLine(item.id, sl.id, e.target.value)}
                                     placeholder="เช่น พื้นที่ : กว้าง 5 เมตร x ยาว 20 เมตร"
-                                    className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                                    className="flex-1 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
                                   />
                                   {!disabled && (
                                     <button onClick={() => removeSpecLine(item.id, sl.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={12} /></button>
@@ -219,7 +219,7 @@ export function ScopeOfWorkItemsEditor({
                               rows={2}
                               value={item.remark}
                               onChange={(e) => updateItem(item.id, "remark", e.target.value)}
-                              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60"
+                              className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-none leading-relaxed disabled:opacity-60"
                             />
                           </div>
                         </div>

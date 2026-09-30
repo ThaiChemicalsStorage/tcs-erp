@@ -11,10 +11,10 @@ import {
 } from "../../lib/receivingReport";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 
-const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors";
-const cellCls = "w-24 px-2 py-1.5 text-sm text-right bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "w-full px-3 py-2 text-sm bg-white border border-[#c3ccda] rounded-lg text-foreground outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
+const cellCls = "w-24 px-2 py-1.5 text-sm text-right bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 /** ช่องที่ความกว้างมาจากตัวห่อ — ไม่มี w-* ของตัวเอง (inputCls มี w-full ซึ่งชนะ w-20 แล้วช่องล้นทับช่องข้าง ๆ) */
-const boxCls = "w-full px-2 py-1.5 text-sm bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 transition-colors";
+const boxCls = "w-full px-2 py-1.5 text-sm bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
 /**
  * กล่อง "บันทึกรับของ" — หนึ่งรอบการรับ ตามที่เจ้าของสั่ง: *"มีช่องให้กรอกแบบราคาต่อหน่วยเท่าไหร่
@@ -125,7 +125,7 @@ export function ReceiveBatchDialog({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="receive-batch-title">
       <div className="bg-card border border-border rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card">
-          <h2 id="receive-batch-title" className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id="receive-batch-title" className="text-base font-semibold text-foreground">
             {t("receivingReportDoc.receive.title").replace("{seq}", String(doc.batches.length + 1))}
           </h2>
           <button onClick={onCancel} disabled={busy} className="text-muted-foreground hover:text-foreground disabled:opacity-50" aria-label={t("common.cancel")}>
@@ -304,7 +304,7 @@ export function ReceiveBatchDialog({
             {t("common.cancel")}
           </button>
           <button onClick={submit} disabled={busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
             {busy ? <Loader2 size={13} className="animate-spin" /> : <PackagePlus size={13} />} {t("receivingReportDoc.receive.submit")}
           </button>
         </div>

@@ -199,7 +199,7 @@ export function CostControlDocument({
     setDraft((p) => (p ? { ...p, lines: [...p.lines, blankCostControlLine(newId("ccline"), kind)] } : p));
   const removeLine = (id: string) =>
     setDraft((p) => (p ? { ...p, lines: p.lines.filter((l) => l.id !== id) } : p));
-  const inputCls = "w-full px-2.5 py-1.5 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
+  const inputCls = "w-full px-2.5 py-1.5 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
   const numCls = `${inputCls} text-right font-mono`;
 
   return (
@@ -230,7 +230,7 @@ export function CostControlDocument({
 
             {editable && (
               <button onClick={save} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("costControlDoc.saveDraft")}
               </button>
             )}

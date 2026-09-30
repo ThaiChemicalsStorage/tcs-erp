@@ -181,7 +181,7 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
         onBlur={addTag}
         placeholder={t("quotation.lineItems.tagsPlaceholder")}
-        className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+        className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
       />
     </div>
   );
@@ -298,12 +298,12 @@ export function LineItemsEditor({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.title")}</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("quotation.lineItems.title")}</h2>
         <div className="flex items-center gap-2">
-          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all font-medium">
             <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
           </button>
-          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all font-medium">
             <Layers size={12} /> {t("quotation.lineItems.addSection")}
           </button>
           <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
@@ -494,7 +494,7 @@ export function LineItemsEditor({
             <span className="font-mono">฿{fmt(vatAmt)}</span>
           </div>
           <div className="flex justify-between text-base font-bold text-foreground pt-2 border-t border-border">
-            <span style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.totals.grandTotal")}</span>
+            <span>{t("quotation.totals.grandTotal")}</span>
             <span className="font-mono text-[#c9a84c] text-lg">฿{fmt(total)}</span>
           </div>
         </div>

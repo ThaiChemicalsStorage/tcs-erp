@@ -24,13 +24,13 @@ export function CustomerAnalytics({ data, vatMode }: { data: CustomerAnalyticsDa
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.customer.title")}</h2>
+          <h2 className="text-base font-semibold text-foreground">{t("dashboard.customer.title")}</h2>
           <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("dashboard.customer.sub")} {vatSuffix} · {t("dashboard.customer.repeatRate")}: {fmtPercent(data.repeatCustomerPercentage)}</p>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
           {tabs.map((tb) => (
             <button key={tb.key} onClick={() => setTab(tb.key)}
-              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${tab === tb.key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${tab === tb.key ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {tb.label}
             </button>
           ))}

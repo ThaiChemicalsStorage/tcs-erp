@@ -59,7 +59,7 @@ export function ChecklistGroupCard({
                   aria-label={opt.label}
                   onClick={(e) => e.preventDefault()}
                   onChange={(e) => onChange({ ...group, options: group.options.map((o) => (o.key === opt.key ? { ...o, value: e.target.value } : o)) })}
-                  className="flex-1 min-w-0 text-xs text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                  className="flex-1 min-w-0 text-xs text-foreground bg-white border border-[#c3ccda] rounded px-2 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
                 />
               )}
               {/* หน่วยที่พิมพ์อยู่บนฟอร์มอยู่แล้ว (BAR / TON) — เป็นป้าย ไม่ใช่ช่องกรอก */}
@@ -74,7 +74,7 @@ export function ChecklistGroupCard({
                     aria-label={`${opt.label} — ${opt.unit2 ?? ""}`.trim()}
                     onClick={(e) => e.preventDefault()}
                     onChange={(e) => onChange({ ...group, options: group.options.map((o) => (o.key === opt.key ? { ...o, value2: e.target.value } : o)) })}
-                    className="w-20 flex-shrink-0 text-xs text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                    className="w-20 flex-shrink-0 text-xs text-foreground bg-white border border-[#c3ccda] rounded px-2 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
                   />
                 </>
               )}
@@ -99,7 +99,7 @@ export function ChecklistGroupCard({
                           : o)),
                       })}
                       placeholder={t("checklist.subDetailPlaceholder")}
-                      className="flex-1 min-w-0 text-xs bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60"
+                      className="flex-1 min-w-0 text-xs bg-white border border-[#c3ccda] rounded px-2 py-1 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60"
                     />
                     {!disabled && (
                       <button
@@ -141,7 +141,7 @@ export function ChecklistGroupCard({
           value={group.note}
           onChange={(e) => onChange({ ...group, note: e.target.value })}
           placeholder="โปรดระบุ..."
-          className="w-full mt-2 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+          className="w-full mt-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60"
         />
       )}
       {error && <p className="text-xs text-[#e05252] mt-1.5">{error}</p>}

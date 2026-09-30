@@ -22,7 +22,7 @@ function ErrorBoundaryFallback() {
       <p className="text-xs text-muted-foreground max-w-sm">{t("boot.errorBoundary.message")}</p>
       <button
         onClick={() => window.location.reload()}
-        className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+        className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
       >
         <RotateCw size={14} /> {t("boot.errorBoundary.reload")}
       </button>

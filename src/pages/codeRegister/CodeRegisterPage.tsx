@@ -134,7 +134,7 @@ export function CodeRegisterPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h1 className="text-lg font-semibold text-foreground">
             {t("codeRegister.pageTitle")}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">{t("codeRegister.pageSubtitle")}</p>
@@ -151,7 +151,7 @@ export function CodeRegisterPage({
             </label>
           )}
           {canCreate && (
-            <button onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Plus size={15} /> {t("codeRegister.addNew")}
             </button>
           )}
@@ -175,7 +175,7 @@ export function CodeRegisterPage({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
+        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
             type="text" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
@@ -329,7 +329,7 @@ function CodeFormModal({
   const panelRef = useDialogA11y(onCancel);
   const titleId = useId();
   const isAccount = draft.kind === "account";
-  const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60";
+  const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-60";
   const label = "text-xs text-muted-foreground block mb-1";
 
   const handleSubmit = async () => {
@@ -346,7 +346,7 @@ function CodeFormModal({
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id={titleId} className="text-sm font-semibold text-foreground">
             {t(isNew ? "codeRegister.form.createTitle" : "codeRegister.form.editTitle")}
           </h2>
           <button onClick={onCancel} disabled={saving} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
@@ -400,7 +400,7 @@ function CodeFormModal({
           <button onClick={onCancel} disabled={saving} className="px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:text-foreground transition-colors disabled:opacity-60">
             {t("common.cancel")}
           </button>
-          <button onClick={handleSubmit} disabled={saving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+          <button onClick={handleSubmit} disabled={saving} className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
             {t("common.save")}
           </button>
         </div>

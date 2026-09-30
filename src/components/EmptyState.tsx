@@ -18,11 +18,11 @@ export function EmptyState({
         <Icon size={22} className="text-muted-foreground" />
       </div>
       <div>
-        <p className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</p>
+        <p className="text-base font-semibold text-foreground">{title}</p>
         <p className="text-sm text-muted-foreground mt-1.5 max-w-sm">{description}</p>
       </div>
       {actionLabel && onAction && (
-        <button onClick={onAction} className="mt-1 flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+        <button onClick={onAction} className="mt-1 flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
           {actionLabel}
         </button>
       )}

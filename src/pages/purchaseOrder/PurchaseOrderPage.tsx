@@ -118,7 +118,7 @@ export function PurchaseOrderPage({
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("purchaseOrder.loadError")}</p>
-        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+        <button onClick={loadList} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
           {t("purchaseOrder.retry")}
         </button>
       </div>
@@ -133,7 +133,7 @@ export function PurchaseOrderPage({
         headerAction={canCreate ? (
           <button
             onClick={() => (canViewPurchaseRequest ? setPickerOpen(true) : void createFrom())}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors"
           >
             <Plus size={14} /> {t("purchaseOrder.createBtn")}
           </button>

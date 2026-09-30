@@ -3,19 +3,33 @@ name: TCS ERP
 description: A navy-and-gold internal ERP for Thai Chemicals Storage — formal enough to trust with an audit trail, clear enough to use without training.
 colors:
   navy-ink: "#0b1d3a"
+  navy-hover: "#1a2f55"
   gilded-gold: "#c9a84c"
-  hover-gold: "#f0c040"
-  paper-blue: "#f4f6fb"
+  gold-ink: "#7d6420"
+  paper-blue: "#f4f6fa"
   ledger-white: "#ffffff"
+  hairline: "#e3e8f0"
+  inner-divider: "#eef1f6"
+  table-header: "#f8f9fc"
+  field-border: "#c3ccda"
+  text-secondary: "#3d5173"
+  text-tertiary: "#5f7293"
+  text-placeholder: "#8a97ad"
+  field-label: "#26395a"
+  focus-blue: "#1a5fb4"
+  info-bg: "#e8f0fb"
+  success: "#1b7f4f"
+  success-bg: "#e6f4ec"
+  warning: "#8a5a00"
+  warning-dot: "#d89614"
+  warning-bg: "#fdf3e0"
+  danger: "#b93636"
+  danger-bg: "#fcebeb"
+  neutral-bg: "#eef1f6"
   pale-surface: "#e8edf7"
   surface-blue-ink: "#1a3a6b"
-  muted-mist: "#eef1f8"
-  muted-slate: "#5a7299"
-  danger-red: "#e05252"
-  border-navy: "rgba(11, 29, 58, 0.1)"
-  sidebar-foreground: "#a8bed8"
-  sidebar-hover: "#132540"
-  sidebar-border: "rgba(201, 168, 76, 0.15)"
+  sidebar-foreground: "#c5d3e8"
+  sidebar-muted: "#8fa6c8"
   chart-blue: "#1a5fb4"
   chart-green: "#2aa36b"
   chart-purple: "#7c4dbb"
@@ -28,23 +42,42 @@ colors:
   status-lost: "#e05252"
   status-cancelled: "#8a94a6"
 typography:
-  display:
-    fontFamily: "'Playfair Display', 'Noto Sans Thai', serif"
+  page-title:
+    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
+    fontSize: "24px"
     fontWeight: 600
-    lineHeight: 1.5
-  body:
+    lineHeight: 1.3
+  dialog-title:
+    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
+    fontSize: "18px"
+    fontWeight: 600
+  panel-title:
     fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
     fontSize: "15px"
+    fontWeight: 600
+  card-title:
+    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
+    fontSize: "16px"
+    fontWeight: 600
+  body:
+    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
+    fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.6
-  label:
+    lineHeight: 1.55
+  field-label:
+    fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
+    fontSize: "13px"
+    fontWeight: 500
+  help:
     fontFamily: "'Inter', 'Noto Sans Thai', sans-serif"
     fontSize: "12px"
-    fontWeight: 500
-    letterSpacing: "0.05em"
+    fontWeight: 400
   mono:
     fontFamily: "'JetBrains Mono', 'Noto Sans Thai', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
     fontWeight: 400
+  print-display:
+    fontFamily: "'Playfair Display', 'Noto Sans Thai', serif"
+    fontWeight: 600
 rounded:
   sm: "4px"
   md: "6px"
@@ -58,30 +91,49 @@ spacing:
   lg: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.gilded-gold}"
-    textColor: "{colors.navy-ink}"
-    rounded: "{rounded.lg}"
-    padding: "10px 16px"
-  button-primary-hover:
-    backgroundColor: "{colors.hover-gold}"
-  button-secondary:
-    backgroundColor: "transparent"
-    textColor: "{colors.muted-slate}"
-    rounded: "{rounded.lg}"
-    padding: "10px 16px"
-  button-danger:
-    backgroundColor: "{colors.danger-red}"
+    backgroundColor: "{colors.navy-ink}"
     textColor: "{colors.ledger-white}"
     rounded: "{rounded.lg}"
-    padding: "10px 16px"
+    height: "40px"
+    padding: "0 16px"
+  button-primary-hover:
+    backgroundColor: "{colors.navy-hover}"
+  button-secondary:
+    backgroundColor: "{colors.ledger-white}"
+    textColor: "{colors.navy-ink}"
+    border: "1px solid {colors.field-border}"
+    rounded: "{rounded.lg}"
+    height: "40px"
+    padding: "0 16px"
+  button-danger:
+    backgroundColor: "{colors.danger}"
+    textColor: "{colors.ledger-white}"
+    rounded: "{rounded.lg}"
+    height: "40px"
+    padding: "0 16px"
   card:
     backgroundColor: "{colors.ledger-white}"
+    border: "1px solid {colors.hairline}"
     rounded: "{rounded.xl}"
     padding: "24px"
   input:
-    backgroundColor: "{colors.muted-mist}"
+    backgroundColor: "{colors.ledger-white}"
+    border: "1px solid {colors.field-border}"
     rounded: "{rounded.lg}"
-    padding: "8px 12px"
+    height: "40px"
+    padding: "0 12px"
+  input-focus:
+    border: "1px solid {colors.focus-blue}"
+    shadow: "0 0 0 3px rgba(26, 95, 180, 0.18)"
+  status-pill:
+    height: "26px"
+    rounded: "{rounded.full}"
+    padding: "0 10px"
+  dialog:
+    width: "480px"
+    rounded: "{rounded.xl}"
+    shadow: "0 24px 48px -12px rgba(11, 29, 58, 0.35)"
+    backdrop: "rgba(11, 29, 58, 0.45)"
   stat-tile:
     backgroundColor: "{colors.ledger-white}"
     rounded: "{rounded.xl}"
@@ -93,6 +145,14 @@ components:
 ---
 
 # Design System: TCS ERP
+
+> **REDESIGN (2026-09-30) — this file now describes the redesigned system.** The owner approved the REDESIGN
+> canvas (claude.ai artifact UhcwgfQyazG8KybzzGLnL9) and asked for it to be built in phases. Phase 1 changed the
+> foundation everywhere at once: navy primary buttons, white fields with a grey border and a blue focus ring,
+> white secondary buttons, 480px dialogs, 26px dot-pills, sans-serif on-screen headings, the collapsible
+> navigation groups and the new topbar/user menu. Screen *layouts* (list pages, document pages, side panels)
+> move over module by module in phases 2–7 — until a module's phase lands, its page keeps its old layout on the
+> new foundation. Where an older paragraph below contradicts this note, the redesign wins.
 
 ## Overview
 
@@ -147,14 +207,14 @@ When a chart or donut legend needs more than 2-3 categories (job type distributi
 
 ## Typography
 
-**Display Font:** Playfair Display (weights 500/600/700), with Noto Sans Thai as an equal-weight fallback — not a glyph-fallback afterthought, since most headings render Thai text by default and Playfair Display has no Thai glyphs at all.
+**Print Display Font:** Playfair Display (weights 500/600/700) — printed documents only since the 2026-09-30 redesign, with Noto Sans Thai as an equal-weight fallback — not a glyph-fallback afterthought, since most headings render Thai text by default and Playfair Display has no Thai glyphs at all.
 **Body Font:** Inter (300–700), with Noto Sans Thai fallback, exposed as the `font-sans` token/utility.
 **Label/Mono Font:** JetBrains Mono (400/500), exposed as the `font-mono` token/utility.
 
 **Character:** An editorial serif for anything that announces a page or section, set against a plain, highly legible sans for everything the user actually reads and fills in — the pairing of a printed ledger's heading with its ruled interior pages.
 
 ### Hierarchy
-- **Display / Headings** (weight 500–600, `h1` 24px / `h2` 20px / `h3` 18px / `h4` 16px, line-height 1.5): Playfair Display, applied via an inline `fontFamily` style (not a Tailwind utility) on page titles and card/section titles. Always paired with the Noto Sans Thai fallback — never the bare `'Playfair Display', serif` stack. **Not on the topbar breadcrumb or on Thai-only titles set in monospace** (2026-09-14): the owner reported the top-left of every page and every document editor as a hard-to-read odd font — Playfair has no Thai glyphs, and JetBrains Mono (used for document form titles with wide tracking) had no Thai fallback at all, so Thai fell through to an OS font. The breadcrumb page name is now body-font semibold in gold ink `#866d28`; document editor form titles (on their navy `#0b1d3a` band) stay Gilded Gold `#c9a84c` but in the body font, bold, without tracking; `--font-mono` carries `'Noto Sans Thai'` as its Thai fallback.
+- **Headings on screen** (redesign 2026-09-30): the body sans — page title 24px/600, dialog title 18px/600, card title 16px/600, rail card title 15px/600. Playfair Display is kept only for printed documents and the paper-like template editor/preview (always with the Noto Sans Thai fallback). History: until 2026-09-30 page and card titles used Playfair inline; the owner reported Thai titles in it as hard to read on 2026-09-14, and the redesign dropped it from screens altogether.
 - **Body** (weight 400, 15px base, line-height 1.6): all paragraph copy, most static UI chrome, input values and table cell data on data-dense pages.
 - **Chrome / Label** (weight 500, 12px floor, `text-xs`): buttons, form labels, status pills, secondary/fine-print text. **Never below 12px for a real form label** — `text-[10px]` is reserved only for uppercase-tracking-wide "section eyebrows" (table header cells, sidebar group labels), a distinct, deliberately-tiny reading mode.
 - **Numbers / Codes** (JetBrains Mono, weight 400/500): quotation numbers, document numbers, currency amounts, dates, product codes — anything that must be scanned character-by-character.
@@ -188,14 +248,16 @@ Flat by default. Cards, panels, and tables are separated from the page and each 
 ## Components
 
 ### Buttons
-- **Shape:** `rounded-lg` (8px).
-- **Primary:** gold background (`#c9a84c`) / navy text (`#0b1d3a`), semibold, hover shifts to `#f0c040`.
-- **Secondary/outline:** transparent background, muted-slate text (`#5a7299`) with a border, hover shifts text/border toward gold.
-- **Danger:** red background (`#e05252`) / white text, hover `#c94444` — reserved for destructive confirmations.
-- **Icon-only row actions:** muted-slate, hover to gold (or red for delete). Always visible at `opacity-50`, sharpening to full opacity on hover *or* focus-visible — never `opacity-0` shown only on hover, which hides the action from touch devices and keyboard users entirely.
+- **Shape and size:** `rounded-lg` (8px), 40px high on page headers and dialog footers, 36px inside card headers.
+- **Primary:** navy `#0b1d3a` / white text, semibold, hover `#1a2f55`. **One per screen**, always the right-most button of its header or footer — it is the next step of the work.
+- **Secondary:** white with a 1px `#c3ccda` border, ink text, hover fill `#f4f6fa`.
+- **"เพิ่มเติม ▾" menu:** rare actions (copy, cancel, delete) live here instead of as extra buttons; destructive items sit at the bottom in red after a divider.
+- **Text button:** `#1a5fb4`, no border — add a row, add a contact.
+- **Danger:** solid `#b93636` / white — only inside a confirm dialog.
+- **Icon-only row actions:** muted `#5f7293`, hover to ink. Always visible — never `opacity-0` shown only on hover.
 
 ### Status Pills (signature component)
-The tinted-pill formula (see Named Rules, Colors) is this system's signature recurring element — it appears on every Quotation/Scope of Work/Delivery Order list and detail view. `rounded-full`, `text-xs font-medium`, an icon + translated label inside. Treat a new status exactly like an existing one: pick a new dedicated hex, apply the same three-part opacity formula, never repurpose another status's color.
+26px high, `rounded-full`, a 6px coloured dot + a 12.5px semibold label on a pale tint: grey (`#eef1f6`/`#3d5173`, dot `#8a97ad`) for draft/archived, amber (`#fdf3e0`/`#8a5a00`, dot `#d89614`) for pending, blue (`#e8f0fb`/`#1a5fb4`) for approved/sent, green (`#e6f4ec`/`#1b7f4f`) for done/active, red (`#fcebeb`/`#b93636`) for rejected, grey struck-through for cancelled. `StatusBadge.tsx` is the shared component. Status *words* stay exactly as the app uses them (Draft / Final kept — PRODUCT.md). The older per-status hex set under The Tinted Pill Rule stays in use on screens whose phase has not landed yet.
 
 ### Stat Tiles (signature component)
 The compact KPI tile — `ExecutiveSummaryCards.tsx`'s `SummaryCard`, `ActivityFollowUpSummary.tsx`'s `ActionItem`, `ApprovalDashboard.tsx`'s summary tiles — is a second recurring signature pattern alongside Status Pills: an icon in an Icon Chip Tint square, a large `text-2xl font-bold font-mono` (or `text-lg`/`text-xl` in denser variants) value, a muted-foreground title/label, and (where the number needs one-line context) a `text-[10px]` helper caption underneath. Reuse this shape for any new at-a-glance number rather than inventing a new card format — never a bare number with no label, and never more than one accent color's worth of visual weight per tile.
@@ -214,32 +276,34 @@ The แดชบอร์ด page and its department tabs follow **[docs/DASHBOA
 - **Internal padding:** `p-4`–`p-6`.
 
 ### Inputs / Fields
-- **Style:** muted-mist background (`#eef1f8`), hairline navy border, `rounded-lg`.
-- **Focus:** border shifts to gold at 50% opacity (`focus:border-[#c9a84c]/50`), no glow/ring.
-- **Error:** red (`#e05252`) helper text below the field, `text-xs`.
-- **In-table inline editing:** ~~a distinct, lighter-weight variant — transparent background by default, only gaining the muted-mist background on focus~~ — **retired 2026-09-24** (see the next rule): the owner reported *"ไม่รู้ว่ามันกรอกได้หรือไม่ได้"*, which is exactly what an invisible-until-focused cell causes.
-- **Editable vs read-only on document pages (2026-09-24, owner order — "ตรงที่กรอกมี box เห็นชัดเจน"):** inside every document editor (root carries `doc-form`, one rule in `src/styles/index.css`) an **editable** field — header field or table cell alike — is a white box (`--card`) with a navy border at 32% (`rgba(11,29,58,0.32)`), gold border on focus; a **read-only** field (`disabled`/`readonly`) has **no box at all** (transparent background and border, full-opacity text, no dropdown arrow, no textarea resize grip, an empty disabled date shows nothing instead of `mm/dd/yyyy`), so it reads as a plain value. A field is either clearly a box or clearly text — never a pale filled box that might or might not take input. Composite fields (icon + input in one frame — customer selector, product-picker search) put `data-field-box` on the frame; the frame gets the editable look and the inner input is exempt, so there is never a box inside a box. Read-only values rendered as `<p>`/`<div>` must not imitate a field box either. Error red borders survive the rule.
-- **Table headers follow their column's alignment:** a numeric column (quantity, price, discount, amount) has a **right-aligned** header over right-aligned figures; a header above a boxed field starts where the box starts (match the cell's padding, or offset the header when a control sits in front of the box).
+- **Style:** label **above** the field (13px/500 `#26395a`), white box, 1px `#c3ccda` border, `rounded-lg`, 40px high (36px inside tables). Help text 12px `#5f7293` below.
+- **Focus:** border `#1a5fb4` plus a 3px `rgba(26,95,180,0.18)` ring (`focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20` in Tailwind). Never gold.
+- **Required:** red `*` after the label. **Error:** red border + 12px red message with an icon.
+- **Read-only (approved documents):** no box at all — 12px `#5f7293` label over a 14px/500 value, "—" in `#8a97ad` when empty. Never a pale-filled box.
+- **Editable vs read-only on document pages (2026-09-24, owner order — "ตรงที่กรอกมี box เห็นชัดเจน"):** inside every document editor (root carries `doc-form`, one rule in `src/styles/index.css`) an **editable** field is a white box with the `#c3ccda` border and the blue focus ring; a **read-only** field (`disabled`/`readonly`) has **no box at all**. Composite fields (icon + input in one frame) put `data-field-box` on the frame so there is never a box inside a box. Error red borders survive the rule.
+- **Table headers follow their column's alignment:** a numeric column has a **right-aligned** header over right-aligned figures.
 
 ### Navigation (Sidebar)
-Navy rail; inactive items are pale-blue text (`#a8bed8`) on navy, hover shifts to white with a navy-accent background (`#132540`); the active item gets the tinted-pill treatment (`bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25`) — the sidebar's active state is a direct application of the same pill formula the status system uses elsewhere. Nav items are grouped under small uppercase eyebrow labels that hide when the sidebar is collapsed to icon-only. As of 2026-08-28 there are ten groups (`NAV_GROUPS` in `App.tsx`) — หลัก / งานขาย / บริการ / บัญชี / โครงการ / ผลิต / จัดซื้อ / BD / คลังสินค้า / การจัดการระบบ — and a group renders only when the current role can see at least one item inside it, so two users can see two different sidebars. **A new module joins an existing group unless it serves a department with a process of its own**, which is the one thing that earns a new group: the ninth, จัดซื้อ, was added 2026-08-28 at the owner's explicit choice for the Purchasing module, on the same reasoning that already gave โครงการ and ผลิต theirs — one department's workflow end to end, not an assortment that happens to be about buying. Ordering inside a group follows the department's own process (ใบขอซื้อ → ใบสั่งซื้อ), never the alphabet. The tenth, BD, followed on the same test the same day for Cost Control — a single document, but one department's own decision process end to end. Absent that test, fold the module into an existing group.
+Navy rail 248px wide (`w-16` when collapsed). Header 64px: the logo in a white circle + "Thai Chemicals Storage / ระบบองค์กร" (`BrandMark appearance="sidebar"`). Each of the ten groups (`NAV_GROUPS` in `App.tsx`) is a **collapsible header row** — icon, label, chevron — and its items sit under it as plain text rows indented 28px. The group holding the open page opens by itself; the user can open or close any group. The **active item is a solid gold row with navy text** — the one place gold fills a surface, and the only gold on the rail. Collapsed, the rail shows the group icons only; clicking one expands the rail with that group open. Inactive text `#c5d3e8`, hover white on `rgba(255,255,255,0.06)`. A group renders only when the current role can see at least one item in it. **A new module joins an existing group unless it serves a department with a process of its own** (the rule that gave จัดซื้อ and BD their groups, 2026-08-28); ordering inside a group follows the department's own process, never the alphabet.
 
 **Scrollbars.** The nav column scrolls, and as of 2026-08-26 it is the only scrollbar in the app this system styles (`.sidebar-scroll`, `src/styles/index.css`): transparent track, no arrow buttons, and a 6px `rounded-full` thumb in the sidebar's own inactive-label ink (`#a8bed8`) at 28% — brightening to 45% when the rail is hovered and 62% on the thumb itself. Left unstyled, the OS scrollbar paints a white track down the navy rail, which is the brightest element on the sidebar and reads as a seam. Two rules generalise: **the thumb takes the surface's own foreground ink, never gold** (a scrollbar is chrome, and The Rare Gold Rule reserves gold for the active row and primary actions), and **it stays visible at rest** rather than fading in on hover, for the same reason icon-only actions sit at `opacity-50` instead of `opacity-0`. **Since 2026-09-14 every other scroll region is styled too** (owner: *"ตรง scroll bar ทำให้หมดทุกหน้าเลย"*): a global rule in the same file gives light surfaces the same shape — thin, transparent track, no arrow buttons, 6px pill — inked navy `rgba(11,29,58,0.18)`, `0.3` when the region is hovered, `0.45` on the thumb. `.sidebar-scroll` overrides it on the navy rail; a new scroll region on a dark surface must do the same, or the navy thumb vanishes.
 
-### Dropdown Panels (Notifications, What's New, Global Search, User Menu)
-One shared shell reused across all four: `absolute right-0 (or left-0) top-full mt-2`, white card, hairline border, `shadow-xl`, `w-96` (or `w-[26rem]` for search). This is the only place `shadow-xl` belongs — see Elevation & Depth.
+### Topbar and dropdown panels
+Topbar 64px, white, hairline bottom border: collapse button · global search box (440px, `#f8f9fc` fill, "Ctrl K") · flexible space · คู่มือการใช้งาน (text button) · notification bell (40px icon button, red count badge) · a divider · the user button (34px avatar, name 14/600, role 12). **มีอะไรใหม่ lives in the user menu** (ตั้งค่า · วิธีใช้งาน · มีอะไรใหม่ · ออกจากระบบ in red); a blue dot on the avatar and on the menu row means an unseen announcement. Dropdown panels (notifications, What's New, user menu, and the global search results — which drop down under the search box on screens 1024px and wider, full-screen on phones) share one shell: white, `rounded-xl`, hairline border, shadow `0 12px 28px -8px rgba(11,29,58,0.22)`.
 
 ### Dialogs
-Fixed navy-tinted overlay (`bg-[#0b1d3a]/40`), centered white card (`max-w-sm`), title + message, an outline Cancel button + a primary or danger Confirm button depending on the action. `ConfirmDialog` for yes/no destructive confirmation, `PromptDialog` for a single free-text value — never the browser's native `window.prompt()`/`window.confirm()`.
+Backdrop `rgba(11,29,58,0.45)`. **Confirm dialog** (`ConfirmDialog`): 480px, `rounded-xl`, shadow `0 24px 48px -12px rgba(11,29,58,0.35)`, a 44px tinted icon circle (blue for normal, red for destructive), an 18px/600 title, one 14px sentence, a ✕ close button, and a footer under a divider with [ยกเลิก] [primary or red danger] on the right. `PromptDialog` uses the same shell with one labelled field. Never the browser's native `window.prompt()`/`window.confirm()`.
 
-A **three-action** variant exists as of 2026-08-25 (`UnsavedChangesDialog`, the "ยังไม่ได้บันทึก" prompt): กลับไปแก้ต่อ (outline) · ไม่บันทึก (danger **outline**) · บันทึก (gold primary). It is a separate component rather than a third prop on `ConfirmDialog`, because the semantics invert — the *middle* action is the destructive one and the *primary* is the safe one, which `danger` (which colours the confirm button) cannot express. Two rules generalise from it: solid `#e05252` stays reserved for the primary/confirm slot, so a destructive *secondary* uses the red outline instead; and initial focus belongs on the safe action, so Enter never triggers the destructive one.
+**Unsaved changes** (`UnsavedChangesDialog`): same shell with an amber icon; "ไม่บันทึก" is **red text alone on the far left**, [กลับไปแก้ต่อ] [บันทึก] on the right. It stays a separate component from `ConfirmDialog` (three actions, the destructive one is not the primary), and initial focus stays on บันทึก so Enter never discards work.
+
+The other screen types of the redesign — **side panel** (560px drawer from the right for master data), **picker dialog** (880px, search + selectable table + "เลือกแล้ว N รายการ") and the **document page** header bar — arrive with the module phases that use them.
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** keep gold rare — one primary action, one active state, one status pill at a time (The Rare Gold Rule).
 - **Do** use the tinted-pill formula (`bg/10, text, border/20`, one dedicated hex) for any new status or state badge (The Tinted Pill Rule).
-- **Do** pair every `'Playfair Display'` inline style with the `'Noto Sans Thai'` fallback — Playfair has no Thai glyphs.
+- **Do** set on-screen headings in the body sans (page title 24/600, card title 16/600, dialog title 18/600). Playfair Display stays only on printed documents and the paper-like template editor/preview — and there it is always paired with the `'Noto Sans Thai'` fallback, since Playfair has no Thai glyphs.
 - **Do** keep icon-only actions discoverable at `opacity-50` by default, full opacity on hover *or* focus-visible — never hover-only.
 - **Do** wrap every table in `overflow-x-auto` and make every field-pair grid `grid-cols-1 sm:grid-cols-2`.
 - **Do** reserve `shadow-xl` for genuinely floating layers (dropdowns, modals) — everything else stays flat with a border (The Flat-Ledger Rule).

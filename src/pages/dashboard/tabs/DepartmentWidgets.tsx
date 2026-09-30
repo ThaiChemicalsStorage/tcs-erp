@@ -370,7 +370,7 @@ export function SectionHeading({ title, note, depts, divider }: { title: string;
 export function OpenListButton({ label, onClick }: { label?: string; onClick: () => void }) {
   const { t } = useI18n();
   return (
-    <button onClick={onClick} className="px-2.5 py-1 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 transition-all whitespace-nowrap">
+    <button onClick={onClick} className="px-2.5 py-1 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-all whitespace-nowrap">
       {label ?? t("dashboard.dept.openList")}
     </button>
   );
@@ -388,7 +388,7 @@ export function CardTable({ title, sub, actions, headers, empty, children, isEmp
   children: ReactNode;
 }) {
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden h-full">
+    <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden h-full">
       <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold text-foreground" style={SERIF}>{title}</h2>

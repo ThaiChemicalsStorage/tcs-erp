@@ -251,7 +251,7 @@ export function ArDocumentListPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(DOC_TYPE_LABEL_KEY[docType])}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t(DOC_TYPE_LABEL_KEY[docType])}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">
             {t("accounting.list.subtitle.before")} {docType} {t("accounting.list.subtitle.after")}
             {isTaxInvoicePage && canCreate && canIssue ? ` ${t("accounting.list.subtitle.orManual")}` : ""}
@@ -261,7 +261,7 @@ export function ArDocumentListPage({
         {isTaxInvoicePage && canCreate && canIssue && (
           <button
             onClick={() => setManualDialogOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
           >
             <Plus size={15} /> {t("accounting.list.btn.createManual")}
           </button>
@@ -269,7 +269,7 @@ export function ArDocumentListPage({
         {docType === "RE" && canIssue && (
           <button
             onClick={() => setReceiptPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
           >
             <Plus size={15} /> {t("accounting.list.btn.createReceipt")}
           </button>
@@ -308,10 +308,10 @@ export function ArDocumentListPage({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("accounting.list.search.placeholder")}
-              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground">
                 <X size={13} />
               </button>
             )}
@@ -322,17 +322,17 @@ export function ArDocumentListPage({
               type="month"
               value={monthFilter}
               onChange={(e) => setMonthFilter(e.target.value)}
-              className="h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
             {monthFilter && (
-              <button onClick={() => setMonthFilter("")} className="text-muted-foreground hover:text-foreground" title={t("accounting.list.filter.clearMonth")}>
+              <button onClick={() => setMonthFilter("")} className="text-foreground" title={t("accounting.list.filter.clearMonth")}>
                 <X size={13} />
               </button>
             )}
           </label>
           <button
             onClick={() => setNcrSettingsOpen(true)}
-            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ml-auto"
+            className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all ml-auto"
             title={t("accounting.list.ncr.settingsTitle")}
           >
             <Settings2 size={13} /> {t("accounting.list.ncr.settingsBtn")}
@@ -341,7 +341,7 @@ export function ArDocumentListPage({
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
           {([["all", t("accounting.list.status.all")], ["issued", t("accounting.list.status.issued")], ["cancelled", t("accounting.list.status.cancelled")]] as const).map(([key, label]) => (
             <button key={key} onClick={() => setStatusFilter(key)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${statusFilter === key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${statusFilter === key ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {label}
             </button>
           ))}
@@ -356,7 +356,7 @@ export function ArDocumentListPage({
         ) : loadError ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <p className="text-sm text-muted-foreground">{t("accounting.list.error.loadFailed")}</p>
-            <button onClick={load} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">{t("accounting.list.error.retry")}</button>
+            <button onClick={load} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">{t("accounting.list.error.retry")}</button>
           </div>
         ) : documents.length === 0 ? (
           <EmptyState
@@ -412,53 +412,53 @@ export function ArDocumentListPage({
                       <td className="px-4 py-3.5 text-xs text-foreground font-mono whitespace-nowrap">{money(d.netTotal)}</td>
                       <td className="px-4 py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${d.status === "issued" ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-[#e05252]/10 text-[#c23f3f] border border-[#e05252]/20"}`}>
-                          {d.status === "issued" ? t("accounting.list.status.issued") : t("accounting.list.status.cancelled")}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          {isTaxInvoicePage && canIssue && d.status === "issued" && !receipt && (
-                            <button
-                              onClick={() => setReceiptTarget(d)}
-                              className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
-                            >
-                              {t("accounting.list.action.issueReceipt")}
-                            </button>
-                          )}
-                          {isStockPage && canViewStock && (
-                            <button onClick={() => void handleOpenStock(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.list.action.viewStockTitle")}>
-                              <Boxes size={14} />
-                            </button>
-                          )}
-                          <button onClick={() => void handlePrint(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.list.action.printTitle")}>
-                            <Printer size={14} />
-                          </button>
-                          <button
-                            onClick={() => void handleNcrPrint(d.id)}
-                            className="px-1.5 py-0.5 text-xs font-mono border border-border rounded text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
-                            title={t("accounting.list.action.ncrPrintTitle")}
-                          >
-                            NCR
-                          </button>
-                          {canCancel && d.status === "issued" && (
-                            <button onClick={() => setCancelTarget(d)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.list.action.cancelTitle")}>
-                              <Ban size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+ {d.status === "issued" ? t("accounting.list.status.issued") : t("accounting.list.status.cancelled")}
+ </span>
+ </td>
+ <td className="px-4 py-3.5 whitespace-nowrap">
+ <div className="flex items-center justify-end gap-2">
+ {isTaxInvoicePage && canIssue && d.status === "issued" && !receipt && (
+ <button
+ onClick={() => setReceiptTarget(d)}
+ className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
+ >
+ {t("accounting.list.action.issueReceipt")}
+ </button>
+ )}
+ {isStockPage && canViewStock && (
+ <button onClick={() => void handleOpenStock(d.id)} className="text-foreground transition-colors" title={t("accounting.list.action.viewStockTitle")}>
+ <Boxes size={14} />
+ </button>
+ )}
+ <button onClick={() => void handlePrint(d.id)} className="text-foreground transition-colors" title={t("accounting.list.action.printTitle")}>
+ <Printer size={14} />
+ </button>
+ <button
+ onClick={() => void handleNcrPrint(d.id)}
+ className="px-1.5 py-0.5 text-xs font-mono border border-[#c3ccda] bg-white rounded text-foreground hover:bg-[#f4f6fa] transition-all"
+ title={t("accounting.list.action.ncrPrintTitle")}
+ >
+ NCR
+ </button>
+ {canCancel && d.status === "issued" && (
+ <button onClick={() => setCancelTarget(d)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.list.action.cancelTitle")}>
+ <Ban size={14} />
+ </button>
+ )}
+ </div>
+ </td>
+ </tr>
+ );
+ })}
+ </tbody>
+ </table>
+ </div>
+ )}
+ </div>
 
-      <PromptDialog
-        open={cancelTarget !== null}
-        title={`${t("accounting.list.action.cancelTitle")} ${cancelTarget?.docNo ?? ""}`}
+ <PromptDialog
+ open={cancelTarget !== null}
+ title={`${t("accounting.list.action.cancelTitle")} ${cancelTarget?.docNo ?? ""}`}
         message={t("accounting.list.cancelDialog.message")}
         label={t("accounting.list.cancelDialog.label")}
         confirmLabel={busy ? t("accounting.list.cancelDialog.busy") : t("accounting.list.action.cancelTitle")}
@@ -538,7 +538,7 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
         step="0.5"
         value={draft[key]}
         onChange={(e) => setDraft((d) => ({ ...d, [key]: num(e.target.value, d[key], key === "pageWidthMm" || key === "pageHeightMm") }))}
-        className="w-24 h-8 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors font-mono text-right"
+        className="w-24 h-8 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors font-mono text-right"
       />
     </label>
   );
@@ -546,7 +546,7 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
       <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.list.ncr.settingsBtn")}</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("accounting.list.ncr.settingsBtn")}</h2>
         <p className="text-xs text-muted-foreground leading-relaxed">
           {t("accounting.list.ncr.description")}
         </p>
@@ -570,7 +570,7 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
             </button>
             <button
               onClick={() => onSave(draft)}
-              className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+              className="px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors"
             >
               {t("accounting.list.ncr.save")}
             </button>
@@ -625,7 +625,7 @@ function ReceiptSourcePickerDialog({ excludeIds, onClose, onSelect }: {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 className="text-lg font-semibold text-foreground">
             {t("accounting.list.receiptPicker.title")}
           </h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
@@ -634,7 +634,7 @@ function ReceiptSourcePickerDialog({ excludeIds, onClose, onSelect }: {
         </div>
         <p className="text-xs text-muted-foreground">{t("accounting.list.receiptPicker.description")}</p>
 
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 flex-shrink-0 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
             autoFocus
@@ -660,7 +660,7 @@ function ReceiptSourcePickerDialog({ excludeIds, onClose, onSelect }: {
                 <button
                   key={d.id}
                   onClick={() => onSelect(d)}
-                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors"
+                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white/60 hover:bg-secondary/40 hover:bg-[#f4f6fa] transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-mono font-medium text-foreground truncate">

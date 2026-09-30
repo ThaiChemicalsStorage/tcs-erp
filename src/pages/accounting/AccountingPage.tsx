@@ -64,7 +64,7 @@ export function AccountingPage({
     <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.jobBilling.title")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground">{t("accounting.jobBilling.title")}</h1>
           <p className="text-sm text-muted-foreground font-mono mt-1">{t("accounting.jobBilling.subtitle")}</p>
         </div>
         {/* ปุ่มเดียวกัน แต่คนที่มีแค่สิทธิ์ดู (ar:view) ก็ต้องเข้าถึงงานได้ — เดิมหน้านี้แสดงตาราง SOW
@@ -73,7 +73,7 @@ export function AccountingPage({
             — ปุ่มออกเอกสาร/เช็คลิสต์ข้างในยังคุมด้วย canCreate/canIssue เหมือนเดิมทุกประการ) */}
         <button
           onClick={() => setPickerOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors flex-shrink-0"
+          className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors flex-shrink-0"
         >
           <Plus size={15} /> {canCreate ? t("accounting.jobBilling.createBtn") : t("accounting.jobBilling.openBtn")}
         </button>
@@ -126,7 +126,7 @@ function ScopeOfWorkPickerDialog({ onClose, onSelect }: { onClose: () => void; o
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 className="text-lg font-semibold text-foreground">
             {t("accounting.jobBilling.createDialog.title")}
           </h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
@@ -135,7 +135,7 @@ function ScopeOfWorkPickerDialog({ onClose, onSelect }: { onClose: () => void; o
         </div>
         <p className="text-xs text-muted-foreground">{t("accounting.jobBilling.createDialog.description")}</p>
 
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 flex-shrink-0 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
             autoFocus
@@ -161,7 +161,7 @@ function ScopeOfWorkPickerDialog({ onClose, onSelect }: { onClose: () => void; o
                 <button
                   key={s.id}
                   onClick={() => onSelect(s.id)}
-                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors"
+                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white/60 hover:bg-secondary/40 hover:bg-[#f4f6fa] transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-mono font-medium text-foreground truncate">{s.scopeNumber}</p>
@@ -441,7 +441,7 @@ function ScopeBillingDetail({
                         <button
                           onClick={handleIssue}
                           disabled={!checklistOk || issuing}
-                          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {issuing ? <Loader2 size={13} className="animate-spin" /> : <ClipboardCheck size={13} />}
                           {t("accounting.jobBilling.issueDocsBtn")} ({milestone.isDownPayment ? "AR" : "IV"} + BI)

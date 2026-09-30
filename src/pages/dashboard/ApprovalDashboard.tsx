@@ -124,7 +124,7 @@ export function ApprovalDashboard({ data, onRefresh, vatMode }: { data: Approval
 
   return (
     <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+      <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5">
         <ClipboardCheck size={15} /> {t("dashboard.approval.title")}
       </h2>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-5">

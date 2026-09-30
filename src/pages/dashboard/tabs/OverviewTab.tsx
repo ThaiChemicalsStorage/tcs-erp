@@ -304,7 +304,7 @@ function PendingHighlight({ rows, wide, onOpen }: { rows: { kind: keyof typeof P
       )}
       <button
         onClick={onOpen}
-        className="self-start flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1d3a] transition-colors"
+        className="self-start flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg bg-[#0b1d3a] text-white hover:bg-[#1a2f55] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1d3a] transition-colors"
       >
         <Inbox size={15} /> {t("dashboard.overview.pending.open")}
       </button>
@@ -329,32 +329,32 @@ function DepartmentCard({ dept, metrics, own, onOpen, onRetry }: {
   const toneClass = (tone?: "alert" | "warn") => (tone === "alert" ? "text-[#d22626]" : tone === "warn" ? "text-[#a75d1a]" : "text-foreground");
   return (
     <section aria-label={title} className="bg-card border border-border rounded-xl p-[18px] flex flex-col gap-3 min-w-0">
-      <button onClick={onOpen} className="group flex items-center gap-2.5 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50">
+      <button onClick={onOpen} className="group flex items-center gap-2.5 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40">
         <span className="w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${meta.accent}18` }}>
-          <Icon size={15} style={{ color: meta.accent }} />
-        </span>
-        <span className="text-[15px] font-semibold text-foreground truncate" style={SERIF}>{title}</span>
-        {own && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap" title={t("dashboard.dept.ownScope")}>
-            <UserRound size={11} className="text-[#c9a84c]" /> {t("dashboard.dept.ownScopeShort")}
-          </span>
-        )}
-        <ArrowRight size={14} className="ml-auto text-muted-foreground group-hover:text-[#c9a84c] transition-colors flex-shrink-0" aria-label={t("dashboard.dept.openTab")} />
-      </button>
+ <Icon size={15} style={{ color: meta.accent }} />
+ </span>
+ <span className="text-[15px] font-semibold text-foreground truncate" style={SERIF}>{title}</span>
+ {own && (
+ <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap" title={t("dashboard.dept.ownScope")}>
+ <UserRound size={11} className="text-[#c9a84c]" /> {t("dashboard.dept.ownScopeShort")}
+ </span>
+ )}
+ <ArrowRight size={14} className="ml-auto text-muted-foreground group-hover:text-[#c9a84c] transition-colors flex-shrink-0" aria-label={t("dashboard.dept.openTab")} />
+ </button>
 
-      {metrics === null ? (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-xs text-muted-foreground">{t("dashboard.dept.loadError")}</p>
-          <button onClick={onRetry} className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-            <RotateCw size={12} /> {t("dashboard.dept.retry")}
-          </button>
-        </div>
-      ) : !main ? (
-        <p className="text-xs text-muted-foreground">{t("dashboard.dept.noPermittedMetrics")}</p>
-      ) : (
-        <>
-          <div className="flex items-baseline gap-2 min-w-0">
-            <span className={`text-2xl font-semibold font-mono leading-none ${toneClass(main.tone)}`}>{fmtCount(main.value ?? 0)}</span>
+ {metrics === null ? (
+ <div className="flex flex-col items-start gap-2">
+ <p className="text-xs text-muted-foreground">{t("dashboard.dept.loadError")}</p>
+ <button onClick={onRetry} className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+ <RotateCw size={12} /> {t("dashboard.dept.retry")}
+ </button>
+ </div>
+ ) : !main ? (
+ <p className="text-xs text-muted-foreground">{t("dashboard.dept.noPermittedMetrics")}</p>
+ ) : (
+ <>
+ <div className="flex items-baseline gap-2 min-w-0">
+ <span className={`text-2xl font-semibold font-mono leading-none ${toneClass(main.tone)}`}>{fmtCount(main.value ?? 0)}</span>
             <span className="text-sm text-muted-foreground truncate" title={main.label}>{main.label}</span>
           </div>
           {rest.length > 0 && (
@@ -378,7 +378,7 @@ function ErrorCard({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="bg-card border border-border rounded-xl p-5 flex flex-col items-start gap-2">
       <p className="text-sm text-muted-foreground">{t("dashboard.dept.loadError")}</p>
-      <button onClick={onRetry} className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+      <button onClick={onRetry} className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
         <RotateCw size={12} /> {t("dashboard.dept.retry")}
       </button>
     </div>
@@ -413,7 +413,7 @@ function AttentionList({ items, today, visibleTabs, onOpenTab }: {
               <li key={`${item.kind}-${item.id}`} className="border-b border-border/50 last:border-0">
                 <button
                   onClick={() => onOpenTab(tab)} disabled={!visibleTabs.includes(tab)}
-                  className="w-full flex items-center gap-3 py-3 text-left rounded-lg hover:bg-muted/40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 transition-colors"
+                  className="w-full flex items-center gap-3 py-3 text-left rounded-lg hover:bg-muted/40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors"
                 >
                   <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${meta.accent}18` }}>
                     <Icon size={15} style={{ color: meta.accent }} />

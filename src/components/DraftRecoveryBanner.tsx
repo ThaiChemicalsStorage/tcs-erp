@@ -33,7 +33,7 @@ export function DraftRecoveryBanner({
       <div className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={onRestore}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#b8973f] transition-colors"
+          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors"
         >
           {t("common.draftRecovery.restore")}
         </button>

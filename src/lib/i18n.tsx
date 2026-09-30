@@ -1284,6 +1284,7 @@ const translations = {
     "whatsNew.bellAria": "มีอะไรใหม่",
     "whatsNew.title": "มีอะไรใหม่",
     "whatsNew.empty": "ยังไม่มีประกาศอัปเดต",
+    "whatsNew.unseenAria": "มีรายการที่ยังไม่ได้ดู",
 
     "common.saveChanges": "บันทึกการเปลี่ยนแปลง",
     "common.savedNote": "บันทึกการเปลี่ยนแปลงแล้ว",
@@ -5172,6 +5173,7 @@ const translations = {
     "whatsNew.bellAria": "What's new",
     "whatsNew.title": "What's New",
     "whatsNew.empty": "No update announcements yet",
+    "whatsNew.unseenAria": "Has unseen updates",
 
     "common.saveChanges": "Save Changes",
     "common.savedNote": "Changes saved",

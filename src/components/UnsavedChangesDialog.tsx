@@ -59,38 +59,39 @@ function UnsavedChangesDialogPanel({
   return (
     // print:hidden เพราะกล่องนี้ลอยอยู่เหนือหน้าเอกสารที่สั่งพิมพ์ได้ — ถ้าค้างอยู่ต้องไม่ติดไปในกระดาษ
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={busy ? undefined : onCancel} />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <div className="flex items-start gap-3 mb-4">
-          {/* สีทองไม่ใช่สีแดง — นี่คือการเตือนก่อนทำสิ่งปกติ ไม่ใช่การยืนยันลบ และไม่ควรแย่งสายตากับปุ่ม "ไม่บันทึก" */}
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#c9a84c]/10">
-            <AlertTriangle size={17} className="text-[#c9a84c]" />
+      <div className="absolute inset-0 bg-[#0b1d3a]/45" onClick={busy ? undefined : onCancel} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] w-full max-w-[480px] flex flex-col">
+        <div className="flex items-start gap-4 px-6 pt-6">
+          {/* สีเหลืองเตือน ไม่ใช่สีแดง — นี่คือการเตือนก่อนทำสิ่งปกติ ไม่ใช่การยืนยันลบ */}
+          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 bg-[#fdf3e0] text-[#8a5a00]">
+            <AlertTriangle size={20} />
           </div>
-          <div className="min-w-0">
-            <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <div className="min-w-0 pt-0.5">
+            <h2 id={titleId} className="text-lg font-semibold text-foreground leading-snug">
               {t("common.unsaved.title")}
             </h2>
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t(messageKey)}</p>
-            {documentLabel && <p className="text-xs font-mono text-[#c9a84c] mt-1.5 truncate">{documentLabel}</p>}
-            {saveFailed && <p className="text-xs text-[#e05252] mt-1.5 leading-relaxed">{t("common.unsaved.saveFailed")}</p>}
+            <p className="text-sm text-[#3d5173] mt-1 leading-relaxed">{t(messageKey)}</p>
+            {documentLabel && <p className="text-[13px] font-mono font-medium text-foreground mt-2 truncate">{documentLabel}</p>}
+            {saveFailed && <p className="text-sm text-[#b93636] mt-2 leading-relaxed">{t("common.unsaved.saveFailed")}</p>}
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <button onClick={onCancel} disabled={busy} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-            {t("common.unsaved.stay")}
-          </button>
-          {/* ปุ่มทำลายงานใช้เส้นขอบแดง ไม่ใช่พื้นแดงทึบ — พื้นทึบสงวนไว้ให้ปุ่มยืนยันหลัก ซึ่งในกล่องนี้เป็นสีทอง */}
-          <button onClick={onDiscard} disabled={busy} className="px-3.5 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors disabled:opacity-60">
+        {/* ดีไซน์ใหม่ (2026-09-30): "ไม่บันทึก" เป็นตัวอักษรแดงแยกไว้ซ้ายสุด ห่างจากปุ่มบันทึก ลดโอกาสกดพลาด */}
+        <div className="flex items-center gap-2.5 px-6 py-4 mt-6 border-t border-[#eef1f6]">
+          <button onClick={onDiscard} disabled={busy} className="h-10 px-2 -ml-2 text-sm font-medium text-[#b93636] rounded-lg hover:bg-[#fcebeb] transition-colors disabled:opacity-60">
             {t("common.unsaved.discard")}
+          </button>
+          <span className="flex-1" />
+          <button onClick={onCancel} disabled={busy} className="h-10 px-4 text-sm font-medium border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-colors disabled:opacity-60">
+            {t("common.unsaved.stay")}
           </button>
           {/* โฟกัสเริ่มต้นอยู่ที่ "บันทึก" — กด Enter แล้วต้องได้ผลลัพธ์ที่ปลอดภัย ไม่ใช่ทิ้งงาน */}
           <button
             autoFocus
             onClick={onSave}
             disabled={busy}
-            className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60 inline-flex items-center gap-1.5"
+            className="h-10 px-4 text-sm rounded-lg font-semibold bg-[#0b1d3a] text-white hover:bg-[#1a2f55] transition-colors disabled:opacity-60 inline-flex items-center gap-1.5"
           >
-            {busy && <Loader2 size={13} className="animate-spin" />}
+            {busy && <Loader2 size={14} className="animate-spin" />}
             {t("common.save")}
           </button>
         </div>

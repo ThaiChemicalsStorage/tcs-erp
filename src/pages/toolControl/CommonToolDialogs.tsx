@@ -10,7 +10,7 @@ import { createCommonTool, setCommonToolStock } from "../../lib/toolHoldings";
  * เครื่องมือกองกลาง (2026-09-29) — เพิ่มเครื่องมือจากหน้าเครื่องมือประจำทีมโดยตรง และกดรหัส/ชื่อเพื่ออัปเดตยอดสต๊อก
  * ทั้งสองกล่อง mount เฉพาะตอนเปิด ค่าที่กรอกจึงเริ่มใหม่ทุกครั้ง (แบบเดียวกับ PromptDialog)
  */
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
 function DialogShell({ title, message, busy, error, confirmLabel, onConfirm, onCancel, children }: {
   title: string;
@@ -33,7 +33,7 @@ function DialogShell({ title, message, busy, error, confirmLabel, onConfirm, onC
           onSubmit={(e) => { e.preventDefault(); if (!busy) onConfirm(); }}
           className="space-y-3">
           <div>
-            <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h2>
+            <h2 id={titleId} className="text-sm font-semibold text-foreground">{title}</h2>
             {message && <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{message}</p>}
           </div>
           {children}
@@ -42,7 +42,7 @@ function DialogShell({ title, message, busy, error, confirmLabel, onConfirm, onC
             <button type="button" onClick={onCancel} disabled={busy} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">
               {t("toolControl.commonTool.cancel")}
             </button>
-            <button type="submit" disabled={busy} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60">
+            <button type="submit" disabled={busy} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#0b1d3a] text-white hover:bg-[#1a2f55] disabled:opacity-60">
               {busy && <Loader2 size={12} className="animate-spin" />} {confirmLabel}
             </button>
           </div>

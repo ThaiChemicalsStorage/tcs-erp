@@ -10,7 +10,7 @@ export function TourReplayButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       title={t("tour.replay")}
       aria-label={t("tour.replay")}
-      className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+      className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
     >
       <HelpCircle size={14} />
     </button>

@@ -56,7 +56,7 @@ export function DateRangeFilter({ value, onChange }: {
             onClick={() => pick(p)}
             aria-pressed={value.preset === p}
             className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${
-              value.preset === p ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+              value.preset === p ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {label[p]}
@@ -72,7 +72,7 @@ export function DateRangeFilter({ value, onChange }: {
             max={value.to || undefined}
             onChange={(e) => onChange({ ...value, preset: "custom", from: e.target.value })}
             aria-label={t("dateFilter.from")}
-            className="h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
           <span className="text-xs text-muted-foreground">–</span>
           <input
@@ -81,7 +81,7 @@ export function DateRangeFilter({ value, onChange }: {
             min={value.from || undefined}
             onChange={(e) => onChange({ ...value, preset: "custom", to: e.target.value })}
             aria-label={t("dateFilter.to")}
-            className="h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
           {(value.from || value.to) && (
             <button

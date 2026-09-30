@@ -159,7 +159,7 @@ export function CostControlImportDialog({ onCreated, onClose }: {
   };
 
   const titleId = "cost-control-import-title";
-  const inputCls = "w-full px-2 py-1 text-xs bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50";
+  const inputCls = "w-full px-2 py-1 text-xs bg-white border border-[#c3ccda] rounded outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
@@ -356,7 +356,7 @@ export function CostControlImportDialog({ onCreated, onClose }: {
             onClick={() => void handleCreate()}
             disabled={!result || lines.length === 0 || creating}
             title={result && lines.length === 0 ? t("costControlImport.noLines") : undefined}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-[#c9a84c] text-[#0b1d3a] rounded-lg hover:bg-[#f0c040] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-[#0b1d3a] text-white rounded-lg hover:bg-[#1a2f55] transition-colors disabled:opacity-50"
           >
             {creating && <Loader2 size={13} className="animate-spin" />}
             {creating ? t("costControlImport.creating") : t("costControlImport.confirm")}

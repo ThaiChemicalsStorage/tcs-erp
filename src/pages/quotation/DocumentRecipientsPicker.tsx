@@ -66,7 +66,7 @@ export function DocumentRecipientsPicker({
 
   return (
     <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-      <h2 className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+      <h2 className="text-sm font-semibold text-foreground mb-1">
         ผู้รับเอกสาร
       </h2>
       <p className="text-xs text-muted-foreground mb-3">
@@ -170,68 +170,68 @@ export function DocumentRecipientsPicker({
                       className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0"
                     />
                     <span className={`truncate ${isSelected ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-                      {u.fullName}
-                      {u.department.trim() && <span className="text-muted-foreground font-normal"> · {u.department.trim()}</span>}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="mt-4 pt-4 border-t border-border/70">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <label className="block text-xs font-semibold text-foreground">
-            ไฟล์แนบ <span className="font-normal text-muted-foreground">(ไม่บังคับ — สูงสุด {MAX_ATTACHMENTS_PER_SCOPE} ไฟล์ ไฟล์ละไม่เกิน {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB)</span>
-          </label>
-          {!disabled && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || attachments.length >= MAX_ATTACHMENTS_PER_SCOPE}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 flex-shrink-0"
-            >
-              {uploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
-              {uploading ? "กำลังอัปโหลด..." : "แนบไฟล์"}
-            </button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPT_ALL_UPLOADS}
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onUploadAttachment(file);
-              e.target.value = "";
-            }}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground mb-2">
-          ผู้รับเอกสารเปิดดูไฟล์ที่แนบได้จากหน้าเอกสารนี้ — ระบบจำกัดขนาดและจำนวนไฟล์ไว้เพื่อประหยัดพื้นที่จัดเก็บ
-        </p>
-        {attachments.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>
-        ) : (
-          <div className="border border-border/70 rounded-lg divide-y divide-border/60">
-            {attachments.map((a) => (
-              <div key={a.id} className="flex items-center gap-2.5 px-3 py-2 text-xs">
-                <FileText size={14} className="text-[#c9a84c] flex-shrink-0" />
-                <a
-                  href={a.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 min-w-0 truncate font-medium text-foreground hover:text-[#c9a84c] transition-colors"
-                  title={a.fileName}
-                >
-                  {a.fileName}
-                </a>
-                <span className="text-muted-foreground font-mono flex-shrink-0">{formatFileSize(a.size)}</span>
-                {!disabled && (
-                  <button
-                    onClick={() => onDeleteAttachment(a.id)}
-                    disabled={uploading}
-                    aria-label={`ลบไฟล์แนบ ${a.fileName}`}
+ {u.fullName}
+ {u.department.trim() && <span className="text-muted-foreground font-normal"> · {u.department.trim()}</span>}
+ </span>
+ </label>
+ );
+ })}
+ </div>
+ )}
+ </div>
+ </div>
+ <div className="mt-4 pt-4 border-t border-border/70">
+ <div className="flex items-center justify-between gap-2 mb-1">
+ <label className="block text-xs font-semibold text-foreground">
+ ไฟล์แนบ <span className="font-normal text-muted-foreground">(ไม่บังคับ — สูงสุด {MAX_ATTACHMENTS_PER_SCOPE} ไฟล์ ไฟล์ละไม่เกิน {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB)</span>
+ </label>
+ {!disabled && (
+ <button
+ onClick={() => fileInputRef.current?.click()}
+ disabled={uploading || attachments.length >= MAX_ATTACHMENTS_PER_SCOPE}
+ className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50 flex-shrink-0"
+ >
+ {uploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+ {uploading ? "กำลังอัปโหลด..." : "แนบไฟล์"}
+ </button>
+ )}
+ <input
+ ref={fileInputRef}
+ type="file"
+ accept={ACCEPT_ALL_UPLOADS}
+ className="hidden"
+ onChange={(e) => {
+ const file = e.target.files?.[0];
+ if (file) onUploadAttachment(file);
+ e.target.value = "";
+ }}
+ />
+ </div>
+ <p className="text-xs text-muted-foreground mb-2">
+ ผู้รับเอกสารเปิดดูไฟล์ที่แนบได้จากหน้าเอกสารนี้ — ระบบจำกัดขนาดและจำนวนไฟล์ไว้เพื่อประหยัดพื้นที่จัดเก็บ
+ </p>
+ {attachments.length === 0 ? (
+ <p className="text-xs text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>
+ ) : (
+ <div className="border border-[#c3ccda] bg-white/70 rounded-lg divide-y divide-border/60">
+ {attachments.map((a) => (
+ <div key={a.id} className="flex items-center gap-2.5 px-3 py-2 text-xs">
+ <FileText size={14} className="text-[#c9a84c] flex-shrink-0" />
+ <a
+ href={a.url}
+ target="_blank"
+ rel="noreferrer"
+ className="flex-1 min-w-0 truncate font-medium text-foreground hover:text-[#c9a84c] transition-colors"
+ title={a.fileName}
+ >
+ {a.fileName}
+ </a>
+ <span className="text-muted-foreground font-mono flex-shrink-0">{formatFileSize(a.size)}</span>
+ {!disabled && (
+ <button
+ onClick={() => onDeleteAttachment(a.id)}
+ disabled={uploading}
+ aria-label={`ลบไฟล์แนบ ${a.fileName}`}
                     className="text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-50 flex-shrink-0"
                   >
                     <Trash2 size={13} />

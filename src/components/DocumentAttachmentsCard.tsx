@@ -94,7 +94,7 @@ export function DocumentAttachmentsCard({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={busy || full}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-2"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-2"
           >
             {busy ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
             {busy ? t("attachments.uploading") : full ? t("attachments.full") : t("attachments.attach")}

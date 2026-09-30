@@ -28,7 +28,7 @@ import { RequisitionSourcePicker } from "./RequisitionSourcePicker";
 import { KitBreakdown } from "../../components/KitBreakdown";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
 const cellInputCls = "w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
 const thCls = "px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
@@ -285,13 +285,13 @@ export function StoreReceiptDocument({
             {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             {canPrint && (
               <button onClick={() => void handlePrint()} disabled={printing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                 {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("storeReceipt.print")}
               </button>
             )}
             {editable && (
               <button onClick={() => void save()} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("storeReceipt.save")}
               </button>
             )}
@@ -340,7 +340,7 @@ export function StoreReceiptDocument({
           />
           <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
             <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
               <h1 className="text-[#c9a84c] text-xl font-bold">{t("storeReceipt.title")}</h1>
               <p className="text-[#a8bed8] text-xs mt-1">
@@ -446,9 +446,9 @@ export function StoreReceiptDocument({
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{linesTitle}</h2>
+              <h2 className="text-sm font-semibold text-foreground">{linesTitle}</h2>
               {editable && kind !== "return" && (
-                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("storeReceipt.addFromCatalog")}
                 </button>
               )}
@@ -553,7 +553,7 @@ export function StoreReceiptDocument({
           </div>
 
           <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("storeReceipt.signatories")}</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-3">{t("storeReceipt.signatories")}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
               {([
                 ["preparedBy", "preparedAt", t("materialRequisitionDoc.field.preparedBy")],
@@ -565,12 +565,12 @@ export function StoreReceiptDocument({
                   <div>
                     <label htmlFor={`sr-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
                     <input id={`sr-${nameField}`} disabled={!editable} value={draft[nameField]} onChange={(e) => set({ [nameField]: e.target.value })}
-                      className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                      className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                   </div>
                   <div>
                     <label htmlFor={`sr-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
                     <input id={`sr-${dateField}`} type="date" disabled={!editable} value={draft[dateField]} onChange={(e) => set({ [dateField]: e.target.value })}
-                      className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                      className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
                   </div>
                 </div>
               ))}

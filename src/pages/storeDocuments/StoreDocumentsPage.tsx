@@ -240,17 +240,17 @@ export function StoreDocumentsPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("storeDocs.title")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("storeDocs.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("storeDocs.subtitle")}</p>
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">
             <button onClick={() => setPicker("receipt")}
-              className="flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
               <Undo2 size={15} /> {t("storeDocs.createReceipt")}
             </button>
             <button onClick={() => setPicker("issue")}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Plus size={15} /> {t("storeDocs.createIssue")}
             </button>
           </div>
@@ -261,7 +261,7 @@ export function StoreDocumentsPage({
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit" role="group" aria-label={t("storeDocs.col.type")}>
           {(["all", "issue", "receipt", "incoming"] as const).map((k) => (
             <button key={k} onClick={() => { setTab(k); setCode(""); }} aria-pressed={tab === k}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${tab === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${tab === k ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {t(k === "all" ? "storeDocs.tab.all" : k === "issue" ? "storeDocs.tab.issue" : k === "receipt" ? "storeDocs.tab.receipt" : "storeDocs.tab.incoming")}
               {k === "incoming" && incoming.length > 0 && (
                 <span className={`min-w-[1.25rem] px-1 rounded-full text-center font-mono ${tab === k ? "bg-[#0b1d3a]/15" : "bg-[#e08a3c]/15 text-[#a75d1a]"}`}>{incoming.length}</span>
@@ -274,14 +274,14 @@ export function StoreDocumentsPage({
           <span className="sr-only">{t("storeDocs.search")}</span>
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("storeDocs.search")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
           {query && <button onClick={() => setQuery("")} aria-label={t("common.cancel")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X size={13} /></button>}
         </label>
         {tab !== "incoming" && (<>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           {t("storeDocs.codeFilter")}
           <select value={code} onChange={(e) => setCode(e.target.value)}
-            className="h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50">
+            className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20">
             <option value="">{t("storeDocs.codeFilterAll")}</option>
             {codeOptions.map((c) => <option key={c.code} value={c.code}>{c.code} — {t(c.nameKey)}</option>)}
           </select>
@@ -289,7 +289,7 @@ export function StoreDocumentsPage({
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit" role="group" aria-label={t("storeDocs.col.status")}>
           {(["all", "Draft", "PendingApproval", "Final"] as const).map((s) => (
             <button key={s} onClick={() => setStatus(s)} aria-pressed={status === s}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${status === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${status === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
               {s === "all" ? t("quotation.filterAll") : s === "Draft" ? t("materialRequisition.status.draft") : s === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
             </button>
           ))}
@@ -306,7 +306,7 @@ export function StoreDocumentsPage({
         ) : loaded === "error" ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16">
             <p className="text-sm text-muted-foreground">{t("materialRequisition.loadError")}</p>
-            <button onClick={() => { setLoaded("loading"); setReload((n) => n + 1); }} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40">{t("materialRequisition.retry")}</button>
+            <button onClick={() => { setLoaded("loading"); setReload((n) => n + 1); }} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm">{t("materialRequisition.retry")}</button>
           </div>
         ) : tab === "incoming" ? (
           incoming.length === 0 ? (
@@ -331,7 +331,7 @@ export function StoreDocumentsPage({
                       <tr key={r.id} className={`border-b border-border/50 transition-colors ${highlight === r.id ? "bg-[#c9a84c]/10" : "hover:bg-secondary/30"}`}>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <button onClick={() => setOpen({ kind: "issue", id: r.id })} aria-label={`${t("storeDocs.incoming.view")} ${r.documentNumber}`}
-                            className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 rounded">
+                            className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded">
                             {r.documentNumber}
                           </button>
                         </td>
@@ -345,7 +345,7 @@ export function StoreDocumentsPage({
                         <td className="px-4 py-3.5 text-xs whitespace-nowrap">
                           {slips.length === 0 ? <span className="text-muted-foreground">—</span> : slips.map((m) => (
                             <button key={m.id} onClick={() => setOpen({ kind: "issue", id: m.id })}
-                              className="block font-mono text-[#866d28] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 rounded">
+                              className="block font-mono text-[#866d28] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded">
                               {m.documentNumber || m.id}
                             </button>
                           ))}
@@ -354,7 +354,7 @@ export function StoreDocumentsPage({
                         <td className="px-4 py-3.5 whitespace-nowrap text-right">
                           {canCreate && (
                             <button onClick={() => { setIssueFor(r); setPicker("issue"); }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
                               <PackageMinus size={13} /> {t("storeDocs.incoming.makeSlip")}
                             </button>
                           )}
@@ -385,7 +385,7 @@ export function StoreDocumentsPage({
                   <tr key={`${r.kind}:${r.id}`} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <button onClick={() => setOpen({ kind: r.kind, id: r.id })} aria-label={`${t("storeDocs.openRow")} ${r.number}`}
-                        className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 rounded">
+                        className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded">
                         {r.number}
                       </button>
                     </td>

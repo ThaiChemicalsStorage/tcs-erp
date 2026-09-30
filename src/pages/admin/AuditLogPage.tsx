@@ -39,11 +39,11 @@ export function AuditLogPage({
     <div className="flex-1 overflow-y-auto p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("nav.auditLog")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("nav.auditLog")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("auditLog.totalCount").replace("{n}", String(entries.length))}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div data-tour="audit-search" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
+          <div data-tour="audit-search" className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-full sm:w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("auditLog.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
           </div>
@@ -51,7 +51,7 @@ export function AuditLogPage({
             onClick={tour.start}
             title={t("tour.replay")}
             aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
           </button>

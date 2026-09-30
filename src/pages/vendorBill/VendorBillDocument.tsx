@@ -17,7 +17,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { VendorBillPrintDocument } from "./VendorBillPrintDocument";
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
 const thCls = "px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
 
 function toUpdateFields(d: VendorBill): VendorBillUpdateFields {
@@ -124,7 +124,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
     return (
       <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
         <p className="text-sm text-muted-foreground">{loadError}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("vendorBill.backToList")}</button>
+        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-foreground">{t("vendorBill.backToList")}</button>
       </div>
     );
   }
@@ -196,7 +196,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
     <>
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("vendorBill.backToList")}
           </button>
           <ChevronRight size={13} className="text-muted-foreground" />
@@ -205,13 +205,13 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             {canPrint && (
               <button onClick={() => void handlePrint()} disabled={printing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
                 {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("vendorBill.print")}
               </button>
             )}
             {editable && (
               <button onClick={() => void save()} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("vendorBill.save")}
               </button>
             )}
@@ -237,7 +237,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             />
           )}
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
             <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
               <h1 className="text-[#c9a84c] text-xl font-bold">{t("vendorBill.title")}</h1>
               <p className="text-[#a8bed8] text-xs mt-1">{t("vendorBill.subtitle")}</p>
@@ -271,12 +271,12 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             </div>
           </div>
 
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
             <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("vendorBill.rowsTitle")}</h2>
+              <h2 className="text-sm font-semibold text-foreground">{t("vendorBill.rowsTitle")}</h2>
               {editable && (
                 <button onClick={() => void openAdd()}
-                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
                   <Plus size={13} /> {t("vendorBill.addRows")}
                 </button>
               )}
@@ -335,7 +335,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
           <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setAdding(false)} aria-hidden="true" />
           <div role="dialog" aria-modal="true" aria-label={t("vendorBill.addRows")} className="relative w-full max-w-2xl bg-card border border-border rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
             <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-              <h2 className="flex-1 text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("vendorBill.addRows")}</h2>
+              <h2 className="flex-1 text-base font-semibold text-foreground">{t("vendorBill.addRows")}</h2>
               <button onClick={() => setAdding(false)} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
             </div>
             <div className="p-5 overflow-y-auto flex-1">
@@ -362,7 +362,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
               <button onClick={() => setAdding(false)} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground">{t("common.cancel")}</button>
               <button onClick={confirmAdd} disabled={picked.size === 0}
-                className="px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50">
+                className="px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
                 {t("vendorBill.addSelected").replace("{n}", String(picked.size))}
               </button>
             </div>

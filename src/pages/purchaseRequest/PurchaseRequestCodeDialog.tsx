@@ -36,7 +36,7 @@ export function PurchaseRequestCodeDialog({
       >
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequest.code.pickTitle")}</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("purchaseRequest.code.pickTitle")}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseRequest.code.pickHint")}</p>
           </div>
           <button onClick={onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -63,7 +63,7 @@ export function PurchaseRequestCodeDialog({
           <button
             onClick={() => void submit()}
             disabled={busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60"
           >
             {busy && <Loader2 size={13} className="animate-spin" />} {t("purchaseRequest.code.create")}
           </button>

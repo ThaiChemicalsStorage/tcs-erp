@@ -28,7 +28,7 @@ interface KitRow {
 let kitRowSeq = 0;
 const kitRowKey = () => `kr${++kitRowSeq}`;
 
-const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
 // ฟอร์มสำหรับสร้างหรือแก้ไขข้อมูลสินค้าหนึ่งรายการ
@@ -121,25 +121,25 @@ export function ProductForm({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-        <button onClick={onCancel} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onCancel} className="flex items-center gap-1.5 text-sm text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+        <span className="text-sm text-[#c9a84c] font-medium">
           {mode === "create" ? t("products.addNew") : t("products.form.editTitle").replace("{code}", initial?.code ?? "")}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={onCancel} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+          <button onClick={onCancel} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
             <X size={13} /> {t("common.cancel")}
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
             <Save size={13} /> {t("products.form.save")}
           </button>
         </div>
       </div>
 
       <div className="p-6 max-w-3xl mx-auto">
-        <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="product-code" className={labelCls}>{t("products.form.codeLabel")} <span className="text-[#e05252]">*</span></label>
@@ -184,53 +184,53 @@ export function ProductForm({
           <div>
             <label htmlFor="product-specifications" className={labelCls}>{t("products.form.specLabel")}</label>
             <textarea id="product-specifications" rows={3} className={`${inputCls} resize-none leading-relaxed`} value={specifications} onChange={(e) => setSpecifications(e.target.value)} placeholder={t("products.form.specPlaceholder")} />
-          </div>
+ </div>
 
-          {/* เครื่องมือ (2026-09-03) — สินค้าที่ทีมเบิกไปแล้ว "ถือ" อยู่จนกว่าจะคืน ต่างจากวัสดุสิ้นเปลืองที่ใช้หมด
-              ติ๊กแล้วจะถูกนับในหน้า "เครื่องมือประจำทีม" */}
-          <label className="flex items-start gap-3 rounded-lg border border-border bg-secondary/40 px-3 py-2.5 cursor-pointer">
-            <input type="checkbox" className="mt-0.5 accent-[#c9a84c]" checked={isTool} onChange={(e) => setIsTool(e.target.checked)} />
-            <span className="text-sm text-foreground">
-              {t("products.form.isToolLabel")}
-              <span className="block text-xs text-muted-foreground mt-0.5">{t("products.form.isToolHint")}</span>
-            </span>
-          </label>
+ {/* เครื่องมือ (2026-09-03) — สินค้าที่ทีมเบิกไปแล้ว "ถือ" อยู่จนกว่าจะคืน ต่างจากวัสดุสิ้นเปลืองที่ใช้หมด
+ ติ๊กแล้วจะถูกนับในหน้า "เครื่องมือประจำทีม" */}
+ <label className="flex items-start gap-3 rounded-lg border border-[#c3ccda] bg-white px-3 py-2.5 cursor-pointer">
+ <input type="checkbox" className="mt-0.5 accent-[#c9a84c]" checked={isTool} onChange={(e) => setIsTool(e.target.checked)} />
+ <span className="text-sm text-foreground">
+ {t("products.form.isToolLabel")}
+ <span className="block text-xs text-muted-foreground mt-0.5">{t("products.form.isToolHint")}</span>
+ </span>
+ </label>
 
-          {/* สูตรชุด (2026-09-29) — เบิกชุดแล้วตัดชิ้นส่วนตามสูตร ชุดไม่มีสต๊อกของตัวเอง */}
-          <div className="rounded-lg border border-border px-3 py-3 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2">
-                <Layers size={15} className="mt-0.5 text-[#866d28] shrink-0" />
-                <div>
-                  <p className="text-sm text-foreground">{t("products.kit.title")}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{t("products.kit.hint")}</p>
-                </div>
-              </div>
-              {!isKit && (
-                <button type="button" onClick={() => setKitRows([{ key: kitRowKey(), productId: "", text: "", qty: "1" }])}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                  <Layers size={13} /> {t("products.kit.makeKit")}
-                </button>
-              )}
-            </div>
-            {isKit && (
-              <>
-                <div className="space-y-2">
-                  {kitRows.map((r) => (
-                    <div key={r.key} className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        <Combobox
-                          value={r.text}
-                          onChange={(next) => setKitRow(r.key, { text: next, productId: idByOptionValue.get(next) ?? "" })}
-                          onPick={(opt) => setKitRow(r.key, { text: opt.value, productId: idByOptionValue.get(opt.value) ?? "" })}
-                          options={componentOptions.map((o) => o.option)}
-                          placeholder={t("products.kit.pickPlaceholder")}
-                          ariaLabel={t("products.kit.component")}
-                          className={inputCls}
-                        />
-                      </div>
-                      <div className="w-24 shrink-0">
-                        <input type="number" min={0} step="any" className={`${inputCls} text-right font-mono`} value={r.qty}
+ {/* สูตรชุด (2026-09-29) — เบิกชุดแล้วตัดชิ้นส่วนตามสูตร ชุดไม่มีสต๊อกของตัวเอง */}
+ <div className="rounded-lg border border-[#c3ccda] bg-white px-3 py-3 space-y-3">
+ <div className="flex items-start justify-between gap-3">
+ <div className="flex items-start gap-2">
+ <Layers size={15} className="mt-0.5 text-[#866d28] shrink-0" />
+ <div>
+ <p className="text-sm text-foreground">{t("products.kit.title")}</p>
+ <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{t("products.kit.hint")}</p>
+ </div>
+ </div>
+ {!isKit && (
+ <button type="button" onClick={() => setKitRows([{ key: kitRowKey(), productId: "", text: "", qty: "1" }])}
+ className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
+ <Layers size={13} /> {t("products.kit.makeKit")}
+ </button>
+ )}
+ </div>
+ {isKit && (
+ <>
+ <div className="space-y-2">
+ {kitRows.map((r) => (
+ <div key={r.key} className="flex items-center gap-2">
+ <div className="flex-1 min-w-0">
+ <Combobox
+ value={r.text}
+ onChange={(next) => setKitRow(r.key, { text: next, productId: idByOptionValue.get(next) ?? "" })}
+ onPick={(opt) => setKitRow(r.key, { text: opt.value, productId: idByOptionValue.get(opt.value) ?? "" })}
+ options={componentOptions.map((o) => o.option)}
+ placeholder={t("products.kit.pickPlaceholder")}
+ ariaLabel={t("products.kit.component")}
+ className={inputCls}
+ />
+ </div>
+ <div className="w-24 shrink-0">
+ <input type="number" min={0} step="any" className={`${inputCls} text-right font-mono`} value={r.qty}
                           aria-label={t("products.kit.qtyPerKit")} title={t("products.kit.qtyPerKit")}
                           onChange={(e) => setKitRow(r.key, { qty: e.target.value })} />
                       </div>

@@ -10,6 +10,9 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Current Phase
 
+**REDESIGN in progress (from 2026-09-30).** The owner approved the redesign canvas and asked for it to be built in
+8 phases (see TODO.md "REDESIGN"). Phase 1 — the shared foundation, navigation, topbar, dialogs — is done.
+
 **Real full-stack app, deployed and live in production.** Vite + React frontend, Node.js backend, self-hosted MongoDB database. **Since the ~2026-08-07 cutover, the primary and only runtime is a standalone Express server (`server/`, `npm start`) on a self-hosted VPS** with its own domain + HTTPS — the pre-cutover Vercel demo is gone, and every Vercel artifact was removed from the repo 2026-09-14. See [ARCHITECTURE.md](./ARCHITECTURE.md), [DEPLOYMENT.md](./DEPLOYMENT.md), and [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md).
 
 ## Completed Features

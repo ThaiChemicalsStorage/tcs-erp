@@ -84,17 +84,17 @@ export function AccountingDashboardView() {
           value={preset}
           onChange={(e) => applyPreset(e.target.value as DateRangePreset)}
           aria-label={t("accountingDashboard.filter.dateRangeLabel")}
-          className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-md px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
         >
           {PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
         </select>
         {preset === "custom" && (
           <div className="flex items-center gap-1.5">
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t("accountingDashboard.filter.fromDateLabel")}
-              className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
+              className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-md px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors font-mono" />
             <span className="text-xs text-muted-foreground">—</span>
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("accountingDashboard.filter.toDateLabel")}
-              className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
+              className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-md px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors font-mono" />
           </div>
         )}
         <div className="flex items-center gap-1.5 text-muted-foreground pl-2"><Users size={13} /></div>
@@ -102,7 +102,7 @@ export function AccountingDashboardView() {
           value={salesperson}
           onChange={(e) => setSalesperson(e.target.value)}
           aria-label={t("accountingDashboard.filter.salespersonLabel")}
-          className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          className="text-xs text-foreground bg-white border border-[#c3ccda] rounded-md px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
         >
           <option value="">{t("accountingDashboard.filter.allSalespeople")}</option>
           {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -116,7 +116,7 @@ export function AccountingDashboardView() {
       ) : loadError || !stats ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16">
           <p className="text-sm text-muted-foreground">{t("accountingDashboard.error.loadFailed")}</p>
-          <button onClick={() => setRetryToken((n) => n + 1)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">{t("accountingDashboard.error.retry")}</button>
+          <button onClick={() => setRetryToken((n) => n + 1)} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">{t("accountingDashboard.error.retry")}</button>
         </div>
       ) : !stats.hasAnyData ? (
         <EmptyState icon={Wallet} title={t("accountingDashboard.empty.title")} description={t("accountingDashboard.empty.description")} />
@@ -183,7 +183,7 @@ function AgingTable({ invoices }: { invoices: ArDashboardStats["aging"]["invoice
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border">
-        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accountingDashboard.agingTable.title")}</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("accountingDashboard.agingTable.title")}</h2>
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("accountingDashboard.agingTable.sub")}</p>
       </div>
       {invoices.length === 0 ? (
@@ -235,7 +235,7 @@ function TopCustomersTable({ customers }: { customers: ArDashboardStats["topCust
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border">
-        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accountingDashboard.topCustomers.title")}</h2>
+        <h2 className="text-base font-semibold text-foreground">{t("accountingDashboard.topCustomers.title")}</h2>
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("accountingDashboard.topCustomers.sub")}</p>
       </div>
       {customers.length === 0 ? (

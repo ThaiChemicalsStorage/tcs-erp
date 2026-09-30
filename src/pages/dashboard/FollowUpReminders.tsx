@@ -30,7 +30,7 @@ export function FollowUpReminders({ followUps, onOpenClient, vatMode }: { follow
 
   return (
     <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-1 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+      <h2 className="text-base font-semibold text-foreground mb-1 flex items-center gap-1.5">
         <CalendarClock size={15} /> {t("dashboard.followUps.title")}
       </h2>
       <p className="text-[10px] text-muted-foreground mb-3">{`${t("dashboard.followUps.amountNote")} ${vatSuffix}`}</p>

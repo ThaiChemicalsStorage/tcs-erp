@@ -73,9 +73,9 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
       <div className="w-14 h-14 rounded-xl bg-[#e05252]/10 flex items-center justify-center mb-4">
         <AlertTriangle size={22} className="text-[#e05252]" />
       </div>
-      <p className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.error.title")}</p>
+      <p className="text-base font-semibold text-foreground">{t("dashboard.error.title")}</p>
       <p className="text-sm text-muted-foreground mt-1.5 max-w-sm">{t("dashboard.error.sub")}</p>
-      <button onClick={onRetry} className="mt-4 flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+      <button onClick={onRetry} className="mt-4 flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
         <RotateCw size={14} /> {t("dashboard.error.retry")}
       </button>
     </div>

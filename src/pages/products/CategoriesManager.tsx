@@ -104,11 +104,11 @@ export function CategoriesManager({
             <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
           </button>
           <ChevronRight size={13} className="text-muted-foreground" />
-          <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("products.manageCategories")}</span>
+          <span className="text-sm text-[#c9a84c] font-medium">{t("products.manageCategories")}</span>
         </div>
       ) : (
         <div className="px-6 pt-6 max-w-2xl mx-auto">
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("products.manageCategories")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("products.manageCategories")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("products.categories.pageSubtitle")}</p>
         </div>
       )}
@@ -116,7 +116,7 @@ export function CategoriesManager({
       <div className="p-6 max-w-2xl mx-auto space-y-5">
         {canManage && (
         <div className="bg-card border border-border rounded-xl p-5">
-          <h2 id="categories-addNew-heading" className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id="categories-addNew-heading" className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5">
             <Tags size={13} /> {t("products.categories.addNewTitle")}
           </h2>
           <div className="flex items-center gap-2">
@@ -126,9 +126,9 @@ export function CategoriesManager({
               onChange={(e) => { setNewName(e.target.value); setError(""); }}
               onKeyDown={(e) => e.key === "Enter" && addCategory()}
               placeholder={t("products.categories.namePlaceholder")}
-              className="flex-1 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
             />
-            <button onClick={addCategory} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={addCategory} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
               <Plus size={14} /> {t("common.add")}
             </button>
           </div>
@@ -149,7 +149,7 @@ export function CategoriesManager({
                     value={editingName}
                     onChange={(e) => setEditingName(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-                    className="flex-1 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+                    className="flex-1 text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
                   />
                   <button onClick={saveEdit} className="p-1.5 text-[#2aa36b] hover:bg-[#2aa36b]/10 rounded-lg transition-colors"><Check size={15} /></button>
                   <button onClick={() => setEditingId(null)} className="p-1.5 text-muted-foreground hover:bg-secondary rounded-lg transition-colors"><X size={15} /></button>

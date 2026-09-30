@@ -83,7 +83,7 @@ export function PasswordResetRequestsPage() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("nav.passwordResets")}</h1>
+        <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("nav.passwordResets")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5">{t("passwordResets.subtitle")}</p>
       </div>
 
@@ -95,11 +95,11 @@ export function PasswordResetRequestsPage() {
       ) : status === "error" ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16">
           <p className="text-sm text-muted-foreground">{t("passwordResets.loadError")}</p>
-          <button onClick={() => { setStatus("loading"); setReload((n) => n + 1); }} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40">{t("passwordResets.retry")}</button>
+          <button onClick={() => { setStatus("loading"); setReload((n) => n + 1); }} className="px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm">{t("passwordResets.retry")}</button>
         </div>
       ) : (
         <>
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <section className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border">
               <KeyRound size={15} className="text-[#a75d1a]" />
               <h2 className="text-sm font-semibold text-foreground">{t("passwordResets.pendingTitle")}</h2>
@@ -134,7 +134,7 @@ export function PasswordResetRequestsPage() {
                               {t("passwordResets.dismiss")}
                             </button>
                             <button onClick={() => setConfirmIssue(r)} disabled={busy}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50">
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
                               <KeyRound size={13} /> {t("passwordResets.issue")}
                             </button>
                           </div>
@@ -226,7 +226,7 @@ function IssuedPasswordDialog({ request, password, onClose }: { request: Passwor
       <div ref={panelRef} role="dialog" aria-modal="true" aria-label={t("passwordResets.issued.title")}
         className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-xl overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <h2 className="flex-1 text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("passwordResets.issued.title")}</h2>
+          <h2 className="flex-1 text-base font-semibold text-foreground">{t("passwordResets.issued.title")}</h2>
           <button onClick={onClose} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -234,14 +234,14 @@ function IssuedPasswordDialog({ request, password, onClose }: { request: Passwor
           <div className="flex items-center gap-2">
             <code className="flex-1 text-center text-xl tracking-widest font-mono font-semibold text-[#0b1d3a] bg-[#c9a84c]/15 border border-[#c9a84c]/40 rounded-lg px-3 py-3 select-all">{password}</code>
             <button onClick={() => void copy()} aria-label={t("passwordResets.issued.copy")} title={t("passwordResets.issued.copy")}
-              className="flex items-center justify-center w-11 h-11 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-colors">
+              className="flex items-center justify-center w-11 h-11 border border-[#c3ccda] bg-white rounded-lg text-muted-foreground hover:text-foreground hover:bg-[#f4f6fa] transition-colors">
               {copied ? <Check size={16} className="text-[#207e52]" /> : <Copy size={16} />}
             </button>
           </div>
           <p className="text-xs text-[#a75d1a] bg-[#e08a3c]/10 border border-[#e08a3c]/20 rounded-lg px-3 py-2.5">{t("passwordResets.issued.warning")}</p>
         </div>
         <div className="flex justify-end px-5 py-3 border-t border-border">
-          <button onClick={onClose} className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <button onClick={onClose} className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
             {t("passwordResets.issued.done")}
           </button>
         </div>

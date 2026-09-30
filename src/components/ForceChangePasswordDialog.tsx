@@ -38,14 +38,14 @@ export function ForceChangePasswordDialog({ user, onChanged, onSignOut }: {
     }
   };
 
-  const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors";
+  const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#0b1d3a]/60" aria-hidden="true" />
       <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby={ids.title}
         className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
-          <h2 id={ids.title} className="flex items-center gap-2 text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id={ids.title} className="flex items-center gap-2 text-base font-semibold text-foreground">
             <KeyRound size={16} className="text-[#a75d1a]" /> {t("forcePassword.title")}
           </h2>
           <p className="text-xs text-muted-foreground mt-1">{t("forcePassword.subtitle")}</p>
@@ -70,7 +70,7 @@ export function ForceChangePasswordDialog({ user, onChanged, onSignOut }: {
             <LogOut size={13} /> {t("forcePassword.signOut")}
           </button>
           <button type="submit" disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
             {saving && <Loader2 size={13} className="animate-spin" />} {t("forcePassword.submit")}
           </button>
         </div>
