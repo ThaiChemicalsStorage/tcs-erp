@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, Loader2, PackageCheck, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  AlertTriangle, CheckCircle2, ClipboardList, Clock, Loader2, Lock, PackageCheck, Plus, Printer, Save, Send, Trash2, Undo2, UserCheck, X,
+} from "lucide-react";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
@@ -13,11 +15,16 @@ import {
   postStoreReceipt, logStoreReceiptPrinted, blankStoreReceiptLine,
 } from "../../lib/storeReceipt";
 import { storeReceiptCodeInfo, type StoreReceiptCode } from "../../lib/storeCodes";
-import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
-import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
+import { useUserDirectory } from "../../lib/userDirectory";
+import { RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { DocumentColumns, DocumentHeader, DocumentStepper, NextStepHint, RailCard } from "../../components/ui/DocumentLayout";
+import { SectionCard } from "../../components/ui/SectionCard";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -27,10 +34,11 @@ import { StoreReceiptPrintDocument } from "./StoreReceiptPrintDocument";
 import { RequisitionSourcePicker } from "./RequisitionSourcePicker";
 import { KitBreakdown } from "../../components/KitBreakdown";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
-
-const inputCls = "w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70";
-const cellInputCls = "w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
-const thCls = "px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
+import { useApprovalFlow } from "../purchaseRequest/useApprovalFlow";
+import { rejectButtonClass } from "../purchaseRequest/docShared";
+import { useApprovalHint } from "../project/projectUi";
+import { Pill, RailSummaryCard, SummaryLine, Tag, type PillTone } from "../receivingReport/receivingUi";
+import { countReturningLines, storeReceiptStepIndex } from "./storeDocsFormat";
 
 /** payload เดียวของปุ่มบันทึกและบันทึกอัตโนมัติ — ช่องที่เซิร์ฟเวอร์เขียนเอง (สถานะ/รับเข้าคลัง) ไม่อยู่ในนี้ */
 function toUpdateFields(d: StoreReceipt): StoreReceiptUpdateFields {
@@ -48,10 +56,19 @@ const REFERENCE_LABEL_KEY = {
   GC: "storeReceipt.field.referenceGC", JN: "storeReceipt.field.referenceJN",
 } as const;
 
+const STATUS_TONE: Record<StoreReceipt["status"], PillTone> = { Draft: "grey", PendingApproval: "amber", Final: "blue" };
+
+/** ช่องในตาราง: กรอกได้ = กล่อง 36px ชิดขวา · ขอบแดงเมื่อเกินยอด (คงคลาส e05252 ไว้ให้กฎช่องกรอกของหน้าเอกสารไม่ทับ) */
+const cellInput = (bad = false) =>
+  `${field.cell} w-full max-w-[140px] ml-auto block text-right tabular-nums ${bad ? "border-[#e05252] focus:border-[#e05252]" : ""}`;
+
 /**
- * หน้าใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23) — โครงเดียวกับหน้าใบเบิก (แถบเครื่องมือ · ขั้นสถานะ ·
- * การ์ดหัวใบแถบกรมท่า · รายการ · การ์ดสโตร์ขอบเขียว · ผู้เกี่ยวข้อง) ต่างกันที่หัวใบและตารางรายการ
- * เปลี่ยนไปตามพฤติกรรมของรหัส (คืน / รับเข้า / ปรับยอด) ดู `src/lib/storeReceipt.ts`
+ * หน้าใบรับคืน / รับเข้าคลังของสโตร์ (2026-09-23) — หัวใบและตารางรายการเปลี่ยนไปตามพฤติกรรมของรหัส
+ * (คืน / รับเข้า / ปรับยอด) ดู `src/lib/storeReceipt.ts`
+ *
+ * ดีไซน์ใหม่ 2026-09-30 (แบบหน้าใบเบิกของสโตร์): หัวเอกสารสีขาวมีปุ่มทั้งหมด (ปุ่มหลักมุมขวาเปลี่ยนตามขั้น — ส่งขออนุมัติ /
+ * อนุมัติ / **บันทึกรับเข้าคลัง** เมื่ออนุมัติแล้ว) · แถบ 4 ขั้น (เพิ่มขั้น "รับเข้าคลังแล้ว") · ข้อมูลเอกสารซ้าย การ์ดสรุปรหัส
+ * การอนุมัติ การ์ดรับเข้าคลัง และ "ขั้นต่อไป" ขวา · รายการเต็มความกว้างด้านล่าง
  */
 export function StoreReceiptDocument({
   storeReceiptId, canEdit, canApprove, canPost, canPrint, canDelete, companyHeader, onBack, showToast,
@@ -68,6 +85,7 @@ export function StoreReceiptDocument({
   showToast: (message: string) => void;
 }) {
   const { t } = useI18n();
+  const { byId } = useUserDirectory();
   // สินค้าชุด (2026-09-29) — คืนชุด = คืนชิ้นส่วน · รับเข้า/ปรับยอดเป็นชุดไม่ได้ (เซิร์ฟเวอร์ปฏิเสธ) จึงเตือนตั้งแต่บรรทัด
   const kits = useKitRecipes();
   const [doc, setDoc] = useState<StoreReceipt | null>(null);
@@ -177,25 +195,65 @@ export function StoreReceiptDocument({
     return () => window.removeEventListener("afterprint", reset);
   }, [showPrint]);
 
-  if (loadError) {
+  const onStatusChanged = (updated: StoreReceipt) => {
+    setDoc(updated);
+    setDraft(updated);
+    dirty.markSaved(toUpdateFields(updated));
+  };
+
+  // ── ขั้นอนุมัติ / ข้อความ "ขั้นต่อไป" — เป็น hook จึงต้องอยู่เหนือ early return ─────────────────────
+  // ตรรกะเดียวกับ DocumentApprovalActions เดิมทุกประการ แค่ปุ่มถูกวางตามดีไซน์ใหม่ (ปุ่มหลักมุมขวา)
+  const posted = !!doc?.postedAt;
+  const codeName = info ? t(info.nameKey) : "";
+  const docNumber = draft ? draft.documentNumber || draft.id : "";
+  const chargeText = draft ? [draft.chargeDepartmentName, draft.chargeTeamName].filter(Boolean).join(" / ") : "";
+  const itemCountText = t("ui.itemCount").replace("{n}", String(draft?.lines.length ?? 0));
+  const approval = useApprovalFlow<StoreReceipt>({
+    status: doc?.status ?? "Draft",
+    canEdit,
+    canApprove,
+    onSubmit: async () => { if (dirty.isDirtyNow()) await save(); return submitStoreReceiptApproval(doc?.id ?? ""); },
+    onApprove: () => approveStoreReceipt(doc?.id ?? ""),
+    onReject: (c) => rejectStoreReceipt(doc?.id ?? "", c),
+    onWithdraw: () => withdrawStoreReceiptApproval(doc?.id ?? ""),
+    onUpdated: onStatusChanged,
+    showToast,
+    summary: <SummaryLine title={docNumber} sub={[codeName, chargeText].filter(Boolean).join(" · ")} right={itemCountText} />,
+  });
+  const approvalHint = useApprovalHint({
+    status: doc?.status ?? "Draft",
+    approverLabel: t("storeReceipt.approverLabel"),
+    rejectionComment: doc?.rejectionComment ?? "",
+    approvedByUserId: doc?.approvedByUserId,
+    approvedByName: doc?.approvedBy ?? "",
+    approvedAt: doc?.approvedAt ?? "",
+    // ใบรับคืนไม่มีฉบับแก้ไข — ข้อความของขั้นอนุมัติแล้วจึงบอกเรื่องรับเข้าคลังแทน
+    finalHint: posted ? t("storeReceipt.finalHintPosted") : canPost ? t("storeReceipt.finalHintAwaiting") : t("storeReceipt.finalHintAwaitingNoPerm"),
+  });
+
+  if (loadError || !doc || !draft || !info) {
     return (
-      <div className="flex-1 p-6 flex flex-col items-center justify-center gap-3">
-        <p className="text-sm text-muted-foreground">{loadError}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("storeReceipt.backToList")}</button>
-      </div>
-    );
-  }
-  if (!doc || !draft || !info) {
-    return (
-      <div className="flex-1 p-6" role="status" aria-live="polite">
-        <span className="sr-only">{t("storeReceipt.loading")}</span>
-        <div className="h-8 w-64 bg-muted rounded animate-pulse mb-4" />
-        <div className="h-64 bg-muted rounded-xl animate-pulse" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-20">
+          <DocumentHeader backLabel={t("storeReceipt.backToList")} onBack={onBack} number={t("storeReceipt.title")} mono={false} />
+        </div>
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+            <AlertTriangle size={20} className="text-[#b93636]" />
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <button type="button" onClick={onBack} className={btn.secondary}>{t("storeReceipt.backToList")}</button>
+          </div>
+        ) : (
+          <div className="px-4 md:px-8 py-6 flex flex-col gap-5" role="status" aria-live="polite">
+            <span className="sr-only">{t("storeReceipt.loading")}</span>
+            <div className="h-14 bg-muted rounded-xl animate-pulse" />
+            <div className="h-64 bg-muted rounded-xl animate-pulse" />
+          </div>
+        )}
       </div>
     );
   }
 
-  const posted = !!doc.postedAt;
   const set = (patch: Partial<StoreReceipt>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const setLine = (id: string, patch: Partial<StoreReceiptLine>) =>
     setDraft((d) => (d ? { ...d, lines: d.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) } : d));
@@ -252,69 +310,160 @@ export function StoreReceiptDocument({
     }
   };
 
-  const onStatusChanged = (updated: StoreReceipt) => {
-    setDoc(updated);
-    setDraft(updated);
-    dirty.markSaved(toUpdateFields(updated));
+  const addProducts = (picked: Product[]) => {
+    if (picked.length === 0) return;
+    setDraft((d) => (d ? {
+      ...d,
+      lines: [...d.lines, ...picked.map((p) => ({ ...blankStoreReceiptLine(), productId: p.id, productCode: p.code, productName: p.name, unit: p.unit }))],
+    } : d));
+    setStockByProduct((s) => ({ ...s, ...Object.fromEntries(picked.map((p) => [p.id, p.stockQty])) }));
   };
 
-  const statusPill = doc.status === "Draft"
-    ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
-    : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20";
+  const statusText = doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final");
   const linesTitle = kind === "return" ? t("storeReceipt.lines.return") : kind === "adjust" ? t("storeReceipt.lines.adjust") : t("storeReceipt.lines.receive");
   const targetLabel = code === "TK" ? t("storeReceipt.col.targetTK") : t("storeReceipt.col.targetJU");
+  const canPostNow = doc.status === "Final" && !posted && canPost;
+  const returning = countReturningLines(draft.lines);
+  const sourceCandidate = candidates.find((c) => c.id === draft.sourceRequisitionId);
+  const deptLabel = (d: StoreReceiptSourceCandidate["ownerDepartment"]) =>
+    d === "production" ? t("storeIssue.dept.production") : d === "store" ? t("storeIssue.dept.store") : t("storeIssue.dept.project");
+  const sourceHint = (c: StoreReceiptSourceCandidate) =>
+    [deptLabel(c.ownerDepartment), c.jobCode, c.storeReference, [c.chargeDepartmentName, c.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ");
+  const approverName = doc.approvedBy.trim() || byId(doc.approvedByUserId)?.fullName || "";
+
+  /** ช่องข้อความ: กรอกได้ = กล่อง · กรอกไม่ได้ = ข้อความธรรมดา (วันที่เป็นแบบไทย) */
+  const textField = (id: string, label: string, value: string, onChange: (v: string) => void, opts: {
+    type?: "date"; mono?: boolean; className?: string; help?: ReactNode; readonlyHelp?: ReactNode; required?: boolean; placeholder?: string;
+  } = {}) => (editable ? (
+    <Field label={label} htmlFor={id} required={opts.required} help={opts.help} className={opts.className}>
+      <input id={id} type={opts.type ?? "text"} value={value} placeholder={opts.placeholder} onChange={(e) => onChange(e.target.value)}
+        className={`${field.input} w-full ${opts.mono ? "font-mono" : ""}`} />
+    </Field>
+  ) : (
+    <div className={`flex flex-col gap-0.5 min-w-0 ${opts.className ?? ""}`}>
+      <ReadonlyField label={label} value={opts.type === "date" && value ? formatQuoteDateThai(value) : value} mono={opts.mono} />
+      {opts.readonlyHelp && <span className="text-xs text-muted-foreground">{opts.readonlyHelp}</span>}
+    </div>
+  ));
+
+  const documentNumberField = textField("sr-documentNumber", t("storeReceipt.field.documentNumber"), draft.documentNumber, (v) => set({ documentNumber: v }), {
+    mono: true,
+    help: t("storeReceipt.field.documentNumberHint").replace("{id}", doc.id),
+    readonlyHelp: draft.documentNumber && draft.documentNumber !== doc.id ? `${t("materialRequisitionDoc.systemNumber")} ${doc.id}` : undefined,
+  });
+  const receivedDateField = textField("sr-receivedDate", t("storeReceipt.field.receivedDate"), draft.receivedDate, (v) => set({ receivedDate: v }), { type: "date" });
+  const receivedByField = textField("sr-receivedBy", t("storeReceipt.field.receivedBy"), draft.receivedBy, (v) => set({ receivedBy: v }));
+
+  const signers = ([
+    ["preparedBy", "preparedAt", t("materialRequisitionDoc.field.preparedBy")],
+    ["approvedBy", "approvedAt", t("materialRequisitionDoc.field.approvedBy")],
+    ["storeDeptBy", "storeDeptAt", t("materialRequisitionDoc.field.storeDeptBy")],
+    ["costDeptBy", "costDeptAt", t("materialRequisitionDoc.field.costDeptBy")],
+  ] as const);
+  const signatories = editable ? (
+    <SectionCard title={t("storeReceipt.signatories")}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        {signers.map(([nameField, dateField, label]) => (
+          <div key={nameField} className="flex flex-col gap-3 min-w-0">
+            <Field label={label} htmlFor={`sr-${nameField}`}>
+              <input id={`sr-${nameField}`} value={draft[nameField]} onChange={(e) => set({ [nameField]: e.target.value })} className={`${field.input} w-full`} />
+            </Field>
+            <Field label={t("materialRequisitionDoc.field.date")} htmlFor={`sr-${dateField}`}>
+              <input id={`sr-${dateField}`} type="date" value={draft[dateField]} onChange={(e) => set({ [dateField]: e.target.value })} className={`${field.input} w-full`} />
+            </Field>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  ) : (
+    <SectionCard title={t("storeReceipt.signatories")}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+        {signers.map(([nameField, dateField, label]) => (
+          <div key={nameField} className="flex flex-col gap-0.5 min-w-0">
+            <ReadonlyField label={label} value={draft[nameField]} />
+            {draft[dateField] && <span className="text-xs text-muted-foreground">{formatQuoteDateThai(draft[dateField])}</span>}
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  const numTd = `${table.td} py-2.5 text-right tabular-nums text-sm whitespace-nowrap`;
+  const lineHeads: { label: string; right?: boolean }[] = kind === "return"
+    ? [{ label: t("storeReceipt.col.issued"), right: true }, { label: t("storeReceipt.col.returned"), right: true }, { label: t("storeReceipt.col.returnNow"), right: true }]
+    : kind === "receive"
+    ? [{ label: t("storeReceipt.col.inStock"), right: true }, { label: t("storeReceipt.col.qty"), right: true }, { label: t("storeReceipt.col.unitCost"), right: true }]
+    : [{ label: t("storeReceipt.col.inStock"), right: true }, { label: targetLabel, right: true }, { label: t("storeReceipt.col.diff"), right: true }];
+  const showRemove = editable && kind !== "return";
 
   return (
     <>
       <div className="doc-form flex-1 overflow-y-auto print:hidden">
-        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap">
-          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronRight size={14} className="rotate-180" /> {t("storeReceipt.backToList")}
-          </button>
-          <ChevronRight size={13} className="text-muted-foreground" />
-          <span className="text-sm text-[#866d28] font-mono font-semibold">{draft.documentNumber || draft.id}</span>
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusPill}`}>
-            {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
-          </span>
-          {doc.status === "Final" && (
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${posted ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"}`}>
-              {posted ? t("storeDocs.posted") : t("storeDocs.awaitingPost")}
-            </span>
-          )}
-          <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-            {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
-            {canPrint && (
-              <button onClick={() => void handlePrint()} disabled={printing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all disabled:opacity-60">
-                {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("storeReceipt.print")}
-              </button>
-            )}
-            {editable && (
-              <button onClick={() => void save()} disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("storeReceipt.save")}
-              </button>
-            )}
-            <DocumentApprovalActions
-              status={doc.status}
-              canEdit={canEdit}
-              canApprove={canApprove}
-              onSubmit={async () => { if (dirty.isDirtyNow()) await save(); return submitStoreReceiptApproval(doc.id); }}
-              onApprove={() => approveStoreReceipt(doc.id)}
-              onReject={(c) => rejectStoreReceipt(doc.id, c)}
-              onWithdraw={() => withdrawStoreReceiptApproval(doc.id)}
-              onUpdated={onStatusChanged}
-              showToast={showToast}
-            />
-            {canDelete && !posted && (
-              <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
-                <Trash2 size={13} /> {t("storeReceipt.delete")}
-              </button>
-            )}
-          </div>
+        <div className="sticky top-0 z-20">
+          <DocumentHeader
+            backLabel={t("storeReceipt.backToList")}
+            onBack={() => requestLeave(onBack)}
+            number={docNumber}
+            status={
+              <span className="flex items-center gap-2 flex-wrap">
+                {docNumber !== doc.id && <span className="font-mono text-[13px] text-muted-foreground" title={t("materialRequisitionDoc.systemNumber")}>{doc.id}</span>}
+                <Pill tone={STATUS_TONE[doc.status]} label={statusText} />
+                {doc.status === "Final" && <Tag tone={posted ? "green" : "amber"}>{posted ? t("storeDocs.posted") : t("storeDocs.awaitingPost")}</Tag>}
+              </span>
+            }
+            meta={editable
+              ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
+              : doc.status !== "Draft" ? <><Lock size={14} aria-hidden="true" /> {t("storeReceipt.lockedMeta")}</> : undefined}
+            actions={
+              <>
+                {canPrint && (
+                  <button type="button" onClick={() => void handlePrint()} disabled={printing} className={btn.secondary}>
+                    {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("storeReceipt.print")}
+                  </button>
+                )}
+                <MoreMenu
+                  items={[
+                    approval.canWithdraw && approval.canDecide && {
+                      key: "withdraw", label: t("approval.withdraw"), icon: Undo2, disabled: approval.busy !== null, onSelect: approval.withdraw,
+                    },
+                    canDelete && !posted && { key: "delete", label: t("storeReceipt.deleteConfirm.title"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+                  ]}
+                />
+                {/* ปุ่มบันทึกร่างคงไว้ตามที่เจ้าของสั่ง (2026-09-30) แม้มีบันทึกอัตโนมัติ */}
+                {editable && (
+                  <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("storeReceipt.save")}
+                  </button>
+                )}
+                {approval.canWithdraw && !approval.canDecide && (
+                  <button type="button" onClick={approval.withdraw} disabled={approval.busy !== null} className={btn.secondary}>
+                    {approval.busy === "withdraw" ? <Loader2 size={16} className="animate-spin" /> : <Undo2 size={16} />} {t("approval.withdraw")}
+                  </button>
+                )}
+                {approval.canDecide && (
+                  <>
+                    <button type="button" onClick={approval.reject} disabled={approval.busy !== null} className={rejectButtonClass}>{t("approval.reject")}</button>
+                    <button type="button" onClick={approval.approve} disabled={approval.busy !== null} className={btn.primary}>
+                      <CheckCircle2 size={16} /> {t("approval.approve")}
+                    </button>
+                  </>
+                )}
+                {approval.canSubmit && (
+                  <button type="button" onClick={approval.submit} disabled={approval.busy !== null} className={btn.primary}>
+                    {approval.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
+                  </button>
+                )}
+                {canPostNow && (
+                  <button type="button" onClick={() => setConfirmPost(true)} disabled={posting} className={btn.primary}>
+                    {posting ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />} {t("storeReceipt.postBtn")}
+                  </button>
+                )}
+              </>
+            }
+          />
         </div>
 
-        <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto">
+        <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
           {editable && draftBackup.recovered && draftBackup.recoveredAt !== null && (
             <DraftRecoveryBanner
               savedAt={draftBackup.recoveredAt}
@@ -330,198 +479,254 @@ export function StoreReceiptDocument({
               onDiscard={draftBackup.dismiss}
             />
           )}
-          <DocumentStatusStepper
-            status={doc.status}
-            rejectionComment={doc.rejectionComment ?? ""}
-            approverLabel={t("storeReceipt.approverLabel")}
-            approvedByUserId={doc.approvedByUserId}
-            approvedByName={doc.approvedBy}
-            approvedAt={doc.approvedAt}
+
+          <DocumentStepper
+            steps={[
+              { label: t("approval.step.draft") },
+              { label: t("approval.step.pending") },
+              { label: t("approval.step.final") },
+              { label: t("storeDocs.posted") },
+            ]}
+            current={storeReceiptStepIndex(doc.status, posted)}
+            ariaLabel={t("storeReceipt.stepsAria")}
           />
           <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
-          <div className="bg-card border border-[#c3ccda] bg-white rounded-xl overflow-hidden">
-            <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-              <h1 className="text-[#c9a84c] text-xl font-bold">{t("storeReceipt.title")}</h1>
-              <p className="text-[#a8bed8] text-xs mt-1">
-                {t("storeReceipt.codeLabel")} <span className="font-mono font-semibold text-[#c9a84c]">{info.code}</span> · {t(info.nameKey)}
-                {info.pair && ` · ${t("storeReceipt.pairHint").replace("{code}", info.pair)}`}
-              </p>
-            </div>
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="sr-documentNumber" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.documentNumber")}</label>
-                <input id="sr-documentNumber" disabled={!editable} value={draft.documentNumber} onChange={(e) => set({ documentNumber: e.target.value })} className={`${inputCls} font-mono`} />
-                <p className="text-xs text-muted-foreground mt-1">{t("storeReceipt.field.documentNumberHint").replace("{id}", doc.id)}</p>
-              </div>
-              <div>
-                <label htmlFor="sr-receivedDate" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.receivedDate")}</label>
-                <input id="sr-receivedDate" type="date" disabled={!editable} value={draft.receivedDate} onChange={(e) => set({ receivedDate: e.target.value })} className={`${inputCls} font-mono`} />
-              </div>
+          <DocumentColumns
+            main={
+              <>
+                <SectionCard title={t("storeReceipt.infoTitle")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px] items-start">
+                    {kind === "return" && (
+                      editable ? (
+                        <Field className="sm:col-span-2" label={t("storeReceipt.field.source").replace("{code}", info.pair ?? "")} htmlFor="sr-source"
+                          help={t("storeReceipt.field.sourceHint").replace("{code}", info.pair ?? "")}>
+                          <RequisitionSourcePicker
+                            key={draft.sourceRequisitionId}
+                            inputId="sr-source"
+                            selectedId={draft.sourceRequisitionId}
+                            selectedNumber={draft.sourceRequisitionNumber}
+                            disabled={false}
+                            placeholder={t("storeDocs.sourceSearch")}
+                            onSelect={(id) => void chooseSource(id)}
+                            options={candidates.map((c) => ({ id: c.id, number: c.documentNumber, hint: sourceHint(c) }))}
+                          />
+                        </Field>
+                      ) : (
+                        <div className="sm:col-span-2 flex items-center gap-3 min-w-0">
+                          <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0">
+                            <ClipboardList size={18} />
+                          </span>
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="text-xs text-muted-foreground">{t("storeReceipt.field.source").replace("{code}", info.pair ?? "")}</span>
+                            <span className="text-sm font-medium text-foreground truncate">
+                              {draft.sourceRequisitionNumber
+                                ? <span className="font-mono">{draft.sourceRequisitionNumber}</span>
+                                : <span className="text-[#8a97ad]">—</span>}
+                              {sourceCandidate && <span className="text-muted-foreground font-normal"> · {sourceHint(sourceCandidate)}</span>}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    )}
 
-              {kind === "return" && (
-                <>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="sr-source" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.source").replace("{code}", info.pair ?? "")}</label>
-                    <RequisitionSourcePicker
-                      key={draft.sourceRequisitionId}
-                      inputId="sr-source"
-                      selectedId={draft.sourceRequisitionId}
-                      selectedNumber={draft.sourceRequisitionNumber}
-                      disabled={!editable}
-                      placeholder={t("storeDocs.sourceSearch")}
-                      onSelect={(id) => void chooseSource(id)}
-                      options={candidates.map((c) => ({
-                        id: c.id,
-                        number: c.documentNumber,
-                        hint: [
-                          c.ownerDepartment === "production" ? t("storeIssue.dept.production") : c.ownerDepartment === "store" ? t("storeIssue.dept.store") : t("storeIssue.dept.project"),
-                          c.jobCode, c.storeReference, [c.chargeDepartmentName, c.chargeTeamName].filter(Boolean).join(" / "),
-                        ].filter(Boolean).join(" · "),
-                      }))}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">{t("storeReceipt.field.sourceHint").replace("{code}", info.pair ?? "")}</p>
-                  </div>
-                  <div>
-                    <label htmlFor="sr-returnedBy" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.returnedBy")}</label>
-                    <input id="sr-returnedBy" disabled={!editable} value={draft.returnedBy} onChange={(e) => set({ returnedBy: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <label htmlFor="sr-receivedBy" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.receivedBy")}</label>
-                    <input id="sr-receivedBy" disabled={!editable} value={draft.receivedBy} onChange={(e) => set({ receivedBy: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.jobCode")}</span>
-                    {/* ค่าจากใบเบิกต้นทาง แก้ที่นี่ไม่ได้ — ข้อความธรรมดาไม่มีกรอบ ตามกฎช่องกรอกของหน้าเอกสาร (2026-09-24) */}
-                    <p className="text-sm font-mono text-foreground px-3 py-2 border border-transparent">{draft.jobCode || "—"}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1">{t("storeDocs.col.charge")}</span>
-                    <p className="text-sm text-foreground px-3 py-2 border border-transparent">{[draft.chargeDepartmentName, draft.chargeTeamName].filter(Boolean).join(" / ") || "—"}</p>
-                  </div>
-                </>
-              )}
+                    {documentNumberField}
+                    {receivedDateField}
 
-              {kind === "receive" && code && code in REFERENCE_LABEL_KEY && (
-                <>
-                  <div>
-                    <label htmlFor="sr-reference" className="text-xs text-muted-foreground block mb-1">{t(REFERENCE_LABEL_KEY[code as keyof typeof REFERENCE_LABEL_KEY])}</label>
-                    <input id="sr-reference" disabled={!editable} value={draft.reference} onChange={(e) => set({ reference: e.target.value })} className={inputCls} />
-                  </div>
-                  {code === "GC" ? (
-                    <div>
-                      <label htmlFor="sr-customer" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.customerName")}</label>
-                      <input id="sr-customer" disabled={!editable} value={draft.customerName} onChange={(e) => set({ customerName: e.target.value })} className={inputCls} />
-                    </div>
-                  ) : (
-                    <div>
-                      <label htmlFor="sr-jobCode" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.jobCode")}</label>
-                      <input id="sr-jobCode" disabled={!editable} value={draft.jobCode} onChange={(e) => set({ jobCode: e.target.value })} className={`${inputCls} font-mono`} />
-                    </div>
-                  )}
-                  <div>
-                    <label htmlFor="sr-deliveredBy" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.deliveredBy")}</label>
-                    <input id="sr-deliveredBy" disabled={!editable} value={draft.returnedBy} onChange={(e) => set({ returnedBy: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <label htmlFor="sr-receivedBy2" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.receivedBy")}</label>
-                    <input id="sr-receivedBy2" disabled={!editable} value={draft.receivedBy} onChange={(e) => set({ receivedBy: e.target.value })} className={inputCls} />
-                  </div>
-                </>
-              )}
+                    {kind === "return" && (
+                      <>
+                        {/* ค่าจากใบเบิกต้นทาง แก้ที่นี่ไม่ได้ — ข้อความธรรมดาไม่มีกรอบ ตามกฎช่องกรอกของหน้าเอกสาร (2026-09-24) */}
+                        <ReadonlyField label={t("storeReceipt.field.jobCode")} value={draft.jobCode} mono />
+                        <ReadonlyField label={t("storeDocs.col.charge")} value={chargeText} />
+                        {textField("sr-returnedBy", t("storeReceipt.field.returnedBy"), draft.returnedBy, (v) => set({ returnedBy: v }))}
+                        {receivedByField}
+                      </>
+                    )}
 
-              {kind === "adjust" && (
-                <div className="sm:col-span-2">
-                  <label htmlFor="sr-reason" className="text-xs text-muted-foreground block mb-1">{t("storeReceipt.field.reason")} <span className="text-[#e05252]">*</span></label>
-                  <input id="sr-reason" disabled={!editable} value={draft.reason} onChange={(e) => set({ reason: e.target.value })}
-                    placeholder={code === "TK" ? t("storeReceipt.field.reasonPlaceholderTK") : t("storeReceipt.field.reasonPlaceholderJU")} className={inputCls} />
-                </div>
-              )}
-            </div>
-          </div>
+                    {kind === "receive" && code && code in REFERENCE_LABEL_KEY && (
+                      <>
+                        {textField("sr-reference", t(REFERENCE_LABEL_KEY[code as keyof typeof REFERENCE_LABEL_KEY]), draft.reference, (v) => set({ reference: v }))}
+                        {code === "GC"
+                          ? textField("sr-customer", t("storeReceipt.field.customerName"), draft.customerName, (v) => set({ customerName: v }))
+                          : textField("sr-jobCode", t("storeReceipt.field.jobCode"), draft.jobCode, (v) => set({ jobCode: v }), { mono: true })}
+                        {textField("sr-deliveredBy", t("storeReceipt.field.deliveredBy"), draft.returnedBy, (v) => set({ returnedBy: v }))}
+                        {receivedByField}
+                      </>
+                    )}
 
-          {code === "GC" && (
-            <div className="rounded-xl border border-[#e08a3c]/30 bg-[#e08a3c]/5 px-4 py-3 text-sm text-[#a75d1a]">{t("storeReceipt.gcNote")}</div>
-          )}
+                    {kind === "adjust" && textField("sr-reason", t("storeReceipt.field.reason"), draft.reason, (v) => set({ reason: v }), {
+                      className: "sm:col-span-2", required: true,
+                      placeholder: code === "TK" ? t("storeReceipt.field.reasonPlaceholderTK") : t("storeReceipt.field.reasonPlaceholderJU"),
+                    })}
+                  </div>
+                </SectionCard>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-foreground">{linesTitle}</h2>
-              {editable && kind !== "return" && (
-                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-                  <Plus size={13} /> {t("storeReceipt.addFromCatalog")}
-                </button>
-              )}
-            </div>
+                {code === "GC" && (
+                  <div className="rounded-xl border border-[#f0d9a8] bg-[#fdf3e0] px-4 py-3 text-sm text-[#8a5a00]">{t("storeReceipt.gcNote")}</div>
+                )}
+
+                {!editable && signatories}
+              </>
+            }
+            rail={
+              <>
+                <RailSummaryCard
+                  label={`${t("storeReceipt.title")} · ${t("storeReceipt.codeLabel")}`}
+                  value={info.code}
+                  mono
+                  aside={codeName}
+                  rows={[
+                    ...(info.pair ? [{ label: t("storeReceipt.rail.pairLabel"), value: info.pair, mono: true }] : []),
+                    ...(kind === "return" ? [
+                      { label: t("storeReceipt.field.source").replace("{code}", info.pair ?? ""), value: draft.sourceRequisitionNumber || "—", mono: true },
+                      {
+                        label: t("storeReceipt.col.returnNow"),
+                        value: t("storeReceipt.rail.returningValue").replace("{n}", String(returning.returning)).replace("{total}", String(returning.total)),
+                      },
+                    ] : [{ label: linesTitle, value: itemCountText }]),
+                  ]}
+                />
+
+                {doc.status !== "Draft" && (
+                  <RailCard title={t("storeReceipt.approval.title")}>
+                    {doc.status === "PendingApproval" ? (
+                      <div className="flex items-center gap-2.5">
+                        <span aria-hidden="true" className="w-[34px] h-[34px] rounded-full bg-[#fdf3e0] text-[#8a5a00] flex items-center justify-center flex-shrink-0"><Clock size={16} /></span>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-xs text-muted-foreground">{t("storeReceipt.approval.waiting")}</span>
+                          <span className="text-sm font-medium text-foreground leading-snug">{t("storeReceipt.approverLabel")}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2.5">
+                          <span aria-hidden="true" className="w-[34px] h-[34px] rounded-full bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0"><UserCheck size={16} /></span>
+                          <ReadonlyField label={t("storeReceipt.approval.approver")} value={approverName} />
+                        </div>
+                        <ReadonlyField label={t("storeReceipt.approval.approvedAt")} value={doc.approvedAt ? formatQuoteDateThai(doc.approvedAt) : ""} />
+                      </>
+                    )}
+                  </RailCard>
+                )}
+
+                <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <PackageCheck size={16} aria-hidden="true" className={posted ? "text-[#1b7f4f]" : doc.status === "Final" ? "text-[#8a5a00]" : "text-[#8a97ad]"} />
+                    <h2 className="flex-1 text-[15px] font-semibold text-foreground">{t("storeReceipt.postCard.title")}</h2>
+                    {doc.status === "Final" && <Tag tone={posted ? "green" : "amber"}>{posted ? t("storeDocs.posted") : t("storeDocs.awaitingPost")}</Tag>}
+                  </div>
+                  <p className="text-[13px] text-[#3d5173] leading-relaxed">
+                    {posted
+                      ? t("storeReceipt.postCard.done").replace("{name}", doc.postedByName || "—").replace("{date}", formatQuoteDateThai(doc.postedAt))
+                      : doc.status !== "Final" ? t("storeReceipt.postCard.locked")
+                      : canPost ? t("storeReceipt.postCard.ready") : t("storeReceipt.postCard.noPermission")}
+                  </p>
+                </section>
+
+                <NextStepHint title={t("project.doc.nextStep")}>{approvalHint}</NextStepHint>
+              </>
+            }
+          />
+
+          <SectionCard
+            title={
+              <span className="flex items-baseline gap-2.5 flex-wrap">
+                {linesTitle}
+                <span className="text-[13px] font-normal text-muted-foreground">{itemCountText}</span>
+              </span>
+            }
+            actions={editable && kind !== "return" ? (
+              <button type="button" onClick={() => setPickerOpen(true)} className={btn.secondarySm}>
+                <Plus size={14} /> {t("storeReceipt.addFromCatalog")}
+              </button>
+            ) : undefined}
+            bodyClassName=""
+          >
             {draft.lines.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">{kind === "return" ? t("storeReceipt.linesEmptyReturn") : t("storeReceipt.linesEmpty")}</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[820px]">
                   <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      {(kind === "return"
-                        ? [t("storeReceipt.col.productCode"), t("storeReceipt.col.item"), t("storeReceipt.col.unit"), t("storeReceipt.col.issued"), t("storeReceipt.col.returned"), t("storeReceipt.col.returnNow")]
-                        : kind === "receive"
-                        ? [t("storeReceipt.col.productCode"), t("storeReceipt.col.item"), t("storeReceipt.col.unit"), t("storeReceipt.col.inStock"), t("storeReceipt.col.qty"), t("storeReceipt.col.unitCost"), ""]
-                        : [t("storeReceipt.col.productCode"), t("storeReceipt.col.item"), t("storeReceipt.col.unit"), t("storeReceipt.col.inStock"), targetLabel, t("storeReceipt.col.diff"), ""]
-                      ).map((h, i) => <th key={`${i}-${h}`} className={thCls}>{h}</th>)}
+                    <tr className={table.head}>
+                      <th className={`${table.th} w-10`}>#</th>
+                      <th className={table.th}>{t("storeReceipt.col.productCode")}</th>
+                      <th className={table.th}>{t("storeReceipt.col.item")}</th>
+                      <th className={table.th}>{t("storeReceipt.col.unit")}</th>
+                      {lineHeads.map((h) => <th key={h.label} className={`${table.th} ${h.right ? "text-right" : ""}`}>{h.label}</th>)}
+                      {showRemove && <th className={`${table.th} w-12`}><span className="sr-only">{t("storeReceipt.removeLine")}</span></th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {draft.lines.map((l) => {
+                    {draft.lines.map((l, i) => {
                       const inStock = stockByProduct[l.productId];
                       const src = l.sourceLineId ? sourceByLine.get(l.sourceLineId) : undefined;
                       const room = src ? Math.max(0, src.issued - src.returned) : 0;
                       const over = kind === "return" && (l.qty ?? 0) > room && !posted;
                       const diff = kind === "adjust" && l.qty !== null && inStock !== undefined ? l.qty - inStock : null;
+                      const qtyText = l.qty === null ? "—" : fmt(l.qty);
                       return (
-                        <tr key={l.id} className="border-b border-border/50">
-                          <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{l.productCode}</td>
-                          <td className="px-3 py-2 text-xs text-foreground">
+                        <tr key={l.id} className="border-b border-[#eef1f6] align-top">
+                          <td className={`${table.td} py-2.5 text-[13px] text-muted-foreground`}>{i + 1}</td>
+                          <td className={`${table.td} py-2.5 font-mono text-[13px] whitespace-nowrap`}>{l.productCode}</td>
+                          <td className={`${table.td} py-2.5 text-sm text-foreground`}>
                             {l.productName}
                             <KitBreakdown productId={l.productId} qty={l.qty} kits={kits} />
                             {kind !== "return" && kits.has(l.productId) && (
-                              <span className="block text-xs text-[#c23f3f] mt-0.5">{t("kit.receiveBlocked")}</span>
+                              <span className="block text-xs text-[#b93636] mt-0.5">{t("kit.receiveBlocked")}</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{l.unit}</td>
+                          <td className={`${table.td} py-2.5 text-sm text-[#3d5173] whitespace-nowrap`}>{l.unit}</td>
                           {kind === "return" ? (
                             <>
-                              <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{src ? fmt(src.issued) : "—"}</td>
-                              <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{src ? fmt(src.returned) : "—"}</td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={0} max={room} disabled={!editable} value={l.qty ?? ""} aria-label={t("storeReceipt.col.returnNow")}
-                                  onChange={(e) => setLine(l.id, { qty: num(e.target.value) })}
-                                  className={`w-24 text-xs font-mono text-foreground bg-[#2aa36b]/5 border rounded px-1.5 py-1 outline-none disabled:opacity-70 ${over ? "border-[#e05252]" : "border-[#2aa36b]/20"}`} />
-                                {over && <p className="text-xs text-[#c23f3f] mt-0.5">{t("storeReceipt.overReturn").replace("{n}", fmt(room))}</p>}
+                              <td className={numTd}>{src ? fmt(src.issued) : "—"}</td>
+                              <td className={`${numTd} ${src && src.returned > 0 ? "" : "text-[#8a97ad]"}`}>{src ? fmt(src.returned) : "—"}</td>
+                              <td className={`${table.td} py-1.5 text-right`}>
+                                {editable ? (
+                                  <>
+                                    <input type="number" min={0} max={room} value={l.qty ?? ""} placeholder="0" aria-label={t("storeReceipt.col.returnNow")}
+                                      onChange={(e) => setLine(l.id, { qty: num(e.target.value) })} className={cellInput(over)} />
+                                    {over && <p className="text-xs text-[#b93636] mt-1">{t("storeReceipt.overReturn").replace("{n}", fmt(room))}</p>}
+                                  </>
+                                ) : (
+                                  <span className="block py-1 text-sm font-semibold tabular-nums">{qtyText}</span>
+                                )}
                               </td>
                             </>
                           ) : (
                             <>
-                              <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{inStock === undefined ? "—" : fmt(inStock)}</td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={0} disabled={!editable} value={l.qty ?? ""} aria-label={kind === "adjust" ? targetLabel : t("storeReceipt.col.qty")}
-                                  onChange={(e) => setLine(l.id, { qty: num(e.target.value) })} className={cellInputCls} />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                {kind === "receive" ? (
-                                  <input type="number" min={0} disabled={!editable || code === "GC"} value={code === "GC" ? "" : l.unitCost ?? ""} aria-label={t("storeReceipt.col.unitCost")}
-                                    onChange={(e) => setLine(l.id, { unitCost: num(e.target.value) })} className={cellInputCls} />
+                              <td className={numTd}>{inStock === undefined ? "—" : fmt(inStock)}</td>
+                              <td className={`${table.td} py-1.5 text-right`}>
+                                {editable ? (
+                                  <input type="number" min={0} value={l.qty ?? ""} aria-label={kind === "adjust" ? targetLabel : t("storeReceipt.col.qty")}
+                                    onChange={(e) => setLine(l.id, { qty: num(e.target.value) })} className={cellInput()} />
                                 ) : (
-                                  <span className={`text-xs font-mono font-semibold ${diff === null || diff === 0 ? "text-muted-foreground" : diff > 0 ? "text-[#207e52]" : "text-[#c23f3f]"}`}>
+                                  <span className="block py-1 text-sm font-semibold tabular-nums">{qtyText}</span>
+                                )}
+                              </td>
+                              <td className={`${table.td} py-1.5 text-right`}>
+                                {kind === "receive" ? (
+                                  editable && code !== "GC" ? (
+                                    <input type="number" min={0} value={l.unitCost ?? ""} aria-label={t("storeReceipt.col.unitCost")}
+                                      onChange={(e) => setLine(l.id, { unitCost: num(e.target.value) })} className={cellInput()} />
+                                  ) : (
+                                    <span className="block py-1 text-sm tabular-nums">{code === "GC" || l.unitCost === null ? "—" : fmt(l.unitCost)}</span>
+                                  )
+                                ) : (
+                                  <span className={`block py-1 text-sm font-semibold tabular-nums ${diff === null || diff === 0 ? "text-muted-foreground" : diff > 0 ? "text-[#1b7f4f]" : "text-[#b93636]"}`}>
                                     {diff === null ? "—" : `${diff > 0 ? "+" : ""}${fmt(diff)}`}
                                   </span>
                                 )}
                               </td>
-                              <td className="px-2 py-1.5">
-                                {editable && (
-                                  <button onClick={() => setDraft((d) => (d ? { ...d, lines: d.lines.filter((x) => x.id !== l.id) } : d))} aria-label={t("storeReceipt.removeLine")} title={t("storeReceipt.removeLine")}
-                                    className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-[#e05252] transition-opacity">
-                                    <X size={13} />
+                              {showRemove && (
+                                <td className={`${table.td} py-1.5`}>
+                                  <button type="button" onClick={() => setDraft((d) => (d ? { ...d, lines: d.lines.filter((x) => x.id !== l.id) } : d))}
+                                    aria-label={t("storeReceipt.removeLine")} title={t("storeReceipt.removeLine")}
+                                    className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors">
+                                    <X size={16} />
                                   </button>
-                                )}
-                              </td>
+                                </td>
+                              )}
                             </>
                           )}
                         </tr>
@@ -531,51 +736,9 @@ export function StoreReceiptDocument({
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className="bg-card border border-[#2aa36b]/30 rounded-xl p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <PackageCheck size={15} className="text-[#207e52]" />
-              <h2 className="text-sm font-semibold text-foreground">{t("storeReceipt.postCard.title")}</h2>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {posted
-                ? t("storeReceipt.postCard.done").replace("{name}", doc.postedByName || "—").replace("{date}", formatQuoteDateThai(doc.postedAt))
-                : doc.status !== "Final" ? t("storeReceipt.postCard.locked")
-                : canPost ? t("storeReceipt.postCard.ready") : t("storeReceipt.postCard.noPermission")}
-            </p>
-            {doc.status === "Final" && !posted && canPost && (
-              <button onClick={() => setConfirmPost(true)} disabled={posting}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#2aa36b]/40 text-[#207e52] rounded-lg font-medium hover:bg-[#2aa36b]/10 transition-colors disabled:opacity-60">
-                {posting ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("storeReceipt.postBtn")}
-              </button>
-            )}
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-3">{t("storeReceipt.signatories")}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-              {([
-                ["preparedBy", "preparedAt", t("materialRequisitionDoc.field.preparedBy")],
-                ["approvedBy", "approvedAt", t("materialRequisitionDoc.field.approvedBy")],
-                ["storeDeptBy", "storeDeptAt", t("materialRequisitionDoc.field.storeDeptBy")],
-                ["costDeptBy", "costDeptAt", t("materialRequisitionDoc.field.costDeptBy")],
-              ] as const).map(([nameField, dateField, label]) => (
-                <div key={nameField} className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor={`sr-${nameField}`} className="text-xs text-muted-foreground block mb-1">{label}</label>
-                    <input id={`sr-${nameField}`} disabled={!editable} value={draft[nameField]} onChange={(e) => set({ [nameField]: e.target.value })}
-                      className="w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-                  </div>
-                  <div>
-                    <label htmlFor={`sr-${dateField}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.date")}</label>
-                    <input id={`sr-${dateField}`} type="date" disabled={!editable} value={draft[dateField]} onChange={(e) => set({ [dateField]: e.target.value })}
-                      className="w-full text-xs font-mono text-foreground bg-white border border-[#c3ccda] rounded-lg px-2.5 py-1.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:opacity-70" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {editable && signatories}
         </div>
       </div>
 
@@ -586,11 +749,10 @@ export function StoreReceiptDocument({
         products={products}
         categories={categories}
         showStock
-        onSelect={(p) => {
-          setDraft((d) => (d ? { ...d, lines: [...d.lines, { ...blankStoreReceiptLine(), productId: p.id, productCode: p.code, productName: p.name, unit: p.unit }] } : d));
-          setStockByProduct((s) => ({ ...s, [p.id]: p.stockQty }));
-          setPickerOpen(false);
-        }}
+        multiSelect
+        subtitle={t("storeReceipt.pickerHint").replace("{number}", docNumber)}
+        onSelect={(p) => addProducts([p])}
+        onSelectMany={addProducts}
         onClose={() => setPickerOpen(false)}
       />
       <ConfirmDialog
@@ -598,6 +760,14 @@ export function StoreReceiptDocument({
         title={t("storeReceipt.postConfirm.title")}
         message={t("storeReceipt.postConfirm.message")}
         confirmLabel={t("storeReceipt.postBtn")}
+        tone="warning"
+        summary={
+          <SummaryLine
+            title={docNumber}
+            sub={[codeName, draft.sourceRequisitionNumber ? `${t("storeReceipt.field.source").replace("{code}", "")} ${draft.sourceRequisitionNumber}` : ""].filter(Boolean).join(" · ")}
+            right={itemCountText}
+          />
+        }
         busy={posting}
         onConfirm={() => void runPost()}
         onCancel={() => setConfirmPost(false)}
@@ -608,10 +778,18 @@ export function StoreReceiptDocument({
         message={t("storeReceipt.deleteConfirm.message")}
         confirmLabel={t("storeReceipt.delete")}
         danger
+        summary={
+          <SummaryLine
+            title={docNumber}
+            sub={[codeName, draft.sourceRequisitionNumber].filter(Boolean).join(" · ")}
+            right={<Pill tone={STATUS_TONE[doc.status]} label={statusText} />}
+          />
+        }
         busy={deleting}
         onConfirm={() => void runDelete()}
         onCancel={() => setConfirmDelete(false)}
       />
+      {approval.dialogs}
     </>
   );
 }

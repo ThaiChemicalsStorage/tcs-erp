@@ -34,7 +34,8 @@ export function ListPageHeader({ module, title, description, help, actions }: {
 }
 
 export function ListCard({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`${surface.card} flex flex-col min-w-0 overflow-hidden ${className}`}>{children}</section>;
+  // flex-shrink-0: หน้ารายการเป็น flex-col ที่เลื่อนได้ — ถ้าการ์ดหดได้ (overflow-hidden ทำให้ min-height เป็น 0) รายการยาวจะบีบแถบแท็บจนโดนตัด
+  return <section className={`${surface.card} flex flex-col flex-shrink-0 min-w-0 overflow-hidden ${className}`}>{children}</section>;
 }
 
 export interface ListTab<K extends string> {

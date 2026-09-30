@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Inbox, PackageMinus, Plus, Search, Undo2, X } from "lucide-react";
+import { ArrowDownToLine, ChevronRight, Info, PackageMinus, Plus } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { useI18n } from "../../lib/i18n";
 import { ApiError } from "../../lib/apiClient";
@@ -14,44 +14,31 @@ import {
   STORE_ISSUE_CODES, STORE_RECEIPT_CODES, storeIssueCodeInfo, storeReceiptCodeInfo,
   type StoreIssueCode, type StoreReceiptCode,
 } from "../../lib/storeCodes";
-import { EmptyState } from "../../components/EmptyState";
-import { DateRangeFilter } from "../../components/DateRangeFilter";
+import { FilterSelect, ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
+import { btn, table } from "../../components/ui/styles";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { MaterialRequisitionDocument } from "../materialRequisition/MaterialRequisitionDocument";
+import { CodeChip, ListDateRangeSelect, LoadErrorState, PAGE_CLASS, Pill, Tag, rowOpenClass, type PillTone } from "../receivingReport/receivingUi";
+import { paginate, rowOpenProps } from "../receivingReport/receivingFormat";
 import { StoreReceiptDocument } from "./StoreReceiptDocument";
 import { StoreCodeDialog } from "./StoreCodeDialog";
+import { storeDocTabCounts, toStoreDocRows, type StoreDocRow, type StoreDocTab, type StoreDocumentKind } from "./storeDocsFormat";
 
-export type StoreDocumentKind = "issue" | "receipt";
+export type { StoreDocumentKind } from "./storeDocsFormat";
 /** deep link ของหน้านี้ — "incoming" = ใบเบิกของแผนกที่เพิ่งอนุมัติ (มาจากแจ้งเตือน) เปิดแท็บ "ใบเบิกจากแผนก" แล้วเน้นแถวนั้น */
 export type StoreDocumentLink = { kind: StoreDocumentKind | "incoming"; id: string };
 
-interface Row {
-  kind: StoreDocumentKind;
-  id: string;
-  number: string;
-  code: string;
-  codeName: string;
-  reference: string;
-  charge: string;
-  status: "Draft" | "PendingApproval" | "Final";
-  /** ใบเบิก: ยังจ่ายไม่ครบ · ใบรับคืน: อนุมัติแล้วแต่ยังไม่รับเข้าคลัง */
-  pendingStore: boolean;
-  posted: boolean;
-  updatedAt: string;
-}
-
-const STATUS_STYLE: Record<Row["status"], string> = {
-  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
-};
+const STATUS_TONE: Record<StoreDocRow["status"], PillTone> = { Draft: "grey", PendingApproval: "amber", Final: "blue" };
 
 /**
  * หน้ารวม "ใบเบิก-คืนวัสดุ (สโตร์)" (2026-09-23) — ใบเบิกของสโตร์ (รหัสจ่าย) กับใบรับคืน/รับเข้าคลัง (รหัสรับ)
  * อยู่ในรายการเดียวกัน ตามชื่อฟอร์มจริง "ใบเบิกและใบคืนวัสดุ" และแบบร่างที่เจ้าของดูแล้ว
  *
  * ใบเบิกเปิดด้วยหน้าแก้ไขใบเบิกตัวเดิม (ปรับให้รองรับใบของสโตร์) ส่วนใบรับคืนมีหน้าแก้ไขของตัวเอง
+ *
+ * ดีไซน์ใหม่ 2026-09-30: การ์ดรายการใบเดียว — แท็บพร้อมจำนวน (ทั้งหมด / ใบเบิก / ใบรับคืน / ใบเบิกจากแผนก) แทนปุ่มกลุ่มเดิม ·
+ * รหัสและสถานะเป็นปุ่มตัวกรอง · ทั้งแถวกดเปิดเอกสาร · แบ่งหน้า
  */
 export function StoreDocumentsPage({
   company, currentUserId, canCreate, canEdit, canFinalize, canPrint, canDelete, canIssueStock, canRequestProductCode,
@@ -89,11 +76,12 @@ export function StoreDocumentsPage({
   const [loaded, setLoaded] = useState<"loading" | "ok" | "error">("loading");
   const [reload, setReload] = useState(0);
   const [picker, setPicker] = useState<StoreDocumentKind | null>(null);
-  const [tab, setTab] = useState<"all" | "incoming" | StoreDocumentKind>(initialDocument?.kind === "incoming" ? "incoming" : "all");
-  const [status, setStatus] = useState<"all" | Row["status"]>("all");
+  const [tab, setTab] = useState<StoreDocTab>(initialDocument?.kind === "incoming" ? "incoming" : "all");
+  const [status, setStatus] = useState<"all" | StoreDocRow["status"]>("all");
   const [code, setCode] = useState("");
   const [query, setQuery] = useState("");
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
+  const [page, setPage] = useState(1);
 
   const [applied, setApplied] = useState<string | null>(null);
   if (initialDocument && `${initialDocument.kind}:${initialDocument.id}` !== applied) {
@@ -101,6 +89,7 @@ export function StoreDocumentsPage({
     if (initialDocument.kind === "incoming") {
       setOpen(null);
       setTab("incoming");
+      setPage(1);
       setHighlight(initialDocument.id);
     } else {
       setOpen({ kind: initialDocument.kind, id: initialDocument.id });
@@ -196,27 +185,17 @@ export function StoreDocumentsPage({
     );
   }
 
-  const rows: Row[] = [
-    ...issues.map((m): Row => {
-      const c = (m.issueCode ?? m.id.split("-")[0]) as StoreIssueCode;
-      const known = STORE_ISSUE_CODES.some((x) => x.code === c);
-      return {
-        kind: "issue", id: m.id, number: m.documentNumber || m.id, code: c,
-        codeName: known ? t(storeIssueCodeInfo(c).nameKey) : "",
-        reference: [m.sourceRequisitionNumber, m.jobCode, m.storeReference].filter(Boolean).join(" · "),
-        charge: [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / "),
-        status: m.status, pendingStore: m.hasOutstanding, posted: false, updatedAt: m.updatedAt,
-      };
-    }),
-    ...receipts.map((r): Row => ({
-      kind: "receipt", id: r.id, number: r.documentNumber || r.id, code: r.receiptCode,
-      codeName: t(storeReceiptCodeInfo(r.receiptCode).nameKey),
-      reference: [r.sourceRequisitionNumber, r.jobCode, r.reference].filter(Boolean).join(" · "),
-      charge: [r.chargeDepartmentName, r.chargeTeamName].filter(Boolean).join(" / "),
-      status: r.status, pendingStore: r.status === "Final" && !r.posted, posted: r.posted, updatedAt: r.updatedAt,
-    })),
-  ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const codeName = (r: StoreDocRow) => {
+    if (r.kind === "receipt") return t(storeReceiptCodeInfo(r.code as StoreReceiptCode).nameKey);
+    return STORE_ISSUE_CODES.some((x) => x.code === r.code) ? t(storeIssueCodeInfo(r.code as StoreIssueCode).nameKey) : "";
+  };
+  const statusLabel = (s: StoreDocRow["status"]) =>
+    s === "Draft" ? t("materialRequisition.status.draft") : s === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final");
+  const incomingDept = (d: StoreIssueSourceCandidate["ownerDepartment"]) =>
+    t(d === "production" ? "storeDocs.incoming.dept.production" : "storeDocs.incoming.dept.project");
 
+  const rows = toStoreDocRows(issues, receipts);
+  const counts = storeDocTabCounts(rows, incoming.length);
   const range = resolveRange(dateRange);
   const q = query.trim().toLowerCase();
   const slipsBySource = new Map<string, MaterialRequisitionSummary[]>();
@@ -232,132 +211,215 @@ export function StoreDocumentsPage({
     .filter((r) => status === "all" || r.status === status)
     .filter((r) => !code || r.code === code)
     .filter((r) => isWithinRange(r.updatedAt, range))
-    .filter((r) => !q || [r.number, r.id, r.reference, r.charge, r.codeName].some((v) => v.toLowerCase().includes(q)));
+    .filter((r) => !q || [r.number, r.id, r.refs.join(" · "), [r.chargeDepartment, r.chargeTeam].filter(Boolean).join(" / "), codeName(r)].some((v) => v.toLowerCase().includes(q)));
+  const pagedRows = paginate(filtered, page);
+  const pagedIncoming = paginate(incomingFiltered, page);
 
   const codeOptions = tab === "receipt" ? STORE_RECEIPT_CODES : tab === "issue" ? STORE_ISSUE_CODES : [...STORE_ISSUE_CODES, ...STORE_RECEIPT_CODES];
+  const withReset = <T,>(set: (v: T) => void) => (v: T) => { set(v); setPage(1); };
+  const dash = <span className="text-[#8a97ad]">—</span>;
+
+  const tabs = (["all", "issue", "receipt", "incoming"] as const).map((k) => ({
+    key: k,
+    label: t(k === "all" ? "storeDocs.tab.all" : k === "issue" ? "storeDocs.tab.issue" : k === "receipt" ? "storeDocs.tab.receipt" : "storeDocs.tab.incoming"),
+    count: counts[k],
+  }));
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("storeDocs.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("storeDocs.subtitle")}</p>
-        </div>
-        {canCreate && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPicker("receipt")}
-              className="flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-              <Undo2 size={15} /> {t("storeDocs.createReceipt")}
+    <div className={PAGE_CLASS}>
+      <ListPageHeader
+        module={t("nav.group.inventory")}
+        title={t("storeDocs.title")}
+        description={t("storeDocs.subtitle")}
+        actions={canCreate ? (
+          <>
+            <button type="button" onClick={() => setPicker("receipt")} className={btn.secondary}>
+              <ArrowDownToLine size={16} /> {t("storeDocs.createReceipt")}
             </button>
-            <button onClick={() => setPicker("issue")}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-              <Plus size={15} /> {t("storeDocs.createIssue")}
+            <button type="button" onClick={() => setPicker("issue")} className={btn.primary}>
+              <Plus size={16} /> {t("storeDocs.createIssue")}
             </button>
-          </div>
-        )}
-      </div>
+          </>
+        ) : undefined}
+      />
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit" role="group" aria-label={t("storeDocs.col.type")}>
-          {(["all", "issue", "receipt", "incoming"] as const).map((k) => (
-            <button key={k} onClick={() => { setTab(k); setCode(""); }} aria-pressed={tab === k}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${tab === k ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {t(k === "all" ? "storeDocs.tab.all" : k === "issue" ? "storeDocs.tab.issue" : k === "receipt" ? "storeDocs.tab.receipt" : "storeDocs.tab.incoming")}
-              {k === "incoming" && incoming.length > 0 && (
-                <span className={`min-w-[1.25rem] px-1 rounded-full text-center font-mono ${tab === k ? "bg-[#0b1d3a]/15" : "bg-[#e08a3c]/15 text-[#a75d1a]"}`}>{incoming.length}</span>
-              )}
-            </button>
-          ))}
-        </div>
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
-        <label className="relative h-9 w-64">
-          <span className="sr-only">{t("storeDocs.search")}</span>
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("storeDocs.search")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-          {query && <button onClick={() => setQuery("")} aria-label={t("common.cancel")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X size={13} /></button>}
-        </label>
-        {tab !== "incoming" && (<>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          {t("storeDocs.codeFilter")}
-          <select value={code} onChange={(e) => setCode(e.target.value)}
-            className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20">
-            <option value="">{t("storeDocs.codeFilterAll")}</option>
-            {codeOptions.map((c) => <option key={c.code} value={c.code}>{c.code} — {t(c.nameKey)}</option>)}
-          </select>
-        </label>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit" role="group" aria-label={t("storeDocs.col.status")}>
-          {(["all", "Draft", "PendingApproval", "Final"] as const).map((s) => (
-            <button key={s} onClick={() => setStatus(s)} aria-pressed={status === s}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${status === s ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === "all" ? t("quotation.filterAll") : s === "Draft" ? t("materialRequisition.status.draft") : s === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
-            </button>
-          ))}
-        </div>
-        </>)}
-      </div>
+      <ListCard>
+        <ListTabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setCode(""); setPage(1); }} ariaLabel={t("storeDocs.col.type")} />
+        <ListToolbar
+          search={query}
+          onSearch={withReset(setQuery)}
+          searchPlaceholder={t("storeDocs.search")}
+          count={loaded !== "ok" ? undefined : tab === "incoming"
+            ? t("storeDocs.incoming.count").replace("{n}", String(incomingFiltered.length))
+            : t("ui.itemCount").replace("{n}", String(filtered.length))}
+        >
+          <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
+          {tab !== "incoming" && (
+            <>
+              <FilterSelect
+                label={t("storeDocs.codeFilter")}
+                value={code}
+                options={[{ value: "", label: t("storeDocs.codeFilterAll") }, ...codeOptions.map((c) => ({ value: c.code as string, label: `${c.code} — ${t(c.nameKey)}` }))]}
+                onChange={withReset(setCode)}
+              />
+              <FilterSelect<"all" | StoreDocRow["status"]>
+                label={t("storeDocs.col.status")}
+                value={status}
+                options={[
+                  { value: "all", label: t("quotation.filterAll") },
+                  ...(["Draft", "PendingApproval", "Final"] as const).map((s) => ({ value: s, label: statusLabel(s) })),
+                ]}
+                onChange={withReset(setStatus)}
+              />
+            </>
+          )}
+        </ListToolbar>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
         {loaded === "loading" ? (
-          <div className="p-6 space-y-3" role="status" aria-live="polite">
+          <div className="p-5 flex flex-col gap-3" role="status" aria-live="polite">
             <span className="sr-only">{t("materialRequisition.loading")}</span>
-            {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
+            {[...Array(4)].map((_, i) => <div key={i} className="h-11 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
           </div>
         ) : loaded === "error" ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16">
-            <p className="text-sm text-muted-foreground">{t("materialRequisition.loadError")}</p>
-            <button onClick={() => { setLoaded("loading"); setReload((n) => n + 1); }} className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm">{t("materialRequisition.retry")}</button>
-          </div>
+          <LoadErrorState message={t("materialRequisition.loadError")} retryLabel={t("materialRequisition.retry")} onRetry={() => { setLoaded("loading"); setReload((n) => n + 1); }} />
         ) : tab === "incoming" ? (
-          incoming.length === 0 ? (
-            <EmptyState icon={Inbox} title={t("storeDocs.incoming.emptyTitle")} description={t("storeDocs.incoming.emptyDescription")} compact />
-          ) : incomingFiltered.length === 0 ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">{t("storeDocs.noMatch")}</p>
-          ) : (
+          <>
+            {incoming.length === 0 ? (
+              <ListEmpty title={t("storeDocs.incoming.emptyTitle")} hint={t("storeDocs.incoming.emptyDescription")} />
+            ) : (
+              <>
+                <div className="px-5 py-3 border-b border-[#eef1f6]">
+                  <div className="px-3.5 py-2.5 rounded-lg bg-[#e8f0fb] border border-[#b9d0f0] flex gap-2.5 text-[#16407a]">
+                    <Info size={16} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <p className="text-[13px] leading-relaxed">{t("storeDocs.incoming.hint")}</p>
+                  </div>
+                </div>
+                {incomingFiltered.length === 0 ? (
+                  <ListEmpty title={t("storeDocs.noMatch")} />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1040px]">
+                      <thead>
+                        <tr className={table.head}>
+                          <th className={table.th}>{t("storeDocs.incoming.col.number")}</th>
+                          <th className={table.th}>{t("storeDocs.incoming.col.job")}</th>
+                          <th className={table.th}>{t("storeDocs.col.charge")}</th>
+                          <th className={table.th}>{t("storeDocs.incoming.col.outstanding")}</th>
+                          <th className={table.th}>{t("storeDocs.incoming.col.slips")}</th>
+                          <th className={table.th}>{t("storeDocs.col.updatedAt")}</th>
+                          <th className={`${table.th} w-[120px]`}><span className="sr-only">{t("storeDocs.incoming.makeSlip")}</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedIncoming.rows.map((r) => {
+                          const slips = slipsBySource.get(r.id) ?? [];
+                          return (
+                            <tr key={r.id} className={`h-16 border-b border-[#eef1f6] transition-colors ${highlight === r.id ? "bg-[#fbf7ea]" : "bg-white hover:bg-[#f8f9fc]"}`}>
+                              <td className={`${table.td} whitespace-nowrap`}>
+                                <button type="button" onClick={() => setOpen({ kind: "issue", id: r.id })} aria-label={`${t("storeDocs.incoming.view")} ${r.documentNumber}`}
+                                  className="block font-mono text-[13px] font-medium text-[#1a5fb4] hover:underline rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40">
+                                  {r.documentNumber}
+                                </button>
+                                <span className="block text-xs text-muted-foreground">{incomingDept(r.ownerDepartment)}</span>
+                              </td>
+                              <td className={`${table.td} max-w-[280px]`}>
+                                <span className="block font-mono text-[13px] font-medium text-foreground truncate">{r.jobCode || dash}</span>
+                                {r.customerName && <span className="block text-xs text-muted-foreground truncate">{r.customerName}</span>}
+                              </td>
+                              <td className={`${table.td} max-w-[200px]`}>
+                                <span className="block text-sm text-foreground truncate">{r.chargeDepartmentName || dash}</span>
+                                {r.chargeTeamName && <span className="block text-xs text-muted-foreground truncate">{r.chargeTeamName}</span>}
+                              </td>
+                              <td className={table.td}>
+                                <Pill tone="amber" label={t("storeDocs.sourceOutstanding").replace("{n}", String(r.outstandingLineCount))} />
+                              </td>
+                              <td className={`${table.td} whitespace-nowrap`}>
+                                {slips.length === 0 ? dash : slips.map((m) => (
+                                  <button key={m.id} type="button" onClick={() => setOpen({ kind: "issue", id: m.id })}
+                                    className="block font-mono text-[12.5px] text-[#1a5fb4] hover:underline rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40">
+                                    {m.documentNumber || m.id}
+                                  </button>
+                                ))}
+                              </td>
+                              <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.updatedAt)}</td>
+                              <td className={`${table.td} text-right`}>
+                                {canCreate && (
+                                  <button type="button" onClick={() => { setIssueFor(r); setPicker("issue"); }} className={btn.secondarySm}>
+                                    <PackageMinus size={14} /> {t("storeDocs.incoming.makeSlip")}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+            {incomingFiltered.length > 0 && (
+              <ListPagination page={pagedIncoming.current} pageCount={pagedIncoming.pageCount} from={pagedIncoming.from} to={pagedIncoming.to} total={incomingFiltered.length} onPage={setPage} />
+            )}
+          </>
+        ) : rows.length === 0 ? (
+          <ListEmpty title={t("storeDocs.empty.title")} hint={t("storeDocs.empty.description")} />
+        ) : filtered.length === 0 ? (
+          <ListEmpty title={t("storeDocs.noMatch")} />
+        ) : (
+          <>
             <div className="overflow-x-auto">
-              <p className="px-4 py-3 text-xs text-muted-foreground border-b border-border">{t("storeDocs.incoming.hint")}</p>
-              <table className="w-full">
+              <table className="w-full min-w-[1040px]">
                 <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    {[t("storeDocs.incoming.col.number"), t("storeDocs.incoming.col.department"), t("storeDocs.incoming.col.job"), t("storeDocs.col.charge"), t("storeDocs.incoming.col.outstanding"), t("storeDocs.incoming.col.slips"), t("storeDocs.col.updatedAt"), ""].map((h, i) => (
-                      <th key={`${i}-${h}`} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("storeDocs.col.number")}</th>
+                    <th className={table.th}>{t("storeDocs.col.type")}</th>
+                    <th className={table.th}>{t("storeDocs.col.reference")}</th>
+                    <th className={table.th}>{t("storeDocs.col.charge")}</th>
+                    <th className={table.th}>{t("storeDocs.col.status")}</th>
+                    <th className={table.th}>{t("storeDocs.col.updatedAt")}</th>
+                    <th className={`${table.th} w-10`} aria-hidden="true" />
                   </tr>
                 </thead>
                 <tbody>
-                  {incomingFiltered.map((r) => {
-                    const slips = slipsBySource.get(r.id) ?? [];
+                  {pagedRows.rows.map((r) => {
+                    const name = codeName(r);
                     return (
-                      <tr key={r.id} className={`border-b border-border/50 transition-colors ${highlight === r.id ? "bg-[#c9a84c]/10" : "hover:bg-secondary/30"}`}>
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <button onClick={() => setOpen({ kind: "issue", id: r.id })} aria-label={`${t("storeDocs.incoming.view")} ${r.documentNumber}`}
-                            className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded">
-                            {r.documentNumber}
-                          </button>
+                      <tr key={`${r.kind}:${r.id}`} {...rowOpenProps(() => setOpen({ kind: r.kind, id: r.id }), `${t("storeDocs.openRow")} ${r.number}`)} className={`${table.row} group ${rowOpenClass}`}>
+                        <td className={`${table.td} whitespace-nowrap`}>
+                          <span className={`block ${table.code}`}>{r.number}</span>
+                          {r.number !== r.id && <span className="block font-mono text-xs text-muted-foreground">{r.id}</span>}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{t(r.ownerDepartment === "production" ? "storeDocs.incoming.dept.production" : "storeDocs.incoming.dept.project")}</td>
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                          <span className="font-mono">{r.jobCode || "—"}</span>
-                          {r.customerName && <span className="block">{r.customerName}</span>}
+                        <td className={`${table.td} max-w-[240px]`}>
+                          <span className="flex items-center gap-2 min-w-0">
+                            <CodeChip>{r.code}</CodeChip>
+                            {name && <span className="text-[13px] text-[#3d5173] truncate">{name}</span>}
+                          </span>
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{[r.chargeDepartmentName, r.chargeTeamName].filter(Boolean).join(" / ") || "—"}</td>
-                        <td className="px-4 py-3.5 text-xs font-mono text-[#a75d1a] font-semibold whitespace-nowrap">{t("storeDocs.sourceOutstanding").replace("{n}", String(r.outstandingLineCount))}</td>
-                        <td className="px-4 py-3.5 text-xs whitespace-nowrap">
-                          {slips.length === 0 ? <span className="text-muted-foreground">—</span> : slips.map((m) => (
-                            <button key={m.id} onClick={() => setOpen({ kind: "issue", id: m.id })}
-                              className="block font-mono text-[#866d28] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded">
-                              {m.documentNumber || m.id}
-                            </button>
-                          ))}
-                        </td>
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(r.updatedAt)}</td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                          {canCreate && (
-                            <button onClick={() => { setIssueFor(r); setPicker("issue"); }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-                              <PackageMinus size={13} /> {t("storeDocs.incoming.makeSlip")}
-                            </button>
+                        <td className={`${table.td} max-w-[260px]`}>
+                          {r.refs.length === 0 ? dash : (
+                            <>
+                              <span className="block text-sm font-medium text-foreground truncate">{r.refs[0]}</span>
+                              {r.refs.length > 1 && <span className="block text-xs text-muted-foreground truncate">{r.refs.slice(1).join(" · ")}</span>}
+                            </>
                           )}
+                        </td>
+                        <td className={`${table.td} max-w-[200px]`}>
+                          <span className="block text-sm text-foreground truncate">{r.chargeDepartment || dash}</span>
+                          {r.chargeTeam && <span className="block text-xs text-muted-foreground truncate">{r.chargeTeam}</span>}
+                        </td>
+                        <td className={table.td}>
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <Pill tone={STATUS_TONE[r.status]} label={statusLabel(r.status)} />
+                            {r.pendingStore && (
+                              <Tag tone="amber">{r.kind === "issue" ? t("materialRequisition.outstandingBadge") : t("storeDocs.awaitingPost")}</Tag>
+                            )}
+                            {r.posted && <Tag tone="green">{t("storeDocs.posted")}</Tag>}
+                          </span>
+                        </td>
+                        <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.updatedAt)}</td>
+                        <td className={table.td}>
+                          <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                         </td>
                       </tr>
                     );
@@ -365,61 +427,21 @@ export function StoreDocumentsPage({
                 </tbody>
               </table>
             </div>
-          )
-        ) : rows.length === 0 ? (
-          <EmptyState icon={PackageMinus} title={t("storeDocs.empty.title")} description={t("storeDocs.empty.description")} compact />
-        ) : filtered.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">{t("storeDocs.noMatch")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {[t("storeDocs.col.number"), t("storeDocs.col.type"), t("storeDocs.col.reference"), t("storeDocs.col.charge"), t("storeDocs.col.status"), t("storeDocs.col.updatedAt")].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={`${r.kind}:${r.id}`} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <button onClick={() => setOpen({ kind: r.kind, id: r.id })} aria-label={`${t("storeDocs.openRow")} ${r.number}`}
-                        className="text-xs font-mono text-[#866d28] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded">
-                        {r.number}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground">
-                      <span className="font-mono font-semibold text-[#866d28] mr-2">{r.code}</span>{r.codeName}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{r.reference || "—"}</td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{r.charge || "—"}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLE[r.status]}`}>
-                        {r.status === "Draft" ? t("materialRequisition.status.draft") : r.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
-                      </span>
-                      {r.pendingStore && (
-                        <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
-                          {r.kind === "issue" ? t("materialRequisition.outstandingBadge") : t("storeDocs.awaitingPost")}
-                        </span>
-                      )}
-                      {r.posted && (
-                        <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#1f9d8a]/10 text-[#187c6d] border border-[#1f9d8a]/20">{t("storeDocs.posted")}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(r.updatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <ListPagination page={pagedRows.current} pageCount={pagedRows.pageCount} from={pagedRows.from} to={pagedRows.to} total={filtered.length} onPage={setPage} />
+          </>
         )}
-      </div>
+      </ListCard>
 
       {picker === "issue" && (
         <StoreCodeDialog mode="issue" onCreate={createIssue} onCancel={() => { setPicker(null); setIssueFor(null); }}
           initialCode={issueFor ? (issueFor.ownerDepartment === "production" ? "PD" : "PP") : undefined}
-          context={issueFor ? t("storeDocs.incoming.pickContext").replace("{number}", issueFor.documentNumber) : undefined} />
+          context={issueFor ? t("storeDocs.incoming.pickContext").replace("{number}", issueFor.documentNumber) : undefined}
+          source={issueFor ? {
+            number: issueFor.documentNumber,
+            jobCode: issueFor.jobCode,
+            detail: [issueFor.customerName, [issueFor.chargeDepartmentName, issueFor.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · "),
+            outstandingLines: issueFor.outstandingLineCount,
+          } : undefined} />
       )}
       {picker === "receipt" && <StoreCodeDialog mode="receipt" onCreate={createReceipt} onCancel={() => setPicker(null)} />}
       <Toast message={toast.message} />

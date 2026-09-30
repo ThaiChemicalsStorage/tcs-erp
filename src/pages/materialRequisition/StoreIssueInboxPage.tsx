@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ExternalLink, Loader2, PackageCheck, PackageMinus, Search, Send, X } from "lucide-react";
-import { EmptyState } from "../../components/EmptyState";
-import { PageHeader } from "../../components/PageHeader";
+import { ChevronDown, ExternalLink, Loader2, Send } from "lucide-react";
+import { ListCard, ListEmpty, ListPageHeader, ListTabs, ListToolbar } from "../../components/ui/ListPage";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
+import { LoadErrorState, PAGE_CLASS, Pill, Tag } from "../receivingReport/receivingUi";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
@@ -14,7 +16,6 @@ import {
 } from "../../lib/materialRequisition";
 
 const FILTER_ALL = "all";
-const inputCls = "h-9 w-full text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors";
 
 /**
  * **หน้าตัดของของสโตร์** (2026-09-10) — เจ้าของสั่ง *"เพิ่มหน้าตัดของ ของสโตร์มา แยกออกมาจากใบ"*
@@ -186,195 +187,156 @@ export function StoreIssueInboxPage({
     }
   };
 
+  const numTd = `${table.td} py-2.5 text-right tabular-nums text-sm whitespace-nowrap`;
+  const deptTabs = ([FILTER_ALL, "project", "production", "store"] as const).map((d) => ({
+    key: d as string,
+    label: d === FILTER_ALL ? t("quotation.filterAll") : departmentLabel(d),
+    count: d === FILTER_ALL ? queue.length : queue.filter((m) => (m.ownerDepartment ?? "project") === d).length,
+  }));
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <PageHeader title={t("storeIssue.pageTitle")} description={t("storeIssue.pageSubtitle")} />
+    <div className={PAGE_CLASS}>
+      <ListPageHeader module={t("nav.group.inventory")} title={t("storeIssue.pageTitle")} description={t("storeIssue.pageSubtitle")} />
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("storeIssue.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} aria-label={t("storeIssue.clearSearch")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "project", "production", "store"] as const).map((d) => (
-            <button key={d} onClick={() => setFilterDept(d)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterDept === d ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {d === FILTER_ALL ? t("quotation.filterAll") : departmentLabel(d)}
-            </button>
-          ))}
-        </div>
-        {!loading && !loadError && (
-          <p className="text-xs text-muted-foreground font-mono" role="status" aria-live="polite">
-            {t("storeIssue.queueCount").replace("{n}", String(rows.length))}
-          </p>
-        )}
-      </div>
+      <ListCard>
+        <ListTabs tabs={deptTabs} active={filterDept} onChange={setFilterDept} ariaLabel={t("storeIssue.tabsAria")} />
+        <ListToolbar
+          search={searchQuery}
+          onSearch={setSearchQuery}
+          searchPlaceholder={t("storeIssue.searchPlaceholder")}
+          count={!loading && !loadError ? <span role="status" aria-live="polite">{t("storeIssue.queueCount").replace("{n}", String(rows.length))}</span> : undefined}
+        />
 
-      {loading ? (
-        <div className="space-y-3" role="status" aria-live="polite">
-          <span className="sr-only">{t("storeIssue.loading")}</span>
-          {[...Array(3)].map((_, i) => <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" aria-hidden="true" />)}
-        </div>
-      ) : loadError ? (
-        <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <p className="text-sm text-muted-foreground">{t("storeIssue.loadError")}</p>
-          <button onClick={() => void loadQueue()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-            {t("materialRequisition.retry")}
-          </button>
-        </div>
-      ) : queue.length === 0 ? (
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl">
-          <EmptyState icon={PackageCheck} title={t("storeIssue.empty.title")} description={t("storeIssue.empty.description")} compact />
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="bg-card border border-[#c3ccda] bg-white rounded-xl flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-            <PackageMinus size={20} className="text-muted-foreground" />
+        {loading ? (
+          <div className="p-5 flex flex-col gap-3" role="status" aria-live="polite">
+            <span className="sr-only">{t("storeIssue.loading")}</span>
+            {[...Array(3)].map((_, i) => <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
           </div>
-          <p className="text-sm text-muted-foreground">{t("storeIssue.noFilterResults")}</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((m) => {
-            const open = openId === m.id;
-            return (
-              <div key={m.id} className={`bg-card border rounded-xl overflow-hidden transition-colors ${open ? "border-[#c9a84c]/40" : "border-border"}`}>
-                <button
-                  onClick={() => (open ? closeRow() : openRow(m.id))}
-                  aria-expanded={open}
-                  className="w-full flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left hover:bg-secondary/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40"
-                >
-                  <ChevronDown size={15} className={`text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
- <span className="text-xs font-mono text-[#c9a84c] font-semibold">{m.documentNumber}</span>
- <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">
- {departmentLabel(m.ownerDepartment)}
- </span>
- <span className="text-xs text-muted-foreground">
- {[m.productionOrderId || m.jobCode, m.customerName, [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") || "—"}
- </span>
- <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
- {t("storeIssue.outstandingLines").replace("{n}", String(m.outstandingLineCount ?? 0))}
- </span>
- <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</span>
- </button>
+        ) : loadError ? (
+          <LoadErrorState message={t("storeIssue.loadError")} retryLabel={t("materialRequisition.retry")} onRetry={() => void loadQueue()} />
+        ) : queue.length === 0 ? (
+          <ListEmpty title={t("storeIssue.empty.title")} hint={t("storeIssue.empty.description")} />
+        ) : rows.length === 0 ? (
+          <ListEmpty title={t("storeIssue.noFilterResults")} />
+        ) : (
+          <div className="flex flex-col">
+            {rows.map((m) => {
+              const open = openId === m.id;
+              return (
+                <div key={m.id} className={`border-b border-[#eef1f6] last:border-b-0 ${open ? "bg-[#fbfcfe]" : "bg-white"}`}>
+                  <button
+                    type="button"
+                    onClick={() => (open ? closeRow() : openRow(m.id))}
+                    aria-expanded={open}
+                    className="w-full min-h-[60px] flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 text-left hover:bg-[#f8f9fc] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40"
+                  >
+                    <ChevronDown size={16} className={`text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+                    <span className="font-mono text-[13px] font-medium text-foreground">{m.documentNumber}</span>
+                    <Tag tone="grey">{departmentLabel(m.ownerDepartment)}</Tag>
+                    <span className="text-[13px] text-[#3d5173] min-w-0 truncate">
+                      {[m.productionOrderId || m.jobCode, m.customerName, [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") || "—"}
+                    </span>
+                    <span className="flex-1" />
+                    <Pill tone="amber" label={t("storeIssue.outstandingLines").replace("{n}", String(m.outstandingLineCount ?? 0))} />
+                    <span className="text-[13px] text-[#3d5173] whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</span>
+                  </button>
 
- {open && (
- <div className="border-t border-border px-5 py-4 space-y-3">
- {detailLoading ? (
- <div className="space-y-2" role="status" aria-live="polite">
- <span className="sr-only">{t("storeIssue.loadingDoc")}</span>
- {[...Array(2)].map((_, i) => <div key={i} className="h-9 rounded-lg animate-pulse" aria-hidden="true" />)}
- </div>
- ) : detailError || detail?.doc.id !== m.id ? (
- <div className="flex flex-col items-center gap-2 py-6 text-center">
- <p className="text-sm text-muted-foreground">{t("storeIssue.loadDocError")}</p>
- <button onClick={() => openRow(m.id)}
- className="px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- {t("materialRequisition.retry")}
- </button>
- </div>
- ) : (
- <>
- <div className="flex flex-wrap items-center justify-between gap-2">
- <p className="text-xs text-muted-foreground">
- {t("storeIssue.roundHint").replace("{n}", String(issueBatchesOf(detail.doc).length + 1))}
- </p>
- <div className="flex items-center gap-2">
- <button onClick={fillIssuable}
- className="px-2.5 py-1 text-[11px] border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- {t("storeIssue.fillIssuable")}
- </button>
- {onOpenDocument && (
- <button onClick={() => onOpenDocument(m.id, m.ownerDepartment)}
- className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- <ExternalLink size={12} /> {t("storeIssue.openDocument")}
- </button>
- )}
- </div>
- </div>
-
- <div className="overflow-x-auto">
- <table className="w-full">
- <thead>
- <tr className="border-b border-border ">
- {[
- t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.issued"),
- t("materialRequisitionDoc.col.outstanding"), t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.issueNow"),
- ].map((h) => (
- <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
- ))}
- </tr>
- </thead>
- <tbody>
- {detail.doc.lines.map((line) => {
- const stock = detail.stock[line.productId];
- const outstanding = outstandingQtyOf(line);
- const typed = Number(issueQty[line.id] ?? "");
- // เตือนที่ช่องก่อนโดนเซิร์ฟเวอร์ปฏิเสธ — เกินค้างเบิก หรือของในคลังไม่พอ
- const bad = Number.isFinite(typed) && typed > 0 && (typed > outstanding || (stock !== undefined && typed > stock));
- return (
- <tr key={line.id} className={`border-b border-border/50 ${outstanding <= 0 ? "opacity-50" : ""}`}>
-                                    <td className="px-3 py-2 text-xs text-foreground"><span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
-                                    <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{(line.plannedQty ?? 0).toLocaleString()} {line.unit}</td>
-                                    <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{issuedQtyOf(line).toLocaleString()}</td>
-                                    <td className={`px-3 py-2 text-xs font-mono ${outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
-                                    <td className={`px-3 py-2 text-xs font-mono ${stock !== undefined && outstanding > 0 && stock < outstanding ? "text-[#e05252] font-semibold" : "text-muted-foreground"}`}>
-                                      {stock === undefined ? "—" : stock.toLocaleString()}
-                                    </td>
-                                    <td className="px-2 py-1.5">
-                                      <input type="number" min={0} max={outstanding} value={issueQty[line.id] ?? ""}
-                                        disabled={outstanding <= 0}
-                                        aria-label={`${t("materialRequisitionDoc.col.issueNow")} ${line.productName}`}
-                                        onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
-                                        className={`w-24 text-xs font-mono text-foreground bg-[#2aa36b]/5 border rounded px-1.5 py-1 outline-none disabled:opacity-40 ${bad ? "border-[#e05252]" : "border-[#2aa36b]/20"}`} />
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                  {open && (
+                    <div className="border-t border-[#eef1f6] px-5 py-4 flex flex-col gap-4">
+                      {detailLoading ? (
+                        <div className="flex flex-col gap-2" role="status" aria-live="polite">
+                          <span className="sr-only">{t("storeIssue.loadingDoc")}</span>
+                          {[...Array(2)].map((_, i) => <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
                         </div>
+                      ) : detailError || detail?.doc.id !== m.id ? (
+                        <LoadErrorState message={t("storeIssue.loadDocError")} retryLabel={t("materialRequisition.retry")} onRetry={() => openRow(m.id)} />
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[13px] text-[#3d5173]">
+                              {t("storeIssue.roundHint").replace("{n}", String(issueBatchesOf(detail.doc).length + 1))}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <button type="button" onClick={fillIssuable} className={btn.secondarySm}>
+                                {t("storeIssue.fillIssuable")}
+                              </button>
+                              {onOpenDocument && (
+                                <button type="button" onClick={() => onOpenDocument(m.id, m.ownerDepartment)} className={btn.secondarySm}>
+                                  <ExternalLink size={14} /> {t("storeIssue.openDocument")}
+                                </button>
+                              )}
+                            </div>
+                          </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label htmlFor={`si-by-${m.id}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.issuedBy")}</label>
-                            <input id={`si-by-${m.id}`} value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} className={inputCls} />
+                          <div className="overflow-x-auto rounded-lg border border-border">
+                            <table className="w-full min-w-[720px]">
+                              <thead>
+                                <tr className={table.head}>
+                                  <th className={table.th}>{t("materialRequisitionDoc.col.item")}</th>
+                                  {[
+                                    t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.issued"),
+                                    t("materialRequisitionDoc.col.outstanding"), t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.issueNow"),
+                                  ].map((h) => <th key={h} className={`${table.th} text-right`}>{h}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detail.doc.lines.map((line) => {
+                                  const stock = detail.stock[line.productId];
+                                  const outstanding = outstandingQtyOf(line);
+                                  const typed = Number(issueQty[line.id] ?? "");
+                                  // เตือนที่ช่องก่อนโดนเซิร์ฟเวอร์ปฏิเสธ — เกินค้างเบิก หรือของในคลังไม่พอ
+                                  const bad = Number.isFinite(typed) && typed > 0 && (typed > outstanding || (stock !== undefined && typed > stock));
+                                  return (
+                                    <tr key={line.id} className={`border-b border-[#eef1f6] last:border-b-0 bg-white ${outstanding <= 0 ? "opacity-50" : ""}`}>
+                                      <td className={`${table.td} py-2.5 text-sm text-foreground`}><span className="font-mono text-[13px] text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
+                                      <td className={`${numTd} text-[#3d5173]`}>{(line.plannedQty ?? 0).toLocaleString()} {line.unit}</td>
+                                      <td className={`${numTd} text-[#3d5173]`}>{issuedQtyOf(line).toLocaleString()}</td>
+                                      <td className={`${numTd} ${outstanding > 0 ? "text-[#8a5a00] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
+                                      <td className={`${numTd} ${stock !== undefined && outstanding > 0 && stock < outstanding ? "text-[#b93636] font-semibold" : "text-[#3d5173]"}`}>
+                                        {stock === undefined ? "—" : stock.toLocaleString()}
+                                      </td>
+                                      <td className={`${table.td} py-1.5 text-right`}>
+                                        <input type="number" min={0} max={outstanding} value={issueQty[line.id] ?? ""}
+                                          disabled={outstanding <= 0}
+                                          aria-label={`${t("materialRequisitionDoc.col.issueNow")} ${line.productName}`}
+                                          onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                                          className={`${field.cell} w-28 text-right tabular-nums disabled:opacity-40 ${bad ? "border-[#b93636] focus:border-[#b93636]" : ""}`} />
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
-                          <div>
-                            <label htmlFor={`si-date-${m.id}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.issuedDate")}</label>
-                            <input id={`si-date-${m.id}`} type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={inputCls} />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label htmlFor={`si-remark-${m.id}`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.issueRemark")}</label>
-                            <input id={`si-remark-${m.id}`} value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)} className={inputCls} />
-                          </div>
-                        </div>
 
-                        <button onClick={() => void submitIssue()} disabled={saving}
-                          className="flex items-center gap-2 px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                          {saving ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                          {t("storeIssue.submit")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+                            <Field label={t("materialRequisitionDoc.field.issuedBy")} htmlFor={`si-by-${m.id}`}>
+                              <input id={`si-by-${m.id}`} value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} className={`${field.input} w-full`} />
+                            </Field>
+                            <Field label={t("materialRequisitionDoc.field.issuedDate")} htmlFor={`si-date-${m.id}`}>
+                              <input id={`si-date-${m.id}`} type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={`${field.input} w-full`} />
+                            </Field>
+                            <Field className="sm:col-span-2" label={t("materialRequisitionDoc.field.issueRemark")} htmlFor={`si-remark-${m.id}`}>
+                              <input id={`si-remark-${m.id}`} value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)} className={`${field.input} w-full`} />
+                            </Field>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button type="button" onClick={() => void submitIssue()} disabled={saving} className={btn.primary}>
+                              {saving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                              {t("storeIssue.submit")}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </ListCard>
       <Toast message={toast.message} />
     </div>
   );

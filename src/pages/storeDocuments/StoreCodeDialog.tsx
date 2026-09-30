@@ -1,16 +1,30 @@
 import { useId, useState } from "react";
-import { Loader2, X } from "lucide-react";
-import { useDialogA11y } from "../../hooks/useDialogA11y";
+import { ArrowDownToLine, ArrowUpFromLine, FilePlus2 } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import {
   STORE_ISSUE_CODES, STORE_RECEIPT_CODES, STORE_ISSUE_GROUP_LABEL_KEY, STORE_RECEIPT_GROUP_LABEL_KEY,
   type StoreIssueCode, type StoreReceiptCode, type StoreIssueGroup, type StoreReceiptGroup,
 } from "../../lib/storeCodes";
+import { Field, SelectBox } from "../../components/ui/Field";
+import { FormDialog } from "../stock/inventoryUi";
+import { CodeChip, Pill } from "../receivingReport/receivingUi";
+
+/** ใบเบิกของแผนกที่กำลังจะทำใบจ่ายให้ — โชว์เป็นกล่องสรุปเหนือช่องรหัส (แท็บ "ใบเบิกจากแผนก") */
+export interface StoreCodeDialogSource {
+  number: string;
+  jobCode: string;
+  /** บรรทัดรอง: ลูกค้า · แผนก / ทีม */
+  detail: string;
+  outstandingLines: number;
+}
 
 /**
  * เลือกรหัสก่อนสร้างใบเบิก/ใบรับคืนของสโตร์ (2026-09-23) — **ดรอปดาวน์แบ่งกลุ่ม** ตามที่เจ้าของบอกว่า
  * *"ตรงใบรับคืนสินค้าทำให้เป็น dropdown ก็ได้"* และเหมือนเมนูในโปรแกรมบัญชีเดิม · รหัสอยู่หน้าเลขที่ใบ
  * จึงต้องเลือกก่อนสร้างและเปลี่ยนภายหลังไม่ได้
+ *
+ * ดีไซน์ใหม่ 2026-09-30: กล่อง 480 แบบเดียวกับกล่องอื่นของคลัง (ไอคอนในวงกลม · ช่อง "รหัส *" · ชิปรหัสสีกรมท่า
+ * บอกว่าเลขที่ใบจะขึ้นต้นด้วยอะไร) · เลือกแล้วต้องกด "สร้างเอกสาร" เสมอ
  */
 export function StoreCodeDialog(props: (
   | { mode: "issue"; onCreate: (code: StoreIssueCode) => Promise<void>; onCancel: () => void }
@@ -19,10 +33,10 @@ export function StoreCodeDialog(props: (
   /** รหัสที่เลือกไว้ให้ก่อน และบรรทัดบอกว่าสร้างให้ใบไหน — ใช้ตอนทำใบจ่ายจากใบเบิกที่แผนกส่งมา (2026-09-24) */
   initialCode?: string;
   context?: string;
+  source?: StoreCodeDialogSource;
 }) {
   const { t } = useI18n();
   const selectId = useId();
-  const panelRef = useDialogA11y(props.onCancel);
   const [code, setCode] = useState(props.initialCode ?? "");
   const [busy, setBusy] = useState(false);
 
@@ -51,46 +65,56 @@ export function StoreCodeDialog(props: (
     }
   };
 
+  const prefix = picked && (
+    <span className="flex items-center gap-2 min-w-0">
+      <CodeChip dark>{picked.code}-</CodeChip>
+      <span className="text-sm text-[#3d5173] truncate">{picked.name}</span>
+    </span>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={props.onCancel} aria-hidden="true" />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={title}
-        className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <div className="flex-1">
-            <h2 className="text-base font-semibold text-foreground">{title}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{t("storeDocs.pickHint")}</p>
-            {props.context && <p className="text-xs font-medium text-[#866d28] mt-1">{props.context}</p>}
-          </div>
-          <button onClick={props.onCancel} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
-        </div>
-        <div className="p-5 space-y-2">
-          <label htmlFor={selectId} className="text-xs text-muted-foreground block">{t("storeDocs.pickLabel")}</label>
-          <select id={selectId} value={code} onChange={(e) => setCode(e.target.value)} autoFocus
-            className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors">
-            <option value="">{t("storeDocs.pickPlaceholder")}</option>
-            {groups.map((g) => (
-              <optgroup key={g.label} label={g.label}>
-                {g.options.map((o) => (
-                  <option key={o.code} value={o.code}>{o.code} — {o.name}{o.hint ? ` (${o.hint})` : ""}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {picked && (
-            <p className="text-xs text-muted-foreground">
-              <span className="font-mono font-semibold text-[#866d28]">{picked.code}-</span> {picked.name}
-            </p>
+    <FormDialog
+      icon={props.mode === "issue" ? ArrowUpFromLine : ArrowDownToLine}
+      title={title}
+      description={t("storeDocs.pickHint")}
+      busy={busy}
+      confirmLabel={t("storeDocs.create")}
+      confirmIcon={FilePlus2}
+      confirmDisabled={!code}
+      onConfirm={() => void submit()}
+      onCancel={props.onCancel}
+    >
+      {(props.context || props.source) && (
+        <div className="flex flex-col gap-1.5">
+          {props.context && <span className="text-xs text-muted-foreground">{props.context}</span>}
+          {props.source && (
+            <div className="px-3.5 py-3 bg-[#f8f9fc] border border-border rounded-lg flex items-center gap-3">
+              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                <span className="font-mono text-[13px] font-medium text-foreground truncate">
+                  {[props.source.number, props.source.jobCode].filter(Boolean).join(" · ")}
+                </span>
+                {props.source.detail && <span className="text-[13px] text-[#3d5173] truncate">{props.source.detail}</span>}
+              </div>
+              <Pill tone="amber" label={t("storeDocs.sourceOutstanding").replace("{n}", String(props.source.outstandingLines))} />
+            </div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-          <button onClick={props.onCancel} className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-          <button onClick={() => void submit()} disabled={!code || busy}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-50">
-            {busy && <Loader2 size={13} className="animate-spin" />} {t("storeDocs.create")}
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+      <Field label={t("storeDocs.pickLabel")} htmlFor={selectId} required help={props.mode === "issue" ? prefix : undefined}>
+        <SelectBox id={selectId} value={code} onChange={(e) => setCode(e.target.value)} autoFocus>
+          <option value="">{t("storeDocs.pickPlaceholder")}</option>
+          {groups.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.options.map((o) => (
+                <option key={o.code} value={o.code}>{o.code} — {o.name}{o.hint ? ` (${o.hint})` : ""}</option>
+              ))}
+            </optgroup>
+          ))}
+        </SelectBox>
+      </Field>
+      {props.mode === "receipt" && picked && (
+        <div className="px-3.5 py-3 bg-[#f8f9fc] border border-border rounded-lg">{prefix}</div>
+      )}
+    </FormDialog>
   );
 }
