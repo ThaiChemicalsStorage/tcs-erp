@@ -3,6 +3,8 @@ import { Printer } from "lucide-react";
 import { fetchArDocuments, DOC_TYPE_LABEL_KEY, type ArDocument, type ArDocumentType } from "../../lib/accounting";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
 import { btn, surface } from "../../components/ui/styles";
 import { MonthField, Pill, TotalsStrip } from "./accountingUi";
@@ -19,7 +21,7 @@ import { MonthlyReportPrint } from "./legacyReportPrint";
 // `MonthlyReportPrint` (legacyReportPrint.tsx) ส่วนเนื้อหาบนจอห่อด้วย `print:hidden` แต่งได้อิสระ
 const SECTION_ORDER: ArDocumentType[] = ["AR", "IV", "BI", "RE"];
 
-export function ArMonthlyReportPage() {
+export function ArMonthlyReportPage({ currentUserId }: { currentUserId: string }) {
   const { t } = useI18n();
   const [month, setMonth] = useState(currentMonthLocal);
   const [attempt, setAttempt] = useState(0);
@@ -43,6 +45,15 @@ export function ArMonthlyReportPage() {
   const loadError = current?.error === true;
   const documents = current?.documents ?? [];
 
+  // คำแนะนำประจำหน้า — เล่นเองหลังโหลดเสร็จ (แถบยอดรวม/ตารางยังไม่อยู่บนจอระหว่างโหลด · เดือนที่ไม่มีรายการ ขั้นนั้นถูกข้าม)
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="armonthly-month"]', manual: "ch13-4", popover: { title: t("tour.arMonthly.month.title"), description: t("tour.arMonthly.month.desc"), side: "bottom" } },
+    { element: '[data-tour="armonthly-print"]', manual: "ch13-4", popover: { title: t("tour.arMonthly.print.title"), description: t("tour.arMonthly.print.desc"), side: "bottom" } },
+    { element: '[data-tour="armonthly-totals"]', manual: "ch13-4", popover: { title: t("tour.arMonthly.totals.title"), description: t("tour.arMonthly.totals.desc"), side: "bottom" } },
+    { element: '[data-tour="armonthly-table"]', manual: "ch13-4", popover: { title: t("tour.arMonthly.sections.title"), description: t("tour.arMonthly.sections.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("arMonthly", currentUserId, tourSteps, { autoStart: !loading });
+
   const active = (docs: ArDocument[]) => docs.filter((d) => d.status === "issued");
 
   // ยอดรวมใบกำกับภาษี (AR + IV) สำหรับกระทบยอดยื่น ภ.พ.30 — ไม่รวมเอกสารที่ยกเลิก
@@ -59,9 +70,10 @@ export function ArMonthlyReportPage() {
           module={t("nav.group.accounting")}
           title={t("accounting.monthly.title")}
           description={t("accounting.monthly.subtitle")}
+          help={<TourReplayButton variant="title" onClick={tour.start} />}
           actions={<>
-            <MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} />
-            <button type="button" onClick={() => window.print()} className={btn.secondary}>
+            <div data-tour="armonthly-month"><MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} /></div>
+            <button type="button" data-tour="armonthly-print" onClick={() => window.print()} className={btn.secondary}>
               <Printer size={16} /> {t("accounting.monthly.printBtn")}
             </button>
           </>}
@@ -89,6 +101,7 @@ export function ArMonthlyReportPage() {
         </div>
       ) : (
         <>
+          <div data-tour="armonthly-totals">
           <TotalsStrip
             title={`${t("accounting.monthly.taxSummary.headingPrefix")} ${thaiMonthLabel(month)}`}
             sub={t("accounting.monthly.taxSummary.headingSuffix")}
@@ -99,14 +112,16 @@ export function ArMonthlyReportPage() {
               { label: t("accounting.monthly.kpi.netTotal"), value: money(taxNetTotal), alignEnd: true, strong: true },
             ]}
           />
+          </div>
 
           {SECTION_ORDER.map((docType) => {
+            const firstSection = docType === SECTION_ORDER.find((dt) => documents.some((d) => d.docType === dt));
             const sectionDocs = documents.filter((d) => d.docType === docType).sort((a, b) => a.docNo.localeCompare(b.docNo));
             if (sectionDocs.length === 0) return null;
             const sectionActive = active(sectionDocs);
             const sectionTotal = sectionActive.reduce((s, d) => s + d.netTotal, 0);
             return (
-              <section key={docType} className={REPORT.card} style={{ breakInside: "avoid" }}>
+              <section key={docType} data-tour={firstSection ? "armonthly-table" : undefined} className={REPORT.card} style={{ breakInside: "avoid" }}>
                 <div className={REPORT.cardHead}>
                   <span className="h-[22px] px-2 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center print:hidden">{docType}</span>
                   <h2 className="flex-1 text-base font-semibold text-foreground print:text-sm">{t(DOC_TYPE_LABEL_KEY[docType])} ({docType})</h2>

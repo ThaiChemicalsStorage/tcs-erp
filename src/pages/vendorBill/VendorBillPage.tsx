@@ -16,7 +16,8 @@ import { btn } from "../../components/ui/styles";
  * หน้าใบรับวางบิลของสโตร์ (2026-09-23) — สลับรายการ/เอกสาร แบบเดียวกับหน้าใบรับสินค้า
  * สิทธิ์ใช้ชุด `receivingReport:*` (ดู `api/_lib/vendorBillHandler.ts`)
  */
-export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, company, initialVendorBillId, onVendorBillIdConsumed }: {
+export function VendorBillPage({ currentUserId, canCreate, canEdit, canPrint, canDelete, company, initialVendorBillId, onVendorBillIdConsumed }: {
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canPrint: boolean;
@@ -88,6 +89,7 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
         <VendorBillDocument
           key={selectedId}
           vendorBillId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canPrint={canPrint}
           canDelete={canDelete}
@@ -122,9 +124,10 @@ export function VendorBillPage({ canCreate, canEdit, canPrint, canDelete, compan
     <>
       <VendorBillList
         vendorBills={rows}
+        currentUserId={currentUserId}
         onOpen={open}
         headerAction={canCreate ? (
-          <button type="button" onClick={() => setCreating(true)} className={btn.primary}>
+          <button type="button" data-tour="vb-create" onClick={() => setCreating(true)} className={btn.primary}>
             <Plus size={16} /> {t("vendorBill.createBtn")}
           </button>
         ) : undefined}

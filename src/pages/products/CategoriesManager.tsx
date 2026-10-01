@@ -6,6 +6,8 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { ListPageHeader, ListCard } from "../../components/ui/ListPage";
 import { btn, field, surface, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 
 /**
  * หน้าจัดการหมวดหมู่สินค้า: เพิ่ม แก้ไขชื่อ และเก็บ/เลิกเก็บถาวร (ดีไซน์ใหม่ 2026-09-30 — ตารางเดียว
@@ -21,12 +23,14 @@ import { useI18n } from "../../lib/i18n";
  * — คนที่ดูได้อย่างเดียวจะเห็นรายการแต่ไม่มีปุ่ม ดีกว่าให้กดแล้วได้ 403
  */
 export function CategoriesManager({
+  currentUserId,
   categories,
   products = [],
   onChange,
   onBack,
   canManage = true,
 }: {
+  currentUserId: string;
   categories: ProductCategory[];
   /** ใช้นับว่าหมวดไหนมีสินค้าอยู่กี่ตัว — ไม่ส่งมาก็ได้ (หน้าย่อยของหน้าสินค้าส่งมาเสมอ) */
   products?: { categoryId: string; archived: boolean }[];
@@ -41,6 +45,14 @@ export function CategoriesManager({
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  // ปุ่มเพิ่มและไอคอนท้ายแถวมีเฉพาะผู้มีสิทธิ์จัดการ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="categories-add"]', manual: "ch21-2", popover: { title: t("tour.categories.add.title"), description: t("tour.categories.add.desc"), side: "bottom" } },
+    { element: '[data-tour="categories-list"]', manual: "ch21-2", popover: { title: t("tour.categories.list.title"), description: t("tour.categories.list.desc"), side: "top" } },
+    { element: '[data-tour="categories-row-actions"]', manual: "ch21-2", popover: { title: t("tour.categories.actions.title"), description: t("tour.categories.actions.desc"), side: "left" } },
+    { element: '[data-tour="categories-summary"]', manual: "ch21-2", popover: { title: t("tour.categories.archived.title"), description: t("tour.categories.archived.desc"), side: "bottom" } },
+  ];
+  const tour = useModuleTour("productCategories", currentUserId, tourSteps);
 
   // ตรวจสอบชื่อและสร้างหมวดหมู่ใหม่ ป้องกันชื่อซ้ำ
   // Validates the name and creates a new category, guarding against duplicates.
@@ -116,18 +128,20 @@ export function CategoriesManager({
         module={t("nav.group.inventory")}
         title={t("nav.productCategories")}
         description={t("products.categories.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canManage && (
-          <button type="button" onClick={() => { setAdding(true); setError(""); }} className={btn.primary}>
+          <button type="button" data-tour="categories-add" onClick={() => { setAdding(true); setError(""); }} className={btn.primary}>
             <Plus size={16} /> {t("products.categories.addNewTitle")}
           </button>
         )}
       />
 
+      <div data-tour="categories-list">
       <ListCard>
         <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-[#eef1f6]">
           <h2 className={surface.cardTitle}>{t("products.categories.listTitle")}</h2>
           <span className="flex-1" />
-          <span className="text-[13px] text-muted-foreground">
+          <span data-tour="categories-summary" className="text-[13px] text-muted-foreground">
             {t("products.categories.countSummary").replace("{active}", String(activeCount)).replace("{archived}", String(categories.length - activeCount))}
           </span>
         </div>
@@ -171,7 +185,7 @@ export function CategoriesManager({
             <p className="text-sm text-muted-foreground">{t("products.categories.empty")}</p>
           </div>
         )}
-        {categories.map((c) => (
+        {categories.map((c, i) => (
           <div key={c.id} className={`grid ${cols} items-center gap-x-3 px-5 min-h-14 py-2 border-b border-[#eef1f6] last:border-b-0 bg-white hover:bg-[#f8f9fc] transition-colors`}>
             <span className="min-w-0 flex items-center">
               {editingId === c.id ? (
@@ -199,7 +213,7 @@ export function CategoriesManager({
             <span className="hidden sm:block">
               <StatusBadge status={c.archived ? "archived" : "active"} label={c.archived ? t("common.status.archived") : t("common.status.active")} />
             </span>
-            <span className="flex justify-end gap-1">
+            <span data-tour={i === 0 && canManage ? "categories-row-actions" : undefined} className="flex justify-end gap-1">
               {canManage && editingId !== c.id && (
                 <>
                   <button type="button" onClick={() => startEdit(c)} title={t("products.categories.editNameTitle")} aria-label={`${t("products.categories.editNameTitle")} ${c.name}`} className={btn.icon}>
@@ -214,6 +228,7 @@ export function CategoriesManager({
           </div>
         ))}
       </ListCard>
+      </div>
     </div>
   );
 }

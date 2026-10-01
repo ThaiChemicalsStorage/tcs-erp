@@ -1267,7 +1267,7 @@ export default function App() {
               : effectiveNav === "dashboard"
               ? <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} />
               : effectiveNav === "pendingApprovals"
-              ? <PendingApprovalsPage onOpen={openPendingApproval} />
+              ? <PendingApprovalsPage currentUserId={currentUser.id} onOpen={openPendingApproval} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage currentUserId={currentUser.id} />
               : effectiveNav === "scopeOfWork"
@@ -1289,33 +1289,33 @@ export default function App() {
               : effectiveNav === "productionPurchase"
               ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} canCreatePurchaseOrder={canCreatePurchaseOrder} onOpenPurchaseOrder={navigateToPurchaseOrder} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionOrder"
-              ? <ProductionOrderPage company={company} canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
+              ? <ProductionOrderPage currentUserId={currentUser.id} company={company} canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
               : effectiveNav === "purchaseOrder"
-              ? <PurchaseOrderPage canCreate={canCreatePurchaseOrder} canEdit={canEditPurchaseOrder} canApprove={canApprovePurchaseOrder} canPrint={canPrintPurchaseOrder} canDelete={canDeletePurchaseOrder} canViewPurchaseRequest={canViewPurchaseRequest} canReceiveGoods={canCreateReceivingReport} onOpenReceivingReport={navigateToReceivingReport} initialPurchaseOrderId={purchaseOrderDeepLinkId} onPurchaseOrderIdConsumed={() => setPurchaseOrderDeepLinkId(null)} />
+              ? <PurchaseOrderPage currentUserId={currentUser.id} canCreate={canCreatePurchaseOrder} canEdit={canEditPurchaseOrder} canApprove={canApprovePurchaseOrder} canPrint={canPrintPurchaseOrder} canDelete={canDeletePurchaseOrder} canViewPurchaseRequest={canViewPurchaseRequest} canReceiveGoods={canCreateReceivingReport} onOpenReceivingReport={navigateToReceivingReport} initialPurchaseOrderId={purchaseOrderDeepLinkId} onPurchaseOrderIdConsumed={() => setPurchaseOrderDeepLinkId(null)} />
               : effectiveNav === "costControl"
-              ? <CostControlPage canCreate={canCreateCostControl} canEdit={canEditCostControl} canApprove={canApproveCostControl} canPrint={canPrintCostControl} canDelete={canDeleteCostControl} canViewScopeOfWork={canViewScopeOfWork} company={company} initialCostControlId={costControlDeepLinkId} onCostControlIdConsumed={() => setCostControlDeepLinkId(null)} />
+              ? <CostControlPage currentUserId={currentUser.id} canCreate={canCreateCostControl} canEdit={canEditCostControl} canApprove={canApproveCostControl} canPrint={canPrintCostControl} canDelete={canDeleteCostControl} canViewScopeOfWork={canViewScopeOfWork} company={company} initialCostControlId={costControlDeepLinkId} onCostControlIdConsumed={() => setCostControlDeepLinkId(null)} />
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"
               ? <ServiceTemplateManagement currentUserId={currentUser.id} canCreate={canCreateServiceTemplates} canEdit={canEditServiceTemplates} canArchive={canArchiveServiceTemplates} />
               : effectiveNav === "accounting"
-              ? <AccountingPage canCreate={canCreateAr} canIssue={canIssueAr} />
+              ? <AccountingPage currentUserId={currentUser.id} canCreate={canCreateAr} canIssue={canIssueAr} />
               : effectiveNav === "arDeposit"
-              ? <ArDocumentListPage key="AR" docType="AR" initialArDocumentId={arDocumentDeepLink?.docType === "AR" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage currentUserId={currentUser.id} key="AR" docType="AR" initialArDocumentId={arDocumentDeepLink?.docType === "AR" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arBilling"
-              ? <ArDocumentListPage key="BI" docType="BI" initialArDocumentId={arDocumentDeepLink?.docType === "BI" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage currentUserId={currentUser.id} key="BI" docType="BI" initialArDocumentId={arDocumentDeepLink?.docType === "BI" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arReceipt"
-              ? <ArDocumentListPage key="RE" docType="RE" initialArDocumentId={arDocumentDeepLink?.docType === "RE" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage currentUserId={currentUser.id} key="RE" docType="RE" initialArDocumentId={arDocumentDeepLink?.docType === "RE" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arTaxInvoice"
-              ? <ArDocumentListPage key="IV" docType="IV" initialArDocumentId={arDocumentDeepLink?.docType === "IV" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage currentUserId={currentUser.id} key="IV" docType="IV" initialArDocumentId={arDocumentDeepLink?.docType === "IV" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arMonthly"
-              ? <ArMonthlyReportPage />
+              ? <ArMonthlyReportPage currentUserId={currentUser.id} />
               : effectiveNav === "purchaseTaxRegister"
-              ? <PurchaseTaxRegisterPage />
+              ? <PurchaseTaxRegisterPage currentUserId={currentUser.id} />
               : effectiveNav === "apRegister"
-              ? <ApRegisterPage canManage={canManageAp} />
+              ? <ApRegisterPage currentUserId={currentUser.id} canManage={canManageAp} />
               : effectiveNav === "accountingDashboard"
-              ? <AccountingDashboardPage />
+              ? <AccountingDashboardPage currentUserId={currentUser.id} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
@@ -1323,11 +1323,11 @@ export default function App() {
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "codeRegister"
-              ? <CodeRegisterPage codes={codeEntries} onCodesChange={setCodeEntries} canCreate={canCreateCodes} canEdit={canEditCodes} canArchive={canArchiveCodes} />
+              ? <CodeRegisterPage currentUserId={currentUser.id} codes={codeEntries} onCodesChange={setCodeEntries} canCreate={canCreateCodes} canEdit={canEditCodes} canArchive={canArchiveCodes} />
               : effectiveNav === "materialRequisitionTemplates"
-              ? <MaterialRequisitionTemplatePage canEdit={canEditMaterialRequisition} />
+              ? <MaterialRequisitionTemplatePage currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} />
               : effectiveNav === "vendors"
-              ? <VendorsPage vendors={vendors} onVendorsChange={setVendors} canCreate={canCreateVendors} canEdit={canEditVendors} canArchive={canArchiveVendors} canApprove={canApproveVendors} />
+              ? <VendorsPage currentUserId={currentUser.id} vendors={vendors} onVendorsChange={setVendors} canCreate={canCreateVendors} canEdit={canEditVendors} canArchive={canArchiveVendors} canApprove={canApproveVendors} />
               : effectiveNav === "customers"
               ? <CustomersPage customers={customers} onCustomersChange={setCustomers} currentUserId={currentUser.id} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "settings"
@@ -1335,13 +1335,13 @@ export default function App() {
               : effectiveNav === "products"
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} currentUserId={currentUser.id} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "stock"
-              ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} onOpenHistory={navigateToStockHistory} />
+              ? <StockPage currentUserId={currentUser.id} products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} onOpenHistory={navigateToStockHistory} />
               : effectiveNav === "stockHistory"
-              ? <StockHistoryPage products={products} company={company} initialProductId={stockHistoryProductId} onInitialProductConsumed={() => setStockHistoryProductId(null)} />
+              ? <StockHistoryPage currentUserId={currentUser.id} products={products} company={company} initialProductId={stockHistoryProductId} onInitialProductConsumed={() => setStockHistoryProductId(null)} />
               : effectiveNav === "toolControl"
               ? <ToolControlPage company={company} currentUserId={currentUser.id} canIssue={canAdjustStock} />
               : effectiveNav === "productCategories"
-              ? <CategoriesManager categories={categories} products={products} onChange={updateCategories} canManage={hasPermission(currentUser, roles, "products:create") || hasPermission(currentUser, roles, "products:edit")} />
+              ? <CategoriesManager currentUserId={currentUser.id} categories={categories} products={products} onChange={updateCategories} canManage={hasPermission(currentUser, roles, "products:create") || hasPermission(currentUser, roles, "products:edit")} />
               : effectiveNav === "storeRequestInbox"
               ? <PurchaseRequestPage key="pr-store" ownerDepartment="all" storeStage="pending" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} canCreatePurchaseOrder={canCreatePurchaseOrder} onOpenPurchaseOrder={navigateToPurchaseOrder} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "storePurchaseRequest"
@@ -1351,19 +1351,19 @@ export default function App() {
               : effectiveNav === "storeDocuments"
               ? <StoreDocumentsPage company={company} currentUserId={currentUser.id} canCreate={canCreateMaterialRequisition} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canIssueStock={canAdjustStock} canRequestProductCode={canCreateProductRequest} initialDocument={storeDocumentDeepLink} onInitialDocumentConsumed={() => setStoreDocumentDeepLink(null)} />
               : effectiveNav === "receivingReport"
-              ? <ReceivingReportPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
+              ? <ReceivingReportPage currentUserId={currentUser.id} canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
               : effectiveNav === "vendorBills"
-              ? <VendorBillPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialVendorBillId={vendorBillDeepLinkId} onVendorBillIdConsumed={() => setVendorBillDeepLinkId(null)} />
+              ? <VendorBillPage currentUserId={currentUser.id} canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialVendorBillId={vendorBillDeepLinkId} onVendorBillIdConsumed={() => setVendorBillDeepLinkId(null)} />
               : effectiveNav === "productRequest"
               ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} onProductsChanged={refreshCatalog} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "passwordResets" && isSuperAdmin
-              ? <PasswordResetRequestsPage />
+              ? <PasswordResetRequestsPage currentUserId={currentUser.id} />
               : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
               : effectiveNav === "departments" && isSuperAdmin
-              ? <DepartmentManagementPage departments={departments} onDepartmentsChange={updateDepartments} teams={teams} onTeamsChange={updateTeams} />
+              ? <DepartmentManagementPage currentUserId={currentUser.id} departments={departments} onDepartmentsChange={updateDepartments} teams={teams} onTeamsChange={updateTeams} />
               : <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} />
             }
           </Suspense>

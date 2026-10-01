@@ -18,9 +18,10 @@ import { btn } from "../../components/ui/styles";
  * ("cost control ไม่ต้องโยนไฟล์ก็สร้างเองได้ด้วยดิ") เผื่องานที่ยังไม่มีไฟล์ประเมินราคา
  */
 export function CostControlPage({
-  canCreate, canEdit, canApprove, canPrint, canDelete, canViewScopeOfWork, company,
+  currentUserId, canCreate, canEdit, canApprove, canPrint, canDelete, canViewScopeOfWork, company,
   initialCostControlId, onCostControlIdConsumed,
 }: {
+  currentUserId: string;
   canCreate: boolean;
   /** เห็นรายการ Scope of Work ได้ไหม — ตัดสินว่าช่อง "ผูกกับ Scope of Work" จะเลือกได้หรือแค่แสดงผล */
   canViewScopeOfWork: boolean;
@@ -95,6 +96,7 @@ export function CostControlPage({
         <CostControlDocument
           key={selectedId}
           costControlId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canApprove={canApprove}
           canPrint={canPrint}
@@ -140,14 +142,15 @@ export function CostControlPage({
     <>
       <CostControlList
         costControls={costControls}
+        currentUserId={currentUserId}
         onOpen={openCostControl}
         // "สร้างจากไฟล์ Excel" เป็นปุ่มหลัก — ทางหลักของการสร้างใบนี้ (ดีไซน์ใหม่ 2026-09-30) · ใบเปล่าเป็นปุ่มรอง
         headerAction={canCreate ? (
           <>
-            <button type="button" onClick={() => void handleCreateBlank()} disabled={creating} className={btn.secondary}>
+            <button type="button" data-tour="cc-create-blank" onClick={() => void handleCreateBlank()} disabled={creating} className={btn.secondary}>
               <Plus size={16} /> {t("costControl.createBlankBtn")}
             </button>
-            <button type="button" onClick={() => setImportOpen(true)} className={btn.primary}>
+            <button type="button" data-tour="cc-create-excel" onClick={() => setImportOpen(true)} className={btn.primary}>
               <Upload size={16} /> {t("costControl.createBtn")}
             </button>
           </>

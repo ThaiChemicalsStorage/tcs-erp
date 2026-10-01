@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Building2, Loader2, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
@@ -35,8 +37,9 @@ function toUpdateFields(d: VendorBill): VendorBillUpdateFields {
  * หัวใบ (วันที่รับวางบิล · เครดิต · วันที่จ่ายชำระ · หมายเหตุ) + ใบรับสินค้าของผู้ขายรายนี้ที่อยู่ในใบ
  * ยอด/จ่ายแล้ว/คงค้าง มาจากทะเบียนเจ้าหนี้ทุกครั้งที่เปิด (ดู `src/lib/vendorBill.ts`)
  */
-export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete, companyHeader, onBack, showToast }: {
+export function VendorBillDocument({ vendorBillId, currentUserId, canEdit, canPrint, canDelete, companyHeader, onBack, showToast }: {
   vendorBillId: string;
+  currentUserId: string;
   canEdit: boolean;
   canPrint: boolean;
   canDelete: boolean;
@@ -117,6 +120,16 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
       }
       : null,
   );
+
+  // ปุ่มพิมพ์/เมนูลบมีเฉพาะผู้มีสิทธิ์ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="vbdoc-print"]', manual: "ch14-4", popover: { title: t("tour.vbdoc.print.title"), description: t("tour.vbdoc.print.desc"), side: "bottom" } },
+    { element: '[data-tour="vbdoc-more"]', manual: "ch14-5", popover: { title: t("tour.vbdoc.more.title"), description: t("tour.vbdoc.more.desc"), side: "bottom" } },
+    { element: '[data-tour="vbdoc-info"]', manual: "ch14-4", popover: { title: t("tour.vbdoc.info.title"), description: t("tour.vbdoc.info.desc"), side: "bottom" } },
+    { element: '[data-tour="vbdoc-outstanding"]', manual: "ch14-6", popover: { title: t("tour.vbdoc.outstanding.title"), description: t("tour.vbdoc.outstanding.desc"), side: "left" } },
+    { element: '[data-tour="vbdoc-rows"]', manual: "ch14-5", popover: { title: t("tour.vbdoc.rows.title"), description: t("tour.vbdoc.rows.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("vendorBillDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
     if (!showPrint) return;
@@ -213,19 +226,20 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             meta={editable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
             actions={
               <>
+                <TourReplayButton variant="title" onClick={docTour.start} />
                 {/* ปุ่มบันทึกคงไว้ตามที่เจ้าของสั่ง (2026-09-30) แม้มีบันทึกอัตโนมัติ */}
                 {editable && (
                   <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("vendorBill.save")}
                   </button>
                 )}
-                <MoreMenu
+                {canDelete && <div data-tour="vbdoc-more"><MoreMenu
                   items={[
                     canDelete && { key: "delete", label: t("vendorBill.deleteMenu"), icon: Trash2, danger: true, hint: t("vendorBill.deleteMenuHint"), onSelect: () => setConfirmDelete(true) },
                   ]}
-                />
+                /></div>}
                 {canPrint && (
-                  <button type="button" onClick={() => void handlePrint()} disabled={printing} className={btn.primary}>
+                  <button type="button" data-tour="vbdoc-print" onClick={() => void handlePrint()} disabled={printing} className={btn.primary}>
                     {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("vendorBill.print")}
                   </button>
                 )}
@@ -268,6 +282,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
                   </div>
                 </SectionCard>
 
+                <div data-tour="vbdoc-info">
                 <SectionCard title={t("vendorBill.infoTitle")}>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
                     {editable ? (
@@ -296,10 +311,12 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
                     )}
                   </div>
                 </SectionCard>
+                </div>
               </>
             }
             rail={
               <>
+                <div data-tour="vbdoc-outstanding">
                 <RailSummaryCard
                   label={t("vendorBill.col.outstanding")}
                   value={`฿${fmt(totals.outstanding)}`}
@@ -309,6 +326,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
                     { label: t("vendorBill.col.rows"), value: t("vendorBill.create.count").replace("{n}", String(shownRows.length)) },
                   ]}
                 />
+                </div>
                 <NextStepHint title={t("receivingReportDoc.nextStep")}>
                   <span className="block">{t("vendorBill.nextStepBody")}</span>
                   <span className="block mt-1 text-muted-foreground">{t("vendorBill.subtitle")}</span>
@@ -317,7 +335,7 @@ export function VendorBillDocument({ vendorBillId, canEdit, canPrint, canDelete,
             }
           />
 
-          <section className={surface.card}>
+          <section data-tour="vbdoc-rows" className={surface.card}>
             <div className={`${surface.cardHead} min-h-[60px] py-3`}>
               <h2 className={surface.cardTitle}>{t("vendorBill.rowsTitle")}</h2>
               <span className="flex-1 text-[13px] text-muted-foreground">{t("vendorBill.rowsCount").replace("{n}", String(shownRows.length))}</span>

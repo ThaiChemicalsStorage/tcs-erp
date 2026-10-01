@@ -16,6 +16,8 @@ import {
   type StockHistoryRow, type StockHistoryResult, type StockMovementKind, type StockMovementSourceType,
 } from "../../lib/stock";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { SelectBox } from "../../components/ui/Field";
 import { btn, field, surface, table } from "../../components/ui/styles";
 import { LoadErrorState } from "../receivingReport/receivingUi";
@@ -121,8 +123,9 @@ function LinkCell({ row }: { row: StockHistoryRow }) {
 }
 
 export function StockHistoryPage({
-  products, company, initialProductId, onInitialProductConsumed,
+  currentUserId, products, company, initialProductId, onInitialProductConsumed,
 }: {
+  currentUserId: string;
   products: Product[];
   /** หัวจดหมายของใบพิมพ์ (ปุ่ม PDF — 2026-09-24) */
   company: Company;
@@ -162,7 +165,21 @@ export function StockHistoryPage({
   };
   const today = new Date().toLocaleDateString("sv-SE");
 
+  // แท็บ "ทุกความเคลื่อนไหว" กับ "ติดตามรายสินค้า" มีส่วนต่างกัน — ขั้นที่ไม่อยู่ในแท็บที่เปิดอยู่ถูกข้ามเอง
+  // เริ่มเองเฉพาะตอนอยู่แท็บแรก (เปิดมาจากปุ่มประวัติของหน้าสต๊อกจะเข้าแท็บติดตามเลย ซึ่งเห็นได้แค่ 2 ขั้น)
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="sh-kpis"]', manual: "ch22-3", popover: { title: t("tour.stockHistory.kpis.title"), description: t("tour.stockHistory.kpis.desc"), side: "bottom" } },
+    { element: '[data-tour="sh-tabs"]', manual: "ch22-2", popover: { title: t("tour.stockHistory.tabs.title"), description: t("tour.stockHistory.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="sh-trace-pick"]', manual: "ch22-2", popover: { title: t("tour.stockHistory.trace.title"), description: t("tour.stockHistory.trace.desc"), side: "bottom" } },
+    { element: '[data-tour="sh-filters"]', manual: "ch22-3", popover: { title: t("tour.stockHistory.filters.title"), description: t("tour.stockHistory.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="sh-table"]', manual: "ch22-3", popover: { title: t("tour.stockHistory.table.title"), description: t("tour.stockHistory.table.desc"), side: "top" } },
+    { element: '[data-tour="sh-export"]', manual: "ch22-7", popover: { title: t("tour.stockHistory.export.title"), description: t("tour.stockHistory.export.desc"), side: "bottom" } },
+  ];
+  const tour = useModuleTour("stockHistory", currentUserId, tourSteps, { autoStart: tab === "all" });
+  const help = <TourReplayButton variant="title" onClick={tour.start} />;
+
   const tabs = (
+    <div data-tour="sh-tabs">
     <ListTabs<Tab>
       tabs={[
         { key: "all", label: t("stockHistory.tab.all"), count: allTotal },
@@ -172,6 +189,7 @@ export function StockHistoryPage({
       onChange={setTab}
       ariaLabel={t("stockHistory.title")}
     />
+    </div>
   );
 
   return (
@@ -180,27 +198,29 @@ export function StockHistoryPage({
     {printJob?.kind === "card" && <StockCardPrintDocument product={printJob.product} movements={printJob.rows} companyHeader={companyHeader} printedAt={today} />}
     <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5 print:hidden">
       {tab === "all"
-        ? <AllMovements tabs={tabs} onTotal={setAllTotal} onTrace={(pid) => { setTraceProductId(pid); setTab("trace"); }} onPrint={setPrintJob} />
-        : <ItemTrace tabs={tabs} products={products} productId={traceProductId} onProductChange={setTraceProductId} onPrint={setPrintJob} />}
+        ? <AllMovements tabs={tabs} help={help} onTotal={setAllTotal} onTrace={(pid) => { setTraceProductId(pid); setTab("trace"); }} onPrint={setPrintJob} />
+        : <ItemTrace tabs={tabs} help={help} products={products} productId={traceProductId} onProductChange={setTraceProductId} onPrint={setPrintJob} />}
     </div>
     </>
   );
 }
 
-function PageHeader({ actions }: { actions?: ReactNode }) {
+function PageHeader({ actions, help }: { actions?: ReactNode; help?: ReactNode }) {
   const { t } = useI18n();
   return (
     <ListPageHeader
       module={t("nav.group.inventory")}
       title={t("stockHistory.title")}
       description={t("stockHistory.subtitle")}
+      help={help}
       actions={actions}
     />
   );
 }
 
-function AllMovements({ tabs, onTotal, onTrace, onPrint }: {
+function AllMovements({ tabs, help, onTotal, onTrace, onPrint }: {
   tabs: ReactNode;
+  help: ReactNode;
   onTotal: (n: number) => void;
   onTrace: (productId: string) => void;
   onPrint: (job: PrintJob) => void;
@@ -285,20 +305,21 @@ function AllMovements({ tabs, onTotal, onTrace, onPrint }: {
   return (
     <>
       <PageHeader
+        help={help}
         actions={(
-          <>
+          <div data-tour="sh-export" className="flex items-center gap-2.5 flex-wrap">
             <button type="button" onClick={() => void exportRows("excel")} disabled={total === 0 || exporting !== null} className={btn.secondary}>
               {exporting === "excel" ? <Loader2 size={16} className="animate-spin" /> : <Sheet size={16} />} {t("stock.export.excel")}
             </button>
             <button type="button" onClick={() => void exportRows("pdf")} disabled={total === 0 || exporting !== null} title={t("stock.export.pdfHint")} className={btn.secondary}>
               {exporting === "pdf" ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} {t("stock.export.pdf")}
             </button>
-          </>
+          </div>
         )}
       />
       {exportError && <p className={`${field.error} -mt-2`} role="alert">{exportError}</p>}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div data-tour="sh-kpis" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label={t("stockHistory.kpi.total")} value={int(total)} sub={t("stockHistory.kpi.inFilter")} />
         <StatCard label={t("stockHistory.kpi.receive")} value={`฿${fmt(summaryOf("receive").amount)}`} tone="green" sub={t("stockHistory.kpi.count").replace("{n}", int(summaryOf("receive").count))} />
         <StatCard label={t("stockHistory.kpi.deduct")} value={`฿${fmt(summaryOf("deduct").amount)}`} tone="amber" sub={t("stockHistory.kpi.count").replace("{n}", int(summaryOf("deduct").count))} />
@@ -307,6 +328,7 @@ function AllMovements({ tabs, onTotal, onTrace, onPrint }: {
 
       <ListCard>
         {tabs}
+        <div data-tour="sh-filters">
         <ListToolbar
           search={query}
           onSearch={setQuery}
@@ -327,13 +349,14 @@ function AllMovements({ tabs, onTotal, onTrace, onPrint }: {
           </SelectBox>
           <button type="button" onClick={clear} className={btn.text}>{t("stockHistory.filter.clear")}</button>
         </ListToolbar>
+        </div>
 
         {error ? (
           <LoadErrorState message={t("stockHistory.loadError")} retryLabel={t("stockHistory.retry")} onRetry={() => setRetry((n) => n + 1)} />
         ) : !loading && result && movements.length === 0 ? (
           <ListEmpty title={t("stockHistory.empty")} />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-tour="sh-table" className="overflow-x-auto">
             <table className="w-full min-w-[1180px] table-fixed">
               <thead>
                 <tr className={table.head}>
@@ -444,8 +467,9 @@ function CardHead({ title, sub }: { title: ReactNode; sub?: ReactNode }) {
   );
 }
 
-function ItemTrace({ tabs, products, productId, onProductChange, onPrint }: {
+function ItemTrace({ tabs, help, products, productId, onProductChange, onPrint }: {
   tabs: ReactNode;
+  help: ReactNode;
   products: Product[];
   productId: string;
   onProductChange: (id: string) => void;
@@ -530,6 +554,7 @@ function ItemTrace({ tabs, products, productId, onProductChange, onPrint }: {
   return (
     <>
       <PageHeader
+        help={help}
         actions={(
           // การ์ดสต๊อกของสินค้าที่เลือก ตามช่วงวันที่ที่กรอง (2026-09-24) — คอลัมน์เดียวกับใบพิมพ์การ์ดสต๊อก
           <>
@@ -547,7 +572,7 @@ function ItemTrace({ tabs, products, productId, onProductChange, onPrint }: {
 
       <section className={`${surface.card} flex-shrink-0`}>
         {tabs}
-        <div className="flex items-end gap-4 flex-wrap px-5 py-4">
+        <div data-tour="sh-trace-pick" className="flex items-end gap-4 flex-wrap px-5 py-4">
           <div className="w-full sm:w-[460px] flex flex-col gap-1.5">
             <span className={field.label}>{t("stockHistory.trace.pickProduct")}</span>
             <span className={field.box}>

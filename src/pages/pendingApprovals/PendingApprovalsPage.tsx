@@ -7,6 +7,8 @@ import { PENDING_KIND_LABEL_KEY } from "./kindLabels";
 import { ApiError } from "../../lib/apiClient";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import {
   type PendingApprovalItem, type PendingApprovalKind,
   fetchPendingApprovals, daysWaiting,
@@ -35,7 +37,8 @@ const KIND_LABEL_KEY = PENDING_KIND_LABEL_KEY;
 /** รอเกินกี่วันถึงเริ่มเตือน — ไม่ใช่กฎของบริษัท เป็นแค่เส้นให้สายตาจับได้ว่าใบไหนค้างนาน */
 const STALE_DAYS = 3;
 
-export function PendingApprovalsPage({ onOpen }: {
+export function PendingApprovalsPage({ currentUserId, onOpen }: {
+  currentUserId: string;
   onOpen: (item: PendingApprovalItem) => void;
 }) {
   const { t } = useI18n();
@@ -43,6 +46,15 @@ export function PendingApprovalsPage({ onOpen }: {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filterKind, setFilterKind] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
+  // ไม่มีใบรอ = ไม่มีจุดให้ชี้ — ทัวร์ไม่ขึ้นและไม่ถูกจำว่าเห็นแล้ว จนกว่าจะมีใบรอครั้งแรก
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="pending-count"]', manual: "ch5-1", popover: { title: t("tour.pending.count.title"), description: t("tour.pending.count.desc"), side: "bottom" } },
+    { element: '[data-tour="pending-tabs"]', manual: "ch5-1", popover: { title: t("tour.pending.tabs.title"), description: t("tour.pending.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="pending-search"]', manual: "ch5-1", popover: { title: t("tour.pending.search.title"), description: t("tour.pending.search.desc"), side: "bottom" } },
+    { element: '[data-tour="pending-waiting"]', manual: "ch5-1", popover: { title: t("tour.pending.waiting.title"), description: t("tour.pending.waiting.desc"), side: "bottom" } },
+    { element: '[data-tour="pending-table"]', manual: "ch5-2", popover: { title: t("tour.pending.table.title"), description: t("tour.pending.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("pendingApprovals", currentUserId, tourSteps, { autoStart: items !== null });
 
   useEffect(() => {
     let cancelled = false;
@@ -79,8 +91,9 @@ export function PendingApprovalsPage({ onOpen }: {
         module={t("nav.group.main")}
         title={t("pendingApprovals.pageTitle")}
         description={t("pendingApprovals.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={items !== null && items.length > 0 ? (
-          <span className="h-8 px-3 rounded-full bg-[#fdf3e0] text-[#8a5a00] text-[13px] font-semibold inline-flex items-center gap-2">
+          <span data-tour="pending-count" className="h-8 px-3 rounded-full bg-[#fdf3e0] text-[#8a5a00] text-[13px] font-semibold inline-flex items-center gap-2">
             <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#d89614]" />
             {t("pendingApprovals.totalCount").replace("{n}", String(items.length))}
           </span>
@@ -104,17 +117,19 @@ export function PendingApprovalsPage({ onOpen }: {
             <EmptyState icon={Inbox} title={t("empty.pendingApprovals.title")} description={t("empty.pendingApprovals.sub")} compact />
           ) : (
             <>
-              <ListTabs tabs={tabs} active={filterKind} onChange={setFilterKind} ariaLabel={t("pendingApprovals.col.kind")} />
+              <div data-tour="pending-tabs"><ListTabs tabs={tabs} active={filterKind} onChange={setFilterKind} ariaLabel={t("pendingApprovals.col.kind")} /></div>
+              <div data-tour="pending-search">
               <ListToolbar
                 search={searchQuery}
                 onSearch={setSearchQuery}
                 searchPlaceholder={t("pendingApprovals.searchPlaceholder")}
                 count={t("pendingApprovals.docCount").replace("{n}", String(filtered.length))}
               />
+              </div>
               {filtered.length === 0 ? (
                 <ListEmpty title={t("pendingApprovals.noFilterResults")} />
               ) : (
-                <div className="overflow-x-auto">
+                <div data-tour="pending-table" className="overflow-x-auto">
                   <table className="w-full min-w-[920px] table-fixed text-sm">
                     <thead>
                       <tr className={table.head}>
@@ -122,7 +137,7 @@ export function PendingApprovalsPage({ onOpen }: {
                         <th className={table.th}>{t("pendingApprovals.col.party")}</th>
                         <th className={`${table.th} w-[210px]`}>{t("pendingApprovals.col.lineage")}</th>
                         <th className={`${table.th} w-[170px]`}>{t("pendingApprovals.col.submittedBy")}</th>
-                        <th className={`${table.th} w-[150px]`}>{t("pendingApprovals.col.waiting")}</th>
+                        <th data-tour="pending-waiting" className={`${table.th} w-[150px]`}>{t("pendingApprovals.col.waiting")}</th>
                         <th className={`${table.th} w-12`}><span className="sr-only">{t("pendingApprovals.openRow")}</span></th>
                       </tr>
                     </thead>

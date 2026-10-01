@@ -11,6 +11,8 @@ import { Sparkline } from "../dashboard/tabs/DepartmentWidgets";
 import { ListPageHeader } from "../../components/ui/ListPage";
 import { btn, field, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { PAGE_CLASS } from "./accountingUi";
 import { AGING_RAMP, money } from "./accountingFormat";
 
@@ -20,11 +22,11 @@ import { AGING_RAMP, money } from "./accountingFormat";
 // main cross-module Dashboard. Some sections are current-state snapshots, not period-filtered —
 // each is labeled honestly per docs/UI_GUIDELINES.md "Filter Honesty"; see accountingDashboard.ts.
 // ดีไซน์ใหม่ 2026-09-30: เปลี่ยนหน้าตาอย่างเดียว — ตัวเลขทุกตัวความหมายเดิม (เจ้าของตัดสินใจไว้)
-export function AccountingDashboardPage() {
+export function AccountingDashboardPage({ currentUserId }: { currentUserId: string }) {
   const { t } = useI18n();
   return (
     <div className={PAGE_CLASS}>
-      <AccountingDashboardView heading={{ module: t("nav.group.accounting"), title: t("accountingDashboard.title"), description: t("accountingDashboard.description") }} />
+      <AccountingDashboardView heading={{ module: t("nav.group.accounting"), title: t("accountingDashboard.title"), description: t("accountingDashboard.description"), currentUserId }} />
     </div>
   );
 }
@@ -35,7 +37,7 @@ export function AccountingDashboardPage() {
  * เมนูเดิมในกลุ่มบัญชียังอยู่ครบ · ตัวกรองวันที่เป็นของตัวเอง เพราะ ar-dashboard ตีความช่วงว่างเป็น "เดือนนี้"
  * `heading` = หน้าเมนูแดชบอร์ดบัญชี (หัวหน้า + ตัวกรองชิดขวา) · ไม่ส่ง = แท็บบนแดชบอร์ดหลัก (ตัวกรองแถวเดียว)
  */
-export function AccountingDashboardView({ heading }: { heading?: { module: string; title: string; description: string } }) {
+export function AccountingDashboardView({ heading }: { heading?: { module: string; title: string; description: string; currentUserId: string } }) {
   const { t } = useI18n();
   const [preset, setPreset] = useState<DateRangePreset>("thisMonth");
   const [from, setFrom] = useState<string>(() => rangeForPreset("thisMonth")?.from ?? "");
@@ -66,6 +68,17 @@ export function AccountingDashboardView({ heading }: { heading?: { module: strin
   const loadError = current?.error === true;
   const stats = current?.stats ?? null;
 
+  // คำแนะนำประจำหน้า — เฉพาะเมนูแดชบอร์ดบัญชี (มี heading) · แท็บบัญชีบนแดชบอร์ดหลักไม่เล่นเอง (autoStart ปิด)
+  // รอโหลดเสร็จก่อนค่อยเล่นเอง เพราะการ์ด/กราฟ/ตารางยังไม่อยู่บนจอระหว่างโหลด
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="accdash-filters"]', manual: "ch13-3", popover: { title: t("tour.accDash.filters.title"), description: t("tour.accDash.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="accdash-kpis"]', manual: "ch13-3", popover: { title: t("tour.accDash.kpis.title"), description: t("tour.accDash.kpis.desc"), side: "bottom" } },
+    { element: '[data-tour="accdash-trend"]', manual: "ch13-3", popover: { title: t("tour.accDash.trend.title"), description: t("tour.accDash.trend.desc"), side: "top" } },
+    { element: '[data-tour="accdash-aging"]', manual: "ch13-3", popover: { title: t("tour.accDash.aging.title"), description: t("tour.accDash.aging.desc"), side: "top" } },
+    { element: '[data-tour="accdash-customers"]', manual: "ch13-3", popover: { title: t("tour.accDash.customers.title"), description: t("tour.accDash.customers.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("accountingDashboard", heading?.currentUserId ?? "", tourSteps, { autoStart: !!heading && !loading });
+
   const applyPreset = (p: DateRangePreset) => {
     setPreset(p);
     if (p === "custom") return;
@@ -82,7 +95,7 @@ export function AccountingDashboardView({ heading }: { heading?: { module: strin
   ];
 
   const filters = (
-    <div className="flex items-end gap-3 flex-wrap">
+    <div data-tour="accdash-filters" className="flex items-end gap-3 flex-wrap">
       <IconSelect
         label={t("accountingDashboard.filter.dateRangeLabel")}
         icon={<CalendarRange size={16} />}
@@ -115,7 +128,7 @@ export function AccountingDashboardView({ heading }: { heading?: { module: strin
   return (
     <div className="flex flex-col gap-5">
       {heading
-        ? <ListPageHeader module={heading.module} title={heading.title} description={heading.description} actions={filters} />
+        ? <ListPageHeader module={heading.module} title={heading.title} description={heading.description} help={<TourReplayButton variant="title" onClick={tour.start} />} actions={filters} />
         : <div className="flex justify-end">{filters}</div>}
 
       {loading ? (
@@ -134,18 +147,18 @@ export function AccountingDashboardView({ heading }: { heading?: { module: strin
           <KpiCards stats={stats} />
 
           {/* โครง หลัก + ข้าง 380 — ตัวเลขทุกตัวเหมือนเดิม เปลี่ยนแค่การจัดวาง */}
-          <DashRow main={<ArTrendChart trend={stats.trend} />} side={<DocTypeBreakdownChart data={stats.docTypeBreakdown} />} />
-          <DashRow main={<AgingTable invoices={stats.aging.invoices} />} side={<BillingFunnelChart data={stats.billingFunnel} />} />
-          <DashRow main={<TopCustomersTable customers={stats.topCustomers} />} side={<AgingChart buckets={stats.aging.buckets} />} />
+          <DashRow tourId="accdash-trend" main={<ArTrendChart trend={stats.trend} />} side={<DocTypeBreakdownChart data={stats.docTypeBreakdown} />} />
+          <DashRow tourId="accdash-aging" main={<AgingTable invoices={stats.aging.invoices} />} side={<BillingFunnelChart data={stats.billingFunnel} />} />
+          <DashRow tourId="accdash-customers" main={<TopCustomersTable customers={stats.topCustomers} />} side={<AgingChart buckets={stats.aging.buckets} />} />
         </>
       )}
     </div>
   );
 }
 
-function DashRow({ main, side }: { main: ReactNode; side: ReactNode }) {
+function DashRow({ main, side, tourId }: { main: ReactNode; side: ReactNode; tourId?: string }) {
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-stretch">
+    <div data-tour={tourId} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-stretch">
       <div className="min-w-0 flex flex-col [&>*]:flex-1">{main}</div>
       <div className="min-w-0 flex flex-col [&>*]:flex-1">{side}</div>
     </div>
@@ -213,7 +226,7 @@ function KpiCards({ stats }: { stats: ArDashboardStats }) {
   const chipNow = t("accountingDashboard.chip.now");
   const agingSegments = stats.aging.buckets.map((b) => ({ key: b.key, label: t(AGING_BUCKET_LABEL_KEY[b.key]), value: Math.round(b.amount), color: AGING_RAMP[b.key] }));
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+    <div data-tour="accdash-kpis" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
       <DashKpiCard
         title={t("accountingDashboard.kpi.issuedTotal.title")} help={t("accountingDashboard.kpi.issuedTotal.help")} chip={chipPeriod}
         value={fmtShort(kpis.issuedNet)}

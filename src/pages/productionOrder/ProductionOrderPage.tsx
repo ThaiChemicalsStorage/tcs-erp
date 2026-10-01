@@ -13,9 +13,10 @@ import type { Company } from "../../lib/storage";
 
 // หน้าจัดการใบสั่งผลิตแบบแยกอิสระ — สร้างจาก Scope of Work ที่อนุมัติแล้วโดยตรง (ไม่ผ่านโครงการ)
 export function ProductionOrderPage({
-  company, canEdit, canApprove, canPrint, canDelete, canCreate,
+  currentUserId, company, canEdit, canApprove, canPrint, canDelete, canCreate,
   initialProductionOrderId, onProductionOrderIdConsumed,
 }: {
+  currentUserId: string;
   /** ส่งต่อให้ใบพิมพ์ FM-PD-02 ใช้วางโลโก้บนหัวเอกสาร */
   company: Company;
   canEdit: boolean;
@@ -81,6 +82,7 @@ export function ProductionOrderPage({
         <ProductionOrderDocument
           key={selectedId}
           productionOrderId={selectedId}
+          currentUserId={currentUserId}
           company={company}
           canEdit={canEdit}
           canApprove={canApprove}
@@ -122,9 +124,10 @@ export function ProductionOrderPage({
     <>
       <ProductionOrderList
         productionOrders={items}
+        currentUserId={currentUserId}
         onOpen={open}
         headerAction={canCreate ? (
-          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+          <button type="button" data-tour="po-create" onClick={() => setPickerOpen(true)} className={btn.primary}>
             <Plus size={16} /> {t("productionOrder.createBtn")}
           </button>
         ) : undefined}

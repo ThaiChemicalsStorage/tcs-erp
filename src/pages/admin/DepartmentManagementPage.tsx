@@ -14,15 +14,19 @@ import { MoreMenu } from "../../components/ui/MoreMenu";
 import { btn, field, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 
 // หน้าจัดการแผนก — ตารางแผนก คลิกแถวเปิดแผงด้านข้างเพื่อแก้ชื่อ จัดการทีม หรือเก็บถาวร (ดีไซน์ใหม่ 2026-09-30)
 // Manages departments — a table; a row opens a side panel to rename, manage teams, or archive
 export function DepartmentManagementPage({
+  currentUserId,
   departments,
   onDepartmentsChange,
   teams,
   onTeamsChange,
 }: {
+  currentUserId: string;
   departments: Department[];
   onDepartmentsChange: (departments: Department[]) => void;
   teams: Team[];
@@ -30,6 +34,13 @@ export function DepartmentManagementPage({
 }) {
   const { t } = useI18n();
   const { message, show } = useToast();
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="dept-create"]', manual: "ch27-3", popover: { title: t("tour.departments.create.title"), description: t("tour.departments.create.desc"), side: "bottom" } },
+    { element: '[data-tour="dept-table"]', manual: "ch27-3", popover: { title: t("tour.departments.table.title"), description: t("tour.departments.table.desc"), side: "top" } },
+    { element: '[data-tour="dept-teams"]', manual: "ch27-3", popover: { title: t("tour.departments.teams.title"), description: t("tour.departments.teams.desc"), side: "bottom" } },
+    { element: '[data-tour="dept-status"]', manual: "ch27-3", popover: { title: t("tour.departments.status.title"), description: t("tour.departments.status.desc"), side: "bottom" } },
+  ];
+  const tour = useModuleTour("departments", currentUserId, tourSteps);
   /** "new" = แผงเพิ่มแผนก · id = แผงของแผนกนั้น · null = ปิด */
   const [drawerTarget, setDrawerTarget] = useState<string | null>(null);
 
@@ -42,8 +53,9 @@ export function DepartmentManagementPage({
         module={t("nav.group.admin")}
         title={t("nav.departments")}
         description={t("departments.pageHint")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={
-          <button onClick={() => setDrawerTarget("new")} className={btn.primary}>
+          <button data-tour="dept-create" onClick={() => setDrawerTarget("new")} className={btn.primary}>
             <Plus size={16} /> {t("departments.addDepartment")}
           </button>
         }
@@ -53,14 +65,14 @@ export function DepartmentManagementPage({
         {departments.length === 0 ? (
           <ListEmpty title={t("departments.empty")} />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-tour="dept-table" className="overflow-x-auto">
             <table className="w-full min-w-[760px] table-fixed">
               <thead>
                 <tr className={table.head}>
                   <th className={`${table.th} w-[240px]`}>{t("departments.col.name")}</th>
-                  <th className={table.th}>{t("departments.col.teams")}</th>
+                  <th data-tour="dept-teams" className={table.th}>{t("departments.col.teams")}</th>
                   <th className={`${table.th} w-[110px] text-right`}>{t("departments.col.teamCount")}</th>
-                  <th className={`${table.th} w-[160px]`}>{t("departments.col.status")}</th>
+                  <th data-tour="dept-status" className={`${table.th} w-[160px]`}>{t("departments.col.status")}</th>
                   <th className={`${table.th} w-12`}><span className="sr-only">{t("common.edit")}</span></th>
                 </tr>
               </thead>

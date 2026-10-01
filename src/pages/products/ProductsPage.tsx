@@ -118,7 +118,7 @@ export function ProductsPage({
   };
 
   if (view === "categories") {
-    return <CategoriesManager categories={categories} products={products} onChange={onCategoriesChange} onBack={() => setView("list")} />;
+    return <CategoriesManager currentUserId={currentUserId} categories={categories} products={products} onChange={onCategoriesChange} onBack={() => setView("list")} />;
   }
 
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified");

@@ -15,6 +15,8 @@ import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { ListPageHeader, ListCard, ListToolbar, ListEmpty } from "../../components/ui/ListPage";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { MoreMenu } from "../../components/ui/MoreMenu";
 import { Field } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
@@ -36,6 +38,7 @@ export function StockPage({
   canAdjust,
   company,
   currentUserName,
+  currentUserId,
   onOpenHistory,
 }: {
   products: Product[];
@@ -46,6 +49,7 @@ export function StockPage({
   company: Company;
   /** ชื่อคนที่กดพิมพ์ เติมให้ในช่อง "ผู้นับ" ของใบนับ */
   currentUserName: string;
+  currentUserId: string;
   /** ประวัติความเคลื่อนไหวย้ายไปอยู่หน้าของตัวเองแล้ว (2026-09-23) — ปุ่มประวัติของแถวพาไปแท็บติดตามสินค้าตัวนั้น */
   onOpenHistory: (productId: string) => void;
 }) {
@@ -198,6 +202,16 @@ export function StockPage({
   }, [cardProduct, cardMovements]);
 
   const noRows = filtered.length === 0;
+  // ปุ่มปรับสต๊อกมีเฉพาะผู้มีสิทธิ์ และไม่มีในแถวสินค้าชุด — ชี้ที่แถวแรกที่มีปุ่ม (ทัวร์ข้ามขั้นที่หาไม่เจอเอง)
+  const firstAdjustableId = canAdjust ? filtered.find((p) => !isKitProduct(p))?.id : undefined;
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="stock-count-sheet"]', manual: "ch22-2", popover: { title: t("tour.stock.countSheet.title"), description: t("tour.stock.countSheet.desc"), side: "bottom" } },
+    { element: '[data-tour="stock-kpis"]', manual: "ch22-1", popover: { title: t("tour.stock.kpis.title"), description: t("tour.stock.kpis.desc"), side: "bottom" } },
+    { element: '[data-tour="stock-search"]', manual: "ch22-2", popover: { title: t("tour.stock.search.title"), description: t("tour.stock.search.desc"), side: "bottom" } },
+    { element: '[data-tour="stock-table"]', manual: "ch22-1", popover: { title: t("tour.stock.table.title"), description: t("tour.stock.table.desc"), side: "top" } },
+    { element: '[data-tour="stock-adjust"]', manual: "ch22-4", popover: { title: t("tour.stock.adjust.title"), description: t("tour.stock.adjust.desc"), side: "left" } },
+  ];
+  const tour = useModuleTour("stock", currentUserId, tourSteps);
 
   return (
     <div className="flex-1 overflow-y-auto print:p-0 print:overflow-visible">
@@ -206,9 +220,10 @@ export function StockPage({
           module={t("nav.group.inventory")}
           title={t("stock.title")}
           description={t("stock.subtitle")}
+          help={<TourReplayButton variant="title" onClick={tour.start} />}
           actions={(
             <>
-              <button type="button" onClick={() => window.print()} disabled={noRows || cardProduct !== null} className={btn.secondary}>
+              <button type="button" data-tour="stock-count-sheet" onClick={() => window.print()} disabled={noRows || cardProduct !== null} className={btn.secondary}>
                 <Printer size={16} /> {t("stock.printCountSheet")}
               </button>
               <MoreMenu
@@ -227,7 +242,7 @@ export function StockPage({
           )}
         />
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div data-tour="stock-kpis" className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard label={t("stock.kpi.itemCount")} value={activeProducts.length.toLocaleString("th-TH")} unit={t("stock.unit.items")} />
           <StatCard label={t("stock.kpi.totalUnitsShort")} value={totalUnits.toLocaleString("th-TH")} unit={t("stock.unit.units")} />
           <StatCard label={t("stock.kpi.stockValueShort")} value={`฿${money(totalValue)}`} />
@@ -236,6 +251,7 @@ export function StockPage({
         </div>
 
         <ListCard>
+          <div data-tour="stock-search">
           <ListToolbar
             search={search}
             onSearch={setSearch}
@@ -246,13 +262,14 @@ export function StockPage({
               <AlertTriangle size={14} className="text-[#8a5a00]" aria-hidden="true" /> {t("stock.lowStockBadge")}
             </span>
           </ListToolbar>
+          </div>
 
           {activeProducts.length === 0 ? (
             <ListEmpty title={t("stock.empty.title")} hint={t("stock.empty.description")} />
           ) : noRows ? (
             <ListEmpty title={t("stock.noMatch")} />
           ) : (
-            <div className="overflow-x-auto">
+            <div data-tour="stock-table" className="overflow-x-auto">
               <table className="w-full min-w-[1100px] table-fixed">
                 <thead>
                   <tr className={table.head}>
@@ -328,7 +345,7 @@ export function StockPage({
                                 <Sheet size={16} />
                               </button>
                               {canAdjust && (
-                                <button type="button" onClick={() => setAdjustTarget(p)} className={`${btn.secondarySm} ml-1.5`}>
+                                <button type="button" data-tour={p.id === firstAdjustableId ? "stock-adjust" : undefined} onClick={() => setAdjustTarget(p)} className={`${btn.secondarySm} ml-1.5`}>
                                   {t("stock.action.adjustBtn")}
                                 </button>
                               )}

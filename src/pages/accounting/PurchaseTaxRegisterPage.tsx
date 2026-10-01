@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Printer } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchApEntries, type ApEntry } from "../../lib/apEntries";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
@@ -25,7 +27,7 @@ import { PurchaseTaxRegisterPrint } from "./legacyReportPrint";
  * **ใบพิมพ์ไม่ได้พิมพ์หน้าจอนี้แล้ว** — เจ้าของสั่งให้กระดาษคงแบบเดิม จึงพิมพ์จาก `PurchaseTaxRegisterPrint`
  * (legacyReportPrint.tsx) ส่วนเนื้อหาบนจอห่อด้วย `print:hidden`
  */
-export function PurchaseTaxRegisterPage() {
+export function PurchaseTaxRegisterPage({ currentUserId }: { currentUserId: string }) {
   const { t } = useI18n();
   const [month, setMonth] = useState(currentMonthLocal);
   const [attempt, setAttempt] = useState(0);
@@ -47,6 +49,15 @@ export function PurchaseTaxRegisterPage() {
   const loadError = current?.error === true;
   const entries = current?.entries ?? [];
 
+  // คำแนะนำประจำหน้า — เล่นเองหลังโหลดเสร็จ (แถบยอดรวม/ตารางยังไม่อยู่บนจอระหว่างโหลด · เดือนที่ไม่มีรายการ ขั้นนั้นถูกข้าม)
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="ptax-month"]', manual: "ch14-1", popover: { title: t("tour.ptax.month.title"), description: t("tour.ptax.month.desc"), side: "bottom" } },
+    { element: '[data-tour="ptax-print"]', manual: "ch14-1", popover: { title: t("tour.ptax.print.title"), description: t("tour.ptax.print.desc"), side: "bottom" } },
+    { element: '[data-tour="ptax-totals"]', manual: "ch14-1", popover: { title: t("tour.ptax.totals.title"), description: t("tour.ptax.totals.desc"), side: "bottom" } },
+    { element: '[data-tour="ptax-table"]', manual: "ch14-1", popover: { title: t("tour.ptax.table.title"), description: t("tour.ptax.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("purchaseTaxRegister", currentUserId, tourSteps, { autoStart: !loading });
+
   const subtotal = entries.reduce((s, e) => s + e.subtotal, 0);
   const vatAmt = entries.reduce((s, e) => s + e.vatAmt, 0);
   const total = entries.reduce((s, e) => s + e.total, 0);
@@ -58,9 +69,10 @@ export function PurchaseTaxRegisterPage() {
           module={t("nav.group.accounting")}
           title={t("purchaseTaxRegister.title")}
           description={t("purchaseTaxRegister.subtitle")}
+          help={<TourReplayButton variant="title" onClick={tour.start} />}
           actions={<>
-            <MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} />
-            <button type="button" onClick={() => window.print()} className={btn.secondary}>
+            <div data-tour="ptax-month"><MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} /></div>
+            <button type="button" data-tour="ptax-print" onClick={() => window.print()} className={btn.secondary}>
               <Printer size={16} /> {t("accounting.monthly.printBtn")}
             </button>
           </>}
@@ -86,6 +98,7 @@ export function PurchaseTaxRegisterPage() {
         </div>
       ) : (
         <>
+          <div data-tour="ptax-totals">
           <TotalsStrip
             title={`${t("purchaseTaxRegister.summaryHeading")} ${thaiMonthLabel(month)}`}
             items={[
@@ -95,8 +108,9 @@ export function PurchaseTaxRegisterPage() {
               { label: t("accounting.monthly.kpi.netTotal"), value: money(total), alignEnd: true, strong: true },
             ]}
           />
+          </div>
 
-          <section className={REPORT.card}>
+          <section data-tour="ptax-table" className={REPORT.card}>
             <div className={`${REPORT.cardHead} print:hidden`}>
               <h2 className="flex-1 text-base font-semibold text-foreground">{t("purchaseTaxRegister.listHeading")}</h2>
               <span className="text-[13px] text-muted-foreground">{t("ui.itemCount").replace("{n}", String(entries.length))} · {t("accounting.report.amountsInBaht")}</span>

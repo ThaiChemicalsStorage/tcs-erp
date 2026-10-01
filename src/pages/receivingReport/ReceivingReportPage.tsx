@@ -20,9 +20,10 @@ import { btn } from "../../components/ui/styles";
  * รับ deep link จากผลค้นหา/ปุ่ม "รับสินค้า" บนใบสั่งซื้อ ผ่าน `initialReceivingReportId`
  */
 export function ReceivingReportPage({
-  canCreate, canEdit, canReceive, canPrint, canDelete, company,
+  currentUserId, canCreate, canEdit, canReceive, canPrint, canDelete, company,
   initialReceivingReportId, onReceivingReportIdConsumed,
 }: {
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canReceive: boolean;
@@ -109,6 +110,7 @@ export function ReceivingReportPage({
         <ReceivingReportDocument
           key={selectedId}
           receivingReportId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canReceive={canReceive}
           canPrint={canPrint}
@@ -145,9 +147,10 @@ export function ReceivingReportPage({
     <>
       <ReceivingReportList
         receivingReports={rows}
+        currentUserId={currentUserId}
         onOpen={open}
         headerAction={canCreate ? (
-          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+          <button type="button" data-tour="rr-create" onClick={() => setPickerOpen(true)} className={btn.primary}>
             <Plus size={16} /> {t("receivingReport.createBtn")}
           </button>
         ) : undefined}

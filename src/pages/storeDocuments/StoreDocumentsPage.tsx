@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowDownToLine, ChevronRight, Info, PackageMinus, Plus } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ApiError } from "../../lib/apiClient";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
@@ -108,6 +110,18 @@ export function StoreDocumentsPage({
     return () => { cancelled = true; };
   }, [reload]);
 
+  // ปุ่มสร้างมีเฉพาะผู้มีสิทธิ์ · ตารางเอกสารกับตารางใบเบิกจากแผนกขึ้นทีละแท็บ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  // เล่นเองเฉพาะตอนอยู่หน้ารายการที่โหลดเสร็จแล้ว (เปิดใบอยู่ = หน้าเอกสารมีคำแนะนำของตัวเอง)
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="storeDocs-createIssue"]', manual: "ch24-3", popover: { title: t("tour.storeDocs.createIssue.title"), description: t("tour.storeDocs.createIssue.desc"), side: "bottom" } },
+    { element: '[data-tour="storeDocs-createReceipt"]', manual: "ch24-4", popover: { title: t("tour.storeDocs.createReceipt.title"), description: t("tour.storeDocs.createReceipt.desc"), side: "bottom" } },
+    { element: '[data-tour="storeDocs-tabs"]', manual: "ch24-2", popover: { title: t("tour.storeDocs.tabs.title"), description: t("tour.storeDocs.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="storeDocs-filters"]', manual: "ch2-6", popover: { title: t("tour.storeDocs.filters.title"), description: t("tour.storeDocs.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="storeDocs-table"]', manual: "ch24", popover: { title: t("tour.storeDocs.table.title"), description: t("tour.storeDocs.table.desc"), side: "top" } },
+    { element: '[data-tour="storeDocs-incoming"]', manual: "ch24-1", popover: { title: t("tour.storeDocs.incoming.title"), description: t("tour.storeDocs.incoming.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("storeDocuments", currentUserId, tourSteps, { autoStart: !open && loaded === "ok" });
+
   const backToList = useCallback(() => { setOpen(null); setReload((n) => n + 1); }, []);
 
   const createIssue = async (issueCode: StoreIssueCode) => {
@@ -171,6 +185,7 @@ export function StoreDocumentsPage({
         <StoreReceiptDocument
           key={open.id}
           storeReceiptId={open.id}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canApprove={canFinalize}
           canPost={canIssueStock}
@@ -231,12 +246,13 @@ export function StoreDocumentsPage({
         module={t("nav.group.inventory")}
         title={t("storeDocs.title")}
         description={t("storeDocs.subtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canCreate ? (
           <>
-            <button type="button" onClick={() => setPicker("receipt")} className={btn.secondary}>
+            <button type="button" data-tour="storeDocs-createReceipt" onClick={() => setPicker("receipt")} className={btn.secondary}>
               <ArrowDownToLine size={16} /> {t("storeDocs.createReceipt")}
             </button>
-            <button type="button" onClick={() => setPicker("issue")} className={btn.primary}>
+            <button type="button" data-tour="storeDocs-createIssue" onClick={() => setPicker("issue")} className={btn.primary}>
               <Plus size={16} /> {t("storeDocs.createIssue")}
             </button>
           </>
@@ -244,36 +260,40 @@ export function StoreDocumentsPage({
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setCode(""); setPage(1); }} ariaLabel={t("storeDocs.col.type")} />
-        <ListToolbar
-          search={query}
-          onSearch={withReset(setQuery)}
-          searchPlaceholder={t("storeDocs.search")}
-          count={loaded !== "ok" ? undefined : tab === "incoming"
-            ? t("storeDocs.incoming.count").replace("{n}", String(incomingFiltered.length))
-            : t("ui.itemCount").replace("{n}", String(filtered.length))}
-        >
-          <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
-          {tab !== "incoming" && (
-            <>
-              <FilterSelect
-                label={t("storeDocs.codeFilter")}
-                value={code}
-                options={[{ value: "", label: t("storeDocs.codeFilterAll") }, ...codeOptions.map((c) => ({ value: c.code as string, label: `${c.code} — ${t(c.nameKey)}` }))]}
-                onChange={withReset(setCode)}
-              />
-              <FilterSelect<"all" | StoreDocRow["status"]>
-                label={t("storeDocs.col.status")}
-                value={status}
-                options={[
-                  { value: "all", label: t("quotation.filterAll") },
-                  ...(["Draft", "PendingApproval", "Final"] as const).map((s) => ({ value: s, label: statusLabel(s) })),
-                ]}
-                onChange={withReset(setStatus)}
-              />
-            </>
-          )}
-        </ListToolbar>
+        <div data-tour="storeDocs-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={(k) => { setTab(k); setCode(""); setPage(1); }} ariaLabel={t("storeDocs.col.type")} />
+        </div>
+        <div data-tour="storeDocs-filters">
+          <ListToolbar
+            search={query}
+            onSearch={withReset(setQuery)}
+            searchPlaceholder={t("storeDocs.search")}
+            count={loaded !== "ok" ? undefined : tab === "incoming"
+              ? t("storeDocs.incoming.count").replace("{n}", String(incomingFiltered.length))
+              : t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
+            {tab !== "incoming" && (
+              <>
+                <FilterSelect
+                  label={t("storeDocs.codeFilter")}
+                  value={code}
+                  options={[{ value: "", label: t("storeDocs.codeFilterAll") }, ...codeOptions.map((c) => ({ value: c.code as string, label: `${c.code} — ${t(c.nameKey)}` }))]}
+                  onChange={withReset(setCode)}
+                />
+                <FilterSelect<"all" | StoreDocRow["status"]>
+                  label={t("storeDocs.col.status")}
+                  value={status}
+                  options={[
+                    { value: "all", label: t("quotation.filterAll") },
+                    ...(["Draft", "PendingApproval", "Final"] as const).map((s) => ({ value: s, label: statusLabel(s) })),
+                  ]}
+                  onChange={withReset(setStatus)}
+                />
+              </>
+            )}
+          </ListToolbar>
+        </div>
 
         {loaded === "loading" ? (
           <div className="p-5 flex flex-col gap-3" role="status" aria-live="polite">
@@ -297,7 +317,7 @@ export function StoreDocumentsPage({
                 {incomingFiltered.length === 0 ? (
                   <ListEmpty title={t("storeDocs.noMatch")} />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div data-tour="storeDocs-incoming" className="overflow-x-auto">
                     <table className="w-full min-w-[1040px]">
                       <thead>
                         <tr className={table.head}>
@@ -368,7 +388,7 @@ export function StoreDocumentsPage({
           <ListEmpty title={t("storeDocs.noMatch")} />
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div data-tour="storeDocs-table" className="overflow-x-auto">
               <table className="w-full min-w-[1040px]">
                 <thead>
                   <tr className={table.head}>

@@ -342,6 +342,7 @@ export function TemplateManagementPage({
         categories={categories}
         canActivate={canActivate}
         initialJobTypeCode={view === "create" ? initialCreateForJobType?.jobTypeCode ?? null : null}
+        currentUserId={currentUserId}
         onSaved={() => { setView("list"); load(); show(t("templates.toast.saved")); }}
         onCancel={() => setView("list")}
       />

@@ -12,6 +12,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { getRevisionNumber, getRevisionRoot } from "../../lib/revisionDiff";
 import { formatQuoteDateThai } from "../../lib/quotes";
@@ -47,9 +49,10 @@ const LINE_GRID_READ = "grid grid-cols-[28px_minmax(0,1fr)_96px_96px_240px] gap-
 // หน้าแก้ไขใบสั่งผลิต (FM-PD-02) — แก้ได้เฉพาะฉบับร่าง อนุมัติแล้วล็อก เหมือนเอกสารอื่นในระบบ
 // หน้าตาแบบใหม่ 2026-09-30: หัวเอกสาร + แถบขั้นตอน + การ์ดข้อมูล/คอลัมน์ขวา + ตารางรายการ + ผู้เกี่ยวข้อง
 export function ProductionOrderDocument({
-  productionOrderId, company, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
+  productionOrderId, currentUserId, company, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
 }: {
   productionOrderId: string;
+  currentUserId: string;
   /** โปรไฟล์บริษัทสำหรับโลโก้บนใบพิมพ์ FM-PD-02 */
   company: Company;
   canEdit: boolean;
@@ -229,6 +232,16 @@ export function ProductionOrderDocument({
     summary: docSummary(doc?.orderedBy.name ? `${t("productionOrderDoc.field.orderedBy")} ${doc.orderedBy.name}` : undefined),
   });
 
+  // เมนูเพิ่มเติมว่างได้ (เช่นใบรออนุมัติที่ไม่ใช่ของเรา) — ทัวร์ข้ามขั้นที่หาไม่เจอเอง · hook อยู่เหนือ early return
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="podoc-actions"]', manual: "ch16-5", popover: { title: t("tour.podoc.actions.title"), description: t("tour.podoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="podoc-more"]', manual: "ch17-1", popover: { title: t("tour.podoc.more.title"), description: t("tour.podoc.more.desc"), side: "bottom" } },
+    { element: '[data-tour="podoc-info"]', manual: "ch17-1", popover: { title: t("tour.podoc.info.title"), description: t("tour.podoc.info.desc"), side: "top" } },
+    { element: '[data-tour="podoc-lines"]', manual: "ch17-3", popover: { title: t("tour.podoc.lines.title"), description: t("tour.podoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="podoc-sign"]', manual: "ch17-4", popover: { title: t("tour.podoc.sign.title"), description: t("tour.podoc.sign.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("productionOrderDoc", currentUserId, docTourSteps, { autoStart: !!doc });
+
   const backLink = (
     <button type="button" onClick={() => requestLeave(onBack)} className="self-start text-[13px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
       <ArrowLeft size={14} /> {t("productionOrderDoc.backToAll")}
@@ -347,6 +360,13 @@ export function ProductionOrderDocument({
     </button>
   );
 
+  const moreItems = [
+    editable && { key: "refresh", label: t("productionOrderDoc.refreshFromScope"), icon: RotateCw, hint: t("productionOrderDoc.refreshHint"), disabled: refreshing, onSelect: () => setConfirmRefresh(true) },
+    canEdit && isFinal && { key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch, hint: t("productionOrderDoc.rewriteHint"), disabled: rewriting, onSelect: () => setConfirmRewrite(true) },
+    approvalFlow.canWithdraw && { key: "withdraw", label: t("approval.withdraw"), icon: Undo2, hint: t("purchaseRequest.shared.withdrawHint"), disabled: approvalFlow.busy !== null, onSelect: approvalFlow.withdraw },
+    canDelete && { key: "delete", label: t("productionOrderDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+  ];
+
   return (
     <div className="doc-form flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-20 print:hidden">
@@ -357,7 +377,8 @@ export function ProductionOrderDocument({
           status={<ApprovalStatusPill status={doc.status} />}
           meta={headerMeta}
           actions={
-            <>
+            <div data-tour="podoc-actions" className="flex items-center gap-2.5 flex-wrap">
+              <TourReplayButton variant="title" onClick={docTour.start} />
               {canPrint && (
                 <button type="button" onClick={handlePrint} disabled={printing} className={btn.secondary}>
                   {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("productionOrderDoc.print")}
@@ -374,14 +395,7 @@ export function ProductionOrderDocument({
                   {t("approval.reject")}
                 </button>
               )}
-              <MoreMenu
-                items={[
-                  editable && { key: "refresh", label: t("productionOrderDoc.refreshFromScope"), icon: RotateCw, hint: t("productionOrderDoc.refreshHint"), disabled: refreshing, onSelect: () => setConfirmRefresh(true) },
-                  canEdit && isFinal && { key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch, hint: t("productionOrderDoc.rewriteHint"), disabled: rewriting, onSelect: () => setConfirmRewrite(true) },
-                  approvalFlow.canWithdraw && { key: "withdraw", label: t("approval.withdraw"), icon: Undo2, hint: t("purchaseRequest.shared.withdrawHint"), disabled: approvalFlow.busy !== null, onSelect: approvalFlow.withdraw },
-                  canDelete && { key: "delete", label: t("productionOrderDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
-                ]}
-              />
+              {moreItems.some(Boolean) && <div data-tour="podoc-more"><MoreMenu items={moreItems} /></div>}
               {approvalFlow.canSubmit && (
                 <button type="button" onClick={approvalFlow.submit} disabled={approvalFlow.busy !== null} className={btn.primary}>
                   {approvalFlow.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
@@ -392,7 +406,7 @@ export function ProductionOrderDocument({
                   <CheckCircle2 size={16} /> {t("approval.approve")}
                 </button>
               )}
-            </>
+            </div>
           }
         />
       </div>
@@ -421,36 +435,38 @@ export function ProductionOrderDocument({
         <DocumentColumns
           main={
             <>
-              <SectionCard title={t("productionOrderDoc.infoTitle")}>
-                {editable ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px] items-start">
-                    {/* เลขที่ที่พิมพ์บนฟอร์ม — แก้ได้ตอนเป็นร่าง แต่ id จริงของเอกสารไม่เปลี่ยน ตัวนับจึงเดินต่อตามปกติ */}
-                    <Field label={t("productionOrderDoc.field.documentNumber")} htmlFor="po-documentNumber" help={t("productionOrderDoc.field.documentNumberHint")}>
-                      <input id="po-documentNumber" value={draft.documentNumber} onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })} className={`${field.input} w-full font-mono`} />
-                    </Field>
-                    <Field label={t("productionOrderDoc.field.supervisorName")} htmlFor="po-supervisorName">
-                      <input id="po-supervisorName" value={draft.supervisorName} onChange={(e) => setDraft({ ...draft, supervisorName: e.target.value })} className={`${field.input} w-full`} />
-                    </Field>
-                    <Field label={t("productionOrderDoc.field.productName")} htmlFor="po-productName" className="sm:col-span-2">
-                      <input id="po-productName" value={draft.productName} onChange={(e) => setDraft({ ...draft, productName: e.target.value })} className={`${field.input} w-full`} />
-                    </Field>
-                    <Field label={t("productionOrderDoc.field.startDate")} htmlFor="po-startDate">
-                      <input id="po-startDate" type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} className={`${field.input} w-full`} />
-                    </Field>
-                    <Field label={t("productionOrderDoc.field.dueDate")} htmlFor="po-dueDate">
-                      <input id="po-dueDate" type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} className={`${field.input} w-full`} />
-                    </Field>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
-                    <ReadonlyField label={t("productionOrderDoc.field.productName")} value={doc.productName} />
-                    <ReadonlyField label={t("productionOrderDoc.field.supervisorName")} value={doc.supervisorName} />
-                    <ReadonlyField label={t("productionOrderDoc.field.documentNumber")} value={doc.documentNumber || doc.id} mono />
-                    <ReadonlyField label={t("productionOrderDoc.field.startDate")} value={dateText(doc.startDate)} />
-                    <ReadonlyField label={t("productionOrderDoc.field.dueDate")} value={dateText(doc.dueDate)} />
-                  </div>
-                )}
-              </SectionCard>
+              <div data-tour="podoc-info">
+                <SectionCard title={t("productionOrderDoc.infoTitle")}>
+                  {editable ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px] items-start">
+                      {/* เลขที่ที่พิมพ์บนฟอร์ม — แก้ได้ตอนเป็นร่าง แต่ id จริงของเอกสารไม่เปลี่ยน ตัวนับจึงเดินต่อตามปกติ */}
+                      <Field label={t("productionOrderDoc.field.documentNumber")} htmlFor="po-documentNumber" help={t("productionOrderDoc.field.documentNumberHint")}>
+                        <input id="po-documentNumber" value={draft.documentNumber} onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })} className={`${field.input} w-full font-mono`} />
+                      </Field>
+                      <Field label={t("productionOrderDoc.field.supervisorName")} htmlFor="po-supervisorName">
+                        <input id="po-supervisorName" value={draft.supervisorName} onChange={(e) => setDraft({ ...draft, supervisorName: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("productionOrderDoc.field.productName")} htmlFor="po-productName" className="sm:col-span-2">
+                        <input id="po-productName" value={draft.productName} onChange={(e) => setDraft({ ...draft, productName: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("productionOrderDoc.field.startDate")} htmlFor="po-startDate">
+                        <input id="po-startDate" type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                      <Field label={t("productionOrderDoc.field.dueDate")} htmlFor="po-dueDate">
+                        <input id="po-dueDate" type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} className={`${field.input} w-full`} />
+                      </Field>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
+                      <ReadonlyField label={t("productionOrderDoc.field.productName")} value={doc.productName} />
+                      <ReadonlyField label={t("productionOrderDoc.field.supervisorName")} value={doc.supervisorName} />
+                      <ReadonlyField label={t("productionOrderDoc.field.documentNumber")} value={doc.documentNumber || doc.id} mono />
+                      <ReadonlyField label={t("productionOrderDoc.field.startDate")} value={dateText(doc.startDate)} />
+                      <ReadonlyField label={t("productionOrderDoc.field.dueDate")} value={dateText(doc.dueDate)} />
+                    </div>
+                  )}
+                </SectionCard>
+              </div>
 
               {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย) เท่านั้น
                   ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
@@ -498,7 +514,7 @@ export function ProductionOrderDocument({
           }
         />
 
-        <section className={`${surface.card} overflow-hidden`}>
+        <section data-tour="podoc-lines" className={`${surface.card} overflow-hidden`}>
           <div className={surface.cardHead}>
             <h2 className={surface.cardTitle}>{t("productionOrderDoc.linesHeading")}</h2>
             <span className="flex-1 text-[13px] text-muted-foreground">
@@ -627,27 +643,29 @@ export function ProductionOrderDocument({
         </section>
 
         {/* หลังอนุมัติแล้วปุ่ม "บันทึกฉบับร่าง" บนหัวหายไป สามช่องล่างจึงมีปุ่มบันทึกของตัวเองที่หัวการ์ด */}
-        <SectionCard
-          title={t("productionOrderDoc.signHeading")}
-          subtitle={!editable && canEdit ? t("productionOrderDoc.saveSignatoriesHint") : undefined}
-          actions={!editable && canEdit ? (
-            <button type="button" onClick={() => { void saveSignatories(); }} disabled={saving} className={btn.secondarySm}>
-              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} {t("productionOrderDoc.saveSignatories")}
-            </button>
-          ) : undefined}
-        >
-          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-x-7 gap-y-5">
-            {signerBlock(t("productionOrderDoc.field.orderedBy"), "orderedBy")}
-            {/* ผู้อนุมัติแก้เองไม่ได้ — ระบบเติมให้ตอนกดอนุมัติ กันการปลอมลายเซ็น */}
-            <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-2.5">
-              <ReadonlyField label={t("productionOrderDoc.field.approver")} value={approverName || <span className="text-[#8a97ad] font-normal">{t("productionOrderDoc.approverPending")}</span>} />
-              <ReadonlyField label={t("productionOrderDoc.field.date")} value={dateText(doc.approver.date)} />
+        <div data-tour="podoc-sign">
+          <SectionCard
+            title={t("productionOrderDoc.signHeading")}
+            subtitle={!editable && canEdit ? t("productionOrderDoc.saveSignatoriesHint") : undefined}
+            actions={!editable && canEdit ? (
+              <button type="button" onClick={() => { void saveSignatories(); }} disabled={saving} className={btn.secondarySm}>
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} {t("productionOrderDoc.saveSignatories")}
+              </button>
+            ) : undefined}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-x-7 gap-y-5">
+              {signerBlock(t("productionOrderDoc.field.orderedBy"), "orderedBy")}
+              {/* ผู้อนุมัติแก้เองไม่ได้ — ระบบเติมให้ตอนกดอนุมัติ กันการปลอมลายเซ็น */}
+              <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-2.5">
+                <ReadonlyField label={t("productionOrderDoc.field.approver")} value={approverName || <span className="text-[#8a97ad] font-normal">{t("productionOrderDoc.approverPending")}</span>} />
+                <ReadonlyField label={t("productionOrderDoc.field.date")} value={dateText(doc.approver.date)} />
+              </div>
+              {signerBlock(t("productionOrderDoc.field.deliveredBy"), "deliveredBy")}
+              {signerBlock(t("productionOrderDoc.field.receivedBy"), "receivedBy")}
+              {signerBlock(t("productionOrderDoc.field.costDeptBy"), "costDeptBy")}
             </div>
-            {signerBlock(t("productionOrderDoc.field.deliveredBy"), "deliveredBy")}
-            {signerBlock(t("productionOrderDoc.field.receivedBy"), "receivedBy")}
-            {signerBlock(t("productionOrderDoc.field.costDeptBy"), "costDeptBy")}
-          </div>
-        </SectionCard>
+          </SectionCard>
+        </div>
       </div>
 
       <ProductionOrderPrintDocument doc={doc} companyHeader={companyHeader} />

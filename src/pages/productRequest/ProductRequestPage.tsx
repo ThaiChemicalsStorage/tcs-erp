@@ -13,6 +13,8 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListEmpty } from "../../components/ui/ListPage";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { Drawer } from "../../components/ui/Overlays";
 import { Field, SelectBox } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
@@ -224,6 +226,18 @@ export function ProductRequestPage({
   const requesterLine = (r: ProductRequest) =>
     [r.requestedByName, r.requestedByDepartment, formatQuoteDateThai(r.requestedAt)].filter(Boolean).join(" · ");
 
+  // ปุ่มขอเพิ่ม (สิทธิ์สร้าง) และปุ่มตั้งรหัส (สโตร์ · แถวแรกที่ยังรอ) ไม่มีเสมอ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  // hook ต้องอยู่เหนือ early return ตอนโหลด
+  const firstReviewableId = canReview ? filtered.find((r) => r.status === "Pending")?.id : undefined;
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="preq-create"]', manual: "ch26-1", popover: { title: t("tour.productRequest.create.title"), description: t("tour.productRequest.create.desc"), side: "bottom" } },
+    { element: '[data-tour="preq-tabs"]', manual: "ch26-2", popover: { title: t("tour.productRequest.tabs.title"), description: t("tour.productRequest.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="preq-search"]', manual: "ch2-6", popover: { title: t("tour.productRequest.search.title"), description: t("tour.productRequest.search.desc"), side: "bottom" } },
+    { element: '[data-tour="preq-table"]', manual: "ch26-2", popover: { title: t("tour.productRequest.table.title"), description: t("tour.productRequest.table.desc"), side: "top" } },
+    { element: '[data-tour="preq-review"]', manual: "ch26-4", popover: { title: t("tour.productRequest.review.title"), description: t("tour.productRequest.review.desc"), side: "left" } },
+  ];
+  const tour = useModuleTour("productRequest", currentUserId, tourSteps, { autoStart: !loading });
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
@@ -238,28 +252,33 @@ export function ProductRequestPage({
         module={t("nav.group.inventory")}
         title={t("productRequest.title")}
         description={t("productRequest.subtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canCreate && (
-          <button type="button" onClick={() => setCreateOpen(true)} className={btn.primary}>
+          <button type="button" data-tour="preq-create" onClick={() => setCreateOpen(true)} className={btn.primary}>
             <PackagePlus size={16} /> {t("productRequest.createBtn")}
           </button>
         )}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={statusTab} onChange={setStatusTab} ariaLabel={t("productRequest.col.status")} />
-        <ListToolbar
-          search={search}
-          onSearch={setSearch}
-          searchPlaceholder={t("productRequest.searchPlaceholder")}
-          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
-        />
+        <div data-tour="preq-tabs">
+          <ListTabs tabs={tabs} active={statusTab} onChange={setStatusTab} ariaLabel={t("productRequest.col.status")} />
+        </div>
+        <div data-tour="preq-search">
+          <ListToolbar
+            search={search}
+            onSearch={setSearch}
+            searchPlaceholder={t("productRequest.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          />
+        </div>
 
         {requests.length === 0 ? (
           <ListEmpty title={t("productRequest.empty")} hint={t("productRequest.emptyHint")} />
         ) : filtered.length === 0 ? (
           <ListEmpty title={t("productRequest.noMatch")} />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-tour="preq-table" className="overflow-x-auto">
             <table className="w-full min-w-[960px] table-fixed">
               <thead>
                 <tr className={table.head}>
@@ -291,14 +310,14 @@ export function ProductRequestPage({
                       <td className={table.td}>
                         <span className="flex items-center justify-end gap-2">
                           {canReview && pending && (
-                            <>
+                            <span data-tour={r.id === firstReviewableId ? "preq-review" : undefined} className="flex items-center gap-2">
                               <button type="button" onClick={() => setRejectTarget(r)} className={rejectBtnCls}>
                                 {t("productRequest.reject")}
                               </button>
                               <button type="button" onClick={() => openReview(r)} className={approveBtnCls}>
                                 <CheckCircle2 size={15} /> {t("productRequest.approve")}
                               </button>
-                            </>
+                            </span>
                           )}
                           {canDelete && (
                             <button type="button" onClick={() => setDeleteTarget(r)} title={t("productRequest.delete")}

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import { type CostControlSummary, type CostControlStatus } from "../../lib/costControl";
@@ -14,13 +16,23 @@ const PAGE_SIZE = 25;
 type ListTabKey = "all" | CostControlStatus;
 
 // รายการ Cost Control ตามดีไซน์ใหม่ (2026-09-30): แท็บสถานะพร้อมจำนวน → ค้นหา + ช่วงวันที่ → ตาราง → แบ่งหน้า
-export function CostControlList({ costControls, onOpen, headerAction }: {
+export function CostControlList({ costControls, currentUserId, onOpen, headerAction }: {
   costControls: CostControlSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
   const statusLabel = useCostControlStatusLabel();
+  // ปุ่มสร้างมีเฉพาะผู้มีสิทธิ์สร้าง — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="cc-create-excel"]', manual: "ch20-2", popover: { title: t("tour.cc.excel.title"), description: t("tour.cc.excel.desc"), side: "bottom" } },
+    { element: '[data-tour="cc-create-blank"]', manual: "ch20-1", popover: { title: t("tour.cc.blank.title"), description: t("tour.cc.blank.desc"), side: "bottom" } },
+    { element: '[data-tour="cc-tabs"]', manual: "ch20-5", popover: { title: t("tour.cc.tabs.title"), description: t("tour.cc.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="cc-search"]', manual: "ch2-6", popover: { title: t("tour.cc.search.title"), description: t("tour.cc.search.desc"), side: "bottom" } },
+    { element: '[data-tour="cc-table"]', manual: "ch20-3", popover: { title: t("tour.cc.table.title"), description: t("tour.cc.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("costControl", currentUserId, tourSteps);
   const [tab, setTab] = useState<ListTabKey>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
@@ -59,11 +71,15 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
         module={t("nav.group.bd")}
         title={t("costControl.pageTitle")}
         description={t("costControl.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={headerAction}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("costControl.tabsAria")} />
+        <div data-tour="cc-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("costControl.tabsAria")} />
+        </div>
+        <div data-tour="cc-search">
         <ListToolbar
           search={searchQuery}
           onSearch={resetPage(setSearchQuery)}
@@ -72,7 +88,9 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
         >
           <CostControlDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
         </ListToolbar>
+        </div>
 
+        <div data-tour="cc-table" className="min-w-0">
         {costControls.length === 0 ? (
           <ListEmpty title={t("costControl.empty.title")} hint={t("costControl.empty.description")} />
         ) : filtered.length === 0 ? (
@@ -117,6 +135,7 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
             </table>
           </div>
         )}
+        </div>
 
         {filtered.length > 0 && (
           <ListPagination

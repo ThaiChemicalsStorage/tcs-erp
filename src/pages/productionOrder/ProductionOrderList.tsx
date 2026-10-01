@@ -5,6 +5,8 @@ import { table } from "../../components/ui/styles";
 import type { ProductionOrderSummary, ProductionOrderStatus } from "../../lib/productionOrder";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalStatusPill, ListDateRangeSelect } from "../purchaseRequest/docShared";
 
@@ -14,13 +16,22 @@ type ListTabKey = "all" | ProductionOrderStatus;
 
 // ตารางรายการใบสั่งผลิต: แท็บสถานะพร้อมจำนวน ค้นหา ช่วงวันที่ และแบ่งหน้า (ดีไซน์ใหม่ 2026-09-30)
 export function ProductionOrderList({
-  productionOrders, onOpen, headerAction,
+  productionOrders, currentUserId, onOpen, headerAction,
 }: {
   productionOrders: ProductionOrderSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
+  // ปุ่มสร้าง (data-tour="po-create") อยู่ใน headerAction ที่ ProductionOrderPage ส่งมา — มีเฉพาะคนที่มีสิทธิ์สร้าง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="po-create"]', manual: "ch17-2", popover: { title: t("tour.po.create.title"), description: t("tour.po.create.desc"), side: "bottom" } },
+    { element: '[data-tour="po-tabs"]', manual: "ch16-5", popover: { title: t("tour.po.tabs.title"), description: t("tour.po.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="po-filters"]', manual: "ch2-6", popover: { title: t("tour.po.filters.title"), description: t("tour.po.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="po-table"]', manual: "ch17-1", popover: { title: t("tour.po.table.title"), description: t("tour.po.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("productionOrder", currentUserId, tourSteps);
   const [tab, setTab] = useState<ListTabKey>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
@@ -52,68 +63,75 @@ export function ProductionOrderList({
         module={<span className="inline-flex items-center gap-2">{t("nav.group.production")}<span className="text-[#c3ccda]">·</span><span className="font-mono text-xs">{t("productionOrder.formCode")}</span></span>}
         title={t("productionOrder.pageTitle")}
         description={t("productionOrder.pageDescription")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={headerAction}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("purchaseRequest.tabsAria")} />
-        <ListToolbar
-          search={searchQuery}
-          onSearch={resetPage(setSearchQuery)}
-          searchPlaceholder={t("productionOrder.searchPlaceholder")}
-          count={<span role="status" aria-live="polite">{t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}</span>}
-        >
-          <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
-        </ListToolbar>
+        <div data-tour="po-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("purchaseRequest.tabsAria")} />
+        </div>
+        <div data-tour="po-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={resetPage(setSearchQuery)}
+            searchPlaceholder={t("productionOrder.searchPlaceholder")}
+            count={<span role="status" aria-live="polite">{t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}</span>}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+          </ListToolbar>
+        </div>
 
-        {productionOrders.length === 0 ? (
-          <ListEmpty title={t("productionOrder.empty.title")} hint={t("productionOrder.empty.description")} />
-        ) : filtered.length === 0 ? (
-          <ListEmpty title={t("productionOrder.noFilterResults")} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
-              <thead>
-                <tr className={table.head}>
-                  <th className={table.th}>{t("productionOrder.col.id")}</th>
-                  <th className={table.th}>{t("productionOrder.col.jobCode")}</th>
-                  <th className={table.th}>{t("productionOrder.col.customer")}</th>
-                  <th className={table.th}>{t("productionOrder.col.productName")}</th>
-                  <th className={table.th}>{t("productionOrder.col.status")}</th>
-                  <th className={table.th}>{t("productionOrder.col.updatedAt")}</th>
-                  <th className={`${table.th} w-10`} aria-hidden="true" />
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((p) => (
-                  <tr
-                    key={p.id}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`${t("productionOrder.openRow")} ${p.documentNumber || p.id}`}
-                    onClick={() => onOpen(p.id)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } }}
-                    className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
-                  >
-                    <td className={`${table.td} ${table.code} whitespace-nowrap`}>{p.documentNumber || p.id}</td>
-                    <td className={`${table.td} font-mono text-[13px] whitespace-nowrap ${p.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{p.jobCode || "—"}</td>
-                    <td className={`${table.td} max-w-[260px]`}>
-                      <span className="block text-sm font-medium text-foreground truncate" title={p.customerCompanyName}>{p.customerCompanyName || "—"}</span>
-                    </td>
-                    <td className={`${table.td} max-w-[260px]`}>
-                      <span className="block text-sm text-[#3d5173] truncate" title={p.productName}>{p.productName || "—"}</span>
-                    </td>
-                    <td className={table.td}><ApprovalStatusPill status={p.status} /></td>
-                    <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
-                    <td className={table.td}>
-                      <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
-                    </td>
+        <div data-tour="po-table" className="min-w-0">
+          {productionOrders.length === 0 ? (
+            <ListEmpty title={t("productionOrder.empty.title")} hint={t("productionOrder.empty.description")} />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("productionOrder.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={table.th}>{t("productionOrder.col.id")}</th>
+                    <th className={table.th}>{t("productionOrder.col.jobCode")}</th>
+                    <th className={table.th}>{t("productionOrder.col.customer")}</th>
+                    <th className={table.th}>{t("productionOrder.col.productName")}</th>
+                    <th className={table.th}>{t("productionOrder.col.status")}</th>
+                    <th className={table.th}>{t("productionOrder.col.updatedAt")}</th>
+                    <th className={`${table.th} w-10`} aria-hidden="true" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {pageRows.map((p) => (
+                    <tr
+                      key={p.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${t("productionOrder.openRow")} ${p.documentNumber || p.id}`}
+                      onClick={() => onOpen(p.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } }}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} ${table.code} whitespace-nowrap`}>{p.documentNumber || p.id}</td>
+                      <td className={`${table.td} font-mono text-[13px] whitespace-nowrap ${p.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{p.jobCode || "—"}</td>
+                      <td className={`${table.td} max-w-[260px]`}>
+                        <span className="block text-sm font-medium text-foreground truncate" title={p.customerCompanyName}>{p.customerCompanyName || "—"}</span>
+                      </td>
+                      <td className={`${table.td} max-w-[260px]`}>
+                        <span className="block text-sm text-[#3d5173] truncate" title={p.productName}>{p.productName || "—"}</span>
+                      </td>
+                      <td className={table.td}><ApprovalStatusPill status={p.status} /></td>
+                      <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                      <td className={table.td}>
+                        <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {filtered.length > 0 && (
           <ListPagination

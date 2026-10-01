@@ -21,6 +21,8 @@ import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import { getRevisionRoot } from "../../lib/revisionDiff";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { useUserDirectory } from "../../lib/userDirectory";
 import { Combobox } from "../../components/Combobox";
 import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
@@ -77,10 +79,11 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
  * ใบที่ไม่ใช่ร่าง (หรือผู้ใช้ไม่มีสิทธิ์แก้) แสดงแบบอ่านอย่างเดียว ไม่มีกล่องช่องกรอก
  */
 export function PurchaseOrderDocument({
-  purchaseOrderId, canEdit, canApprove, canPrint, canDelete, canReceiveGoods, onBack, onDeleted, onOpenOther,
+  purchaseOrderId, currentUserId, canEdit, canApprove, canPrint, canDelete, canReceiveGoods, onBack, onDeleted, onOpenOther,
   onOpenReceivingReport, showToast,
 }: {
   purchaseOrderId: string;
+  currentUserId: string;
   canEdit: boolean;
   canApprove: boolean;
   canPrint: boolean;
@@ -300,6 +303,16 @@ export function PurchaseOrderDocument({
     return () => window.removeEventListener("afterprint", reset);
   }, [showPrint]);
 
+  // ช่อง "ส่งให้ใครอนุมัติ" มีเฉพาะใบร่าง และเมนูเพิ่มเติมว่างได้ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง · hook อยู่เหนือ early return
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="purdoc-actions"]', manual: "ch18-11", popover: { title: t("tour.purdoc.actions.title"), description: t("tour.purdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="purdoc-more"]', manual: "ch18-7", popover: { title: t("tour.purdoc.more.title"), description: t("tour.purdoc.more.desc"), side: "bottom" } },
+    { element: '[data-tour="purdoc-vendor"]', manual: "ch18-6", popover: { title: t("tour.purdoc.vendor.title"), description: t("tour.purdoc.vendor.desc"), side: "top" } },
+    { element: '[data-tour="purdoc-approver"]', manual: "ch18-7", popover: { title: t("tour.purdoc.approver.title"), description: t("tour.purdoc.approver.desc"), side: "left" } },
+    { element: '[data-tour="purdoc-lines"]', manual: "ch18-8", popover: { title: t("tour.purdoc.lines.title"), description: t("tour.purdoc.lines.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("purchaseOrderDoc", currentUserId, docTourSteps, { autoStart: !!doc });
+
   if (loading) {
     return (
       <div className="flex-1 px-4 md:px-8 py-6" role="status" aria-live="polite">
@@ -364,13 +377,14 @@ export function PurchaseOrderDocument({
   ];
 
   const headerActions = (
-    <>
+    <div data-tour="purdoc-actions" className="flex items-center gap-2.5 flex-wrap">
+      <TourReplayButton variant="title" onClick={docTour.start} />
       {canPrint && (
         <button type="button" onClick={() => { void logPurchaseOrderPrinted(draft.id).catch(() => {}); setShowPrint(true); }} className={btn.secondary}>
           <Printer size={16} /> {t("purchaseOrderDoc.print")}
         </button>
       )}
-      <MoreMenu items={moreItems} />
+      {moreItems.some(Boolean) && <div data-tour="purdoc-more"><MoreMenu items={moreItems} /></div>}
       {editable && (
         <button type="button" onClick={() => void save()} disabled={saving} className={btn.secondary}>
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("purchaseOrderDoc.saveDraft")}
@@ -403,7 +417,7 @@ export function PurchaseOrderDocument({
           {receiving ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />} {t("purchaseOrderDoc.receiveGoods")}
         </button>
       )}
-    </>
+    </div>
   );
 
   const headerMeta = editable ? (
@@ -459,27 +473,29 @@ export function PurchaseOrderDocument({
             {/* ผู้อนุมัติที่ตั้งใจไว้ (2026-09-21) — เจ้าของข้อ 2 "ใบ PO สามารถเลือกคนอนุมัติได้"
                 รายชื่อมาจาก `useUserDirectory()` ซึ่ง App.tsx โหลดไว้ให้อยู่แล้ว ไม่ต้องส่ง prop
                 ลงมาอีกสี่ชั้น (เหตุผลเดียวกับที่ช่องลายเซ็นบนใบพิมพ์ใช้ context ตัวนี้) */}
-            <Field label={t("purchaseOrderDoc.intendedApprover")} htmlFor="po-intended-approver" help={t("purchaseOrderDoc.intendedApproverHint")}>
-              <SelectBox
-                id="po-intended-approver"
-                value={draft.intendedApproverUserId ?? ""}
-                onChange={(e) => {
-                  const picked = approverOptions.find((u) => u.id === e.target.value);
-                  setDraft((d) => d && {
-                    ...d,
-                    intendedApproverUserId: e.target.value,
-                    intendedApproverName: picked?.fullName ?? "",
-                  });
-                }}
-              >
-                <option value="">{t("purchaseOrderDoc.intendedApproverAny")}</option>
-                {approverOptions.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-                {/* คนที่เคยถูกเลือกไว้แล้วถูกปิดบัญชี — ยังต้องเห็นชื่อ ไม่ใช่ช่องว่างที่อธิบายไม่ได้ */}
-                {draft.intendedApproverUserId && !approverOptions.some((u) => u.id === draft.intendedApproverUserId) && (
-                  <option value={draft.intendedApproverUserId}>{draft.intendedApproverName || draft.intendedApproverUserId}</option>
-                )}
-              </SelectBox>
-            </Field>
+            <div data-tour="purdoc-approver">
+              <Field label={t("purchaseOrderDoc.intendedApprover")} htmlFor="po-intended-approver" help={t("purchaseOrderDoc.intendedApproverHint")}>
+                <SelectBox
+                  id="po-intended-approver"
+                  value={draft.intendedApproverUserId ?? ""}
+                  onChange={(e) => {
+                    const picked = approverOptions.find((u) => u.id === e.target.value);
+                    setDraft((d) => d && {
+                      ...d,
+                      intendedApproverUserId: e.target.value,
+                      intendedApproverName: picked?.fullName ?? "",
+                    });
+                  }}
+                >
+                  <option value="">{t("purchaseOrderDoc.intendedApproverAny")}</option>
+                  {approverOptions.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+                  {/* คนที่เคยถูกเลือกไว้แล้วถูกปิดบัญชี — ยังต้องเห็นชื่อ ไม่ใช่ช่องว่างที่อธิบายไม่ได้ */}
+                  {draft.intendedApproverUserId && !approverOptions.some((u) => u.id === draft.intendedApproverUserId) && (
+                    <option value={draft.intendedApproverUserId}>{draft.intendedApproverName || draft.intendedApproverUserId}</option>
+                  )}
+                </SelectBox>
+              </Field>
+            </div>
             <Field label={t("purchaseOrderDoc.orderedBy")} htmlFor="po-ordered-by">
               <input id="po-ordered-by" className={`${field.input} w-full`} value={draft.orderedBy} onChange={(e) => set("orderedBy", e.target.value)} />
             </Field>
@@ -953,19 +969,21 @@ export function PurchaseOrderDocument({
             </div>
           )}
           <DocumentStepper ariaLabel={t("purchaseOrderDoc.stepperAria")} steps={steps} current={stepIndex} />
-          <DocumentColumns main={<>{vendorCard}{infoCard}</>} rail={rail} />
+          <DocumentColumns main={<><div data-tour="purdoc-vendor">{vendorCard}</div>{infoCard}</>} rail={rail} />
 
-          <SectionCard
-            title={
-              <span className="flex items-baseline gap-2.5 flex-wrap">
-                {t("purchaseOrderDoc.sectionLines")}
-                <span className="text-[13px] font-normal text-muted-foreground">{lineCountLabel(draft.lines.length)}</span>
-              </span>
-            }
-            bodyClassName=""
-          >
-            {editable ? linesEditable : linesReadonly}
-          </SectionCard>
+          <div data-tour="purdoc-lines">
+            <SectionCard
+              title={
+                <span className="flex items-baseline gap-2.5 flex-wrap">
+                  {t("purchaseOrderDoc.sectionLines")}
+                  <span className="text-[13px] font-normal text-muted-foreground">{lineCountLabel(draft.lines.length)}</span>
+                </span>
+              }
+              bodyClassName=""
+            >
+              {editable ? linesEditable : linesReadonly}
+            </SectionCard>
+          </div>
 
           <SectionCard title={t("purchaseOrderDoc.remarks")}>
             {editable ? (

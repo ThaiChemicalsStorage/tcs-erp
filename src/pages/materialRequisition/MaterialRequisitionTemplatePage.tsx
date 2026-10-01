@@ -19,6 +19,8 @@ import { btn, field, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { paginate, rowOpenProps, rowRemoveBtn } from "../project/projectUi";
 
 /**
@@ -37,9 +39,17 @@ type Draft = { name: string; description: string; lines: MaterialRequisitionTemp
 
 const EMPTY_DRAFT: Draft = { name: "", description: "", lines: [] };
 
-export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean }) {
+export function MaterialRequisitionTemplatePage({ canEdit, currentUserId }: { canEdit: boolean; currentUserId: string }) {
   const { t } = useI18n();
   const toast = useToast();
+
+  // ปุ่มสร้างมีเฉพาะคนที่แก้ทะเบียนได้ และตารางมีเมื่อมีเทมเพลตแล้ว — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="mrtpl-create"]', manual: "ch16-2", popover: { title: t("tour.mrTpl.create.title"), description: t("tour.mrTpl.create.desc"), side: "bottom" } },
+    { element: '[data-tour="mrtpl-search"]', manual: "ch16-2", popover: { title: t("tour.mrTpl.search.title"), description: t("tour.mrTpl.search.desc"), side: "bottom" } },
+    { element: '[data-tour="mrtpl-table"]', manual: "ch16-2", popover: { title: t("tour.mrTpl.table.title"), description: t("tour.mrTpl.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("materialRequisitionTemplates", currentUserId, tourSteps);
 
   const [templates, setTemplates] = useState<MaterialRequisitionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,20 +151,23 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
         module={t("nav.group.project")}
         title={t("mrTemplate.pageTitle")}
         description={t("mrTemplate.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canEdit ? (
-          <button type="button" onClick={openNew} className={btn.primary}>
+          <button type="button" data-tour="mrtpl-create" onClick={openNew} className={btn.primary}>
             <Plus size={16} /> {t("mrTemplate.createBtn")}
           </button>
         ) : undefined}
       />
 
       <ListCard>
-        <ListToolbar
-          search={search}
-          onSearch={(v) => { setSearch(v); setPage(1); }}
-          searchPlaceholder={t("mrTemplate.searchPlaceholder")}
-          count={loading || loadError ? undefined : t("mrTemplate.templateCount").replace("{n}", String(filtered.length))}
-        />
+        <div data-tour="mrtpl-search">
+          <ListToolbar
+            search={search}
+            onSearch={(v) => { setSearch(v); setPage(1); }}
+            searchPlaceholder={t("mrTemplate.searchPlaceholder")}
+            count={loading || loadError ? undefined : t("mrTemplate.templateCount").replace("{n}", String(filtered.length))}
+          />
+        </div>
         {loading ? (
           <div className="px-5 py-4 space-y-2" role="status" aria-live="polite">
             {[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
@@ -170,7 +183,7 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
             hint={search.trim() ? t("mrTemplate.noMatchDescription") : t("mrTemplate.emptyDescription")}
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-tour="mrtpl-table" className="overflow-x-auto">
             <table className="w-full min-w-[760px]">
               <thead>
                 <tr className={table.head}>

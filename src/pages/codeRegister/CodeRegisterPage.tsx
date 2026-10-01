@@ -13,6 +13,8 @@ import { btn, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { DialogSummary } from "../purchaseOrder/purchasingUi";
 import { CodeRegisterDrawer } from "./CodeRegisterDrawer";
 import { codeKindCounts, codeKindLabelKey, filterCodeEntries } from "./codeRegisterDisplay";
@@ -39,15 +41,26 @@ export function CodeRegisterPage({
   canCreate,
   canEdit,
   canArchive,
+  currentUserId,
 }: {
   codes: CodeEntry[];
   onCodesChange: (next: CodeEntry[]) => void;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
+  currentUserId: string;
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  // ปุ่มนำเข้ามีเฉพาะแท็บรหัสบัญชี และปุ่มสร้างเฉพาะคนที่มีสิทธิ์ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="codes-create"]', manual: "ch19-2", popover: { title: t("tour.codes.create.title"), description: t("tour.codes.create.desc"), side: "bottom" } },
+    { element: '[data-tour="codes-import"]', manual: "ch19-2", popover: { title: t("tour.codes.import.title"), description: t("tour.codes.import.desc"), side: "bottom" } },
+    { element: '[data-tour="codes-tabs"]', manual: "ch19-2", popover: { title: t("tour.codes.tabs.title"), description: t("tour.codes.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="codes-filters"]', manual: "ch19-2", popover: { title: t("tour.codes.filters.title"), description: t("tour.codes.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="codes-table"]', manual: "ch19-2", popover: { title: t("tour.codes.table.title"), description: t("tour.codes.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("codeRegister", currentUserId, tourSteps);
   const [kind, setKind] = useState<CodeKind>("department");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -166,11 +179,12 @@ export function CodeRegisterPage({
       <ListPageHeader
         title={t("codeRegister.pageTitle")}
         description={t("codeRegister.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canCreate ? (
           <>
             {/* นำเข้าไฟล์มีเฉพาะแท็บรหัสบัญชี — เหมือนเดิม */}
             {isAccount && (
-              <label className={`${btn.secondary} ${importing ? "opacity-60 pointer-events-none" : "cursor-pointer"} focus-within:ring-2 focus-within:ring-[#1a5fb4]/40`}>
+              <label data-tour="codes-import" className={`${btn.secondary} ${importing ? "opacity-60 pointer-events-none" : "cursor-pointer"} focus-within:ring-2 focus-within:ring-[#1a5fb4]/40`}>
                 {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 {t("codeRegister.importAccounts")}
                 <input
@@ -180,7 +194,7 @@ export function CodeRegisterPage({
                 />
               </label>
             )}
-            <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}>
+            <button type="button" data-tour="codes-create" onClick={() => setFormTarget("new")} className={btn.primary}>
               <Plus size={16} /> {t("codeRegister.addNew")}
             </button>
           </>
@@ -189,76 +203,82 @@ export function CodeRegisterPage({
 
       <ListCard>
         {/* สามแท็บ — รหัสคนละชุดกัน รหัสซ้ำข้ามชุดได้ (ประเภทงานเพิ่ม 2026-09-03 สำหรับ "ตัดเข้างาน" บนใบเบิก) */}
-        <ListTabs tabs={tabs} active={kind} onChange={(k) => { setKind(k); setPage(1); }} ariaLabel={t("codeRegister.tabsAria")} />
-        <ListToolbar
-          search={search}
-          onSearch={(v) => { setSearch(v); setPage(1); }}
-          searchPlaceholder={t("codeRegister.searchPlaceholder")}
-          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
-        >
-          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173] ml-1">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
-              className="w-4 h-4 rounded border-[#c3ccda] accent-[#0b1d3a]"
-            />
-            {t("codeRegister.showArchived")}
-          </label>
-        </ListToolbar>
+        <div data-tour="codes-tabs">
+          <ListTabs tabs={tabs} active={kind} onChange={(k) => { setKind(k); setPage(1); }} ariaLabel={t("codeRegister.tabsAria")} />
+        </div>
+        <div data-tour="codes-filters">
+          <ListToolbar
+            search={search}
+            onSearch={(v) => { setSearch(v); setPage(1); }}
+            searchPlaceholder={t("codeRegister.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173] ml-1">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
+                className="w-4 h-4 rounded border-[#c3ccda] accent-[#0b1d3a]"
+              />
+              {t("codeRegister.showArchived")}
+            </label>
+          </ListToolbar>
+        </div>
 
-        {ofKindCount === 0 ? (
-          <ListEmpty
-            title={t(isAccount ? "empty.codeRegister.account.title" : "empty.codeRegister.department.title")}
-            hint={t(isAccount ? "empty.codeRegister.account.sub" : "empty.codeRegister.department.sub")}
-            action={canCreate ? <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}><Plus size={16} /> {t("codeRegister.addNew")}</button> : undefined}
-          />
-        ) : filtered.length === 0 ? (
-          <ListEmpty title={t("codeRegister.noFilterResults")} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px]">
-              <thead>
-                <tr className={table.head}>
-                  {columns.map((h, i) => <th key={i} className={table.th}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((c) => (
-                  <tr
-                    key={c.id}
-                    tabIndex={0}
-                    aria-label={`${t("codeRegister.openRow")} ${c.code}`}
-                    onClick={() => setFormTarget(c.id)}
-                    onKeyDown={(e) => openOnKey(e, c.id)}
-                    className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 ${c.isDeleted ? "opacity-60" : ""}`}
-                  >
-                    <td className={`${table.td} whitespace-nowrap`}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className={table.code}>{c.code}</span>
-                        {c.isControl && (
-                          <span className="h-5 px-1.5 rounded bg-[#eef1f6] text-[#3d5173] text-xs font-semibold inline-flex items-center">{t("codeRegister.controlAccount")}</span>
-                        )}
-                      </span>
-                    </td>
-                    <td className={`${table.td} text-sm text-foreground ${c.isControl ? "font-semibold" : "font-medium"}`}>{c.name}</td>
-                    {isAccount && <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{c.category || dash}</td>}
-                    {isAccount && <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{c.parentCode || dash}</td>}
-                    <td className={table.td}>
-                      <StatusBadge
-                        status={c.isDeleted ? "archived" : c.isActive ? "active" : "inactive"}
-                        label={t(c.isDeleted ? "vendors.status.archived" : c.isActive ? "vendors.status.active" : "vendors.status.inactive")}
-                      />
-                    </td>
-                    <td className={`${table.td} w-10`}>
-                      <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
-                    </td>
+        <div data-tour="codes-table" className="min-w-0">
+          {ofKindCount === 0 ? (
+            <ListEmpty
+              title={t(isAccount ? "empty.codeRegister.account.title" : "empty.codeRegister.department.title")}
+              hint={t(isAccount ? "empty.codeRegister.account.sub" : "empty.codeRegister.department.sub")}
+              action={canCreate ? <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}><Plus size={16} /> {t("codeRegister.addNew")}</button> : undefined}
+            />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("codeRegister.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px]">
+                <thead>
+                  <tr className={table.head}>
+                    {columns.map((h, i) => <th key={i} className={table.th}>{h}</th>)}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {visible.map((c) => (
+                    <tr
+                      key={c.id}
+                      tabIndex={0}
+                      aria-label={`${t("codeRegister.openRow")} ${c.code}`}
+                      onClick={() => setFormTarget(c.id)}
+                      onKeyDown={(e) => openOnKey(e, c.id)}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 ${c.isDeleted ? "opacity-60" : ""}`}
+                    >
+                      <td className={`${table.td} whitespace-nowrap`}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className={table.code}>{c.code}</span>
+                          {c.isControl && (
+                            <span className="h-5 px-1.5 rounded bg-[#eef1f6] text-[#3d5173] text-xs font-semibold inline-flex items-center">{t("codeRegister.controlAccount")}</span>
+                          )}
+                        </span>
+                      </td>
+                      <td className={`${table.td} text-sm text-foreground ${c.isControl ? "font-semibold" : "font-medium"}`}>{c.name}</td>
+                      {isAccount && <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{c.category || dash}</td>}
+                      {isAccount && <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{c.parentCode || dash}</td>}
+                      <td className={table.td}>
+                        <StatusBadge
+                          status={c.isDeleted ? "archived" : c.isActive ? "active" : "inactive"}
+                          label={t(c.isDeleted ? "vendors.status.archived" : c.isActive ? "vendors.status.active" : "vendors.status.inactive")}
+                        />
+                      </td>
+                      <td className={`${table.td} w-10`}>
+                        <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         {filtered.length > 0 && (
           <ListPagination
             page={currentPage}

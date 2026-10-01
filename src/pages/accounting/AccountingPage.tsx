@@ -13,6 +13,8 @@ import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ACCEPT_ALL_UPLOADS, checkBeforeUpload } from "../../lib/uploadLimits";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
 import { DocumentHeader, DocumentColumns, RailTotalCard, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
@@ -41,8 +43,9 @@ const CHECKLIST_LABEL_KEY: Record<ArChecklistKey, TranslationKey> = {
 // Accounts Receivable page — Phase 1: pick a job (Scope of Work), then bill it milestone by milestone.
 // See docs/MODULES/Accounting.md for the full design writeup and the Phase 1/Phase 2 boundary.
 export function AccountingPage({
-  canCreate, canIssue,
+  currentUserId, canCreate, canIssue,
 }: {
+  currentUserId: string;
   canCreate: boolean;
   canIssue: boolean;
 }) {
@@ -52,13 +55,21 @@ export function AccountingPage({
   const toast = useToast();
   const { t } = useI18n();
 
+  // คำแนะนำหน้าเริ่มต้น (ปุ่มเลือกงาน + สามขั้นตอน) — hook อยู่เหนือ early return ของหน้างาน
+  // หน้างานที่เลือกมีคำแนะนำของตัวเอง (accountingJobBillingDoc ใน ScopeBillingDetail)
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="accjob-create"]', manual: "ch13-2", popover: { title: t("tour.accJob.create.title"), description: t("tour.accJob.create.desc"), side: "bottom" } },
+    { element: '[data-tour="accjob-steps"]', manual: "ch13-2", popover: { title: t("tour.accJob.steps.title"), description: t("tour.accJob.steps.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("accountingJobBilling", currentUserId, tourSteps, { autoStart: view === "list" });
+
   const openScope = (id: string) => { setSelectedId(id); setView("detail"); setPickerOpen(false); };
   const backToList = () => setView("list");
 
   if (view === "detail" && selectedId) {
     return (
       <>
-        <ScopeBillingDetail scopeOfWorkId={selectedId} canCreate={canCreate} canIssue={canIssue} onBack={backToList} showToast={toast.show} />
+        <ScopeBillingDetail currentUserId={currentUserId} scopeOfWorkId={selectedId} canCreate={canCreate} canIssue={canIssue} onBack={backToList} showToast={toast.show} />
         <Toast message={toast.message} />
       </>
     );
@@ -77,7 +88,8 @@ export function AccountingPage({
         module={t("nav.group.accounting")}
         title={t("accounting.jobBilling.title")}
         description={t("accounting.jobBilling.subtitle")}
-        actions={<button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}><Plus size={16} /> {openLabel}</button>}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={<button type="button" data-tour="accjob-create" onClick={() => setPickerOpen(true)} className={btn.primary}><Plus size={16} /> {openLabel}</button>}
       />
 
       <section className={`${surface.card} flex-1 min-h-[360px] flex flex-col items-center justify-center gap-3 px-6 py-10 text-center`}>
@@ -86,7 +98,7 @@ export function AccountingPage({
         <p className="max-w-[520px] text-sm text-[#3d5173]">
           {canCreate ? t("accounting.jobBilling.landing.description") : t("accounting.jobBilling.landing.descriptionReadOnly")}
         </p>
-        <ol className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] text-muted-foreground">
+        <ol data-tour="accjob-steps" className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] text-muted-foreground">
           {steps.map((s, i) => (
             <li key={s} className="flex items-center gap-2.5">
               {i > 0 && <ChevronRight size={14} aria-hidden="true" />}
@@ -194,8 +206,9 @@ const CHECKLIST_KEYS_FOR: Record<ArWorkClassification, ArChecklistKey[]> = {
 const ISSUED_DOCS_GRID = "grid-cols-[150px_minmax(0,1fr)_minmax(150px,210px)_150px_150px]";
 
 function ScopeBillingDetail({
-  scopeOfWorkId, canCreate, canIssue, onBack, showToast,
+  currentUserId, scopeOfWorkId, canCreate, canIssue, onBack, showToast,
 }: {
+  currentUserId: string;
   scopeOfWorkId: string;
   canCreate: boolean;
   canIssue: boolean;
@@ -358,6 +371,17 @@ function ScopeBillingDetail({
     }
   };
 
+  // คำแนะนำหน้างาน — hook ต้องอยู่เหนือ early return (กำลังโหลด) ด้านล่าง
+  // ขั้นเอกสารประกอบ/ปุ่มออกเอกสารมีเฉพาะตอนเปิดงวดที่ยังไม่วางบิล — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="accjobdoc-installments"]', manual: "ch13-2", popover: { title: t("tour.accJobDoc.installments.title"), description: t("tour.accJobDoc.installments.desc"), side: "top" } },
+    { element: '[data-tour="accjobdoc-checklist"]', manual: "ch13-2", popover: { title: t("tour.accJobDoc.checklist.title"), description: t("tour.accJobDoc.checklist.desc"), side: "top" } },
+    { element: '[data-tour="accjobdoc-issue"]', manual: "ch13-2", popover: { title: t("tour.accJobDoc.issue.title"), description: t("tour.accJobDoc.issue.desc"), side: "bottom" } },
+    { element: '[data-tour="accjobdoc-deposit"]', manual: "ch13-2", popover: { title: t("tour.accJobDoc.deposit.title"), description: t("tour.accJobDoc.deposit.desc"), side: "left" } },
+    { element: '[data-tour="accjobdoc-issued"]', manual: "ch13-2", popover: { title: t("tour.accJobDoc.issued.title"), description: t("tour.accJobDoc.issued.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("accountingJobBillingDoc", currentUserId, docTourSteps, { autoStart: !loading && !!scope });
+
   if (loading || !scope) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
@@ -382,7 +406,7 @@ function ScopeBillingDetail({
   const cancelledCount = documents.filter((d) => d.status === "cancelled").length;
 
   const installmentsCard = (
-    <section className={`${surface.card} overflow-hidden`}>
+    <section data-tour="accjobdoc-installments" className={`${surface.card} overflow-hidden`}>
       <div className={surface.cardHead}>
         <h2 className={`${surface.cardTitle} flex-1`}>{t("accounting.jobBilling.installmentsHeading")}</h2>
         {installments.length > 0 && (
@@ -424,7 +448,7 @@ function ScopeBillingDetail({
             </button>
 
             {isOpen && milestone && (
-              <div id={panelId} className="px-6 md:pl-[66px] pt-5 pb-6 flex flex-col gap-[18px]">
+              <div id={panelId} data-tour={milestone.billingStatus === "not_billed" ? "accjobdoc-checklist" : undefined} className="px-6 md:pl-[66px] pt-5 pb-6 flex flex-col gap-[18px]">
                 {milestone.billingStatus === "not_billed" ? (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-[240px_minmax(0,1fr)] gap-x-5 gap-y-1.5 items-end">
@@ -501,16 +525,18 @@ function ScopeBillingDetail({
   const rail = (
     <>
       {depositDoc ? (
-        <RailTotalCard
-          label={t("accounting.jobBilling.rail.depositIssued")}
-          amount={`฿${money(depositDoc.netTotal)}`}
-          rows={[
-            { label: t(DOC_TYPE_LABEL_KEY.AR), value: <span className="font-mono">{depositDoc.docNo}</span> },
-            { label: t(DOC_TYPE_LABEL_KEY.RE), value: depositReceipt ? <span className="font-mono">{depositReceipt.docNo}</span> : t("accounting.list.receiptNotIssued") },
-          ]}
-        />
+        <div data-tour="accjobdoc-deposit">
+          <RailTotalCard
+            label={t("accounting.jobBilling.rail.depositIssued")}
+            amount={`฿${money(depositDoc.netTotal)}`}
+            rows={[
+              { label: t(DOC_TYPE_LABEL_KEY.AR), value: <span className="font-mono">{depositDoc.docNo}</span> },
+              { label: t(DOC_TYPE_LABEL_KEY.RE), value: depositReceipt ? <span className="font-mono">{depositReceipt.docNo}</span> : t("accounting.list.receiptNotIssued") },
+            ]}
+          />
+        </div>
       ) : (
-        <div className="rounded-xl bg-[#fdf3e0] border border-[#f0d9a8] px-4 py-3.5 flex gap-3 text-[#8a5a00]">
+        <div data-tour="accjobdoc-deposit" className="rounded-xl bg-[#fdf3e0] border border-[#f0d9a8] px-4 py-3.5 flex gap-3 text-[#8a5a00]">
           <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
           <span className="text-sm font-medium">{t("accounting.jobBilling.depositNotIssuedNotice")}</span>
         </div>
@@ -539,9 +565,12 @@ function ScopeBillingDetail({
         number={scope.scopeNumber}
         status={<span className="text-sm text-[#3d5173] min-w-0 truncate">{scope.customerSnapshot.companyName} · <span className="font-mono text-[13px]">{scope.quotationNumber}</span></span>}
         meta={milestone ? <>{t("accounting.jobBilling.selectedInstallment")} {milestone.label} — {milestone.pct ?? "-"}%</> : undefined}
-        actions={issuable ? (
+        actions={<>
+          <TourReplayButton variant="title" onClick={docTour.start} />
+          {issuable && (
           <button
             type="button"
+            data-tour="accjobdoc-issue"
             onClick={() => void handleIssue()}
             disabled={!checklistOk || issuing}
             title={!checklistOk ? t("accounting.jobBilling.checklistRequiredNotice") : undefined}
@@ -550,13 +579,14 @@ function ScopeBillingDetail({
             {issuing ? <Loader2 size={16} className="animate-spin" /> : <ClipboardCheck size={16} />}
             {t("accounting.jobBilling.issueDocsBtn")} ({principalType} + BI)
           </button>
-        ) : undefined}
+          )}
+        </>}
       />
 
       <div className="px-4 md:px-8 pt-6 pb-10 flex flex-col gap-5">
         <DocumentColumns main={installmentsCard} rail={rail} />
 
-        <section className={surface.card}>
+        <section data-tour="accjobdoc-issued" className={surface.card}>
           <div className={surface.cardHead}>
             <h2 className={surface.cardTitle}>{t("accounting.jobBilling.issuedDocsHeading")}</h2>
             {documents.length > 0 && (

@@ -3,6 +3,8 @@ import { ChevronRight } from "lucide-react";
 import { receivingReportCodeOf, RECEIVING_REPORT_CODE_LABEL_KEY, type ReceivingReportSummary, type ReceivingReportStatus } from "../../lib/receivingReport";
 import { formatQuoteDateThai, fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -20,13 +22,22 @@ export function ReceivingReportStatusPill({ status }: { status: ReceivingReportS
 }
 
 export function ReceivingReportList({
-  receivingReports, onOpen, headerAction,
+  receivingReports, currentUserId, onOpen, headerAction,
 }: {
   receivingReports: ReceivingReportSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
+  // ปุ่มสร้างมีเฉพาะผู้มีสิทธิ์ และตารางมีเฉพาะเมื่อมีใบ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="rr-create"]', manual: "ch23-1", popover: { title: t("tour.rr.create.title"), description: t("tour.rr.create.desc"), side: "bottom" } },
+    { element: '[data-tour="rr-tabs"]', manual: "ch23", popover: { title: t("tour.rr.tabs.title"), description: t("tour.rr.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="rr-filters"]', manual: "ch2-6", popover: { title: t("tour.rr.filters.title"), description: t("tour.rr.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="rr-table"]', manual: "ch23", popover: { title: t("tour.rr.table.title"), description: t("tour.rr.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("receivingReport", currentUserId, tourSteps);
   const [tab, setTab] = useState<Tab>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
@@ -66,26 +77,31 @@ export function ReceivingReportList({
         module={t("nav.group.inventory")}
         title={t("receivingReport.pageTitle")}
         description={t("receivingReport.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={headerAction}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("receivingReport.col.status")} />
-        <ListToolbar
-          search={searchQuery}
-          onSearch={withReset(setSearchQuery)}
-          searchPlaceholder={t("receivingReport.searchPlaceholder")}
-          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
-        >
-          <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
-        </ListToolbar>
+        <div data-tour="rr-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("receivingReport.col.status")} />
+        </div>
+        <div data-tour="rr-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={withReset(setSearchQuery)}
+            searchPlaceholder={t("receivingReport.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
+          </ListToolbar>
+        </div>
 
         {receivingReports.length === 0 ? (
           <ListEmpty title={t("receivingReport.empty.title")} hint={t("receivingReport.empty.description")} />
         ) : filtered.length === 0 ? (
           <ListEmpty title={t("receivingReport.noFilterResults")} />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-tour="rr-table" className="overflow-x-auto">
             <table className="w-full min-w-[1040px]">
               <thead>
                 <tr className={table.head}>

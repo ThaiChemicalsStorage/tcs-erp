@@ -14,6 +14,8 @@ import { Field, ReadonlyField } from "../../components/ui/Field";
 import { btn, field, surface, table } from "../../components/ui/styles";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { TemplateProductPicker } from "./TemplateProductPicker";
 
 function newId(): string {
@@ -74,6 +76,7 @@ export function TemplateEditorView({
   categories,
   canActivate,
   initialJobTypeCode,
+  currentUserId,
   onSaved,
   onCancel,
 }: {
@@ -83,11 +86,20 @@ export function TemplateEditorView({
   categories: ProductCategory[];
   canActivate: boolean;
   initialJobTypeCode: string | null;
+  currentUserId: string;
   onSaved: () => void;
   onCancel: () => void;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(!!templateId);
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="tpledit-save"]', manual: "ch11-4", popover: { title: t("tour.tplEdit.save.title"), description: t("tour.tplEdit.save.desc"), side: "bottom" } },
+    { element: '[data-tour="tpledit-settings"]', manual: "ch11-2", popover: { title: t("tour.tplEdit.settings.title"), description: t("tour.tplEdit.settings.desc"), side: "left" } },
+    { element: '[data-tour="tpledit-sections"]', manual: "ch11-2", popover: { title: t("tour.tplEdit.sections.title"), description: t("tour.tplEdit.sections.desc"), side: "bottom" } },
+    { element: '[data-tour="tpledit-terms"]', manual: "ch11-2", popover: { title: t("tour.tplEdit.terms.title"), description: t("tour.tplEdit.terms.desc"), side: "top" } },
+  ];
+  // เปิดอัตโนมัติเมื่อโหลด Template เสร็จ (หน้าสร้างใหม่ไม่ต้องรอ) — hook อยู่เหนือ early return ตอนโหลด
+  const tour = useModuleTour("templateEditor", currentUserId, tourSteps, { autoStart: !loading });
   const [draft, setDraft] = useState<TemplateContentDraft>(() => {
     const jt = initialJobTypeCode ? jobTypes.find((j) => j.code === initialJobTypeCode) : null;
     return emptyDraft(jt?.code ?? "", jt?.name ?? "");
@@ -240,8 +252,9 @@ export function TemplateEditorView({
         meta={<span>{modeLabel} · {countsLabel}</span>}
         actions={
           <>
+            <TourReplayButton variant="title" onClick={tour.start} />
             <button type="button" onClick={onCancel} disabled={saving} className={btn.secondary}>{t("common.cancel")}</button>
-            <button type="button" onClick={() => void handleSave()} disabled={saving} className={`${btn.primary} min-w-[88px]`}>
+            <button type="button" data-tour="tpledit-save" onClick={() => void handleSave()} disabled={saving} className={`${btn.primary} min-w-[88px]`}>
               {saving ? <Loader2 size={16} className="animate-spin" /> : t("templates.form.save")}
             </button>
           </>
@@ -271,7 +284,7 @@ export function TemplateEditorView({
               </div>
             </SectionCard>
 
-            <div className="w-full lg:w-80 flex-shrink-0 flex flex-col">
+            <div data-tour="tpledit-settings" className="w-full lg:w-80 flex-shrink-0 flex flex-col">
               <RailCard title={t("templates.form.settingsSection")}>
                 <div className="flex flex-col gap-4">
                   <Field label={t("templates.col.jobType")} htmlFor={jobTypeId} required>
@@ -317,7 +330,7 @@ export function TemplateEditorView({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 -mb-1.5 flex-wrap">
+          <div data-tour="tpledit-sections" className="flex items-center gap-2.5 -mb-1.5 flex-wrap">
             <h2 className={surface.cardTitle}>{t("templates.form.sections")}</h2>
             <span className="flex-1 text-[13px] text-muted-foreground">{countsLabel}</span>
             <button type="button" onClick={addSection} className={btn.secondarySm}>
@@ -389,6 +402,7 @@ export function TemplateEditorView({
             </section>
           ))}
 
+          <div data-tour="tpledit-terms">
           <SectionCard title={t("templates.preview.terms")} subtitle={t("templates.form.termsHint")}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {(["paymentTerm", "warrantyTerm", "taxNote"] as const).map((type) => (
@@ -407,6 +421,7 @@ export function TemplateEditorView({
               ))}
             </div>
           </SectionCard>
+          </div>
 
           <SectionCard
             title={t("templates.form.internalNotes")}

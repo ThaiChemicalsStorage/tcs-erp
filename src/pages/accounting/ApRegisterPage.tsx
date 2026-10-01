@@ -4,6 +4,8 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchApEntries, updateApEntry, type ApEntry } from "../../lib/apEntries";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
@@ -28,7 +30,7 @@ import { ApRegisterPrint } from "./legacyReportPrint";
  */
 const COLS = 7;
 
-export function ApRegisterPage({ canManage }: { canManage: boolean }) {
+export function ApRegisterPage({ currentUserId, canManage }: { currentUserId: string; canManage: boolean }) {
   const { t } = useI18n();
   const toast = useToast();
   const [month, setMonth] = useState(currentMonthLocal);
@@ -55,6 +57,18 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
   const paidTotal = entries.filter((e) => e.status === "Paid").reduce((s, e) => s + e.total, 0);
   const vendors = groupApEntriesByVendor(entries, t("apRegister.unknownVendor"));
 
+  // คำแนะนำประจำหน้า — เล่นเองหลังโหลดเสร็จ (แถบยอดรวม/ตารางยังไม่อยู่บนจอระหว่างโหลด · เดือนที่ไม่มีรายการ ขั้นนั้นถูกข้าม)
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="ap-month"]', manual: "ch14-2", popover: { title: t("tour.ap.month.title"), description: t("tour.ap.month.desc"), side: "bottom" } },
+    { element: '[data-tour="ap-print"]', manual: "ch14-2", popover: { title: t("tour.ap.print.title"), description: t("tour.ap.print.desc"), side: "bottom" } },
+    { element: '[data-tour="ap-totals"]', manual: "ch14-2", popover: { title: t("tour.ap.totals.title"), description: t("tour.ap.totals.desc"), side: "bottom" } },
+    { element: '[data-tour="ap-table"]', manual: "ch14-2", popover: { title: t("tour.ap.table.title"), description: t("tour.ap.table.desc"), side: "top" } },
+    { element: '[data-tour="ap-markpaid"]', manual: "ch14-2", popover: { title: t("tour.ap.markPaid.title"), description: t("tour.ap.markPaid.desc"), side: "left" } },
+  ];
+  const tour = useModuleTour("apRegister", currentUserId, tourSteps, { autoStart: !loading });
+  // ปุ่ม "บันทึกจ่ายแล้ว" ของแถวค้างจ่ายแถวแรกบนจอ (ลำดับตามกลุ่มผู้ขาย) เป็นจุดชี้ของคำแนะนำ
+  const firstUnpaidId = vendors.flatMap((g) => g.rows).find((e) => e.status !== "Paid")?.id;
+
   const applyStatus = async (entry: ApEntry, status: "Paid" | "Unpaid", paymentRef?: string) => {
     setBusy(true);
     try {
@@ -76,9 +90,10 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
           module={t("nav.group.accounting")}
           title={t("apRegister.title")}
           description={t("apRegister.subtitle")}
+          help={<TourReplayButton variant="title" onClick={tour.start} />}
           actions={<>
-            <MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} />
-            <button type="button" onClick={() => window.print()} className={btn.secondary}>
+            <div data-tour="ap-month"><MonthField value={month} onChange={setMonth} label={t("accounting.monthly.monthLabel")} /></div>
+            <button type="button" data-tour="ap-print" onClick={() => window.print()} className={btn.secondary}>
               <Printer size={16} /> {t("accounting.monthly.printBtn")}
             </button>
           </>}
@@ -104,6 +119,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
         </div>
       ) : (
         <>
+          <div data-tour="ap-totals">
           <TotalsStrip
             items={[
               { label: t("apRegister.kpi.entries"), value: entries.length },
@@ -111,8 +127,9 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
               { label: t("apRegister.kpi.paid"), value: money(paidTotal), dot: "#1b7f4f", alignEnd: true },
             ]}
           />
+          </div>
 
-          <section className={REPORT.card}>
+          <section data-tour="ap-table" className={REPORT.card}>
             <div className={`${REPORT.cardHead} print:hidden`}>
               <h2 className="flex-1 text-base font-semibold text-foreground">{t("apRegister.listHeading")}</h2>
               <span className="text-[13px] text-muted-foreground">{t("apRegister.vendorCount").replace("{n}", String(vendors.length))} · {t("accounting.report.amountsInBaht")}</span>
@@ -167,7 +184,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
                                 <RotateCcw size={14} /> {t("apRegister.clearPaidBtn")}
                               </button>
                             ) : (
-                              <button type="button" onClick={() => setPayTarget(e)} disabled={busy} className={btn.secondarySm.replace("h-9", "h-8")}>
+                              <button type="button" data-tour={e.id === firstUnpaidId ? "ap-markpaid" : undefined} onClick={() => setPayTarget(e)} disabled={busy} className={btn.secondarySm.replace("h-9", "h-8")}>
                                 <BadgeCheck size={14} /> {t("apRegister.markPaidBtn")}
                               </button>
                             ))}

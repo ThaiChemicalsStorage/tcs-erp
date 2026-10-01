@@ -4,6 +4,8 @@ import {
 } from "lucide-react";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import type { CompanyHeaderInfo } from "../../lib/storage";
@@ -71,9 +73,10 @@ const cellInput = (bad = false) =>
  * การอนุมัติ การ์ดรับเข้าคลัง และ "ขั้นต่อไป" ขวา · รายการเต็มความกว้างด้านล่าง
  */
 export function StoreReceiptDocument({
-  storeReceiptId, canEdit, canApprove, canPost, canPrint, canDelete, companyHeader, onBack, showToast,
+  storeReceiptId, currentUserId, canEdit, canApprove, canPost, canPrint, canDelete, companyHeader, onBack, showToast,
 }: {
   storeReceiptId: string;
+  currentUserId: string;
   canEdit: boolean;
   canApprove: boolean;
   /** `stock:adjust` — ปุ่มรับเข้าคลัง */
@@ -230,6 +233,16 @@ export function StoreReceiptDocument({
     // ใบรับคืนไม่มีฉบับแก้ไข — ข้อความของขั้นอนุมัติแล้วจึงบอกเรื่องรับเข้าคลังแทน
     finalHint: posted ? t("storeReceipt.finalHintPosted") : canPost ? t("storeReceipt.finalHintAwaiting") : t("storeReceipt.finalHintAwaitingNoPerm"),
   });
+
+  // ปุ่มหลัก (ส่งขออนุมัติ / อนุมัติ / รับเข้าคลัง) ขึ้นตามขั้นและสิทธิ์ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="srdoc-primary"]', manual: "ch24-5", popover: { title: t("tour.storeReceipt.primary.title"), description: t("tour.storeReceipt.primary.desc"), side: "bottom" } },
+    { element: '[data-tour="srdoc-steps"]', manual: "ch24-5", popover: { title: t("tour.storeReceipt.steps.title"), description: t("tour.storeReceipt.steps.desc"), side: "bottom" } },
+    { element: '[data-tour="srdoc-info"]', manual: "ch24-4", popover: { title: t("tour.storeReceipt.info.title"), description: t("tour.storeReceipt.info.desc"), side: "bottom" } },
+    { element: '[data-tour="srdoc-lines"]', manual: "ch24-4", popover: { title: t("tour.storeReceipt.lines.title"), description: t("tour.storeReceipt.lines.desc"), side: "top" } },
+    { element: '[data-tour="srdoc-post"]', manual: "ch24-5", popover: { title: t("tour.storeReceipt.post.title"), description: t("tour.storeReceipt.post.desc"), side: "left" } },
+  ];
+  const docTour = useModuleTour("storeReceiptDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   if (loadError || !doc || !draft || !info) {
     return (
@@ -416,6 +429,7 @@ export function StoreReceiptDocument({
               : doc.status !== "Draft" ? <><Lock size={14} aria-hidden="true" /> {t("storeReceipt.lockedMeta")}</> : undefined}
             actions={
               <>
+                <TourReplayButton variant="title" onClick={docTour.start} />
                 {canPrint && (
                   <button type="button" onClick={() => void handlePrint()} disabled={printing} className={btn.secondary}>
                     {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("storeReceipt.print")}
@@ -443,18 +457,18 @@ export function StoreReceiptDocument({
                 {approval.canDecide && (
                   <>
                     <button type="button" onClick={approval.reject} disabled={approval.busy !== null} className={rejectButtonClass}>{t("approval.reject")}</button>
-                    <button type="button" onClick={approval.approve} disabled={approval.busy !== null} className={btn.primary}>
+                    <button type="button" data-tour="srdoc-primary" onClick={approval.approve} disabled={approval.busy !== null} className={btn.primary}>
                       <CheckCircle2 size={16} /> {t("approval.approve")}
                     </button>
                   </>
                 )}
                 {approval.canSubmit && (
-                  <button type="button" onClick={approval.submit} disabled={approval.busy !== null} className={btn.primary}>
+                  <button type="button" data-tour="srdoc-primary" onClick={approval.submit} disabled={approval.busy !== null} className={btn.primary}>
                     {approval.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
                   </button>
                 )}
                 {canPostNow && (
-                  <button type="button" onClick={() => setConfirmPost(true)} disabled={posting} className={btn.primary}>
+                  <button type="button" data-tour="srdoc-primary" onClick={() => setConfirmPost(true)} disabled={posting} className={btn.primary}>
                     {posting ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />} {t("storeReceipt.postBtn")}
                   </button>
                 )}
@@ -480,21 +494,24 @@ export function StoreReceiptDocument({
             />
           )}
 
-          <DocumentStepper
-            steps={[
-              { label: t("approval.step.draft") },
-              { label: t("approval.step.pending") },
-              { label: t("approval.step.final") },
-              { label: t("storeDocs.posted") },
-            ]}
-            current={storeReceiptStepIndex(doc.status, posted)}
-            ariaLabel={t("storeReceipt.stepsAria")}
-          />
+          <div data-tour="srdoc-steps">
+            <DocumentStepper
+              steps={[
+                { label: t("approval.step.draft") },
+                { label: t("approval.step.pending") },
+                { label: t("approval.step.final") },
+                { label: t("storeDocs.posted") },
+              ]}
+              current={storeReceiptStepIndex(doc.status, posted)}
+              ariaLabel={t("storeReceipt.stepsAria")}
+            />
+          </div>
           <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
           <DocumentColumns
             main={
               <>
+                <div data-tour="srdoc-info">
                 <SectionCard title={t("storeReceipt.infoTitle")}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-[18px] items-start">
                     {kind === "return" && (
@@ -560,6 +577,7 @@ export function StoreReceiptDocument({
                     })}
                   </div>
                 </SectionCard>
+                </div>
 
                 {code === "GC" && (
                   <div className="rounded-xl border border-[#f0d9a8] bg-[#fdf3e0] px-4 py-3 text-sm text-[#8a5a00]">{t("storeReceipt.gcNote")}</div>
@@ -609,7 +627,7 @@ export function StoreReceiptDocument({
                   </RailCard>
                 )}
 
-                <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-2.5">
+                <section data-tour="srdoc-post" className="bg-card border border-border rounded-xl p-5 flex flex-col gap-2.5">
                   <div className="flex items-center gap-2">
                     <PackageCheck size={16} aria-hidden="true" className={posted ? "text-[#1b7f4f]" : doc.status === "Final" ? "text-[#8a5a00]" : "text-[#8a97ad]"} />
                     <h2 className="flex-1 text-[15px] font-semibold text-foreground">{t("storeReceipt.postCard.title")}</h2>
@@ -628,6 +646,7 @@ export function StoreReceiptDocument({
             }
           />
 
+          <div data-tour="srdoc-lines">
           <SectionCard
             title={
               <span className="flex items-baseline gap-2.5 flex-wrap">
@@ -737,6 +756,7 @@ export function StoreReceiptDocument({
               </div>
             )}
           </SectionCard>
+          </div>
 
           {editable && signatories}
         </div>

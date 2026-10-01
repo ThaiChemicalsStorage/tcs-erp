@@ -87,6 +87,7 @@ export function ServiceTemplateManagement({
         <ServiceTemplateEditor
           key={editingId}
           templateId={editingId}
+          currentUserId={currentUserId}
           canCreate={canCreate}
           canEdit={canEdit}
           canArchive={canArchive}
@@ -214,9 +215,10 @@ const deleteBtn = "w-9 h-9 rounded-lg text-[#8a97ad] hover:text-[#b93636] hover:
 const deleteBtnSm = "w-8 h-8 rounded-lg text-[#8a97ad] hover:text-[#b93636] hover:bg-[#fcebeb] flex items-center justify-center transition-colors flex-shrink-0";
 
 function ServiceTemplateEditor({
-  templateId, canCreate, canEdit, canArchive, onBack, showToast,
+  templateId, currentUserId, canCreate, canEdit, canArchive, onBack, showToast,
 }: {
   templateId: string | "new";
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
@@ -237,6 +239,14 @@ function ServiceTemplateEditor({
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(initialSection ? [initialSection.key] : []));
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="stpledit-actions"]', manual: "ch12-5", popover: { title: t("tour.serviceTplEdit.actions.title"), description: t("tour.serviceTplEdit.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="stpledit-info"]', manual: "ch12-5", popover: { title: t("tour.serviceTplEdit.info.title"), description: t("tour.serviceTplEdit.info.desc"), side: "bottom" } },
+    { element: '[data-tour="stpledit-summary"]', manual: "ch12-5", popover: { title: t("tour.serviceTplEdit.summary.title"), description: t("tour.serviceTplEdit.summary.desc"), side: "left" } },
+    { element: '[data-tour="stpledit-sections"]', manual: "ch12-5", popover: { title: t("tour.serviceTplEdit.sections.title"), description: t("tour.serviceTplEdit.sections.desc"), side: "bottom" } },
+  ];
+  // hook อยู่เหนือ early return ตอนโหลด — เปิดอัตโนมัติเมื่อโหลด Template เสร็จ
+  const tour = useModuleTour("serviceTemplateEditor", currentUserId, tourSteps, { autoStart: !loading });
 
   useEffect(() => {
     if (isNew) return;
@@ -355,7 +365,8 @@ function ServiceTemplateEditor({
             )}
           </div>
           <span className="flex-1" />
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div data-tour="stpledit-actions" className="flex items-center gap-2.5 flex-wrap">
+            <TourReplayButton variant="title" onClick={tour.start} />
             <button type="button" onClick={onBack} className={btn.secondary}>{t("serviceTemplates.cancel")}</button>
             {!isNew && meta && (
               <MoreMenu
@@ -379,6 +390,7 @@ function ServiceTemplateEditor({
       <div className="px-4 md:px-8 pt-6 pb-10 flex flex-col gap-5">
         <DocumentColumns
           main={(
+            <div data-tour="stpledit-info">
             <SectionCard title={t("serviceTemplates.section.info")}>
               <div className="flex flex-col gap-[18px]">
                 <Field label={t("serviceTemplates.form.name")} required>
@@ -389,9 +401,11 @@ function ServiceTemplateEditor({
                 </Field>
               </div>
             </SectionCard>
+            </div>
           )}
           rail={(
             <>
+              <div data-tour="stpledit-summary">
               <RailTotalCard
                 label={t("serviceTemplates.rail.total")}
                 amount={itemsLabel(itemCount)}
@@ -401,6 +415,7 @@ function ServiceTemplateEditor({
                   { label: t("serviceTemplates.form.kindMeasurement"), value: itemsLabel(msCount) },
                 ]}
               />
+              </div>
               <div className="rounded-xl bg-[#e8f0fb] border border-[#b9d0f0] p-4 flex gap-2.5 text-[#16407a]">
                 <Info size={18} className="flex-shrink-0 mt-0.5" />
                 <span className="text-[13px] leading-relaxed">{t("serviceTemplates.rail.note")}</span>
@@ -409,7 +424,7 @@ function ServiceTemplateEditor({
           )}
         />
 
-        <div className="flex items-baseline gap-2.5 flex-wrap -mb-1.5">
+        <div data-tour="stpledit-sections" className="flex items-baseline gap-2.5 flex-wrap -mb-1.5">
           <h2 className="text-base font-semibold text-foreground">{t("serviceTemplates.sectionsHeading")}</h2>
           <span className="text-[13px] text-muted-foreground">{t("serviceTemplates.sectionsSub")}</span>
         </div>

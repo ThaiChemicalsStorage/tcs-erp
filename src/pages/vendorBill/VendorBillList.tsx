@@ -3,6 +3,8 @@ import { ChevronRight } from "lucide-react";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { formatQuoteDateThai, fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { VendorBillSummary } from "../../lib/vendorBill";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -15,12 +17,21 @@ type Tab = "all" | "owing" | "paid";
  * รายการใบรับวางบิล — ไม่มีสถานะอนุมัติ ป้ายบอกแค่ว่าจ่ายครบแล้วหรือยังค้าง (อ่านจากทะเบียนเจ้าหนี้)
  * แท็บ ค้างจ่าย / จ่ายครบแล้ว (ดีไซน์ใหม่ 2026-09-30) กรองจากยอดคงค้างของแต่ละใบ
  */
-export function VendorBillList({ vendorBills, onOpen, headerAction }: {
+export function VendorBillList({ vendorBills, currentUserId, onOpen, headerAction }: {
   vendorBills: VendorBillSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
+  // ปุ่มรับวางบิลมีเฉพาะผู้มีสิทธิ์ และตารางมีเฉพาะเมื่อมีใบ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="vb-create"]', manual: "ch14-4", popover: { title: t("tour.vb.create.title"), description: t("tour.vb.create.desc"), side: "bottom" } },
+    { element: '[data-tour="vb-tabs"]', manual: "ch14-3", popover: { title: t("tour.vb.tabs.title"), description: t("tour.vb.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="vb-filters"]', manual: "ch2-6", popover: { title: t("tour.vb.filters.title"), description: t("tour.vb.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="vb-table"]', manual: "ch14-6", popover: { title: t("tour.vb.table.title"), description: t("tour.vb.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("vendorBills", currentUserId, tourSteps);
   const [tab, setTab] = useState<Tab>("all");
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,26 +69,31 @@ export function VendorBillList({ vendorBills, onOpen, headerAction }: {
         module={t("nav.group.inventory")}
         title={t("vendorBill.pageTitle")}
         description={t("vendorBill.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={headerAction}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("vendorBill.tab.ariaLabel")} />
-        <ListToolbar
-          search={searchQuery}
-          onSearch={withReset(setSearchQuery)}
-          searchPlaceholder={t("vendorBill.searchPlaceholder")}
-          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
-        >
-          <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
-        </ListToolbar>
+        <div data-tour="vb-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("vendorBill.tab.ariaLabel")} />
+        </div>
+        <div data-tour="vb-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={withReset(setSearchQuery)}
+            searchPlaceholder={t("vendorBill.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <ListDateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
+          </ListToolbar>
+        </div>
 
         {vendorBills.length === 0 ? (
           <ListEmpty title={t("vendorBill.empty.title")} hint={t("vendorBill.empty.description")} />
         ) : filtered.length === 0 ? (
           <ListEmpty title={t("vendorBill.noFilterResults")} />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-tour="vb-table" className="overflow-x-auto">
             <table className="w-full min-w-[960px]">
               <thead>
                 <tr className={table.head}>

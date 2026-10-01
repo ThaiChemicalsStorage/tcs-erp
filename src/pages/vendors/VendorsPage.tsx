@@ -10,6 +10,8 @@ import { btn, field, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { DialogSummary, ReasonDialog, TonePill } from "../purchaseOrder/purchasingUi";
 import { VendorDrawer } from "./VendorDrawer";
 import { filterVendors, vendorApprovalLabelKey, vendorApprovalTone, type VendorStatusTab } from "./vendorDisplay";
@@ -34,6 +36,7 @@ export function VendorsPage({
   canEdit,
   canArchive,
   canApprove,
+  currentUserId,
 }: {
   vendors: Vendor[];
   onVendorsChange: (next: Vendor[]) => void;
@@ -42,9 +45,19 @@ export function VendorsPage({
   canArchive: boolean;
   /** `vendor:approve` — สิทธิ์ของ**ฝ่ายบัญชี** (2026-09-21) แยกจาก `vendor:edit` ของจัดซื้อ */
   canApprove: boolean;
+  currentUserId: string;
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  // ปุ่มเพิ่มผู้ขายมีเฉพาะคนที่มีสิทธิ์สร้าง และคอลัมน์/ตารางมีเมื่อมีผู้ขายแล้ว — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="vendors-create"]', manual: "ch19-1", popover: { title: t("tour.vendors.create.title"), description: t("tour.vendors.create.desc"), side: "bottom" } },
+    { element: '[data-tour="vendors-tabs"]', manual: "ch19-1", popover: { title: t("tour.vendors.tabs.title"), description: t("tour.vendors.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="vendors-filters"]', manual: "ch19-1", popover: { title: t("tour.vendors.filters.title"), description: t("tour.vendors.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="vendors-approval-col"]', manual: "ch18-6", popover: { title: t("tour.vendors.approval.title"), description: t("tour.vendors.approval.desc"), side: "bottom" } },
+    { element: '[data-tour="vendors-table"]', manual: "ch19-1", popover: { title: t("tour.vendors.table.title"), description: t("tour.vendors.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("vendors", currentUserId, tourSteps);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<VendorStatusTab>("all");
   const [showArchived, setShowArchived] = useState(false);
@@ -157,6 +170,8 @@ export function VendorsPage({
     t("vendors.col.code"), t("vendors.col.name"), t("vendors.col.contact"), t("vendors.col.phone"),
     t("vendors.col.status"), t("vendors.approval.col"), "",
   ];
+  /** คอลัมน์ "การอนุมัติของบัญชี" — จุดยึดของทัวร์ */
+  const APPROVAL_COL = 5;
   const dash = <span className="text-[#8a97ad]">—</span>;
   const vendorSummary = (v: Vendor) => (
     <DialogSummary
@@ -171,99 +186,106 @@ export function VendorsPage({
       <ListPageHeader
         title={t("vendors.pageTitle")}
         description={t("vendors.pageSubtitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canCreate ? (
-          <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}>
+          <button type="button" data-tour="vendors-create" onClick={() => setFormTarget("new")} className={btn.primary}>
             <Plus size={16} /> {t("vendors.addNew")}
           </button>
         ) : undefined}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("vendors.col.status")} />
-        <ListToolbar
-          search={search}
-          onSearch={withReset(setSearch)}
-          searchPlaceholder={t("vendors.searchPlaceholder")}
-          count={t("ui.itemCount").replace("{n}", String(filtered.length))}
-        >
-          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173] ml-1">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
-              className="w-4 h-4 rounded border-[#c3ccda] accent-[#0b1d3a]"
-            />
-            {t("vendors.showArchived")}
-          </label>
-        </ListToolbar>
+        <div data-tour="vendors-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("vendors.col.status")} />
+        </div>
+        <div data-tour="vendors-filters">
+          <ListToolbar
+            search={search}
+            onSearch={withReset(setSearch)}
+            searchPlaceholder={t("vendors.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173] ml-1">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
+                className="w-4 h-4 rounded border-[#c3ccda] accent-[#0b1d3a]"
+              />
+              {t("vendors.showArchived")}
+            </label>
+          </ListToolbar>
+        </div>
 
-        {vendors.length === 0 ? (
-          <ListEmpty
-            title={t("empty.vendors.title")}
-            hint={t("empty.vendors.sub")}
-            action={canCreate ? <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}><Plus size={16} /> {t("empty.vendors.action")}</button> : undefined}
-          />
-        ) : filtered.length === 0 ? (
-          <ListEmpty title={t("vendors.noFilterResults")} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px]">
-              <thead>
-                <tr className={table.head}>
-                  {columns.map((h, i) => <th key={i} className={table.th}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((v) => {
-                  const stage = vendorApprovalStatusOf(v);
-                  return (
-                    <tr
-                      key={v.id}
-                      tabIndex={0}
-                      aria-label={`${t("vendors.openRow")} ${v.name}`}
-                      onClick={() => setFormTarget(v.id)}
-                      onKeyDown={(e) => openOnKey(e, v.id)}
-                      className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 ${v.isDeleted ? "opacity-60" : ""}`}
-                    >
-                      <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{v.code || dash}</td>
-                      <td className={`${table.td} max-w-[320px]`}>
-                        <div className="flex flex-col min-w-0 leading-snug">
-                          <span className="text-sm font-medium text-foreground truncate" title={v.name}>{v.name}</span>
-                          {v.taxId && (
-                            <span className="text-xs text-muted-foreground truncate">
-                              {t("vendors.col.taxId")} <span className="font-mono">{v.taxId}</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className={`${table.td} text-sm text-foreground`}>{v.contactName || dash}</td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{v.phone || dash}</td>
-                      <td className={table.td}>
-                        <StatusBadge
-                          status={v.isDeleted ? "archived" : v.isActive ? "active" : "inactive"}
-                          label={t(v.isDeleted ? "vendors.status.archived" : v.isActive ? "vendors.status.active" : "vendors.status.inactive")}
-                        />
-                      </td>
-                      <td className={`${table.td} py-2.5`}>
-                        {v.isDeleted ? dash : (
-                          <div className="flex flex-col items-start gap-1 max-w-[260px]">
-                            <TonePill tone={vendorApprovalTone[stage]} label={t(vendorApprovalLabelKey[stage])} />
-                            {stage === "rejected" && (v.rejectionComment ?? "").trim() && (
-                              <span className="text-xs text-[#b93636] line-clamp-2" title={v.rejectionComment}>{v.rejectionComment}</span>
+        <div data-tour="vendors-table" className="min-w-0">
+          {vendors.length === 0 ? (
+            <ListEmpty
+              title={t("empty.vendors.title")}
+              hint={t("empty.vendors.sub")}
+              action={canCreate ? <button type="button" onClick={() => setFormTarget("new")} className={btn.primary}><Plus size={16} /> {t("empty.vendors.action")}</button> : undefined}
+            />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("vendors.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1000px]">
+                <thead>
+                  <tr className={table.head}>
+                    {columns.map((h, i) => <th key={i} data-tour={i === APPROVAL_COL ? "vendors-approval-col" : undefined} className={table.th}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((v) => {
+                    const stage = vendorApprovalStatusOf(v);
+                    return (
+                      <tr
+                        key={v.id}
+                        tabIndex={0}
+                        aria-label={`${t("vendors.openRow")} ${v.name}`}
+                        onClick={() => setFormTarget(v.id)}
+                        onKeyDown={(e) => openOnKey(e, v.id)}
+                        className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 ${v.isDeleted ? "opacity-60" : ""}`}
+                      >
+                        <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{v.code || dash}</td>
+                        <td className={`${table.td} max-w-[320px]`}>
+                          <div className="flex flex-col min-w-0 leading-snug">
+                            <span className="text-sm font-medium text-foreground truncate" title={v.name}>{v.name}</span>
+                            {v.taxId && (
+                              <span className="text-xs text-muted-foreground truncate">
+                                {t("vendors.col.taxId")} <span className="font-mono">{v.taxId}</span>
+                              </span>
                             )}
                           </div>
-                        )}
-                      </td>
-                      <td className={`${table.td} w-10`}>
-                        <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                        </td>
+                        <td className={`${table.td} text-sm text-foreground`}>{v.contactName || dash}</td>
+                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{v.phone || dash}</td>
+                        <td className={table.td}>
+                          <StatusBadge
+                            status={v.isDeleted ? "archived" : v.isActive ? "active" : "inactive"}
+                            label={t(v.isDeleted ? "vendors.status.archived" : v.isActive ? "vendors.status.active" : "vendors.status.inactive")}
+                          />
+                        </td>
+                        <td className={`${table.td} py-2.5`}>
+                          {v.isDeleted ? dash : (
+                            <div className="flex flex-col items-start gap-1 max-w-[260px]">
+                              <TonePill tone={vendorApprovalTone[stage]} label={t(vendorApprovalLabelKey[stage])} />
+                              {stage === "rejected" && (v.rejectionComment ?? "").trim() && (
+                                <span className="text-xs text-[#b93636] line-clamp-2" title={v.rejectionComment}>{v.rejectionComment}</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className={`${table.td} w-10`}>
+                          <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         {filtered.length > 0 && (
           <ListPagination
             page={currentPage}

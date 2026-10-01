@@ -84,6 +84,7 @@ export function RoleManagementPage({
           role={editingRole}
           roles={roles}
           userCount={editingRole ? usersWithRole(editingRole.key) : 0}
+          currentUserId={currentUserId}
           onRolesChange={onRolesChange}
           onAudit={onAudit}
           onToast={show}
@@ -230,11 +231,12 @@ function PermissionBox({ state, label, title, onToggle, small = false, children 
 // หน้าเดียวสำหรับดู/สร้าง/แก้ไขบทบาท (บอร์ด Roles-View / Roles-Create / Roles-Edit) — แถบหัวติดด้านบนพร้อมปุ่มบันทึก
 // ส่งรายการสิทธิ์ชุดเดียวกับฟอร์มเดิมทุกประการ (name/description/permissions) — เซิร์ฟเวอร์ทำ sanitizeRolePermissions ซ้ำเสมอ
 // The single view/create/edit page with a sticky header save; saves exactly the same payload the old form did
-function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onToast, onDone }: {
+function RoleEditor({ mode, role, roles, userCount, currentUserId, onRolesChange, onAudit, onToast, onDone }: {
   mode: Exclude<View, "list">;
   role: Role | undefined;
   roles: Role[];
   userCount: number;
+  currentUserId: string;
   onRolesChange: (roles: Role[]) => void;
   onAudit: (action: string, details: string) => void;
   onToast: (message: string) => void;
@@ -250,6 +252,15 @@ function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onTo
   const formId = useId();
   const nameId = useId();
   const descriptionId = useId();
+  // หน้า Super Admin (ดูอย่างเดียว) ไม่มีปุ่มบันทึก — ทัวร์ข้ามขั้นแรกเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="roleedit-actions"]', manual: "ch27-2", popover: { title: t("tour.roleEdit.actions.title"), description: t("tour.roleEdit.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="roleedit-info"]', manual: "ch27-2", popover: { title: t("tour.roleEdit.info.title"), description: t("tour.roleEdit.info.desc"), side: "bottom" } },
+    { element: '[data-tour="roleedit-matrix"]', manual: "ch27-2", popover: { title: t("tour.roleEdit.matrix.title"), description: t("tour.roleEdit.matrix.desc"), side: "bottom" } },
+    { element: '[data-tour="roleedit-visibility"]', manual: "ch27-2", popover: { title: t("tour.roleEdit.visibility.title"), description: t("tour.roleEdit.visibility.desc"), side: "bottom" } },
+    { element: '[data-tour="roleedit-other"]', manual: "ch27-2", popover: { title: t("tour.roleEdit.other.title"), description: t("tour.roleEdit.other.desc"), side: "bottom" } },
+  ];
+  const tour = useModuleTour("roleEditor", currentUserId, tourSteps);
 
   // ความสูงของแถบหัวที่ติดด้านบน — หัวตารางสิทธิ์ติดอยู่ใต้แถบนี้พอดี (แถบสูงไม่เท่ากันเมื่อปุ่มตกบรรทัด)
   const headerRef = useRef<HTMLDivElement>(null);
@@ -385,7 +396,8 @@ function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onTo
           )}
           {meta && <span className="text-[13px] text-muted-foreground tabular-nums">{meta}</span>}
           <span className="flex-1" />
-          <div className="flex items-center gap-2.5">
+          <TourReplayButton variant="title" onClick={tour.start} />
+          <div data-tour={readOnly ? undefined : "roleedit-actions"} className="flex items-center gap-2.5">
             {readOnly ? (
               <button type="button" onClick={onDone} className={btn.secondary}>{t("common.close")}</button>
             ) : (
@@ -416,7 +428,7 @@ function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onTo
       <form id={formId} onSubmit={(e) => void handleSubmit(e)} noValidate className="px-4 md:px-8 pt-6 pb-10 flex flex-col gap-5">
         {error && <p role="alert" className="rounded-lg bg-[#fcebeb] text-[#b93636] text-[13px] px-3.5 py-2.5">{error}</p>}
 
-        <section className={surface.card}>
+        <section data-tour="roleedit-info" className={surface.card}>
           <div className={surface.cardHead}><h2 className={surface.cardTitle}>{t("roles.sectionInfo")}</h2></div>
           <div className="px-6 pt-5 pb-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-5">
             {readOnly ? (
@@ -467,11 +479,12 @@ function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onTo
           <div className="overflow-x-auto xl:overflow-visible">
             <div className="min-w-[960px] xl:min-w-0">
               <div
+                data-tour="roleedit-matrix"
                 style={{ top: headerHeight }}
                 className={`${MATRIX_GRID} grid-rows-[26px_30px] xl:sticky z-10 px-5 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173] leading-tight`}
               >
                 <span className="col-start-1 row-span-2 flex items-center">{t("roles.col.menu")}</span>
-                <span className="col-start-2 col-span-4 row-start-1 mx-2 pb-[3px] flex items-end justify-center border-b border-[#d6dce6] font-medium text-muted-foreground">{t("roles.col.visibility")}</span>
+                <span data-tour="roleedit-visibility" className="col-start-2 col-span-4 row-start-1 mx-2 pb-[3px] flex items-end justify-center border-b border-[#d6dce6] font-medium text-muted-foreground">{t("roles.col.visibility")}</span>
                 {MATRIX_COLUMNS.map((c, i) => (
                   <span
                     key={c}
@@ -481,7 +494,7 @@ function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onTo
                     {t(COLUMN_LABEL_KEY[c])}
                   </span>
                 ))}
-                <span className="col-start-11 row-start-1 row-span-2 flex items-center pl-4">{t("roles.col.other")}</span>
+                <span data-tour="roleedit-other" className="col-start-11 row-start-1 row-span-2 flex items-center pl-4">{t("roles.col.other")}</span>
               </div>
 
               {MATRIX.map((section) => (

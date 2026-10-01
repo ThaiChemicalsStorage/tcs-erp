@@ -6,6 +6,8 @@ import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { RejectionNotice } from "../../components/DocumentApprovalActions";
 import { DocumentHeader, DocumentStepper, DocumentColumns, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
 import { MoreMenu } from "../../components/ui/MoreMenu";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { SectionCard } from "../../components/ui/SectionCard";
 import { Field, ReadonlyField } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
@@ -44,10 +46,11 @@ function toUpdateFields(d: CostControl): CostControlUpdateFields {
 }
 
 export function CostControlDocument({
-  costControlId, canEdit, canApprove, canPrint, canDelete, canCreate, canViewScopeOfWork, company,
+  costControlId, currentUserId, canEdit, canApprove, canPrint, canDelete, canCreate, canViewScopeOfWork, company,
   onBack, onDeleted, onOpenOther, showToast,
 }: {
   costControlId: string;
+  currentUserId: string;
   canEdit: boolean;
   canViewScopeOfWork: boolean;
   canApprove: boolean;
@@ -186,6 +189,16 @@ export function CostControlDocument({
     showToast,
   });
 
+  // ช่องผูก Scope of Work มีเฉพาะผู้ที่ดู Scope of Work ได้ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง · hook ต้องอยู่เหนือ early return
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="ccdoc-actions"]', manual: "ch20-5", popover: { title: t("tour.ccdoc.actions.title"), description: t("tour.ccdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="ccdoc-header"]', manual: "ch20-1", popover: { title: t("tour.ccdoc.header.title"), description: t("tour.ccdoc.header.desc"), side: "bottom" } },
+    { element: '[data-tour="ccdoc-scope"]', manual: "ch20-4", popover: { title: t("tour.ccdoc.scope.title"), description: t("tour.ccdoc.scope.desc"), side: "bottom" } },
+    { element: '[data-tour="ccdoc-signers"]', manual: "ch20-5", popover: { title: t("tour.ccdoc.signers.title"), description: t("tour.ccdoc.signers.desc"), side: "left" } },
+    { element: '[data-tour="ccdoc-lines"]', manual: "ch20-3", popover: { title: t("tour.ccdoc.lines.title"), description: t("tour.ccdoc.lines.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("costControlDoc", currentUserId, docTourSteps, { autoStart: !!doc });
+
   useEffect(() => {
     if (!showPrint) return;
     const reset = () => setShowPrint(false);
@@ -275,7 +288,8 @@ export function CostControlDocument({
             status={<CostControlStatusPill status={draft.status} />}
             meta={editable ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
             actions={
-              <>
+              <div data-tour="ccdoc-actions" className="flex items-center gap-2.5 flex-wrap">
+                <TourReplayButton variant="title" onClick={docTour.start} />
                 {canPrint && (
                   <button type="button" onClick={() => { void logCostControlPrinted(draft.id).catch(() => {}); setShowPrint(true); }} className={btn.secondary}>
                     <Printer size={16} /> {t("costControlDoc.print")}
@@ -317,7 +331,7 @@ export function CostControlDocument({
                     {approval.busy === "submit" ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {t("approval.submit")}
                   </button>
                 )}
-              </>
+              </div>
             }
           />
         </div>
@@ -340,6 +354,7 @@ export function CostControlDocument({
 
           <DocumentColumns
             main={
+              <div data-tour="ccdoc-header">
               <SectionCard title={t("costControlDoc.section.header")}>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
                   {textField(t("costControlDoc.field.jobName"), "jobName", { className: "sm:col-span-3" })}
@@ -356,6 +371,7 @@ export function CostControlDocument({
                   {textField(t("costControlDoc.field.jobOrder"), "jobOrder", { mono: true })}
                   {canViewScopeOfWork && (
                     editable ? (
+                      <div data-tour="ccdoc-scope" className="sm:col-span-2">
                       <Field
                         label={t("costControlDoc.field.scopeOfWork")}
                         className="sm:col-span-2"
@@ -373,8 +389,9 @@ export function CostControlDocument({
                           }}
                         />
                       </Field>
+                      </div>
                     ) : (
-                      <div className="sm:col-span-2 flex flex-col gap-1">
+                      <div data-tour="ccdoc-scope" className="sm:col-span-2 flex flex-col gap-1">
                         <ReadonlyField label={t("costControlDoc.field.scopeOfWork")} value={scopeQuery} mono />
                         <p className={field.help}>
                           {draft.scopeOfWorkId ? t("costControlDoc.field.scopeOfWorkLinked") : t("costControlDoc.field.scopeOfWorkHint")}
@@ -391,6 +408,7 @@ export function CostControlDocument({
                   )}
                 </div>
               </SectionCard>
+              </div>
             }
             rail={
               <>
@@ -403,15 +421,18 @@ export function CostControlDocument({
                     </div>
                   ))}
                 </RailCard>
+                <div data-tour="ccdoc-signers">
                 <RailCard title={t("costControlDoc.signersTitle")}>
                   {textField(t("costControlDoc.field.submittedBy"), "submittedBy")}
                   {textField(t("costControlDoc.field.approvedBy"), "approvedBy")}
                 </RailCard>
+                </div>
                 <NextStepHint title={t("costControlDoc.nextStep")}>{nextStepHint}</NextStepHint>
               </>
             }
           />
 
+          <div data-tour="ccdoc-lines">
           <SectionCard
             title={
               <span className="flex items-baseline gap-2.5">
@@ -580,6 +601,7 @@ export function CostControlDocument({
               </div>
             </div>
           </SectionCard>
+          </div>
 
           <SectionCard title={t("costControlDoc.section.remarks")}>
             {editable ? (

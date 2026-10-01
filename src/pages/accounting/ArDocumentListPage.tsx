@@ -16,6 +16,8 @@ import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSe
 import { ArStockPanel } from "./ArStockPanel";
 import { ManualTaxInvoicePage } from "./ManualTaxInvoicePage";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, FilterSelect, ListEmpty } from "../../components/ui/ListPage";
 import { Field } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
@@ -30,9 +32,10 @@ type StatusTab = "all" | "issued" | "cancelled";
 // Per-document-type accounting list page — one shared component parameterized by docType,
 // matching the Sales modules' standalone-list pattern per the owner's 2026-08-18 instruction.
 export function ArDocumentListPage({
-  docType, canIssue, canCancel, canCreate, canViewStock, canAdjustStock,
+  currentUserId, docType, canIssue, canCancel, canCreate, canViewStock, canAdjustStock,
   initialArDocumentId, onArDocumentIdConsumed,
 }: {
+  currentUserId: string;
   docType: ArDocumentType;
   canIssue: boolean;
   canCancel: boolean;
@@ -234,6 +237,27 @@ export function ArDocumentListPage({
     }
   };
 
+  // คำแนะนำประจำหน้า — 4 หน้าใช้ component เดียวกัน แต่ปุ่ม/คอลัมน์ต่างกันตามประเภท จึงแยก tourKey ต่อประเภท
+  // (ดูครั้งเดียวต่อหน้า ไม่ใช่ดูหน้า AR แล้วหน้า RE ไม่เล่นให้) · ขั้นที่หาปุ่มไม่เจอ (ไม่มีสิทธิ์/ไม่มีแถว) ถูกข้ามเอง
+  // เล่นเองหลังโหลดรายการเสร็จ เพราะปุ่มท้ายแถวยังไม่อยู่บนจอระหว่างโหลด
+  const tourSteps: TourStep[] = [
+    isTaxInvoicePage
+      ? { element: '[data-tour="arlist-create"]', manual: "ch13-5", popover: { title: t("tour.arList.manual.title"), description: t("tour.arList.manual.desc"), side: "bottom" } }
+      : docType === "RE"
+      ? { element: '[data-tour="arlist-create"]', manual: "ch13-2", popover: { title: t("tour.arList.receipt.title"), description: t("tour.arList.receipt.desc"), side: "bottom" } }
+      : { element: '[data-tour="arlist-intro"]', manual: "ch13-2", popover: { title: t("tour.arList.intro.title"), description: t("tour.arList.intro.desc"), side: "bottom" } },
+    { element: '[data-tour="arlist-ncr"]', manual: "ch13-5", popover: { title: t("tour.arList.ncr.title"), description: t("tour.arList.ncr.desc"), side: "bottom" } },
+    { element: '[data-tour="arlist-filters"]', manual: "ch13-2", popover: { title: t("tour.arList.filters.title"), description: t("tour.arList.filters.desc"), side: "bottom" } },
+    ...(isStockPage ? [] : [isTaxInvoicePage
+      ? { element: '[data-tour="arlist-refcol"]', manual: "ch13-1", popover: { title: t("tour.arList.receiptCol.title"), description: t("tour.arList.receiptCol.desc"), side: "bottom" as const } }
+      : { element: '[data-tour="arlist-refcol"]', manual: "ch13-1", popover: { title: t("tour.arList.refCol.title"), description: t("tour.arList.refCol.desc"), side: "bottom" as const } }]),
+    isTaxInvoicePage
+      ? { element: '[data-tour="arlist-row"]', manual: "ch13-5", popover: { title: t("tour.arList.rowTax.title"), description: t("tour.arList.rowTax.desc"), side: "left" } }
+      : { element: '[data-tour="arlist-row"]', manual: "ch13-5", popover: { title: t("tour.arList.row.title"), description: t("tour.arList.row.desc"), side: "left" } },
+    ...(isStockPage ? [{ element: '[data-tour="arlist-stock"]', manual: "ch22-5", popover: { title: t("tour.arList.stock.title"), description: t("tour.arList.stock.desc"), side: "left" as const } }] : []),
+  ];
+  const tour = useModuleTour(`arDocuments${docType}`, currentUserId, tourSteps, { autoStart: !loading && !detailDoc && !manualOpen });
+
   const typeLabel = t(DOC_TYPE_LABEL_KEY[docType]);
   const backToAll = t("accounting.list.backToAll").replace("{type}", typeLabel);
   const canManual = isTaxInvoicePage && canCreate && canIssue;
@@ -249,22 +273,23 @@ export function ArDocumentListPage({
       <ListPageHeader
         module={t("nav.group.accounting")}
         title={typeLabel}
-        description={<>
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        description={<span data-tour={docType === "BI" ? "arlist-intro" : undefined}>
           {t("accounting.list.subtitle.before")} <span className="font-mono text-[#3d5173]">{docType}</span> {t("accounting.list.subtitle.after")}
           {canManual ? ` ${t("accounting.list.subtitle.orManualTop")}` : ""}
           {docType === "RE" && canIssue ? ` ${t("accounting.list.subtitle.orReceiptHere")}` : ""}
-        </>}
+        </span>}
         actions={<>
-          <button type="button" onClick={() => setNcrSettingsOpen(true)} className={btn.secondary} title={t("accounting.list.ncr.settingsTitle")}>
+          <button type="button" data-tour="arlist-ncr" onClick={() => setNcrSettingsOpen(true)} className={btn.secondary} title={t("accounting.list.ncr.settingsTitle")}>
             <Settings2 size={16} /> {t("accounting.list.ncr.settingsBtn")}
           </button>
           {canManual && (
-            <button type="button" onClick={() => setManualOpen(true)} className={btn.primary}>
+            <button type="button" data-tour="arlist-create" onClick={() => setManualOpen(true)} className={btn.primary}>
               <Plus size={16} /> {t("accounting.list.btn.createManual")}
             </button>
           )}
           {docType === "RE" && canIssue && (
-            <button type="button" onClick={() => setReceiptPickerOpen(true)} className={btn.primary}>
+            <button type="button" data-tour="arlist-create" onClick={() => setReceiptPickerOpen(true)} className={btn.primary}>
               <Plus size={16} /> {t("accounting.list.btn.createReceipt")}
             </button>
           )}
@@ -272,6 +297,7 @@ export function ArDocumentListPage({
       />
 
       <ListCard>
+        <div data-tour="arlist-filters">
         <ListTabs tabs={tabs} active={statusFilter} onChange={setStatusFilter} ariaLabel={t("accounting.list.statusTabs")} />
         <ListToolbar
           search={search}
@@ -286,6 +312,7 @@ export function ArDocumentListPage({
             onChange={setMonthFilter}
           />
         </ListToolbar>
+        </div>
 
         {loading ? (
           <div className="p-6 space-y-3">
@@ -315,14 +342,14 @@ export function ArDocumentListPage({
                   {/* AR/IV = ใบเสร็จที่ออกให้ใบนี้แล้ว · BI/RE = เลขที่ใบกำกับภาษี (AR/IV) ที่ใบนี้อ้างถึง (field `reference`
                       ซึ่งเซิร์ฟเวอร์ใส่เป็นเลขที่ใบกำกับภาษีต้นทางตอนออก BI/RE) — เดิมหน้า BI ใช้หัวว่า "ใบเสร็จรับเงิน"
                       ทั้งที่แสดงเลขที่ใบกำกับภาษี แก้หัวให้ตรงกับข้อมูล 2026-09-30 */}
-                  <th className={table.th}>{isTaxInvoicePage ? t("accounting.list.col.receipt") : t("accounting.list.col.refInvoice")}</th>
+                  <th data-tour="arlist-refcol" className={table.th}>{isTaxInvoicePage ? t("accounting.list.col.receipt") : t("accounting.list.col.refInvoice")}</th>
                   <th className={table.th.replace("text-left", "text-right")}>{t("accounting.list.col.netTotal")}</th>
                   <th className={table.th}>{t("accounting.list.col.status")}</th>
                   <th className={table.th}><span className="sr-only">{t("accounting.list.col.actions")}</span></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((d) => {
+                {filtered.map((d, rowIndex) => {
                   const receipt = isTaxInvoicePage ? receiptByInvoiceId[d.id] : undefined;
                   const cancelled = d.status === "cancelled";
                   const scopeNo = scopeNumbers[d.scopeOfWorkId];
@@ -351,14 +378,16 @@ export function ArDocumentListPage({
                       <td className={`${table.td} ${table.money} whitespace-nowrap ${cancelled ? "text-[#8a97ad] line-through" : "text-foreground"}`}>{money(d.netTotal)}</td>
                       <td className={table.td}><DocStatusPill status={d.status} /></td>
                       <td className={`${table.td} whitespace-nowrap`}>
-                        <div className="flex items-center justify-end gap-1">
+                        <div data-tour={rowIndex === 0 ? "arlist-row" : undefined} className="flex items-center justify-end gap-1">
                           {isTaxInvoicePage && canIssue && d.status === "issued" && !receipt && (
                             <button type="button" onClick={() => setReceiptTarget(d)} className={`${btn.secondarySm.replace("h-9", "h-8")} mr-1`}>
                               {t("accounting.list.action.issueReceipt")}
                             </button>
                           )}
                           {isStockPage && canViewStock && (
-                            <RowIconButton icon={Boxes} label={t("accounting.list.action.viewStockTitle")} onClick={() => void handleOpenStock(d.id)} />
+                            <span data-tour={rowIndex === 0 ? "arlist-stock" : undefined} className="inline-flex">
+                              <RowIconButton icon={Boxes} label={t("accounting.list.action.viewStockTitle")} onClick={() => void handleOpenStock(d.id)} />
+                            </span>
                           )}
                           <RowIconButton icon={Printer} label={t("accounting.list.action.printTitle")} onClick={() => void handlePrint(d.id)} />
                           <RowMoreMenu

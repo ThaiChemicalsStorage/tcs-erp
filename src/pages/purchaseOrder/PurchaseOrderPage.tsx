@@ -15,9 +15,10 @@ import { PurchaseRequestPickerDialog } from "./PurchaseRequestPickerDialog";
  * รับ deep link จากผลค้นหา/กระดิ่งผ่าน `initialPurchaseOrderId` / `onPurchaseOrderIdConsumed`
  */
 export function PurchaseOrderPage({
-  canCreate, canEdit, canApprove, canPrint, canDelete, canViewPurchaseRequest, canReceiveGoods, onOpenReceivingReport,
+  currentUserId, canCreate, canEdit, canApprove, canPrint, canDelete, canViewPurchaseRequest, canReceiveGoods, onOpenReceivingReport,
   initialPurchaseOrderId, onPurchaseOrderIdConsumed,
 }: {
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canApprove: boolean;
@@ -93,6 +94,7 @@ export function PurchaseOrderPage({
         <PurchaseOrderDocument
           key={selectedId}
           purchaseOrderId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canApprove={canApprove}
           canPrint={canPrint}
@@ -134,10 +136,12 @@ export function PurchaseOrderPage({
     <>
       <PurchaseOrderList
         purchaseOrders={rows}
+        currentUserId={currentUserId}
         onOpen={open}
         headerAction={canCreate ? (
           <button
             type="button"
+            data-tour="pur-create"
             onClick={() => (canViewPurchaseRequest ? setPickerOpen(true) : void createFrom())}
             disabled={creating}
             className={btn.primary}

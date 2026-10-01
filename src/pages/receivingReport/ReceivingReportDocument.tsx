@@ -15,6 +15,8 @@ import { ApiError } from "../../lib/apiClient";
 import { fmt, formatQuoteDateThai } from "../../lib/quotes";
 import { lineSubtotal } from "../../lib/quoteMath";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
   type ReceivingReport, type ReceivingReportUpdateFields, type ReceivingReportLine, type ReceiveBatchInput, type ReceivingReportPrintInfo,
@@ -75,9 +77,10 @@ function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
  * การกระทำที่ตั้งใจ ไม่ใช่การพิมพ์ทิ้งไว้
  */
 export function ReceivingReportDocument({
-  receivingReportId, canEdit, canReceive, canPrint, canDelete, companyHeader, onBack, onDeleted, showToast,
+  receivingReportId, currentUserId, canEdit, canReceive, canPrint, canDelete, companyHeader, onBack, onDeleted, showToast,
 }: {
   receivingReportId: string;
+  currentUserId: string;
   canEdit: boolean;
   canReceive: boolean;
   canPrint: boolean;
@@ -186,6 +189,16 @@ export function ReceivingReportDocument({
       }
       : null,
   );
+
+  // ปุ่มบันทึกรับของมีเฉพาะใบที่ยังรับไม่ครบ และเมนูเพิ่มเติมมีเฉพาะผู้มีสิทธิ์ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="rrdoc-receive"]', manual: "ch23-3", popover: { title: t("tour.rrdoc.receive.title"), description: t("tour.rrdoc.receive.desc"), side: "bottom" } },
+    { element: '[data-tour="rrdoc-more"]', manual: "ch23-4", popover: { title: t("tour.rrdoc.more.title"), description: t("tour.rrdoc.more.desc"), side: "bottom" } },
+    { element: '[data-tour="rrdoc-info"]', manual: "ch23-2", popover: { title: t("tour.rrdoc.info.title"), description: t("tour.rrdoc.info.desc"), side: "bottom" } },
+    { element: '[data-tour="rrdoc-items"]', manual: "ch23-2", popover: { title: t("tour.rrdoc.items.title"), description: t("tour.rrdoc.items.desc"), side: "top" } },
+    { element: '[data-tour="rrdoc-history"]', manual: "ch23-4", popover: { title: t("tour.rrdoc.history.title"), description: t("tour.rrdoc.history.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("receivingReportDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
     if (!showPrint) return;
@@ -471,6 +484,7 @@ export function ReceivingReportDocument({
             meta={canEdit ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} /> : undefined}
             actions={
               <>
+                <TourReplayButton variant="title" onClick={docTour.start} />
                 {canPrint && (
                   <button type="button" onClick={() => void handlePrint(null)} disabled={printing} className={btn.secondary}>
                     {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {t("receivingReportDoc.print")}
@@ -482,7 +496,7 @@ export function ReceivingReportDocument({
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("receivingReportDoc.save")}
                   </button>
                 )}
-                <MoreMenu
+                {(canReceive || canDelete) && <div data-tour="rrdoc-more"><MoreMenu
                   items={[
                     canReceive && (isOpen
                       ? { key: "close", label: t("receivingReportDoc.closeBtn"), icon: CheckCircle2, disabled: busy, hint: t("receivingReportDoc.closeHint"), onSelect: () => void toggleStatus() }
@@ -499,9 +513,9 @@ export function ReceivingReportDocument({
                       onSelect: () => setConfirmDelete(true),
                     },
                   ]}
-                />
+                /></div>}
                 {canReceive && isOpen && (
-                  <button type="button" onClick={() => void openReceive()} disabled={busy || pendingLines.length === 0} className={btn.primary}>
+                  <button type="button" data-tour="rrdoc-receive" onClick={() => void openReceive()} disabled={busy || pendingLines.length === 0} className={btn.primary}>
                     <PackagePlus size={16} /> {t("receivingReportDoc.receiveBtn")}
                   </button>
                 )}
@@ -516,6 +530,7 @@ export function ReceivingReportDocument({
           <DocumentColumns
             main={
               <>
+                <div data-tour="rrdoc-info">
                 <SectionCard title={t("receivingReportDoc.sectionHeader")}>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
                     {textField(t("receivingReportDoc.documentNumber"), "rr-number", draft.documentNumber, (v) => setDraft({ ...draft, documentNumber: v }), { mono: true })}
@@ -592,6 +607,7 @@ export function ReceivingReportDocument({
                     </p>
                   </div>
                 </SectionCard>
+                </div>
 
                 {/* เงื่อนไขบิล (2026-09-24) — ประเภทราคา · ส่วนลด · เครดิต/ครบกำหนด · ผู้ออกบิล แก้ได้ทุกใบ เป็นค่าตั้งต้นของรอบรับ */}
                 <SectionCard title={t("receivingReportDoc.termsTitle")} subtitle={t("receivingReportDoc.termsHint")}>
@@ -780,7 +796,7 @@ export function ReceivingReportDocument({
           )}
 
           {/* รายการค้างรับ + รับครบแล้วในตารางเดียว (ดีไซน์ใหม่ 2026-09-30) — บรรทัดย้ายกลุ่มเองเมื่อค้างรับเหลือศูนย์ */}
-          <section className={surface.card}>
+          <section data-tour="rrdoc-items" className={surface.card}>
             <div className={`${surface.cardHead} flex-wrap`}>
               <h2 className={surface.cardTitle}>{t("receivingReportDoc.itemsTitle")}</h2>
               <span className="flex-1 text-[13px] text-muted-foreground">
@@ -819,7 +835,7 @@ export function ReceivingReportDocument({
             </div>
           </section>
 
-          <section className={surface.card}>
+          <section data-tour="rrdoc-history" className={surface.card}>
             <div className={surface.cardHead}>
               <h2 className={surface.cardTitle}>{t("receivingReportDoc.historyTitle")}</h2>
               <span className="text-[13px] text-muted-foreground">{t("receivingReportDoc.historyCount").replace("{n}", String(draft.batches.length))}</span>

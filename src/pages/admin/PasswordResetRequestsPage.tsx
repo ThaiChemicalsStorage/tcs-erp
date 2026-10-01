@@ -14,6 +14,8 @@ import { ListPageHeader } from "../../components/ui/ListPage";
 import { btn, surface, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 
 function timeOf(iso: string): string {
   return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
@@ -41,11 +43,19 @@ function UserMeta({ r }: { r: PasswordResetRequest }) {
  * เซิร์ฟเวอร์ตรวจ `isSuperAdmin` ทุกคำสั่ง (`api/_lib/passwordResetHandler.ts`)
  * ดีไซน์ใหม่ 2026-09-30 (บอร์ด PasswordResets): ปุ่มในแถวเป็นปุ่มรอง/ปุ่มข้อความ · กล่องยืนยันมีกล่องสรุปผู้ใช้
  */
-export function PasswordResetRequestsPage() {
+export function PasswordResetRequestsPage({ currentUserId }: { currentUserId: string }) {
   const { t } = useI18n();
   const toast = useToast();
   const [requests, setRequests] = useState<PasswordResetRequest[]>([]);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+  // ปุ่มออกรหัส/ปิดคำขอชี้ที่แถวแรก — ไม่มีคำขอค้างก็ข้ามสองขั้นนั้นเอง · ประวัติขึ้นเมื่อมีคำขอที่จบแล้ว
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="pwreset-pending"]', manual: "ch27-5", popover: { title: t("tour.pwReset.pending.title"), description: t("tour.pwReset.pending.desc"), side: "bottom" } },
+    { element: '[data-tour="pwreset-issue"]', manual: "ch27-5", popover: { title: t("tour.pwReset.issue.title"), description: t("tour.pwReset.issue.desc"), side: "left" } },
+    { element: '[data-tour="pwreset-dismiss"]', manual: "ch27-5", popover: { title: t("tour.pwReset.dismiss.title"), description: t("tour.pwReset.dismiss.desc"), side: "left" } },
+    { element: '[data-tour="pwreset-history"]', manual: "ch27-5", popover: { title: t("tour.pwReset.history.title"), description: t("tour.pwReset.history.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("passwordResets", currentUserId, tourSteps, { autoStart: status === "ok" });
   const [reload, setReload] = useState(0);
   const [confirmIssue, setConfirmIssue] = useState<PasswordResetRequest | null>(null);
   const [confirmDismiss, setConfirmDismiss] = useState<PasswordResetRequest | null>(null);
@@ -109,7 +119,7 @@ export function PasswordResetRequestsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
-      <ListPageHeader module={t("nav.group.admin")} title={t("nav.passwordResets")} description={<span className="block max-w-[880px] text-[#3d5173]">{t("passwordResets.subtitle")}</span>} />
+      <ListPageHeader module={t("nav.group.admin")} title={t("nav.passwordResets")} description={<span className="block max-w-[880px] text-[#3d5173]">{t("passwordResets.subtitle")}</span>} help={<TourReplayButton variant="title" onClick={tour.start} />} />
 
       {status === "loading" ? (
         <div className="space-y-3" role="status" aria-live="polite">
@@ -123,7 +133,7 @@ export function PasswordResetRequestsPage() {
         </div>
       ) : (
         <>
-          <section className={`${surface.card} overflow-hidden`}>
+          <section data-tour="pwreset-pending" className={`${surface.card} overflow-hidden`}>
             <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#eef1f6]">
               <h2 className={surface.cardTitle}>{t("passwordResets.pendingTitle")}</h2>
               <span className={`min-w-[22px] h-5 px-1.5 rounded-full text-xs font-semibold inline-flex items-center justify-center ${pending.length ? "bg-[#fdf3e0] text-[#8a5a00]" : "bg-[#eef1f6] text-[#3d5173]"}`}>{pending.length}</span>
@@ -142,7 +152,7 @@ export function PasswordResetRequestsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pending.map((r) => (
+                    {pending.map((r, i) => (
                       <tr key={r.id} className="border-b border-[#eef1f6] last:border-b-0">
                         <td className={`${table.td} py-3`}>{who(r)}</td>
                         <td className={`${table.td} py-3`}>
@@ -160,10 +170,10 @@ export function PasswordResetRequestsPage() {
                         </td>
                         <td className={`${table.td} py-3`}>
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => setConfirmDismiss(r)} disabled={busy} className="h-9 px-2.5 inline-flex items-center rounded-lg text-[#1a5fb4] text-[13px] font-medium hover:bg-[#e8f0fb] transition-colors disabled:opacity-60 whitespace-nowrap">
+                            <button data-tour={i === 0 ? "pwreset-dismiss" : undefined} onClick={() => setConfirmDismiss(r)} disabled={busy} className="h-9 px-2.5 inline-flex items-center rounded-lg text-[#1a5fb4] text-[13px] font-medium hover:bg-[#e8f0fb] transition-colors disabled:opacity-60 whitespace-nowrap">
                               {t("passwordResets.dismiss")}
                             </button>
-                            <button onClick={() => setConfirmIssue(r)} disabled={busy} className={btn.secondarySm}>
+                            <button data-tour={i === 0 ? "pwreset-issue" : undefined} onClick={() => setConfirmIssue(r)} disabled={busy} className={btn.secondarySm}>
                               <KeyRound size={15} /> {t("passwordResets.issue")}
                             </button>
                           </div>
@@ -177,7 +187,7 @@ export function PasswordResetRequestsPage() {
           </section>
 
           {done.length > 0 && (
-            <section className={`${surface.card} overflow-hidden`}>
+            <section data-tour="pwreset-history" className={`${surface.card} overflow-hidden`}>
               <div className="px-5 py-4 border-b border-[#eef1f6]">
                 <h2 className={surface.cardTitle}>{t("passwordResets.historyTitle")}</h2>
               </div>

@@ -3,6 +3,8 @@ import { ChevronRight } from "lucide-react";
 import type { PurchaseOrderSummary, PurchaseOrderStatus } from "../../lib/purchaseOrder";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
@@ -18,14 +20,23 @@ const TABS: StatusTab[] = ["all", "Draft", "PendingApproval", "Final"];
  * แท็บสถานะพร้อมจำนวน (แทนปุ่มกรองสถานะเดิม) → ค้นหา + ช่วงวันที่ + จำนวน → ตาราง (ทั้งแถวกดเปิดเอกสาร) → แบ่งหน้า
  */
 export function PurchaseOrderList({
-  purchaseOrders, onOpen, headerAction,
+  purchaseOrders, currentUserId, onOpen, headerAction,
 }: {
   purchaseOrders: PurchaseOrderSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
   const statusLabel = usePurchaseOrderStatusLabel();
+  // ปุ่มสร้าง (data-tour="pur-create") อยู่ใน headerAction ที่ PurchaseOrderPage ส่งมา — มีเฉพาะคนที่มีสิทธิ์สร้าง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="pur-create"]', manual: "ch18-8", popover: { title: t("tour.pur.create.title"), description: t("tour.pur.create.desc"), side: "bottom" } },
+    { element: '[data-tour="pur-tabs"]', manual: "ch18-11", popover: { title: t("tour.pur.tabs.title"), description: t("tour.pur.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="pur-filters"]', manual: "ch2-6", popover: { title: t("tour.pur.filters.title"), description: t("tour.pur.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="pur-table"]', manual: "ch18-8", popover: { title: t("tour.pur.table.title"), description: t("tour.pur.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("purchaseOrder", currentUserId, tourSteps);
   const [tab, setTab] = useState<StatusTab>("all");
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
@@ -67,60 +78,67 @@ export function PurchaseOrderList({
       <ListPageHeader
         module={<span className="inline-flex items-center gap-2">{t("nav.group.purchasing")}<span className="text-[#c3ccda]">·</span>{t("purchaseOrder.pageSubtitle")}</span>}
         title={t("purchaseOrder.pageTitle")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={headerAction}
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("purchaseOrder.col.status")} />
-        <ListToolbar
-          search={searchQuery}
-          onSearch={withReset(setSearchQuery)}
-          searchPlaceholder={t("purchaseOrder.searchPlaceholder")}
-          count={t("purchaseOrder.countLabel").replace("{n}", String(filtered.length))}
-        >
-          <DateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
-        </ListToolbar>
+        <div data-tour="pur-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={withReset(setTab)} ariaLabel={t("purchaseOrder.col.status")} />
+        </div>
+        <div data-tour="pur-filters">
+          <ListToolbar
+            search={searchQuery}
+            onSearch={withReset(setSearchQuery)}
+            searchPlaceholder={t("purchaseOrder.searchPlaceholder")}
+            count={t("purchaseOrder.countLabel").replace("{n}", String(filtered.length))}
+          >
+            <DateRangeSelect value={dateRange} onChange={withReset(setDateRange)} />
+          </ListToolbar>
+        </div>
 
-        {purchaseOrders.length === 0 ? (
-          <ListEmpty title={t("purchaseOrder.empty.title")} hint={t("purchaseOrder.empty.description")} />
-        ) : filtered.length === 0 ? (
-          <ListEmpty title={t("purchaseOrder.noFilterResults")} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px]">
-              <thead>
-                <tr className={table.head}>
-                  {columns.map((h, i) => <th key={i} className={table.th}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((p) => (
-                  <tr
-                    key={p.id}
-                    tabIndex={0}
-                    aria-label={`${t("purchaseOrder.openRow")} ${p.documentNumber || p.id}`}
-                    onClick={() => onOpen(p.id)}
-                    onKeyDown={(e) => openOnKey(e, p.id)}
-                    className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
-                  >
-                    <td className={`${table.td} ${table.code} whitespace-nowrap`}>{p.documentNumber || p.id}</td>
-                    <td className={`${table.td} max-w-[300px]`}>
-                      <span className="block text-sm font-medium text-foreground truncate" title={p.vendorName}>{p.vendorName || dash}</span>
-                    </td>
-                    <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{p.jobCode || dash}</td>
-                    <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{p.purchaseRequestId || dash}</td>
-                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{p.neededByDate ? formatQuoteDateThai(p.neededByDate) : dash}</td>
-                    <td className={table.td}><PurchaseOrderStatusPill status={p.status} /></td>
-                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
-                    <td className={`${table.td} w-10`}>
-                      <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
-                    </td>
+        <div data-tour="pur-table" className="min-w-0">
+          {purchaseOrders.length === 0 ? (
+            <ListEmpty title={t("purchaseOrder.empty.title")} hint={t("purchaseOrder.empty.description")} />
+          ) : filtered.length === 0 ? (
+            <ListEmpty title={t("purchaseOrder.noFilterResults")} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1040px]">
+                <thead>
+                  <tr className={table.head}>
+                    {columns.map((h, i) => <th key={i} className={table.th}>{h}</th>)}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {pageRows.map((p) => (
+                    <tr
+                      key={p.id}
+                      tabIndex={0}
+                      aria-label={`${t("purchaseOrder.openRow")} ${p.documentNumber || p.id}`}
+                      onClick={() => onOpen(p.id)}
+                      onKeyDown={(e) => openOnKey(e, p.id)}
+                      className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                    >
+                      <td className={`${table.td} ${table.code} whitespace-nowrap`}>{p.documentNumber || p.id}</td>
+                      <td className={`${table.td} max-w-[300px]`}>
+                        <span className="block text-sm font-medium text-foreground truncate" title={p.vendorName}>{p.vendorName || dash}</span>
+                      </td>
+                      <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{p.jobCode || dash}</td>
+                      <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{p.purchaseRequestId || dash}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{p.neededByDate ? formatQuoteDateThai(p.neededByDate) : dash}</td>
+                      <td className={table.td}><PurchaseOrderStatusPill status={p.status} /></td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                      <td className={`${table.td} w-10`}>
+                        <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         {filtered.length > 0 && (
           <ListPagination
             page={currentPage}
