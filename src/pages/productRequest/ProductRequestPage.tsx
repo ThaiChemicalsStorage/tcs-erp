@@ -468,6 +468,7 @@ export function ProductRequestPage({
         message={rejectTarget ? t("productRequest.rejectMessage").replace("{name}", rejectTarget.name).replace("{by}", rejectTarget.requestedByName) : undefined}
         label={t("productRequest.rejectPrompt")}
         confirmLabel={t("productRequest.reject")}
+        requiredMessage={t("approval.rejectDialog.required")}
         multiline
         onConfirm={(value) => void submitReject(value)}
         onCancel={() => setRejectTarget(null)}
