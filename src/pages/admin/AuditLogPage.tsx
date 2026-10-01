@@ -1,13 +1,19 @@
-import { useEffect, useState } from "react";
-import { Search, HelpCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Lock } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import type { AuditLogEntry } from "../../lib/auditLog";
 import { fetchAuditLog } from "../../lib/auditLog";
 import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListPageHeader, ListCard, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
 
-// หน้าแสดงประวัติการใช้งานระบบ (Audit Log) พร้อมช่องค้นหาและทัวร์แนะนำการใช้งาน
-// Displays the audit log with a search box and a first-run guided tour
+/** แถวต่อหน้า — เดิมแสดงทุกแถวในหน้าเดียว (บันทึกสะสมหลายพันแถว) ดีไซน์ใหม่ 2026-09-30 เพิ่มการแบ่งหน้า */
+const PAGE_SIZE = 20;
+
+// หน้าแสดงประวัติการใช้งานระบบ (Audit Log) พร้อมช่องค้นหา การแบ่งหน้า และทัวร์แนะนำการใช้งาน
+// Displays the audit log with a search box, pagination and a first-run guided tour
 export function AuditLogPage({
   currentUserId,
 }: {
@@ -22,6 +28,7 @@ export function AuditLogPage({
   const tour = useModuleTour("auditLog", currentUserId, tourSteps);
 
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,75 +36,105 @@ export function AuditLogPage({
     fetchAuditLog().then(setEntries).finally(() => setLoading(false));
   }, []);
 
-  const filtered = entries.filter((e) => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return [e.userName, e.roleName, e.module, e.action, e.details].some((f) => f.toLowerCase().includes(q));
-  });
+    if (!q) return entries;
+    return entries.filter((e) => [e.userName, e.roleName, e.module, e.action, e.details].some((f) => f.toLowerCase().includes(q)));
+  }, [entries, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("nav.auditLog")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("auditLog.totalCount").replace("{n}", String(entries.length))}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div data-tour="audit-search" className="flex items-center gap-2 bg-white border border-[#c3ccda] rounded-lg px-3 py-2 w-full sm:w-72 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
-            <Search size={14} className="text-muted-foreground flex-shrink-0" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("auditLog.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
-          </div>
-          <button
-            onClick={tour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
-          >
-            <HelpCircle size={15} />
-          </button>
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.admin")}
+        title={t("nav.auditLog")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        description={
+          <span className="inline-flex items-center gap-1.5 text-[13px]">
+            <Lock size={14} aria-hidden="true" /> {t("auditLog.subtitle")}
+          </span>
+        }
+      />
 
-      <div data-tour="audit-table" className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
-              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.datetime")}</th>
-              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.user")}</th>
-              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.role")}</th>
-              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.module")}</th>
-              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.action")}</th>
-              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.details")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((e) => (
-              <tr key={e.id} className="border-b border-border/60 last:border-0 hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{new Date(e.createdAt).toLocaleString("th-TH")}</td>
-                <td className="px-4 py-3 text-xs text-foreground font-medium whitespace-nowrap">{e.userName}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{e.roleName}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{e.module}</td>
-                <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/20 whitespace-nowrap">{e.action}</span></td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">{e.details}</td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center text-xs text-muted-foreground py-10" role={loading ? "status" : undefined} aria-live={loading ? "polite" : undefined}>
-                  {loading ? t("auditLog.loading") : entries.length === 0 ? (
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="font-medium text-foreground">{t("empty.auditLog.title")}</span>
-                      <span>{t("empty.auditLog.sub")}</span>
-                    </div>
-                  ) : t("auditLog.noFilterResults")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <ListCard>
+        <div data-tour="audit-search">
+          <ListToolbar
+            search={search}
+            onSearch={(v) => { setSearch(v); setPage(1); }}
+            searchPlaceholder={t("auditLog.searchPlaceholder")}
+            count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+          >
+            <span className="text-xs text-muted-foreground">{t("auditLog.searchHint")}</span>
+          </ListToolbar>
         </div>
-      </div>
+
+        <div data-tour="audit-table">
+          {filtered.length === 0 ? (
+            <div role={loading ? "status" : undefined} aria-live={loading ? "polite" : undefined}>
+              {loading ? (
+                <ListEmpty title={t("auditLog.loading")} />
+              ) : entries.length === 0 ? (
+                <ListEmpty title={t("empty.auditLog.title")} hint={t("empty.auditLog.sub")} />
+              ) : (
+                <ListEmpty title={t("auditLog.noFilterResults")} />
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] table-fixed text-sm">
+                <thead>
+                  <tr className={table.head}>
+                    <th className={`${table.th} w-[150px]`}>{t("auditLog.col.datetime")}</th>
+                    <th className={`${table.th} w-[220px]`}>{t("auditLog.col.user")}</th>
+                    <th className={`${table.th} w-[140px]`}>{t("auditLog.col.module")}</th>
+                    <th className={`${table.th} w-[240px]`}>{t("auditLog.col.action")}</th>
+                    <th className={table.th}>{t("auditLog.col.details")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((e) => {
+                    const at = new Date(e.createdAt);
+                    return (
+                      <tr key={e.id} className="h-[60px] border-b border-[#eef1f6] last:border-b-0 bg-white hover:bg-[#f8f9fc] transition-colors">
+                        <td className={table.td}>
+                          <span className="block text-foreground whitespace-nowrap">{at.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}</span>
+                          <span className="block text-xs text-muted-foreground tabular-nums">{at.toLocaleTimeString("th-TH")}</span>
+                        </td>
+                        <td className={table.td}>
+                          <span className="block font-medium text-foreground truncate" title={e.userName}>{e.userName}</span>
+                          <span className="block text-xs text-muted-foreground truncate" title={e.roleName}>{e.roleName}</span>
+                        </td>
+                        <td className={`${table.td} text-[#3d5173] truncate`} title={e.module}>{e.module}</td>
+                        <td className={table.td}>
+                          <span className="h-6 px-2 rounded-md bg-[#eef1f6] text-[#26395a] text-xs font-medium font-mono inline-flex items-center max-w-full truncate" title={e.action}>{e.action}</span>
+                        </td>
+                        <td className={`${table.td} text-[#3d5173]`}>
+                          {/* สองบรรทัดแล้วตัด (ไม่ใช่บรรทัดเดียว) — รายละเอียดคือเนื้อหาหลักของบันทึก ข้อความเต็มอยู่ใน title */}
+                          <span className="line-clamp-2 break-words leading-snug" title={e.details}>{e.details}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {filtered.length > 0 && (
+          <ListPagination
+            page={currentPage}
+            pageCount={pageCount}
+            from={(currentPage - 1) * PAGE_SIZE + 1}
+            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            total={filtered.length}
+            onPage={setPage}
+          />
+        )}
+      </ListCard>
     </div>
   );
 }

@@ -1,16 +1,24 @@
-import { useId, useState } from "react";
-import { Plus, Pencil, Trash2, Lock, ShieldCheck, HelpCircle } from "lucide-react";
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronLeft, ChevronRight, Lock, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import type { Role } from "../../lib/roles";
 import { isPermissionLockedToSuperAdmin, createRole, updateRole, deleteRole } from "../../lib/roles";
-import { PERMISSION_GROUPS, PERMISSION_LABEL_KEY, permissionsRequiring, withPermissionDependencies, type Permission } from "../../lib/permissions";
+import { ALL_PERMISSIONS, PERMISSION_LABEL_KEY, permissionsRequiring, withPermissionDependencies, type Permission } from "../../lib/permissions";
 import type { User } from "../../lib/users";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { ListPageHeader, ListCard } from "../../components/ui/ListPage";
+import { Field, ReadonlyField } from "../../components/ui/Field";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { btn, field, surface, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import {
+  buildPermissionMatrix, COLUMN_LABEL_KEY, EXTRA_SHORT_LABEL_KEY, MATRIX_COLUMNS, RESOURCE_LABEL_KEY, actionOf, type MatrixSection,
+} from "./permissionMatrix";
 
 type View = "list" | "create" | "edit" | "view";
 
@@ -20,14 +28,18 @@ interface RoleFormState {
   permissions: Permission[];
 }
 
+const MATRIX: MatrixSection[] = buildPermissionMatrix();
+/** คอลัมน์ของตาราง: ชื่อเมนู 220 · 9 ช่องติ๊ก 60 · "สิทธิ์อื่น ๆ" ที่เหลือ (บอร์ด Roles-Edit) */
+const MATRIX_GRID = "grid grid-cols-[220px_repeat(9,60px)_minmax(160px,1fr)]";
+
 // สร้างค่าเริ่มต้นว่างสำหรับฟอร์มบทบาท
 // Returns an empty role form state
 function emptyForm(): RoleFormState {
   return { name: "", description: "", permissions: [] };
 }
 
-// หน้าจัดการบทบาทและสิทธิ์การใช้งาน แสดงรายการ สร้าง แก้ไข และลบบทบาท
-// Manages roles and permissions — list, create, edit, and delete roles
+// หน้าจัดการบทบาทและสิทธิ์การใช้งาน — รายการเป็นตาราง (ดีไซน์ใหม่ 2026-09-30) คลิกแถวเปิดหน้าตารางสิทธิ์เต็มหน้า
+// Manages roles and permissions — list as a table; a row opens the full-page permission matrix (view/create/edit)
 export function RoleManagementPage({
   roles,
   onRolesChange,
@@ -45,37 +57,224 @@ export function RoleManagementPage({
 
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="roles-create"]', popover: { title: t("tour.roles.create.title"), description: t("tour.roles.create.desc"), side: "bottom" } },
-    { element: '[data-tour="roles-list"]', popover: { title: t("tour.roles.list.title"), description: t("tour.roles.list.desc"), side: "top" } },
+    { element: '[data-tour="roles-list"]', popover: { title: t("tour.roles.list.title"), description: t("tour.roles.list.descTable"), side: "top" } },
   ];
   const tour = useModuleTour("roles", currentUserId, tourSteps);
 
   const [view, setView] = useState<View>("list");
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [form, setForm] = useState<RoleFormState>(emptyForm());
-  const [error, setError] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
   const { message, show } = useToast();
+
+  const usersWithRole = (roleKey: string) => users.filter((u) => u.roleKey === roleKey).length;
+  const editingRole = roles.find((r) => r.key === editingKey);
+
+  const startCreate = () => { setEditingKey(null); setView("create"); };
+  // เปิดบทบาท — Super Admin เปิดแบบดูอย่างเดียว บทบาทอื่นแก้ไขได้
+  // Opens a role — Super Admin opens view-only, every other role is editable
+  const startEdit = (r: Role) => { setEditingKey(r.key); setView(r.isSuperAdmin ? "view" : "edit"); };
+  const backToList = () => { setView("list"); setEditingKey(null); };
+
+  if (view !== "list") {
+    return (
+      <>
+        <RoleEditor
+          key={`${view}:${editingKey ?? ""}`}
+          mode={view}
+          role={editingRole}
+          roles={roles}
+          userCount={editingRole ? usersWithRole(editingRole.key) : 0}
+          onRolesChange={onRolesChange}
+          onAudit={onAudit}
+          onToast={show}
+          onDone={backToList}
+        />
+        <Toast message={message} />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.admin")}
+        title={t("nav.roles")}
+        description={t("roles.pageHint")}
+        help={<TourReplayButton variant="title" onClick={tour.start} />}
+        actions={
+          <button data-tour="roles-create" onClick={startCreate} className={btn.primary}>
+            <Plus size={16} /> {t("roles.createNew")}
+          </button>
+        }
+      />
+
+      <ListCard>
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-[#eef1f6]">
+          <h2 className={`${surface.cardTitle} flex-1`}>{t("roles.listTitle")}</h2>
+          <span className="text-[13px] text-muted-foreground">
+            {t("roles.listSummary").replace("{roles}", String(roles.length)).replace("{users}", String(users.length))}
+          </span>
+        </div>
+        <div data-tour="roles-list" className="overflow-x-auto">
+          <table className="w-full min-w-[760px] table-fixed">
+            <thead>
+              <tr className={table.head}>
+                <th className={table.th}>{t("roles.col.role")}</th>
+                <th className={`${table.th} w-[140px] text-right`}>{t("roles.col.permissions")}</th>
+                <th className={`${table.th} w-[140px] text-right`}>{t("roles.col.users")}</th>
+                <th className={`${table.th} w-[190px]`}>{t("roles.col.type")}</th>
+                <th className={`${table.th} w-12`}><span className="sr-only">{t("roles.viewDetails")}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map((r) => {
+                const count = usersWithRole(r.key);
+                const openLabel = `${r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} ${r.name}`;
+                return (
+                  <tr key={r.key} onClick={() => startEdit(r)} className={`${table.row} group cursor-pointer text-sm`}>
+                    <td className={table.td}>
+                      <span className="flex flex-col min-w-0 leading-snug">
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          {r.isSuperAdmin && <ShieldCheck size={15} className="text-[#7d6420] flex-shrink-0" aria-hidden="true" />}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); startEdit(r); }}
+                            aria-label={openLabel}
+                            className="font-semibold text-foreground truncate text-left rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40"
+                          >
+                            {r.name}
+                          </button>
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate">{r.description || t("common.dash")}</span>
+                      </span>
+                    </td>
+                    <td className={`${table.td} text-right tabular-nums text-[#3d5173]`}>
+                      {r.isSuperAdmin ? t("roles.allPermissions") : t("roles.permissionCount").replace("{n}", String(r.permissions.length))}
+                    </td>
+                    <td className={`${table.td} text-right tabular-nums ${count > 0 ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>
+                      {t("roles.userCount").replace("{n}", String(count))}
+                    </td>
+                    <td className={table.td}>
+                      {r.isSystem ? (
+                        <span className="h-[26px] px-2.5 rounded-md bg-[#eef1f6] text-[#26395a] text-[12.5px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap">
+                          <Lock size={13} aria-hidden="true" /> {t("roles.systemBadge")}
+                        </span>
+                      ) : (
+                        <span className="text-[#8a97ad]">{t("common.dash")}</span>
+                      )}
+                    </td>
+                    <td className={`${table.td} text-right`}>
+                      <ChevronRight size={18} aria-hidden="true" className="inline text-[#a3aec2] group-hover:text-foreground transition-colors" />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </ListCard>
+      <Toast message={message} />
+    </div>
+  );
+}
+
+type BoxState = "on" | "off" | "pinned" | "locked" | "roOn" | "roOff";
+
+// ช่องติ๊กของตารางสิทธิ์ (บอร์ด Roles-Edit): ติ๊ก = กรมท่า · ติ๊กอัตโนมัติจากสิทธิ์อื่น = เทา ล็อก · สงวนให้ Super Admin = กุญแจ ·
+// โหมดดูอย่างเดียว = เครื่องหมายถูกล้วน
+// A matrix tick box: on/off · pinned (auto-ticked dependency) · Super-Admin-only lock · read-only check
+function PermissionBox({ state, label, title, onToggle, small = false, children }: {
+  state: BoxState;
+  label: string;
+  title: string;
+  onToggle: () => void;
+  small?: boolean;
+  children?: ReactNode;
+}) {
+  const size = small ? "w-4 h-4" : "w-[18px] h-[18px]";
+  const iconSize = small ? 11 : 12;
+  if (state === "roOn" || state === "roOff") {
+    return (
+      <span role={state === "roOn" ? "img" : undefined} aria-label={state === "roOn" ? label : undefined} title={label} className="inline-flex items-center gap-2 text-[13px] text-foreground leading-snug">
+        {state === "roOn" ? <Check size={16} className="text-[#0b1d3a] flex-shrink-0" aria-hidden="true" /> : <span className={`${size} flex-shrink-0`} aria-hidden="true" />}
+        {children}
+      </span>
+    );
+  }
+  const disabled = state === "pinned" || state === "locked";
+  const boxCls =
+    state === "on" ? "border-[#0b1d3a] bg-[#0b1d3a] text-white"
+    : state === "pinned" ? "border-[#8a97ad] bg-[#8a97ad] text-white"
+    : state === "locked" ? "border-[#d6dce6] bg-[#eef1f6] text-[#8a97ad]"
+    : "border-[#a3aec2] bg-white";
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={state === "on" || state === "pinned"}
+      aria-disabled={disabled}
+      aria-label={label}
+      title={title}
+      onClick={() => { if (!disabled) onToggle(); }}
+      className={`inline-flex items-start gap-2 text-left rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 ${disabled ? "cursor-not-allowed" : "cursor-pointer"} ${children ? "text-[13px] leading-snug" : ""} ${state === "locked" ? "text-[#8a97ad]" : "text-foreground"}`}
+    >
+      <span aria-hidden="true" className={`${size} ${children ? "mt-px" : ""} rounded border-[1.5px] flex items-center justify-center flex-shrink-0 ${boxCls}`}>
+        {(state === "on" || state === "pinned") && <Check size={iconSize} strokeWidth={3} />}
+        {state === "locked" && <Lock size={iconSize - 1} />}
+      </span>
+      {children}
+    </button>
+  );
+}
+
+// หน้าเดียวสำหรับดู/สร้าง/แก้ไขบทบาท (บอร์ด Roles-View / Roles-Create / Roles-Edit) — แถบหัวติดด้านบนพร้อมปุ่มบันทึก
+// ส่งรายการสิทธิ์ชุดเดียวกับฟอร์มเดิมทุกประการ (name/description/permissions) — เซิร์ฟเวอร์ทำ sanitizeRolePermissions ซ้ำเสมอ
+// The single view/create/edit page with a sticky header save; saves exactly the same payload the old form did
+function RoleEditor({ mode, role, roles, userCount, onRolesChange, onAudit, onToast, onDone }: {
+  mode: Exclude<View, "list">;
+  role: Role | undefined;
+  roles: Role[];
+  userCount: number;
+  onRolesChange: (roles: Role[]) => void;
+  onAudit: (action: string, details: string) => void;
+  onToast: (message: string) => void;
+  onDone: () => void;
+}) {
+  const { t } = useI18n();
+  const [form, setForm] = useState<RoleFormState>(() =>
+    role && mode !== "create" ? { name: role.name, description: role.description, permissions: [...role.permissions] } : emptyForm());
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const formId = useId();
   const nameId = useId();
   const descriptionId = useId();
 
-  const editingRole = roles.find((r) => r.key === editingKey);
+  // ความสูงของแถบหัวที่ติดด้านบน — หัวตารางสิทธิ์ติดอยู่ใต้แถบนี้พอดี (แถบสูงไม่เท่ากันเมื่อปุ่มตกบรรทัด)
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => setHeaderHeight(el.offsetHeight);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  const startCreate = () => { setForm(emptyForm()); setError(""); setEditingKey(null); setView("create"); };
-  // เริ่มแก้ไขบทบาท เปิดโหมดดูอย่างเดียวถ้าเป็น Super Admin เท่านั้น
-  // Starts editing a role — Super Admin opens in view-only mode, other roles are editable
-  const startEdit = (r: Role) => {
-    setForm({ name: r.name, description: r.description, permissions: [...r.permissions] });
-    setEditingKey(r.key);
-    setError("");
-    setView(r.isSuperAdmin ? "view" : "edit");
-  };
+  const readOnly = mode === "view";
+  const nameLocked = readOnly || !!role?.isSystem;
+  const allTicked = readOnly && !!role?.isSuperAdmin;
+  const has = (p: Permission) => allTicked || form.permissions.includes(p);
 
   // สิทธิ์อื่นที่ติ๊กอยู่และจำเป็นต้องใช้สิทธิ์นี้ร่วมด้วย
   // Currently-ticked permissions that would break if `p` were removed (see PERMISSION_DEPENDENCIES).
   const requiredBy = (p: Permission) => permissionsRequiring(p, form.permissions);
 
   const togglePermission = (p: Permission) => {
-    if (isPermissionLockedToSuperAdmin(p)) return;
+    if (readOnly || isPermissionLockedToSuperAdmin(p)) return;
     setForm((f) => {
       if (!f.permissions.includes(p)) {
         // Ticking pulls in whatever that permission needs, so the admin sees it happen here rather
@@ -87,209 +286,272 @@ export function RoleManagementPage({
     });
   };
 
+  const boxFor = (p: Permission): { state: BoxState; label: string; title: string } => {
+    const label = t(PERMISSION_LABEL_KEY[p]);
+    if (readOnly) return { state: has(p) ? "roOn" : "roOff", label, title: label };
+    if (isPermissionLockedToSuperAdmin(p)) return { state: "locked", label, title: `${label} — ${t("roles.permissionsLockHint")}` };
+    const dependents = has(p) ? requiredBy(p) : [];
+    if (dependents.length > 0) {
+      return { state: "pinned", label, title: t("roles.permissionRequiredBy").replace("{names}", dependents.map((d) => t(PERMISSION_LABEL_KEY[d])).join(", ")) };
+    }
+    return { state: has(p) ? "on" : "off", label, title: label };
+  };
+
   // บันทึกฟอร์มบทบาท ตรวจสอบชื่อซ้ำก่อนสร้างหรืออัปเดตบทบาท
   // Submits the role form — validates the name then creates or updates the role
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly || saving) return;
     if (!form.name.trim()) { setError(t("roles.errorNameRequired")); return; }
-    const nameTaken = roles.some((r) => r.name.trim().toLowerCase() === form.name.trim().toLowerCase() && r.key !== editingKey);
+    const nameTaken = roles.some((r) => r.name.trim().toLowerCase() === form.name.trim().toLowerCase() && r.key !== role?.key);
     if (nameTaken) { setError(t("roles.errorNameTaken")); return; }
 
+    setSaving(true);
     try {
-      if (view === "create") {
+      if (mode === "create") {
         const created = await createRole({ name: form.name.trim(), description: form.description.trim(), permissions: form.permissions });
         onRolesChange([...roles, created]);
         onAudit("Role Changed", `สร้างบทบาทใหม่ "${created.name}"`);
-        show(t("roles.createdToast"));
-      } else if (editingKey) {
-        const updated = await updateRole(editingKey, { name: form.name.trim(), description: form.description.trim(), permissions: form.permissions });
-        onRolesChange(roles.map((r) => (r.key === editingKey ? updated : r)));
+        onToast(t("roles.createdToast"));
+      } else if (role) {
+        const updated = await updateRole(role.key, { name: form.name.trim(), description: form.description.trim(), permissions: form.permissions });
+        onRolesChange(roles.map((r) => (r.key === role.key ? updated : r)));
         onAudit("Permission Changed", `แก้ไขสิทธิ์ของบทบาท "${form.name.trim()}"`);
-        show(t("common.savedNote"));
+        onToast(t("common.savedNote"));
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("common.errorGeneric"));
+      setSaving(false);
       return;
     }
-    setView("list");
-    setEditingKey(null);
+    setSaving(false);
+    onDone();
   };
 
-  const usersWithRole = (roleKey: string) => users.filter((u) => u.roleKey === roleKey).length;
-
-  // ยืนยันการลบบทบาทที่เลือกไว้
-  // Confirms and deletes the currently targeted role
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
+  // ยืนยันการลบบทบาทนี้
+  // Confirms and deletes this role
+  const runDelete = async () => {
+    if (!role) return;
+    setDeleting(true);
     try {
-      await deleteRole(deleteTarget.key);
-      onRolesChange(roles.filter((r) => r.key !== deleteTarget.key));
-      onAudit("Role Changed", `ลบบทบาท "${deleteTarget.name}"`);
-      show(t("roles.deletedToast"));
+      await deleteRole(role.key);
+      onRolesChange(roles.filter((r) => r.key !== role.key));
+      onAudit("Role Changed", `ลบบทบาท "${role.name}"`);
+      onToast(t("roles.deletedToast"));
+      setDeleting(false);
+      setConfirmDelete(false);
+      onDone();
     } catch (err) {
-      show(err instanceof ApiError ? err.message : t("roles.deleteErrorToast"));
+      onToast(err instanceof ApiError ? err.message : t("roles.deleteErrorToast"));
+      setDeleting(false);
+      setConfirmDelete(false);
     }
-    setDeleteTarget(null);
   };
 
-  const readOnly = view === "view";
-  const nameLocked = readOnly || !!editingRole?.isSystem;
+  const selectedCount = ALL_PERMISSIONS.filter(has).length;
+  const deleteBlockedReason = role?.isSystem ? t("roles.deleteSystemTitle") : userCount > 0 ? t("roles.deleteInUseTitle") : "";
+  const title = mode === "create" ? t("roles.createNew") : role?.name ?? "";
+  const meta = mode === "create" ? null
+    : `${allTicked ? t("roles.allPermissions") : t("roles.permissionCount").replace("{n}", String(form.permissions.length))} · ${t("roles.userCount").replace("{n}", String(userCount))}`;
 
-  if (view !== "list") {
+  const sectionCount = (perms: Permission[]) => {
+    const n = perms.filter(has).length;
     return (
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-2 mb-5">
-            <h2 className="text-lg font-semibold text-foreground">
-              {view === "create" ? t("roles.createNew") : view === "view" ? `${t("roles.viewTitlePrefix")}${editingRole?.name}` : t("roles.editTitle")}
-            </h2>
-            {readOnly && (
-              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
-                <Lock size={10} /> {t("roles.viewOnlyBadge")}
-              </span>
-            )}
-            {!readOnly && editingRole?.isSystem && (
-              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
-                <Lock size={10} /> {t("roles.nameLockedBadge")}
-              </span>
-            )}
-          </div>
-          <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor={nameId} className="text-xs font-medium text-foreground block mb-1.5">{t("roles.nameLabel")}</label>
-                <input id={nameId} disabled={nameLocked} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div>
-                <label htmlFor={descriptionId} className="text-xs font-medium text-foreground block mb-1.5">{t("roles.descriptionLabel")}</label>
-                <input id={descriptionId} disabled={readOnly} className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 disabled:opacity-60" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-foreground mb-2">{t("roles.permissionsTitle")}</p>
-              <div className="space-y-3">
-                {PERMISSION_GROUPS.map((group) => (
-                  <div key={group.label} className="border border-border rounded-lg p-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t(group.labelKey)}</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {group.permissions.map((p) => {
-                        const locked = isPermissionLockedToSuperAdmin(p);
-                        const dependents = requiredBy(p);
-                        const pinned = dependents.length > 0;
-                        const pinnedTitle = pinned
-                          ? t("roles.permissionRequiredBy").replace("{names}", dependents.map((d) => t(PERMISSION_LABEL_KEY[d])).join(", "))
-                          : undefined;
-                        // items-start + mt-0.5 (2026-09-14): ป้ายยาวที่ตัดสองบรรทัดเคยทำให้ช่องติ๊กลอยอยู่กลางสองบรรทัด
-                        // ไม่ตรงกับบรรทัดแรก — ตอนนี้ช่องติ๊กตรงกับบรรทัดแรกของป้ายเสมอ
-                        return (
-                          <label
-                            key={p}
-                            title={pinnedTitle}
-                            className={`flex items-start gap-2 text-xs ${locked || readOnly || pinned ? "opacity-50" : "cursor-pointer"}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={form.permissions.includes(p)}
-                              disabled={locked || readOnly || pinned}
-                              onChange={() => togglePermission(p)}
-                              className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 rounded border-border accent-[#c9a84c]"
-                            />
-                            <span className="min-w-0 leading-snug text-foreground">
-                              {t(PERMISSION_LABEL_KEY[p])}
-                              {locked && <Lock size={10} className="inline ml-1 align-baseline text-muted-foreground" />}
-                              {!locked && pinned && <Lock size={10} className="inline ml-1 align-baseline text-muted-foreground" aria-label={pinnedTitle} />}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                {t("roles.permissionsLockHintPrefix")} <Lock size={9} className="inline" /> {t("roles.permissionsLockHint")}
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-1">{t("roles.permissionDependencyHint")}</p>
-            </div>
-
-            {error && <p className="text-xs text-[#e05252]">{error}</p>}
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button type="button" onClick={() => { setView("list"); setEditingKey(null); }} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                {readOnly ? t("common.close") : t("common.cancel")}
-              </button>
-              {!readOnly && (
-                <button type="submit" className="px-4 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">{t("common.save")}</button>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
+      <span className={`text-[12.5px] tabular-nums ${n > 0 ? "text-[#1a5fb4]" : "text-[#8a97ad]"}`}>
+        {t("roles.selectedInGroup").replace("{n}", String(n)).replace("{total}", String(perms.length))}
+      </span>
     );
-  }
+  };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <p className="text-xs text-muted-foreground">{t("roles.pageHint")}</p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={tour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:border-[#c3ccda] hover:shadow-sm hover:text-foreground transition-all"
-          >
-            <HelpCircle size={15} />
-          </button>
-          <button data-tour="roles-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors">
-            <Plus size={15} /> {t("roles.createNew")}
-          </button>
+    <div className="flex-1 overflow-y-auto">
+      <div ref={headerRef} className="sticky top-0 z-20 bg-white border-b border-border px-4 md:px-8 pt-3.5 pb-4 flex flex-col gap-2.5">
+        <button type="button" onClick={onDone} className="self-start inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40">
+          <ChevronLeft size={16} /> {t("roles.backToList")}
+        </button>
+        <div className="flex items-center gap-x-3.5 gap-y-2.5 flex-wrap min-h-10">
+          {readOnly && <ShieldCheck size={20} className="text-[#7d6420] flex-shrink-0" aria-hidden="true" />}
+          <h1 className="text-[22px] font-semibold leading-tight text-foreground min-w-0 break-words">{title}</h1>
+          {readOnly && (
+            <span className="h-[26px] px-2.5 rounded-full bg-[#eef1f6] text-[#3d5173] text-[12.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+              <Lock size={13} aria-hidden="true" /> {t("roles.viewOnlyBadge")}
+            </span>
+          )}
+          {!readOnly && role?.isSystem && (
+            <span className="h-[26px] px-2.5 rounded-full bg-[#eef1f6] text-[#3d5173] text-[12.5px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+              <Lock size={13} aria-hidden="true" /> {t("roles.nameLockedBadge")}
+            </span>
+          )}
+          {meta && <span className="text-[13px] text-muted-foreground tabular-nums">{meta}</span>}
+          <span className="flex-1" />
+          <div className="flex items-center gap-2.5">
+            {readOnly ? (
+              <button type="button" onClick={onDone} className={btn.secondary}>{t("common.close")}</button>
+            ) : (
+              <>
+                <button type="button" onClick={onDone} disabled={saving} className={btn.secondary}>{t("common.cancel")}</button>
+                {mode === "edit" && (
+                  <MoreMenu
+                    items={[{
+                      key: "delete",
+                      label: t("roles.deleteAction"),
+                      hint: deleteBlockedReason || t("roles.menu.deleteHint"),
+                      icon: Trash2,
+                      danger: true,
+                      disabled: !!deleteBlockedReason,
+                      onSelect: () => setConfirmDelete(true),
+                    }]}
+                  />
+                )}
+                <button type="submit" form={formId} disabled={saving} className={btn.primary}>
+                  <Save size={16} /> {t("common.save")}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      <div data-tour="roles-list" className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {roles.map((r) => (
-          <div key={r.key} className="bg-card border border-[#c3ccda] bg-white rounded-xl p-4">
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                {r.isSuperAdmin && <ShieldCheck size={14} className="text-[#c9a84c]" />}
-                <p className="text-sm font-semibold text-foreground">{r.name}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => startEdit(r)} title={r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} aria-label={`${r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} ${r.name}`} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>
-                <button
-                  onClick={() => setDeleteTarget(r)}
-                  disabled={r.isSystem || usersWithRole(r.key) > 0}
-                  title={r.isSystem ? t("roles.deleteSystemTitle") : usersWithRole(r.key) > 0 ? t("roles.deleteInUseTitle") : t("roles.deleteAction")}
-                  aria-label={`${r.isSystem ? t("roles.deleteSystemTitle") : usersWithRole(r.key) > 0 ? t("roles.deleteInUseTitle") : t("roles.deleteAction")} ${r.name}`}
-                  className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
+      <form id={formId} onSubmit={(e) => void handleSubmit(e)} noValidate className="px-4 md:px-8 pt-6 pb-10 flex flex-col gap-5">
+        {error && <p role="alert" className="rounded-lg bg-[#fcebeb] text-[#b93636] text-[13px] px-3.5 py-2.5">{error}</p>}
+
+        <section className={surface.card}>
+          <div className={surface.cardHead}><h2 className={surface.cardTitle}>{t("roles.sectionInfo")}</h2></div>
+          <div className="px-6 pt-5 pb-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-5">
+            {readOnly ? (
+              <>
+                <ReadonlyField label={t("roles.nameLabel").replace(/\s*\*$/, "")} value={form.name} />
+                <ReadonlyField label={t("roles.descriptionLabel")} value={form.description || t("common.dash")} />
+              </>
+            ) : (
+              <>
+                <Field label={t("roles.nameLabel").replace(/\s*\*$/, "")} htmlFor={nameId} required>
+                  <input id={nameId} disabled={nameLocked} autoFocus={mode === "create"} placeholder={t("roles.namePlaceholder")} className={`${field.input} w-full`} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                </Field>
+                <Field label={t("roles.descriptionLabel")} htmlFor={descriptionId}>
+                  <input id={descriptionId} placeholder={t("roles.descriptionPlaceholder")} className={`${field.input} w-full`} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+                </Field>
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className={surface.card}>
+          <div className="px-5 pt-4 pb-3.5 border-b border-[#eef1f6] flex flex-col gap-2.5">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className={`${surface.cardTitle} flex-1`}>{t("roles.permissionsTitle")}</h2>
+              <span className="h-[26px] px-2.5 rounded-full bg-[#e8f0fb] text-[#1a5fb4] text-[12.5px] font-semibold inline-flex items-center tabular-nums">
+                {allTicked ? t("roles.allPermissions") : t("roles.selectedTotal").replace("{n}", String(selectedCount)).replace("{total}", String(ALL_PERMISSIONS.length))}
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed mb-3">{r.description || t("common.dash")}</p>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span>{r.isSuperAdmin ? t("roles.allPermissions") : t("roles.permissionCount").replace("{n}", String(r.permissions.length))}</span>
-              <span>·</span>
-              <span>{t("roles.userCount").replace("{n}", String(usersWithRole(r.key)))}</span>
-              {r.isSystem && <span className="flex items-center gap-1 text-[#866d28]"><Lock size={10} /> {t("roles.systemBadge")}</span>}
+            {!readOnly && (
+              <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <span aria-hidden="true" className="w-4 h-4 rounded border-[1.5px] border-[#d6dce6] bg-[#eef1f6] text-[#8a97ad] flex items-center justify-center flex-shrink-0"><Lock size={10} /></span>
+                  {t("roles.legend.locked")}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span aria-hidden="true" className="w-4 h-4 rounded border-[1.5px] border-[#8a97ad] bg-[#8a97ad] text-white flex items-center justify-center flex-shrink-0"><Check size={11} strokeWidth={3} /></span>
+                  {t("roles.legend.pinned")}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span aria-hidden="true" className="w-4 text-center text-[#c3ccda]">—</span>
+                  {t("roles.legend.na")}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* จอกว้าง (xl) หัวตารางติดใต้แถบหัวเมื่อเลื่อน · จอแคบเลื่อนตารางซ้าย-ขวาได้แทน (sticky ใช้ไม่ได้ในกล่องที่เลื่อนแนวนอน) */}
+          <div className="overflow-x-auto xl:overflow-visible">
+            <div className="min-w-[960px] xl:min-w-0">
+              <div
+                style={{ top: headerHeight }}
+                className={`${MATRIX_GRID} grid-rows-[26px_30px] xl:sticky z-10 px-5 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173] leading-tight`}
+              >
+                <span className="col-start-1 row-span-2 flex items-center">{t("roles.col.menu")}</span>
+                <span className="col-start-2 col-span-4 row-start-1 mx-2 pb-[3px] flex items-end justify-center border-b border-[#d6dce6] font-medium text-muted-foreground">{t("roles.col.visibility")}</span>
+                {MATRIX_COLUMNS.map((c, i) => (
+                  <span
+                    key={c}
+                    style={{ gridColumnStart: i + 2 }}
+                    className={`flex items-center justify-center text-center ${i < 4 ? "row-start-2" : "row-start-1 row-span-2"}`}
+                  >
+                    {t(COLUMN_LABEL_KEY[c])}
+                  </span>
+                ))}
+                <span className="col-start-11 row-start-1 row-span-2 flex items-center pl-4">{t("roles.col.other")}</span>
+              </div>
+
+              {MATRIX.map((section) => (
+                <div key={section.labelKey} className="flex flex-col">
+                  <div className="h-11 px-5 border-t border-border flex items-center gap-2.5 bg-white">
+                    <h3 className="text-[15px] font-semibold text-foreground">{t(section.labelKey)}</h3>
+                    {sectionCount(section.permissions)}
+                  </div>
+                  {section.kind === "matrix" ? (
+                    section.rows.map((row) => (
+                      <div key={row.resource} className={`${MATRIX_GRID} items-center min-h-11 px-5 border-t border-[#eef1f6] hover:bg-[#f8f9fc]`}>
+                        <span className="py-2.5 pr-3 text-sm font-medium leading-snug text-foreground">{t(RESOURCE_LABEL_KEY[row.resource])}</span>
+                        {MATRIX_COLUMNS.map((c) => {
+                          const p = row.cells[c];
+                          return (
+                            <span key={c} className="h-11 flex items-center justify-center">
+                              {p ? <PermissionBox {...boxFor(p)} onToggle={() => togglePermission(p)} /> : <span aria-hidden="true" className="text-[#c3ccda]">—</span>}
+                            </span>
+                          );
+                        })}
+                        <span className="flex flex-wrap gap-x-[18px] gap-y-1.5 py-2.5 pl-4">
+                          {row.extras.map((p) => {
+                            const shortKey = EXTRA_SHORT_LABEL_KEY[actionOf(p)];
+                            return (
+                              <PermissionBox key={p} {...boxFor(p)} small onToggle={() => togglePermission(p)}>
+                                {shortKey ? t(shortKey) : t(PERMISSION_LABEL_KEY[p])}
+                              </PermissionBox>
+                            );
+                          })}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-1 px-5 pt-1.5 pb-3.5 border-t border-[#eef1f6]">
+                      {section.permissions.map((p) => (
+                        <span key={p} className="py-1.5">
+                          <PermissionBox {...boxFor(p)} onToggle={() => togglePermission(p)}>
+                            <span className="text-[13.5px] leading-normal">{t(PERMISSION_LABEL_KEY[p])}</span>
+                          </PermissionBox>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        </section>
+      </form>
 
       <ConfirmDialog
-        open={!!deleteTarget}
+        open={confirmDelete && !!role}
         title={t("roles.deleteConfirmTitle")}
-        message={t("roles.deleteConfirmMessage").replace("{name}", deleteTarget?.name ?? "")}
+        message={t("roles.deleteConfirmMessage").replace("{name}", role?.name ?? "")}
         danger
-        confirmLabel={t("common.delete")}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteTarget(null)}
+        confirmLabel={t("roles.deleteAction")}
+        busy={deleting}
+        summary={role ? (
+          <div className="flex items-center gap-3">
+            <span className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
+              <span className="font-medium text-foreground truncate">{role.name}</span>
+              {role.description && <span className="text-xs text-muted-foreground truncate">{role.description}</span>}
+            </span>
+            <span className="text-[13px] text-[#3d5173] whitespace-nowrap tabular-nums">
+              {t("roles.permissionCount").replace("{n}", String(role.permissions.length))} · {t("roles.userCount").replace("{n}", String(userCount))}
+            </span>
+          </div>
+        ) : undefined}
+        onConfirm={() => void runDelete()}
+        onCancel={() => setConfirmDelete(false)}
       />
-      <Toast message={message} />
     </div>
   );
 }

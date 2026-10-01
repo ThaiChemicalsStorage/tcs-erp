@@ -26,10 +26,10 @@ export interface UserFormState {
   confirm: string;
 }
 
-// ค่าเริ่มต้นของฟอร์ม — ผู้ใช้ใหม่ยังไม่เลือกบทบาท (ดีไซน์ใหม่ 2026-09-30: แสดง "— เลือกบทบาท —" แทนการเลือกให้ก่อน)
-// Initial form values — a new user starts with no role picked (placeholder instead of preselecting the first role)
-function toForm(u: User | null): UserFormState {
-  if (!u) return { fullName: "", employeeId: "", username: "", email: "", phone: "", department: "", teamId: "", position: "", roleKey: "", password: "", confirm: "" };
+// ค่าเริ่มต้นของฟอร์ม — ผู้ใช้ใหม่ได้บทบาทแรกที่มอบได้ไว้ก่อนเหมือนเดิม (บอร์ดแสดง "— เลือกบทบาท —" แต่คงพฤติกรรมเดิม)
+// Initial form values — a new user keeps today's behaviour: the first assignable role is preselected
+function toForm(u: User | null, defaultRoleKey: string): UserFormState {
+  if (!u) return { fullName: "", employeeId: "", username: "", email: "", phone: "", department: "", teamId: "", position: "", roleKey: defaultRoleKey, password: "", confirm: "" };
   return {
     fullName: u.fullName, employeeId: u.employeeId, username: u.username, email: u.email, phone: u.phone,
     department: u.department, teamId: u.teamId, position: u.position, roleKey: u.roleKey, password: "", confirm: "",
@@ -78,7 +78,7 @@ export function UserDrawer({
   onDelete: (u: User) => void;
 }) {
   const { t } = useI18n();
-  const [form, setForm] = useState<UserFormState>(() => toForm(user));
+  const [form, setForm] = useState<UserFormState>(() => toForm(user, assignableRoles[0]?.key ?? ""));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const formId = useId();

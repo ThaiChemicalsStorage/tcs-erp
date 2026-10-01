@@ -33,9 +33,11 @@ and Delivery Order, so a team's records stay private to that team by default.
 
 ## Pages
 
-- `src/pages/admin/DepartmentManagementPage.tsx` — combined department list + inline team
-  management, one file, following `RoleManagementPage.tsx`'s conventions (list, inline edit,
-  `Toast` feedback — no `ConfirmDialog` on archive since it's reversible).
+- `src/pages/admin/DepartmentManagementPage.tsx` — department table + right-side drawer (REDESIGN phase 7,
+  2026-10-01). The drawer edits the name and the teams (rename / add / archive / restore) and saves them with
+  **one Save button** — department first, then teams; steps that already succeeded are remembered so a retry
+  does not duplicate teams. Archiving/restoring the whole department from "เพิ่มเติม ▾" still applies at once
+  (no `ConfirmDialog` — it is reversible). Before 2026-10-01 this was expand-in-place cards that saved each edit inline.
 
 ## Database Tables
 

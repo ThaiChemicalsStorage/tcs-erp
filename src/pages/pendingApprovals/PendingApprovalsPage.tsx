@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Inbox, Search, X, Loader2, AlertTriangle } from "lucide-react";
+import { Inbox, Loader2, AlertTriangle, ChevronRight } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
+import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListEmpty } from "../../components/ui/ListPage";
+import { table } from "../../components/ui/styles";
 import { PENDING_KIND_LABEL_KEY } from "./kindLabels";
 import { ApiError } from "../../lib/apiClient";
 import { formatQuoteDateThai } from "../../lib/quotes";
@@ -21,6 +23,8 @@ import {
  *
  * เซิร์ฟเวอร์กรองด้วย**สิทธิ์อนุมัติ**ให้แล้ว (ดู `api/_lib/pendingApprovals.ts`) หน้านี้จึงแสดง
  * ทุกอย่างที่ได้รับมา ไม่กรองสิทธิ์ซ้ำ
+ *
+ * ดีไซน์ใหม่ 2026-09-30 (บอร์ด PendingApprovals): ปุ่มชนิดเอกสาร → แท็บพร้อมจำนวน · ชนิดเอกสารย้ายไปอยู่ใต้เลขที่
  */
 
 const FILTER_ALL = "all";
@@ -64,22 +68,27 @@ export function PendingApprovalsPage({ onOpen }: {
     .filter((it) => filterKind === FILTER_ALL || it.kind === filterKind)
     .filter((it) => !q || [it.docNumber, it.party, it.lineage, it.submittedBy, it.id].some((v) => (v ?? "").toLowerCase().includes(q)));
 
+  const tabs = [
+    { key: FILTER_ALL, label: t("quotation.filterAll"), count: items?.length ?? 0 },
+    ...kindsPresent.map(([kind, count]) => ({ key: kind as string, label: t(KIND_LABEL_KEY[kind]), count })),
+  ];
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight">{t("pendingApprovals.pageTitle")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("pendingApprovals.pageSubtitle")}</p>
-        </div>
-        {items !== null && items.length > 0 && (
-          <span className="px-3 py-1.5 rounded-full bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 text-xs font-semibold">
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+      <ListPageHeader
+        module={t("nav.group.main")}
+        title={t("pendingApprovals.pageTitle")}
+        description={t("pendingApprovals.pageSubtitle")}
+        actions={items !== null && items.length > 0 ? (
+          <span className="h-8 px-3 rounded-full bg-[#fdf3e0] text-[#8a5a00] text-[13px] font-semibold inline-flex items-center gap-2">
+            <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#d89614]" />
             {t("pendingApprovals.totalCount").replace("{n}", String(items.length))}
           </span>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {loadError && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-[#e05252]/10 border border-[#e05252]/20 text-sm text-[#a83232]">
+        <div role="alert" className="flex items-center gap-2 px-4 py-3 rounded-lg bg-[#fcebeb] border border-[#b93636]/20 text-sm text-[#b93636]">
           <AlertTriangle size={15} className="flex-shrink-0" />
           {loadError}
         </div>
@@ -90,106 +99,88 @@ export function PendingApprovalsPage({ onOpen }: {
           <Loader2 size={18} className="animate-spin" />
         </div>
       ) : (
-        <>
-          {items.length > 0 && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="relative h-9 w-72">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t("pendingApprovals.searchPlaceholder")}
-                  aria-label={t("pendingApprovals.searchPlaceholder")}
-                  className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} aria-label={t("common.close")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1 bg-muted rounded-xl p-1 min-h-9 w-fit flex-wrap">
-                <button onClick={() => setFilterKind(FILTER_ALL)}
-                  className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterKind === FILTER_ALL ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-                  {t("quotation.filterAll")}
-                </button>
-                {kindsPresent.map(([kind, count]) => (
-                  <button key={kind} onClick={() => setFilterKind(kind)}
-                    className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterKind === kind ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-                    {t(KIND_LABEL_KEY[kind])}
-                    <span className="ml-1.5 font-mono opacity-70">{count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            {items.length === 0 ? (
-              <EmptyState icon={Inbox} title={t("empty.pendingApprovals.title")} description={t("empty.pendingApprovals.sub")} compact />
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                  <Inbox size={20} className="text-muted-foreground" />
+        <ListCard>
+          {items.length === 0 ? (
+            <EmptyState icon={Inbox} title={t("empty.pendingApprovals.title")} description={t("empty.pendingApprovals.sub")} compact />
+          ) : (
+            <>
+              <ListTabs tabs={tabs} active={filterKind} onChange={setFilterKind} ariaLabel={t("pendingApprovals.col.kind")} />
+              <ListToolbar
+                search={searchQuery}
+                onSearch={setSearchQuery}
+                searchPlaceholder={t("pendingApprovals.searchPlaceholder")}
+                count={t("pendingApprovals.docCount").replace("{n}", String(filtered.length))}
+              />
+              {filtered.length === 0 ? (
+                <ListEmpty title={t("pendingApprovals.noFilterResults")} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[920px] table-fixed text-sm">
+                    <thead>
+                      <tr className={table.head}>
+                        <th className={`${table.th} w-[210px]`}>{t("pendingApprovals.col.docNumber")}</th>
+                        <th className={table.th}>{t("pendingApprovals.col.party")}</th>
+                        <th className={`${table.th} w-[210px]`}>{t("pendingApprovals.col.lineage")}</th>
+                        <th className={`${table.th} w-[170px]`}>{t("pendingApprovals.col.submittedBy")}</th>
+                        <th className={`${table.th} w-[150px]`}>{t("pendingApprovals.col.waiting")}</th>
+                        <th className={`${table.th} w-12`}><span className="sr-only">{t("pendingApprovals.openRow")}</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((it) => {
+                        const days = daysWaiting(it.waitingSince);
+                        const stale = days >= STALE_DAYS;
+                        return (
+                          <tr
+                            key={`${it.kind}:${it.id}`}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`${t("pendingApprovals.openRow")} ${it.docNumber || it.party}`}
+                            onClick={() => onOpen(it)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(it); } }}
+                            className={`${table.row} group cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
+                          >
+                            <td className={table.td}>
+                              <span className="block font-mono text-[13px] font-medium text-foreground truncate">{it.docNumber || t("common.dash")}</span>
+                              <span className="block text-xs text-muted-foreground truncate">{t(KIND_LABEL_KEY[it.kind])}</span>
+                            </td>
+                            <td className={table.td}>
+                              <span className="block font-medium text-foreground truncate" title={it.party}>{it.party || t("common.dash")}</span>
+                            </td>
+                            <td className={table.td}>
+                              <span className="block font-mono text-[12.5px] text-[#3d5173] truncate" title={it.lineage}>{it.lineage || t("common.dash")}</span>
+                            </td>
+                            <td className={table.td}>
+                              <span className={`block truncate ${it.submittedBy ? "text-foreground" : "text-[#8a97ad]"}`} title={it.submittedBy}>{it.submittedBy || t("common.dash")}</span>
+                            </td>
+                            <td className={table.td}>
+                              {/* วันที่ที่แสดงคือ "แก้ไขล่าสุด" ไม่ใช่เวลากดส่งจริง สำหรับ 9 ใน 10 ชนิด —
+                                  ระบบยังไม่เก็บเวลากดส่ง ดู api/_lib/pendingApprovals.ts */}
+                              <span className="flex flex-col items-start gap-0.5 leading-snug">
+                                <span className={`h-6 px-2.5 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap ${stale ? "bg-[#fdf3e0] text-[#8a5a00]" : "bg-[#eef1f6] text-[#3d5173]"}`}>
+                                  <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${stale ? "bg-[#d89614]" : "bg-[#8a97ad]"}`} />
+                                  {days === 0 ? t("pendingApprovals.waitingToday") : t("pendingApprovals.waitingDays").replace("{n}", String(days))}
+                                </span>
+                                <span className="text-xs text-muted-foreground">{it.waitingSince ? formatQuoteDateThai(it.waitingSince.slice(0, 10)) : t("common.dash")}</span>
+                              </span>
+                            </td>
+                            <td className={`${table.td} text-right`}>
+                              <ChevronRight size={18} aria-hidden="true" className="inline text-[#a3aec2] group-hover:text-foreground transition-colors" />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <p className="text-sm text-muted-foreground">{t("pendingApprovals.noFilterResults")}</p>
+              )}
+              <div className="flex items-center gap-2 px-5 py-3.5 border-t border-[#eef1f6] text-[13px] text-muted-foreground">
+                <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#d89614] flex-shrink-0" />
+                <span>{t("pendingApprovals.footerHint").replace("{n}", String(STALE_DAYS))}</span>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      {[
-                        t("pendingApprovals.col.kind"), t("pendingApprovals.col.docNumber"),
-                        t("pendingApprovals.col.party"), t("pendingApprovals.col.lineage"),
-                        t("pendingApprovals.col.submittedBy"), t("pendingApprovals.col.waiting"),
-                      ].map((h) => (
-                        <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((it) => {
-                      const days = daysWaiting(it.waitingSince);
-                      return (
-                        <tr
-                          key={`${it.kind}:${it.id}`}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`${t("pendingApprovals.openRow")} ${it.docNumber || it.party}`}
-                          onClick={() => onOpen(it)}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(it); } }}
-                          className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:bg-secondary/30"
-                        >
-                          <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{t(KIND_LABEL_KEY[it.kind])}</td>
-                          <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{it.docNumber || "—"}</td>
-                          <td className="px-4 py-3.5 text-sm text-foreground max-w-[240px] truncate" title={it.party}>{it.party || "—"}</td>
-                          <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{it.lineage || "—"}</td>
-                          <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-[160px] truncate" title={it.submittedBy}>{it.submittedBy || "—"}</td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            {/* วันที่ที่แสดงคือ "แก้ไขล่าสุด" ไม่ใช่เวลากดส่งจริง สำหรับ 9 ใน 10 ชนิด —
-                                ระบบยังไม่เก็บเวลากดส่ง ดู api/_lib/pendingApprovals.ts */}
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                              days >= STALE_DAYS
-                                ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
-                                : "bg-muted text-muted-foreground border border-border"
-                            }`}>
-                              {days === 0 ? t("pendingApprovals.waitingToday") : t("pendingApprovals.waitingDays").replace("{n}", String(days))}
-                            </span>
-                            <span className="ml-2 text-xs font-mono text-muted-foreground">
-                              {it.waitingSince ? formatQuoteDateThai(it.waitingSince.slice(0, 10)) : "—"}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
+            </>
+          )}
+        </ListCard>
       )}
     </div>
   );

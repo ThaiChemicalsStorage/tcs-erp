@@ -96,7 +96,7 @@ ERP/
 │   │   ├── purchaseOrder/          # PurchaseOrderPage + PurchaseOrderList + PurchaseOrderDocument + PurchaseOrderPrintDocument (⚠️ placeholder, awaiting the real form) + PurchaseRequestPickerDialog — added 2026-08-28, see MODULES/Purchasing.md
 │   │   ├── customers/              # CustomersPage (added 2026-07-14) — Customer master-data admin (list + create/edit modal)
 │   │   ├── templates/              # TemplateManagementPage + TemplateEditorView (added 2026-07-15) — Quotation Template admin (list + create/edit with sections/items CRUD)
-│   │   └── admin/                 # UserManagementPage, RoleManagementPage, DepartmentManagementPage (added 2026-08-14, Departments+Teams), AuditLogPage — the companyProfiles/ subfolder (added 2026-07-13) was deleted 2026-07-14, see MODULES/CompanyProfiles.md
+│   │   └── admin/                 # UserManagementPage, RoleManagementPage, DepartmentManagementPage (added 2026-08-14, Departments+Teams), AuditLogPage, UserDrawer + permissionMatrix.ts (REDESIGN phase 7, 2026-10-01: user side panel and the per-module permission matrix the role page renders) — the companyProfiles/ subfolder (added 2026-07-13) was deleted 2026-07-14, see MODULES/CompanyProfiles.md
 │   └── styles/                    # fonts.css, tailwind.css, theme.css (design tokens), index.css
 └── eslint.config.js / tsconfig.json / vite.config.ts / package.json
 ```

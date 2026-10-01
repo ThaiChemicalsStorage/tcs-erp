@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PERMISSION_GROUPS, type Permission } from "../src/lib/permissions";
+import { ALL_PERMISSIONS, PERMISSION_GROUPS, type Permission } from "../src/lib/permissions";
 import {
   buildPermissionMatrix, EXTRA_SHORT_LABEL_KEY, MATRIX_COLUMNS, RESOURCE_LABEL_KEY, actionOf, resourceOf,
 } from "../src/pages/admin/permissionMatrix";
@@ -24,6 +24,10 @@ describe("permission matrix", () => {
     const expected = PERMISSION_GROUPS.flatMap((g) => g.permissions);
     expect(new Set(shown).size).toBe(shown.length);
     expect([...shown].sort()).toEqual([...expected].sort());
+  });
+
+  it("covers every permission in the system (ALL_PERMISSIONS), so no permission is untickable", () => {
+    expect([...flatten()].sort()).toEqual([...ALL_PERMISSIONS].sort());
   });
 
   it("keeps one section per permission group, in the same order", () => {

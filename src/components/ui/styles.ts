@@ -35,7 +35,8 @@ export const surface = {
 
 export const table = {
   head: "h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]",
-  th: "px-3 first:pl-5 last:pr-5 text-left font-semibold whitespace-nowrap",
+  // relative: ข้อความ sr-only ในหัวคอลัมน์เป็น absolute — ถ้าไม่มีกรอบอ้างอิงจะหลุดกล่องเลื่อนของตาราง ดันทั้งหน้าให้เลื่อนข้างได้บนมือถือ
+  th: "relative px-3 first:pl-5 last:pr-5 text-left font-semibold whitespace-nowrap",
   row: "h-[60px] border-b border-[#eef1f6] bg-white hover:bg-[#f8f9fc] transition-colors",
   td: "px-3 first:pl-5 last:pr-5 align-middle",
   code: "font-mono text-[13px] font-medium text-foreground",

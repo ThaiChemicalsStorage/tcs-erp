@@ -17,7 +17,7 @@ An append-only record of sensitive actions across the app, viewable (not editabl
 
 ## Pages
 
-- `src/pages/admin/AuditLogPage.tsx` — the entire module, a single read-only table + search.
+- `src/pages/admin/AuditLogPage.tsx` — the entire module, a single read-only table + search, paginated 20 rows per page since REDESIGN phase 7 (2026-10-01); searching resets to page 1.
 
 ## Components
 

@@ -4862,6 +4862,7 @@ const translations = {
     "departments.menu.archive": "เก็บถาวรแผนกนี้",
     "departments.menu.archiveHint": "ซ่อนจากตัวเลือกแผนก กู้คืนได้ภายหลัง",
     "departments.menu.restore": "กู้คืนแผนกนี้",
+    "departments.empty": "ยังไม่มีแผนก",
     "auditLog.subtitle": "เรียงจากล่าสุด · ไม่สามารถแก้ไขหรือลบได้",
     "auditLog.searchHint": "ค้นหาได้ทั้งชื่อผู้ใช้ บทบาท โมดูล การกระทำ และรายละเอียด",
 
@@ -9737,6 +9738,7 @@ const translations = {
     "departments.menu.archive": "Archive this department",
     "departments.menu.archiveHint": "Hidden from department pickers; can be restored later",
     "departments.menu.restore": "Restore this department",
+    "departments.empty": "No departments yet",
     "auditLog.subtitle": "Newest first · entries cannot be edited or deleted",
     "auditLog.searchHint": "Searches user name, role, module, action and details",
 
