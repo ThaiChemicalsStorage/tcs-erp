@@ -151,7 +151,7 @@ export function ProjectPage({
         currentUserId={currentUserId}
         onOpen={openProject}
         headerAction={canCreate ? (
-          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+          <button type="button" data-tour="project-create" onClick={() => setPickerOpen(true)} className={btn.primary}>
             <Plus size={16} /> {t("project.createBtn")}
           </button>
         ) : undefined}

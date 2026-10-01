@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -32,9 +31,14 @@ export function MaterialRequisitionList({
 }) {
   const { t } = useI18n();
   const statusLabel = useApprovalStatusLabel();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="mr-filters"]', popover: { title: t("tour.mr.filters.title"), description: t("tour.mr.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="mr-table"]', popover: { title: t("tour.mr.table.title"), description: t("tour.mr.table.desc"), side: "top" } },
+  // ปุ่มสร้าง/เปิดใบเปล่าอยู่ใน MaterialRequisitionPage (headerAction) และขึ้นเฉพาะผู้มีสิทธิ์ — ไม่มีปุ่ม ขั้นนั้นถูกข้ามเอง
+  // หน้านี้ใช้ทั้งเมนูโครงการและผลิต คำแนะนำจึงต้องไม่พูดถึงโครงการอย่างเดียว
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="mr-create"]', manual: "ch16", popover: { title: t("tour.mr.create.title"), description: t("tour.mr.create.desc"), side: "bottom" } },
+    { element: '[data-tour="mr-blank"]', manual: "ch16-1", popover: { title: t("tour.mr.blank.title"), description: t("tour.mr.blank.desc"), side: "bottom" } },
+    { element: '[data-tour="mr-tabs"]', manual: "ch16-5", popover: { title: t("tour.mr.tabs.title"), description: t("tour.mr.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="mr-filters"]', manual: "ch2-6", popover: { title: t("tour.mr.filters.title"), description: t("tour.mr.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="mr-table"]', manual: "ch16-4", popover: { title: t("tour.mr.table.title"), description: t("tour.mr.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("materialRequisition", currentUserId, tourSteps);
   const [tab, setTab] = useState<TabKey>("all");
@@ -78,7 +82,9 @@ export function MaterialRequisitionList({
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("materialRequisition.list.tabsAria")} />
+        <div data-tour="mr-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("materialRequisition.list.tabsAria")} />
+        </div>
         <div data-tour="mr-filters">
           <ListToolbar
             search={searchQuery}

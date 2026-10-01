@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Plus, ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import type { ServiceReportListItem, ServiceReportStatus } from "../../lib/serviceReports";
 import { formatQuoteDateThai } from "../../lib/quotes";
@@ -32,10 +31,11 @@ export function ServiceList({
   onCreate: () => void;
 }) {
   const { t } = useI18n();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="service-summary"]', popover: { title: t("tour.service.summary.title"), description: t("tour.service.summary.desc"), side: "bottom" } },
-    { element: '[data-tour="service-filters"]', popover: { title: t("tour.service.filters.title"), description: t("tour.service.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="service-table"]', popover: { title: t("tour.service.table.title"), description: t("tour.service.table.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="service-create"]', manual: "ch12-1", popover: { title: t("tour.service.create.title"), description: t("tour.service.create.desc"), side: "bottom" } },
+    { element: '[data-tour="service-summary"]', manual: "ch12-3", popover: { title: t("tour.service.summary.title"), description: t("tour.service.summary.desc"), side: "bottom" } },
+    { element: '[data-tour="service-filters"]', manual: "ch2-6", popover: { title: t("tour.service.filters.title"), description: t("tour.service.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="service-table"]', manual: "ch12-2", popover: { title: t("tour.service.table.title"), description: t("tour.service.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("service", currentUserId, tourSteps);
 
@@ -69,7 +69,7 @@ export function ServiceList({
         // the walkthrough as much as anyone, and this must never be conditional on tour state.
         help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canCreate && (
-          <button type="button" onClick={onCreate} className={btn.primary}>
+          <button type="button" data-tour="service-create" onClick={onCreate} className={btn.primary}>
             <Plus size={16} /> {t("service.newReport")}
           </button>
         )}

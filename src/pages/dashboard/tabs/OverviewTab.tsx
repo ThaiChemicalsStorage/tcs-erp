@@ -168,7 +168,7 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
       </p>
 
       {topKpis.length > 0 && (
-        <KpiGrid>
+        <KpiGrid dataTour="dashboard-overview-kpis">
           {topKpis.map(({ key, node }) => (node === "loading" ? <KpiSkeleton key={key} /> : <div key={key} className="contents">{node}</div>))}
         </KpiGrid>
       )}
@@ -267,7 +267,7 @@ function PendingCard({ rows, onOpen }: { rows: { kind: keyof typeof PENDING_KIND
   if (rows.length === 0) return null;
   return (
     <ChartCard
-      flush title={t("dashboard.overview.pending.title")} sub={t("dashboard.overview.pending.sub")} className="h-full" bodyClassName="flex-1 flex flex-col"
+      flush dataTour="dashboard-pending" title={t("dashboard.overview.pending.title")} sub={t("dashboard.overview.pending.sub")} className="h-full" bodyClassName="flex-1 flex flex-col"
       actions={<CountPill count={total} />}
     >
       {total === 0 ? (

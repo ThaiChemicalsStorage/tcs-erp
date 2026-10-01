@@ -3,8 +3,7 @@ import {
   User as UserIcon, Building2, ShieldCheck, Bell, CheckCircle2, Lock, Info, AlertTriangle, Loader2, type LucideIcon,
   Image as ImageIcon, Stamp,
 } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../components/GuidedTour";
 import { TourReplayButton } from "../components/TourReplayButton";
 import { ListPageHeader } from "../components/ui/ListPage";
 import { SectionCard } from "../components/ui/SectionCard";
@@ -133,9 +132,12 @@ export function SettingsPage({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="settings-tabs"]', popover: { title: t("tour.settings.tabs.title"), description: t("tour.settings.tabs.desc"), side: "right" } },
-    { element: '[data-tour="settings-profile"]', popover: { title: t("tour.settings.profile.title"), description: t("tour.settings.profile.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="settings-tabs"]', manual: "ch28", popover: { title: t("tour.settings.tabs.title"), description: t("tour.settings.tabs.desc"), side: "right" } },
+    { element: '[data-tour="settings-personal"]', manual: "ch28-1", popover: { title: t("tour.settings.personal.title"), description: t("tour.settings.personal.desc"), side: "top" } },
+    { element: '[data-tour="settings-profile"]', manual: "ch28-1", popover: { title: t("tour.settings.profile.title"), description: t("tour.settings.profile.desc"), side: "top" } },
+    { element: '[data-tour="settings-language"]', manual: "ch2-5", popover: { title: t("tour.settings.language.title"), description: t("tour.settings.language.desc"), side: "top" } },
+    { element: '[data-tour="settings-save"]', manual: "ch28-1", popover: { title: t("tour.settings.save.title"), description: t("tour.settings.save.desc"), side: "top" } },
   ];
   const tour = useModuleTour("settings", currentUser.id, tourSteps);
 
@@ -315,6 +317,7 @@ export function SettingsPage({
           <div className="flex-1 min-w-0 lg:max-w-[820px] flex flex-col gap-5">
             {tab === "profile" && (
               <>
+                <div data-tour="settings-personal">
                 <SectionCard title={t("settings.profile.sectionPersonal")} bodyClassName="px-6 pt-5 pb-6 flex flex-col gap-5">
                   <div className="flex items-center gap-3.5">
                     <div className="w-14 h-14 rounded-full bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center text-lg font-semibold flex-shrink-0 overflow-hidden">
@@ -355,6 +358,7 @@ export function SettingsPage({
                     </div>
                   </div>
                 </SectionCard>
+                </div>
 
                 <div data-tour="settings-profile">
                   <SectionCard title={t("settings.profile.sectionMedia")} bodyClassName="px-6 pt-5 pb-6 grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] gap-6 md:gap-8">
@@ -380,7 +384,9 @@ export function SettingsPage({
                   </SectionCard>
                 </div>
 
-                <LanguageSection />
+                <div data-tour="settings-language">
+                  <LanguageSection />
+                </div>
               </>
             )}
 
@@ -521,7 +527,7 @@ export function SettingsPage({
           <div className="lg:ml-[244px] lg:max-w-[820px] flex flex-wrap items-center justify-end gap-x-3.5 gap-y-2">
             {saveBar.error && <p role="alert" className="text-[13px] text-[#b93636] mr-auto">{saveBar.error}</p>}
             <SavedNote show={saveBar.saved} />
-            <button type="button" onClick={() => { void saveBar.onSave(); }} disabled={saveBar.saving} className={btn.primary}>
+            <button type="button" data-tour="settings-save" onClick={() => { void saveBar.onSave(); }} disabled={saveBar.saving} className={btn.primary}>
               {saveBar.saving && <Loader2 size={16} className="animate-spin" />}
               {t("common.saveChanges")}
             </button>

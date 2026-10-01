@@ -1,7 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { Plus, Target, X, ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, FilterSelect, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { btn, table } from "../../components/ui/styles";
@@ -61,11 +60,11 @@ export function QuoteList({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="quotation-create"]', popover: { title: t("tour.quotation.create.title"), description: t("tour.quotation.create.desc"), side: "bottom" } },
-    { element: '[data-tour="quotation-summary"]', popover: { title: t("tour.quotation.tabs.title"), description: t("tour.quotation.tabs.desc"), side: "bottom" } },
-    { element: '[data-tour="quotation-filters"]', popover: { title: t("tour.quotation.filters.title"), description: t("tour.quotation.toolbar.desc"), side: "bottom" } },
-    { element: '[data-tour="quotation-table"]', popover: { title: t("tour.quotation.table.title"), description: t("tour.quotation.table.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="quotation-create"]', manual: "ch6-1", popover: { title: t("tour.quotation.create.title"), description: t("tour.quotation.create.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-summary"]', manual: "ch6-6", popover: { title: t("tour.quotation.tabs.title"), description: t("tour.quotation.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-filters"]', manual: "ch6-6", popover: { title: t("tour.quotation.filters.title"), description: t("tour.quotation.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-table"]', manual: "ch6-6", popover: { title: t("tour.quotation.table.title"), description: t("tour.quotation.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("quotation", currentUserId, tourSteps);
   // ลิงก์จากแดชบอร์ดที่ขอ "รออนุมัติ"/"อนุมัติแล้ว" เปิดแท็บนั้นเลย สถานะอื่นไปอยู่ที่ตัวกรองสถานะ

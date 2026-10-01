@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2, GitBranch, LayoutTemplate, PackageCheck, Send, CheckCircle2, Info } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields, type MaterialIssueBatch,
@@ -32,7 +31,7 @@ import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { KitBreakdown } from "../../components/KitBreakdown";
@@ -202,11 +201,15 @@ export function MaterialRequisitionDocument({
     return () => { cancelled = true; };
   }, []);
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="mrdoc-actions"]', popover: { title: t("tour.mrdoc.actions.title"), description: t("tour.mrdoc.actions.desc"), side: "bottom" } },
-    { element: '[data-tour="mrdoc-addline"]', popover: { title: t("tour.mrdoc.addline.title"), description: t("tour.mrdoc.addline.desc"), side: "bottom" } },
-    { element: '[data-tour="mrdoc-lines"]', popover: { title: t("tour.mrdoc.lines.title"), description: t("tour.mrdoc.lines.desc"), side: "top" } },
-    { element: '[data-tour="mrdoc-issueCard"]', popover: { title: t("tour.mrdoc.issueCard.title"), description: t("tour.mrdoc.issueCard.desc"), side: "top" } },
+  // หน้านี้ใช้ทั้งใบเบิกของโครงการ/ผลิต และใบจ่ายของสโตร์ (StoreDocumentsPage) — ปุ่มเพิ่มรายการขึ้นเฉพาะตอนแก้ได้
+  // และการ์ดจ่ายของขึ้นเฉพาะใบของสโตร์ที่ผู้ใช้มีสิทธิ์จ่าย ขั้นที่ไม่มีบนหน้าถูกข้ามเอง
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="mrdoc-actions"]', manual: "ch16-5", popover: { title: t("tour.mrdoc.actions.title"), description: t("tour.mrdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="mrdoc-steps"]', manual: "ch16-5", popover: { title: t("tour.mrdoc.steps.title"), description: t("tour.mrdoc.steps.desc"), side: "bottom" } },
+    { element: '[data-tour="mrdoc-charge"]', manual: "ch16-4", popover: { title: t("tour.mrdoc.charge.title"), description: t("tour.mrdoc.charge.desc"), side: "top" } },
+    { element: '[data-tour="mrdoc-addbuttons"]', manual: "ch16-2", popover: { title: t("tour.mrdoc.addline.title"), description: t("tour.mrdoc.addline.desc"), side: "bottom" } },
+    { element: '[data-tour="mrdoc-lines"]', manual: "ch16-4", popover: { title: t("tour.mrdoc.lines.title"), description: t("tour.mrdoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="mrdoc-issueCard"]', manual: "ch24-1", popover: { title: t("tour.mrdoc.issueCard.title"), description: t("tour.mrdoc.issueCard.desc"), side: "top" } },
   ];
 
   // ── บันทึกอัตโนมัติ (2026-08-25) — hook ต้องอยู่ก่อน early return ทุกอันด้านล่าง ────────────────
@@ -784,7 +787,9 @@ export function MaterialRequisitionDocument({
           />
         )}
 
-        <DocumentStepper steps={steps.steps} current={steps.current} ariaLabel={t("materialRequisitionDoc.stepsAria")} />
+        <div data-tour="mrdoc-steps">
+          <DocumentStepper steps={steps.steps} current={steps.current} ariaLabel={t("materialRequisitionDoc.stepsAria")} />
+        </div>
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
         <DocumentColumns
@@ -849,11 +854,13 @@ export function MaterialRequisitionDocument({
               </SectionCard>
 
               {/* ตัดของให้แผนก/ทีม/ประเภทงาน — ตั้งได้ตอนร่าง สโตร์แก้ได้อีกครั้งตอนจ่ายของ (การ์ดจ่ายของด้านล่าง) */}
-              <SectionCard title={t("materialRequisitionDoc.chargeTitle")}>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
-                  {renderChargeSelectors(!editable, "mr")}
-                </div>
-              </SectionCard>
+              <div data-tour="mrdoc-charge">
+                <SectionCard title={t("materialRequisitionDoc.chargeTitle")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
+                    {renderChargeSelectors(!editable, "mr")}
+                  </div>
+                </SectionCard>
+              </div>
 
               {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
                   ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
@@ -914,14 +921,14 @@ export function MaterialRequisitionDocument({
               </span>
             }
             actions={editable ? (
-              <>
+              <span data-tour="mrdoc-addbuttons" className="flex items-center gap-2">
                 <button type="button" onClick={openTemplatePicker} className={btn.secondarySm}>
                   <LayoutTemplate size={14} /> {t("materialRequisitionDoc.useTemplate")}
                 </button>
                 <button type="button" onClick={() => openProductPicker()} className={btn.secondarySm}>
                   <Plus size={14} /> {t("materialRequisitionDoc.addLine")}
                 </button>
-              </>
+              </span>
             ) : undefined}
             bodyClassName=""
           >

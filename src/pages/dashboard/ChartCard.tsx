@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 // Standard dashboard card: divided header (title + optional tag + scope line, actions on the right), then the body.
 // `fill`: การ์ดที่ถูกยืดให้สูงเท่าการ์ดข้าง ๆ ในแถว 2 ต่อ 1 — เนื้อหา (กราฟ) ขยายลงเต็มการ์ด
 // `flush`: เนื้อหาไม่มีระยะขอบ (ตาราง/รายการเต็มความกว้าง)
-export function ChartCard({ title, sub, tag, children, className = "", actions, fill = false, flush = false, bodyClassName }: {
+export function ChartCard({ title, sub, tag, children, className = "", actions, fill = false, flush = false, bodyClassName, dataTour }: {
   title: string;
   sub?: ReactNode;
   tag?: string;
@@ -15,10 +15,12 @@ export function ChartCard({ title, sub, tag, children, className = "", actions, 
   fill?: boolean;
   flush?: boolean;
   bodyClassName?: string;
+  /** จุดยึดของคำแนะนำประจำหน้า (data-tour) */
+  dataTour?: string;
 }) {
   const body = bodyClassName ?? (flush ? "" : "px-6 py-5");
   return (
-    <section className={`bg-card border border-border rounded-xl min-w-0 flex flex-col ${flush ? "overflow-hidden" : ""} ${className}`}>
+    <section data-tour={dataTour} className={`bg-card border border-border rounded-xl min-w-0 flex flex-col ${flush ? "overflow-hidden" : ""} ${className}`}>
       <div className="px-6 py-4 border-b border-[#eef1f6] flex items-start gap-4 flex-wrap">
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <div className="flex items-center gap-2 flex-wrap">

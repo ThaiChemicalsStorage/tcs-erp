@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -29,9 +28,12 @@ export function JobOrderList({
 }) {
   const { t } = useI18n();
   const statusLabel = useApprovalStatusLabel();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="jo-filters"]', popover: { title: t("tour.jo.filters.title"), description: t("tour.jo.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="jo-table"]', popover: { title: t("tour.jo.table.title"), description: t("tour.jo.table.desc"), side: "top" } },
+  // ปุ่ม "สร้างใบสั่งงาน" อยู่ใน JobOrderPage (headerAction) และขึ้นเฉพาะผู้มีสิทธิ์ — ไม่มีปุ่ม ขั้นนี้ถูกข้ามเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="jo-create"]', manual: "ch16", popover: { title: t("tour.jo.create.title"), description: t("tour.jo.create.desc"), side: "bottom" } },
+    { element: '[data-tour="jo-tabs"]', manual: "ch16-5", popover: { title: t("tour.jo.tabs.title"), description: t("tour.jo.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="jo-filters"]', manual: "ch2-6", popover: { title: t("tour.jo.filters.title"), description: t("tour.jo.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="jo-table"]', manual: "ch2-6", popover: { title: t("tour.jo.table.title"), description: t("tour.jo.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("jobOrder", currentUserId, tourSteps);
   const [tab, setTab] = useState<TabKey>("all");
@@ -70,7 +72,9 @@ export function JobOrderList({
       />
 
       <ListCard>
-        <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("jobOrder.list.tabsAria")} />
+        <div data-tour="jo-tabs">
+          <ListTabs tabs={tabs} active={tab} onChange={resetPage(setTab)} ariaLabel={t("jobOrder.list.tabsAria")} />
+        </div>
         <div data-tour="jo-filters">
           <ListToolbar
             search={searchQuery}

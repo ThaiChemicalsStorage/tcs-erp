@@ -220,6 +220,7 @@ export function PurchaseRequestPage({
           <button
             type="button"
             onClick={() => (needsSourcePicker ? setPickerOpen(true) : setCodePickerOpen(true))}
+            data-tour="pr-create"
             className={btn.primary}
           >
             <Plus size={16} /> {t("purchaseRequest.createBtn")}

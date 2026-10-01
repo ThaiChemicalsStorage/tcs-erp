@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Info } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar, FilterSelect } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -29,11 +28,12 @@ export function ScopeOfWorkList({
 }) {
   const { t } = useI18n();
   // ตัวกรอง "ยังไม่มี PO" กลายเป็นแท็บสุดท้าย — ขั้นทัวร์ของมันจึงชี้ไปที่แท็บนั้นตรง ๆ
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="sow-summary"]', popover: { title: t("tour.sow.tabs.title"), description: t("tour.sow.tabs.desc"), side: "bottom" } },
-    { element: '[data-tour="sow-summary"] [role="tab"]:last-child', popover: { title: t("tour.sow.nopo.title"), description: t("tour.sow.nopoTab.desc"), side: "bottom" } },
-    { element: '[data-tour="sow-filters"]', popover: { title: t("tour.sow.filters.title"), description: t("tour.sow.toolbar.desc"), side: "bottom" } },
-    { element: '[data-tour="sow-table"]', popover: { title: t("tour.sow.table.title"), description: t("tour.sow.table.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="sow-create-hint"]', manual: "ch7-1", popover: { title: t("tour.sow.create.title"), description: t("tour.sow.create.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-summary"]', manual: "ch7-3", popover: { title: t("tour.sow.tabs.title"), description: t("tour.sow.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-summary"] [role="tab"]:last-child', manual: "ch7-4", popover: { title: t("tour.sow.nopo.title"), description: t("tour.sow.nopo.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-filters"]', manual: "ch7-3", popover: { title: t("tour.sow.filters.title"), description: t("tour.sow.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-table"]', manual: "ch7-2", popover: { title: t("tour.sow.table.title"), description: t("tour.sow.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("scopeOfWork", currentUserId, tourSteps);
 
@@ -106,7 +106,7 @@ export function ScopeOfWorkList({
         title="Scope of Work"
         help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={
-          <p className="max-w-[460px] text-[13px] leading-relaxed text-muted-foreground flex items-start gap-2 sm:text-right">
+          <p data-tour="sow-create-hint" className="max-w-[460px] text-[13px] leading-relaxed text-muted-foreground flex items-start gap-2 sm:text-right">
             <Info size={16} className="text-[#1a5fb4] flex-shrink-0 mt-0.5" />
             <span>{t("scopeOfWork.empty.description")}</span>
           </p>

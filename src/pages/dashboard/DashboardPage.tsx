@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, Download, FileSpreadsheet, FileText, LayoutDashboard } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import type { QuotationListFilter } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardFilters, type DashboardStats } from "../../lib/dashboard";
 import type { DepartmentDashboardResponse, DepartmentDashboardView } from "../../lib/departmentDashboard";
@@ -11,7 +10,7 @@ import {
   type DashboardTabKey,
 } from "../../lib/dashboardTabs";
 import { useI18n } from "../../lib/i18n";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { hasTourCompleted } from "../../lib/tour";
 import { ListPageHeader } from "../../components/ui/ListPage";
 import { MoreMenu } from "../../components/ui/MoreMenu";
@@ -149,14 +148,17 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
       : seen.map((d) => t(DEPARTMENT_META[d].labelKey)).join(" · ");
   };
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="dashboard-tabs"]', popover: { title: t("tour.dashboard.tabs.title"), description: t("tour.dashboard.tabs.desc"), side: "bottom" } },
-    { element: '[data-tour="dashboard-filters"]', popover: { title: t("tour.dashboard.filters.title"), description: t("tour.dashboard.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="dashboard-overview-cards"]', popover: { title: t("tour.dashboard.overviewCards.title"), description: t("tour.dashboard.overviewCards.desc"), side: "top" } },
-    { element: '[data-tour="dashboard-export"]', popover: { title: t("tour.dashboard.export.title"), description: t("tour.dashboard.export.desc"), side: "bottom" } },
-    { element: '[data-tour="dashboard-kpis"]', popover: { title: t("tour.dashboard.kpis.title"), description: t("tour.dashboard.kpis.desc"), side: "bottom" } },
-    { element: '[data-tour="dashboard-status"]', popover: { title: t("tour.dashboard.status.title"), description: t("tour.dashboard.status.desc"), side: "top" } },
-    { element: '[data-tour="dashboard-indepth"]', popover: { title: t("tour.dashboard.indepth.title"), description: t("tour.dashboard.indepth.desc"), side: "top" } },
+  // คำแนะนำประจำหน้า (ดีไซน์ 2026-09-30) — ขั้นที่ไม่มีบนแท็บที่เปิดอยู่ถูกข้ามเอง (availableSteps)
+  // แท็บภาพรวม: ตัวเลขหลัก · เอกสารรออนุมัติ · สรุปแต่ละแผนก / แท็บขาย: สวิตช์ VAT (คงไว้ตามเจ้าของสั่ง) · ส่งออก · ตัวเลขหลัก
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="dashboard-filters"]', manual: "ch4-3", popover: { title: t("tour.dashboard.filters.title"), description: t("tour.dashboard.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-tabs"]', manual: "ch4", popover: { title: t("tour.dashboard.tabs.title"), description: t("tour.dashboard.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-overview-kpis"]', manual: "ch4-4", popover: { title: t("tour.dashboard.overviewKpis.title"), description: t("tour.dashboard.overviewKpis.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-pending"]', manual: "ch5-1", popover: { title: t("tour.dashboard.pending.title"), description: t("tour.dashboard.pending.desc"), side: "left" } },
+    { element: '[data-tour="dashboard-overview-cards"]', manual: "ch4-4", popover: { title: t("tour.dashboard.overviewCards.title"), description: t("tour.dashboard.overviewCards.desc"), side: "top" } },
+    { element: '[data-tour="dashboard-vat"]', manual: "ch4-1", popover: { title: t("tour.dashboard.vat.title"), description: t("tour.dashboard.vat.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-export"]', manual: "ch4-2", popover: { title: t("tour.dashboard.export.title"), description: t("tour.dashboard.export.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-kpis"]', manual: "ch4-1", popover: { title: t("tour.dashboard.kpis.title"), description: t("tour.dashboard.kpis.desc"), side: "bottom" } },
   ];
   const tour = useModuleTour("dashboard", currentUserId, tourSteps, { autoStart: hasTourCompleted(currentUserId) });
 

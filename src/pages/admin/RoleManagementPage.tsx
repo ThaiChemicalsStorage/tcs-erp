@@ -1,7 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronLeft, ChevronRight, Lock, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import type { Role } from "../../lib/roles";
 import { isPermissionLockedToSuperAdmin, createRole, updateRole, deleteRole } from "../../lib/roles";
 import { ALL_PERMISSIONS, PERMISSION_LABEL_KEY, permissionsRequiring, withPermissionDependencies, type Permission } from "../../lib/permissions";
@@ -55,9 +54,11 @@ export function RoleManagementPage({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="roles-create"]', popover: { title: t("tour.roles.create.title"), description: t("tour.roles.create.desc"), side: "bottom" } },
-    { element: '[data-tour="roles-list"]', popover: { title: t("tour.roles.list.title"), description: t("tour.roles.list.descTable"), side: "top" } },
+  // ทัวร์นี้ครอบเฉพาะหน้ารายการ — หน้าแก้บทบาท (RoleEditor) ยังไม่มีปุ่มเปิดคำแนะนำของตัวเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="roles-create"]', manual: "ch27-2", popover: { title: t("tour.roles.create.title"), description: t("tour.roles.create.desc"), side: "bottom" } },
+    { element: '[data-tour="roles-list"]', manual: "ch27-2", popover: { title: t("tour.roles.list.title"), description: t("tour.roles.list.desc"), side: "top" } },
+    { element: '[data-tour="roles-system"]', manual: "ch27-2", popover: { title: t("tour.roles.system.title"), description: t("tour.roles.system.desc"), side: "left" } },
   ];
   const tour = useModuleTour("roles", currentUserId, tourSteps);
 
@@ -155,7 +156,7 @@ export function RoleManagementPage({
                     </td>
                     <td className={table.td}>
                       {r.isSystem ? (
-                        <span className="h-[26px] px-2.5 rounded-md bg-[#eef1f6] text-[#26395a] text-[12.5px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap">
+                        <span data-tour="roles-system" className="h-[26px] px-2.5 rounded-md bg-[#eef1f6] text-[#26395a] text-[12.5px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap">
                           <Lock size={13} aria-hidden="true" /> {t("roles.systemBadge")}
                         </span>
                       ) : (

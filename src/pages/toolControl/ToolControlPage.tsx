@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Printer, Loader2 } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { fetchDepartments, type Department } from "../../lib/departments";
 import { fetchTeams, type Team } from "../../lib/teams";
@@ -10,7 +9,7 @@ import { ToolReportPrintDocument } from "./ToolReportPrintDocument";
 import { ToolIssueCard } from "./ToolIssueCard";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { printDate } from "../../lib/printFormat";
@@ -84,9 +83,13 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
   const holdings = current?.holdings ?? [];
   const rows = current?.rows ?? [];
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="tool-filters"]', popover: { title: t("tour.toolControl.filters.title"), description: t("tour.toolControl.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="tool-tabs"]', popover: { title: t("tour.toolControl.tabs.title"), description: t("tour.toolControl.tabs.desc"), side: "bottom" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="tool-tabs"]', manual: "ch25-1", popover: { title: t("tour.toolControl.tabs.title"), description: t("tour.toolControl.tabs.desc"), side: "bottom" } },
+    // แท็บ "จ่าย / รับคืน" มีเฉพาะผู้มีสิทธิ์จ่าย (และเป็นแท็บแรกเสมอเมื่อมี) — ไม่มีสิทธิ์ก็ไม่ใส่ขั้นนี้
+    ...(canIssue ? [{ element: '[data-tour="tool-tabs"] [role="tab"]:first-child', manual: "ch25-2", popover: { title: t("tour.toolControl.issue.title"), description: t("tour.toolControl.issue.desc"), side: "bottom" } } satisfies TourStep] : []),
+    { element: '[data-tour="tool-filters"]', manual: "ch25-1", popover: { title: t("tour.toolControl.filters.title"), description: t("tour.toolControl.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="tool-holdings"]', manual: "ch25-1", popover: { title: t("tour.toolControl.holdings.title"), description: t("tour.toolControl.holdings.desc"), side: "top" } },
+    { element: '[data-tour="tool-print"]', manual: "ch25-1", popover: { title: t("tour.toolControl.print.title"), description: t("tour.toolControl.print.desc"), side: "bottom" } },
   ];
   const tour = useModuleTour("toolControl", currentUserId, tourSteps);
 
@@ -145,6 +148,7 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
           actions={(
             <button
               type="button"
+              data-tour="tool-print"
               onClick={() => setShowPrint(true)}
               disabled={loading || (tab === "holdings" ? holdings.length === 0 : rows.length === 0)}
               className={btn.secondary}
@@ -211,7 +215,7 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
                 holdings.length === 0 ? (
                   <ListEmpty title={t("toolControl.empty.holdings")} hint={t("toolControl.empty.holdingsHint")} />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div data-tour="tool-holdings" className="overflow-x-auto">
                     <table className="w-full min-w-[1000px] table-fixed">
                       <thead>
                         <tr className={table.head}>

@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -50,8 +49,15 @@ export function PurchaseRequestList({
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="pr-filters"]', popover: { title: t("tour.pr.filters.title"), description: t("tour.pr.filters.desc"), side: "bottom" } },
+  // หน้านี้ถูกเมาต์ 5 ที่ (ใบขอซื้อโครงการ / ผลิต / สโตร์เปิดเอง / กล่องรอสโตร์ / กล่องจัดซื้อ) ด้วยทัวร์เดียวกัน
+  // ขั้นที่ไม่มีในหน้านั้น (ปุ่มสร้าง แท็บ คอลัมน์ขั้นหลังอนุมัติ) ถูกข้ามเองตอนเริ่มทัวร์
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="pr-create"]', manual: "ch18-3", popover: { title: t("tour.pr.create.title"), description: t("tour.pr.create.desc"), side: "bottom" } },
+    tabsMode === "stage"
+      ? { element: '[data-tour="pr-tabs"]', manual: "ch18-3", popover: { title: t("tour.pr.stageTabs.title"), description: t("tour.pr.stageTabs.desc"), side: "bottom" } }
+      : { element: '[data-tour="pr-tabs"]', manual: "ch16-5", popover: { title: t("tour.pr.tabs.title"), description: t("tour.pr.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="pr-search"]', manual: "ch2-6", popover: { title: t("tour.pr.search.title"), description: t("tour.pr.search.desc"), side: "bottom" } },
+    { element: '[data-tour="pr-stage-col"]', manual: "ch18-1", popover: { title: t("tour.pr.stage.title"), description: t("tour.pr.stage.desc"), side: "bottom" } },
     { element: '[data-tour="pr-table"]', popover: { title: t("tour.pr.table.title"), description: t("tour.pr.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("purchaseRequest", currentUserId, tourSteps);
@@ -133,20 +139,26 @@ export function PurchaseRequestList({
 
       <ListCard>
         <div data-tour="pr-filters">
-          {tabsMode === "status" && (
-            <ListTabs tabs={statusTabs} active={statusTab} onChange={resetPage(setStatusTab)} ariaLabel={t("purchaseRequest.tabsAria")} />
+          {tabsMode !== "none" && (
+            <div data-tour="pr-tabs">
+              {tabsMode === "status" && (
+                <ListTabs tabs={statusTabs} active={statusTab} onChange={resetPage(setStatusTab)} ariaLabel={t("purchaseRequest.tabsAria")} />
+              )}
+              {tabsMode === "stage" && (
+                <ListTabs tabs={stageTabs} active={stageTab} onChange={resetPage(setStageTab)} ariaLabel={t("purchaseRequest.stageTabsAria")} />
+              )}
+            </div>
           )}
-          {tabsMode === "stage" && (
-            <ListTabs tabs={stageTabs} active={stageTab} onChange={resetPage(setStageTab)} ariaLabel={t("purchaseRequest.stageTabsAria")} />
-          )}
-          <ListToolbar
-            search={searchQuery}
-            onSearch={resetPage(setSearchQuery)}
-            searchPlaceholder={t("purchaseRequest.searchPlaceholder")}
-            count={<span role="status" aria-live="polite">{t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}</span>}
-          >
-            <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
-          </ListToolbar>
+          <div data-tour="pr-search">
+            <ListToolbar
+              search={searchQuery}
+              onSearch={resetPage(setSearchQuery)}
+              searchPlaceholder={t("purchaseRequest.searchPlaceholder")}
+              count={<span role="status" aria-live="polite">{t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}</span>}
+            >
+              <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+            </ListToolbar>
+          </div>
         </div>
 
         <div data-tour="pr-table" className="min-w-0">
@@ -163,7 +175,7 @@ export function PurchaseRequestList({
                     <th className={table.th}>{t("purchaseRequest.col.jobCode")}</th>
                     {showDepartment && <th className={table.th}>{t("purchaseRequest.col.department")}</th>}
                     <th className={table.th}>{t("purchaseRequest.col.status")}</th>
-                    {!showDepartment && <th className={table.th}>{t("purchaseRequest.col.afterApproval")}</th>}
+                    {!showDepartment && <th data-tour="pr-stage-col" className={table.th}>{t("purchaseRequest.col.afterApproval")}</th>}
                     <th className={table.th}>{t("purchaseRequest.col.updatedAt")}</th>
                     <th className={`${table.th} w-10`} aria-hidden="true" />
                   </tr>

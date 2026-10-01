@@ -64,8 +64,8 @@ export function TabIntro({ scope, children }: { scope: BlockScope; children?: Re
 
 // ── โครงหน้า ────────────────────────────────────────────────────────────────
 
-export function KpiGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">{children}</div>;
+export function KpiGrid({ children, dataTour }: { children: ReactNode; dataTour?: string }) {
+  return <div data-tour={dataTour} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">{children}</div>;
 }
 
 /** แถวหลัก + การ์ดข้างกว้าง 360px — จอเล็กกว่า lg ซ้อนเป็นคอลัมน์เดียว · ไม่มี `side` = กินเต็มแถว */

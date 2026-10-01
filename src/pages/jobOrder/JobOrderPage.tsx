@@ -146,7 +146,7 @@ export function JobOrderPage({
         currentUserId={currentUserId}
         onOpen={openJobOrder}
         headerAction={canCreate ? (
-          <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+          <button type="button" data-tour="jo-create" onClick={() => setPickerOpen(true)} className={btn.primary}>
             <Plus size={16} /> {t("jobOrder.createBtn")}
           </button>
         ) : undefined}

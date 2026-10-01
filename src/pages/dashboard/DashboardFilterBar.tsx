@@ -123,7 +123,7 @@ export function DashboardSalesFilters({ filters, onChange, availableSalespeople,
           </LabeledSelect>
         </>
       )}
-      <div className="flex items-center gap-2.5 h-10">
+      <div data-tour="dashboard-vat" className="flex items-center gap-2.5 h-10">
         <Toggle
           checked={filters.vatMode === "post"}
           onChange={(checked) => onChange({ ...filters, vatMode: checked ? "post" : "pre" })}

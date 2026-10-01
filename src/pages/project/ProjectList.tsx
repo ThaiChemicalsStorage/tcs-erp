@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -30,10 +29,12 @@ export function ProjectList({
 }) {
   const { t } = useI18n();
   const statusLabel = useProjectStatusLabel();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="project-summary"]', popover: { title: t("tour.project.summary.title"), description: t("tour.project.summary.desc"), side: "bottom" } },
-    { element: '[data-tour="project-filters"]', popover: { title: t("tour.project.filters.title"), description: t("tour.project.filters.desc"), side: "bottom" } },
-    { element: '[data-tour="project-table"]', popover: { title: t("tour.project.table.title"), description: t("tour.project.table.desc"), side: "top" } },
+  // ปุ่ม "สร้างโครงการ" อยู่ใน ProjectPage (headerAction) และขึ้นเฉพาะผู้มีสิทธิ์ — ไม่มีปุ่ม ขั้นนี้ถูกข้ามเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="project-create"]', manual: "ch15-1", popover: { title: t("tour.project.create.title"), description: t("tour.project.create.desc"), side: "bottom" } },
+    { element: '[data-tour="project-summary"]', manual: "ch15-2", popover: { title: t("tour.project.summary.title"), description: t("tour.project.summary.desc"), side: "bottom" } },
+    { element: '[data-tour="project-filters"]', manual: "ch2-6", popover: { title: t("tour.project.filters.title"), description: t("tour.project.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="project-table"]', manual: "ch15-2", popover: { title: t("tour.project.table.title"), description: t("tour.project.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("project", currentUserId, tourSteps);
   const [tab, setTab] = useState<TabKey>("all");

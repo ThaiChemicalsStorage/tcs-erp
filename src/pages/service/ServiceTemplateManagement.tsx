@@ -6,8 +6,7 @@ import {
   fetchServiceTemplates, fetchServiceTemplate, createServiceTemplate, updateServiceTemplate,
   duplicateServiceTemplate, setServiceTemplateArchived,
 } from "../../lib/serviceTemplates";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../hooks/useToast";
@@ -57,9 +56,10 @@ export function ServiceTemplateManagement({
 }) {
   const { t } = useI18n();
   const toast = useToast();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="servicetpl-list"]', popover: { title: t("tour.serviceTpl.list.title"), description: t("tour.serviceTpl.list.desc"), side: "top" } },
-    { element: '[data-tour="servicetpl-archived"]', popover: { title: t("tour.serviceTpl.archived.title"), description: t("tour.serviceTpl.archived.desc"), side: "bottom" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="servicetpl-create"]', manual: "ch12-5", popover: { title: t("tour.serviceTpl.create.title"), description: t("tour.serviceTpl.create.desc"), side: "bottom" } },
+    { element: '[data-tour="servicetpl-archived"]', manual: "ch12-5", popover: { title: t("tour.serviceTpl.archived.title"), description: t("tour.serviceTpl.archived.desc"), side: "bottom" } },
+    { element: '[data-tour="servicetpl-list"]', manual: "ch12-5", popover: { title: t("tour.serviceTpl.list.title"), description: t("tour.serviceTpl.list.desc"), side: "top" } },
   ];
   const tour = useModuleTour("serviceTemplates", currentUserId, tourSteps);
   const [templates, setTemplates] = useState<ServiceTemplateSummary[]>([]);
@@ -106,7 +106,7 @@ export function ServiceTemplateManagement({
         description={t("serviceTemplates.listDescription")}
         help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={canCreate && (
-          <button type="button" onClick={() => setEditingId("new")} className={btn.primary}>
+          <button type="button" data-tour="servicetpl-create" onClick={() => setEditingId("new")} className={btn.primary}>
             <Plus size={16} /> {t("serviceTemplates.addNew")}
           </button>
         )}

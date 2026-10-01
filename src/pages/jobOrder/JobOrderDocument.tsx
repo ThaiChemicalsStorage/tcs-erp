@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
 import { Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, GitBranch, Send, CheckCircle2, Undo2 } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
   fetchJobOrder, updateJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
@@ -20,7 +19,7 @@ import {
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
@@ -123,10 +122,12 @@ export function JobOrderDocument({
     return () => { cancelled = true; };
   }, [jobOrderId, reloadKey, t, dirty]);
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="jodoc-actions"]', popover: { title: t("tour.jodoc.actions.title"), description: t("tour.jodoc.actions.desc"), side: "bottom" } },
-    { element: '[data-tour="jodoc-lines"]', popover: { title: t("tour.jodoc.lines.title"), description: t("tour.jodoc.lines.desc"), side: "top" } },
-    { element: '[data-tour="jodoc-checklist"]', popover: { title: t("tour.jodoc.checklist.title"), description: t("tour.jodoc.checklist.desc"), side: "top" } },
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="jodoc-actions"]', manual: "ch16-5", popover: { title: t("tour.jodoc.actions.title"), description: t("tour.jodoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="jodoc-steps"]', manual: "ch16-5", popover: { title: t("tour.jodoc.steps.title"), description: t("tour.jodoc.steps.desc"), side: "bottom" } },
+    { element: '[data-tour="jodoc-info"]', manual: "ch16-3", popover: { title: t("tour.jodoc.info.title"), description: t("tour.jodoc.info.desc"), side: "top" } },
+    { element: '[data-tour="jodoc-lines"]', manual: "ch16-3", popover: { title: t("tour.jodoc.lines.title"), description: t("tour.jodoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="jodoc-checklist"]', manual: "ch16-3", popover: { title: t("tour.jodoc.checklist.title"), description: t("tour.jodoc.checklist.desc"), side: "top" } },
   ];
 
   // ── บันทึกอัตโนมัติ (2026-08-25) — hook ต้องอยู่ก่อน early return ทุกอันด้านล่าง ────────────────
@@ -405,38 +406,42 @@ export function JobOrderDocument({
           />
         )}
 
-        <DocumentStepper steps={approvalSteps.steps} current={approvalSteps.current} ariaLabel={t("materialRequisitionDoc.stepsAria")} />
+        <div data-tour="jodoc-steps">
+          <DocumentStepper steps={approvalSteps.steps} current={approvalSteps.current} ariaLabel={t("materialRequisitionDoc.stepsAria")} />
+        </div>
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
         <DocumentColumns
           main={
             <>
-              <SectionCard title={t("jobOrderDoc.infoTitle")}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 items-start">
-                  {textField("jo-customerName", t("jobOrderDoc.field.customerName"), draft.customerName,
-                    (v) => setDraft({ ...draft, customerName: v }), { className: "sm:col-span-2" })}
-                  {textField("jo-fromSite", t("jobOrderDoc.field.fromSite"), draft.fromSite, (v) => setDraft({ ...draft, fromSite: v }))}
-                  {editable ? (
-                    <Field label={t("jobOrderDoc.field.toSite")} htmlFor="jo-toSite">
-                      {/* ดึงจากตาราง departments จริง — เก็บเป็น "ชื่อ" ไม่ใช่ id เพราะใบพิมพ์ต้องแสดงชื่อ
-                          และมี option สำรองสำหรับค่าเก่าที่พิมพ์ไว้ก่อนมี dropdown แบบเดียวกับหน้าจัดการผู้ใช้ จะได้ไม่หายเงียบ */}
-                      <SelectBox id="jo-toSite" value={draft.toSite} onChange={(e) => setDraft({ ...draft, toSite: e.target.value })}>
-                        <option value="">{t("jobOrderDoc.field.toSitePlaceholder")}</option>
-                        {departments.filter((d) => d.isActive).map((d) => (
-                          <option key={d.id} value={d.name}>{d.name}</option>
-                        ))}
-                        {draft.toSite && !departments.some((d) => d.name === draft.toSite) && (
-                          <option value={draft.toSite}>{draft.toSite} ({t("users.field.department.legacy")})</option>
-                        )}
-                      </SelectBox>
-                    </Field>
-                  ) : (
-                    <ReadonlyField label={t("jobOrderDoc.field.toSite")} value={draft.toSite} />
-                  )}
-                  {textField("jo-startDate", t("jobOrderDoc.field.startDate"), draft.startDate, (v) => setDraft({ ...draft, startDate: v }), { type: "date" })}
-                  {textField("jo-finishDate", t("jobOrderDoc.field.finishDate"), draft.finishDate, (v) => setDraft({ ...draft, finishDate: v }), { type: "date" })}
-                </div>
-              </SectionCard>
+              <div data-tour="jodoc-info">
+                <SectionCard title={t("jobOrderDoc.infoTitle")}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 items-start">
+                    {textField("jo-customerName", t("jobOrderDoc.field.customerName"), draft.customerName,
+                      (v) => setDraft({ ...draft, customerName: v }), { className: "sm:col-span-2" })}
+                    {textField("jo-fromSite", t("jobOrderDoc.field.fromSite"), draft.fromSite, (v) => setDraft({ ...draft, fromSite: v }))}
+                    {editable ? (
+                      <Field label={t("jobOrderDoc.field.toSite")} htmlFor="jo-toSite">
+                        {/* ดึงจากตาราง departments จริง — เก็บเป็น "ชื่อ" ไม่ใช่ id เพราะใบพิมพ์ต้องแสดงชื่อ
+                            และมี option สำรองสำหรับค่าเก่าที่พิมพ์ไว้ก่อนมี dropdown แบบเดียวกับหน้าจัดการผู้ใช้ จะได้ไม่หายเงียบ */}
+                        <SelectBox id="jo-toSite" value={draft.toSite} onChange={(e) => setDraft({ ...draft, toSite: e.target.value })}>
+                          <option value="">{t("jobOrderDoc.field.toSitePlaceholder")}</option>
+                          {departments.filter((d) => d.isActive).map((d) => (
+                            <option key={d.id} value={d.name}>{d.name}</option>
+                          ))}
+                          {draft.toSite && !departments.some((d) => d.name === draft.toSite) && (
+                            <option value={draft.toSite}>{draft.toSite} ({t("users.field.department.legacy")})</option>
+                          )}
+                        </SelectBox>
+                      </Field>
+                    ) : (
+                      <ReadonlyField label={t("jobOrderDoc.field.toSite")} value={draft.toSite} />
+                    )}
+                    {textField("jo-startDate", t("jobOrderDoc.field.startDate"), draft.startDate, (v) => setDraft({ ...draft, startDate: v }), { type: "date" })}
+                    {textField("jo-finishDate", t("jobOrderDoc.field.finishDate"), draft.finishDate, (v) => setDraft({ ...draft, finishDate: v }), { type: "date" })}
+                  </div>
+                </SectionCard>
+              </div>
 
               {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
                   ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}

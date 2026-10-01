@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2, Lock, PackageMinus, ShoppingBag, Send, Info, ArrowRight, type LucideIcon } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type PurchaseRequest, type PurchaseRequestLine, type PurchaseRequestUpdateFields,
@@ -21,7 +20,7 @@ import { createProductRequest } from "../../lib/productRequest";
 import { RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { PurchaseRequestPrintDocument } from "./PurchaseRequestPrintDocument";
@@ -201,10 +200,13 @@ export function PurchaseRequestDocument({
     return () => { cancelled = true; };
   }, []);
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="prdoc-actions"]', popover: { title: t("tour.prdoc.actions.title"), description: t("tour.prdoc.actions.desc"), side: "bottom" } },
+  // ปุ่มเพิ่มรายการ (เฉพาะใบที่แก้ได้) และการ์ดสโตร์ (เฉพาะใบอนุมัติแล้ว + สิทธิ์จ่ายของ) ไม่มีเสมอ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="prdoc-actions"]', manual: "ch16-5", popover: { title: t("tour.prdoc.actions.title"), description: t("tour.prdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="prdoc-steps"]', manual: "ch18-1", popover: { title: t("tour.prdoc.steps.title"), description: t("tour.prdoc.steps.desc"), side: "bottom" } },
     { element: '[data-tour="prdoc-addline"]', popover: { title: t("tour.prdoc.addline.title"), description: t("tour.prdoc.addline.desc"), side: "bottom" } },
-    { element: '[data-tour="prdoc-lines"]', popover: { title: t("tour.prdoc.lines.title"), description: t("tour.prdoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="prdoc-lines"]', manual: "ch18-5", popover: { title: t("tour.prdoc.lines.title"), description: t("tour.prdoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="prdoc-store"]', manual: "ch18-1", popover: { title: t("tour.prdoc.store.title"), description: t("tour.prdoc.store.desc"), side: "top" } },
   ];
 
   // ── บันทึกอัตโนมัติ (2026-08-25) — hook ต้องอยู่ก่อน early return ทุกอันด้านล่าง ────────────────
@@ -728,11 +730,13 @@ export function PurchaseRequestDocument({
 
         {/* ขั้น Final ของใบขอซื้อไม่ได้จบที่ "อนุมัติแล้ว" ตั้งแต่ 2026-09-09 — ยังต้องผ่านสโตร์แล้วถึงจัดซื้อ
             แถบนี้แสดงครบ 6 ขั้น คำนวณจากฟิลด์ที่มีอยู่ (ดู purchaseRequestSteps.ts) ไม่เพิ่มสถานะใหม่ให้ทั้งระบบ */}
-        <DocumentStepper
-          steps={progress.steps.map((k) => ({ label: stepLabel[k] }))}
-          current={progress.current}
-          ariaLabel={t("purchaseRequest.shared.stepsAria")}
-        />
+        <div data-tour="prdoc-steps">
+          <DocumentStepper
+            steps={progress.steps.map((k) => ({ label: stepLabel[k] }))}
+            current={progress.current}
+            ariaLabel={t("purchaseRequest.shared.stepsAria")}
+          />
+        </div>
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
         {/* จัดซื้อกำลังแก้ใบที่หัวหน้าเซ็นไปแล้ว — ต้องเห็นชัดว่าไม่ใช่การแก้ใบร่างธรรมดา */}
@@ -905,7 +909,7 @@ export function PurchaseRequestDocument({
             ก็จะมีให้เลือกว่าจะเอาทั้งหมดหรือเอาแค่ที่ติ๊ก" · การติ๊กเป็น state ของหน้าจอล้วน ไม่ได้บันทึก ·
             "ซื้อไปแล้วหรือยัง" มาจาก purchasedLines ที่เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง ลบใบสั่งซื้อทิ้งแล้วบรรทัดกลับมาซื้อได้เอง */}
         <section className={surface.card}>
-          <div data-tour="prdoc-addline" className={`${surface.cardHead} flex-wrap`}>
+          <div className={`${surface.cardHead} flex-wrap`}>
             <h2 className={surface.cardTitle}>{t("purchaseRequestDoc.linesTitle")}</h2>
             <span className="flex-1 text-[13px] text-muted-foreground">
               {buyMode
@@ -918,7 +922,7 @@ export function PurchaseRequestDocument({
               </span>
             )}
             {editable && (
-              <div className="flex items-center gap-2">
+              <div data-tour="prdoc-addline" className="flex items-center gap-2">
                 <button type="button" onClick={() => openProductPicker()} className={btn.secondarySm}>
                   <Plus size={15} /> {t("purchaseRequestDoc.addFromCatalog")}
                 </button>
@@ -1124,7 +1128,7 @@ export function PurchaseRequestDocument({
         */}
         {storeCardVisible && (
           <section className={surface.card}>
-            <div className="px-6 py-4 border-b border-[#eef1f6] flex items-start gap-4 flex-wrap">
+            <div data-tour="prdoc-store" className="px-6 py-4 border-b border-[#eef1f6] flex items-start gap-4 flex-wrap">
               <div className="flex-1 min-w-[16rem] flex flex-col gap-1">
                 <h2 className={surface.cardTitle}>{t("purchaseRequestDoc.store.title")}</h2>
                 <p className="text-[13px] text-muted-foreground leading-relaxed">{t("purchaseRequestDoc.store.help")}</p>

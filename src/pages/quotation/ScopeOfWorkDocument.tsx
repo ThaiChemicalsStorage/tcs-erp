@@ -25,9 +25,8 @@ import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
 import { Combobox, type ComboboxOption } from "../../components/Combobox";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import type { DriveStep } from "driver.js";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { DocumentRecipientsPicker } from "./DocumentRecipientsPicker";
@@ -493,11 +492,12 @@ export function ScopeOfWorkDocument({
     return () => { cancelled = true; };
   }, [scopeOfWorkId, reloadKey, dirty]);
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions2.desc"), side: "bottom" } },
-    { element: '[data-tour="sowdoc-completion"]', popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "left" } },
-    { element: '[data-tour="sowdoc-header"]', popover: { title: t("tour.sowdoc.header.title"), description: t("tour.sowdoc.header.desc"), side: "top" } },
-    { element: '[data-tour="sowdoc-checklist"]', popover: { title: t("tour.sowdoc.checklist.title"), description: t("tour.sowdoc.checklist.desc"), side: "top" } },
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="sowdoc-submit"]', manual: "ch7-3", popover: { title: t("tour.sowdoc.submit.title"), description: t("tour.sowdoc.submit.desc"), side: "bottom" } },
+    { element: '[data-tour="sowdoc-po"]', manual: "ch7-4", popover: { title: t("tour.sowdoc.po.title"), description: t("tour.sowdoc.po.desc"), side: "top" } },
+    { element: '[data-tour="sowdoc-completion"]', manual: "ch7-3", popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "left" } },
+    { element: '[data-tour="sowdoc-checklist"]', manual: "ch7-2", popover: { title: t("tour.sowdoc.checklist.title"), description: t("tour.sowdoc.checklist.desc"), side: "top" } },
+    { element: '[data-tour="sowdoc-recipients"]', manual: "ch8-1", popover: { title: t("tour.sowdoc.recipients.title"), description: t("tour.sowdoc.recipients.desc"), side: "top" } },
   ];
   const docTour = useModuleTour("scopeOfWorkDoc", currentUserId, docTourSteps, { autoStart: !!scope });
 
@@ -969,7 +969,7 @@ export function ScopeOfWorkDocument({
                 </>
               )}
               {canEdit && isDraft && (
-                <button type="button" onClick={handleSubmitClick} disabled={!printValidation.valid} title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined} className={btn.primary}>
+                <button type="button" data-tour="sowdoc-submit" onClick={handleSubmitClick} disabled={!printValidation.valid} title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined} className={btn.primary}>
                   <Send size={16} /> {t("scopeOfWorkDoc.submit")}
                 </button>
               )}
@@ -1063,7 +1063,8 @@ export function ScopeOfWorkDocument({
                       {/* ลูกค้าออก PO มาได้หลายใบต่อหนึ่งงาน — เก็บเลขแรกไว้ที่ `customerPoNumber` (ตัวที่
                           แท็บ "ยังไม่มี PO" กับคำสั่งทวง PO ใช้) ที่เหลือลง `additionalPoNumbers` ·
                           แก้ได้แม้เอกสารอนุมัติแล้ว (PO มักมาทีหลัง) จึงผูกกับ canEdit ไม่ใช่ editable */}
-                      <Field className="md:col-span-3" label={t("scopeOfWorkDoc.field.customerPoNumber")} htmlFor="sow-customerPoNumber" help={canEdit && !isDraft ? t("scopeOfWorkDoc.field.poHelp") : undefined}>
+                      <div data-tour="sowdoc-po" className="md:col-span-3 min-w-0">
+                      <Field label={t("scopeOfWorkDoc.field.customerPoNumber")} htmlFor="sow-customerPoNumber" help={canEdit && !isDraft ? t("scopeOfWorkDoc.field.poHelp") : undefined}>
                         <PoNumberListEditor
                           idPrefix="sow-customerPoNumber"
                           disabled={!canEdit}
@@ -1074,6 +1075,7 @@ export function ScopeOfWorkDocument({
                           placeholder={t("scopeOfWorkDoc.poPlaceholder")}
                         />
                       </Field>
+                      </div>
                     </div>
                   </SectionCard>
                 </div>
@@ -1277,6 +1279,8 @@ export function ScopeOfWorkDocument({
             </SectionCard>
           </div>
 
+          {/* ไม่มีกลุ่ม "เอกสารส่งถึง" = การ์ดไม่แสดง — ไม่ใส่จุดยึด คำแนะนำจะข้ามขั้นนี้ */}
+          <div data-tour={documentsToSendGroup ? "sowdoc-recipients" : undefined}>
           <DocumentRecipientsPicker
             documentsToSendGroup={documentsToSendGroup}
             users={users}
@@ -1311,6 +1315,7 @@ export function ScopeOfWorkDocument({
               </>
             ) : undefined}
           />
+          </div>
         </div>
 
         <ScopeOfWorkPrintDocument

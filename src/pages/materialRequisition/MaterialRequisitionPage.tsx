@@ -188,10 +188,10 @@ export function MaterialRequisitionPage({
         moduleLabel={ownerDepartment === "production" ? t("nav.group.production") : t("nav.group.project")}
         headerAction={canCreate ? (
           <>
-            <button type="button" onClick={() => void handleCreateBlank()} disabled={creatingBlank} className={btn.secondary}>
+            <button type="button" data-tour="mr-blank" onClick={() => void handleCreateBlank()} disabled={creatingBlank} className={btn.secondary}>
               {creatingBlank ? <Loader2 size={16} className="animate-spin" /> : <FilePlus2 size={16} />} {t("materialRequisition.createBlankBtn")}
             </button>
-            <button type="button" onClick={() => setPickerOpen(true)} className={btn.primary}>
+            <button type="button" data-tour="mr-create" onClick={() => setPickerOpen(true)} className={btn.primary}>
               <Plus size={16} /> {t("materialRequisition.createBtn")}
             </button>
           </>

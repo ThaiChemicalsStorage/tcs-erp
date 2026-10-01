@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { ChevronRight, Info, KeyRound, Plus, ShieldCheck, Users as UsersIcon, X } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import type { User, UserStatus } from "../../lib/users";
 import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials } from "../../lib/users";
 import type { Department } from "../../lib/departments";
@@ -121,10 +120,11 @@ export function UserManagementPage({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="users-create"]', popover: { title: t("tour.users.create.title"), description: t("tour.users.create.desc"), side: "bottom" } },
-    { element: '[data-tour="users-search"]', popover: { title: t("tour.users.search.title"), description: t("tour.users.search.desc"), side: "bottom" } },
-    { element: '[data-tour="users-table"]', popover: { title: t("tour.users.table.title"), description: t("tour.users.table.descDrawer"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="users-create"]', manual: "ch27-1", popover: { title: t("tour.users.create.title"), description: t("tour.users.create.desc"), side: "bottom" } },
+    { element: '[data-tour="users-tabs"]', manual: "ch27-1", popover: { title: t("tour.users.tabs.title"), description: t("tour.users.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="users-search"]', manual: "ch27-1", popover: { title: t("tour.users.search.title"), description: t("tour.users.search.desc"), side: "bottom" } },
+    { element: '[data-tour="users-table"]', manual: "ch27-1", popover: { title: t("tour.users.table.title"), description: t("tour.users.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("users", currentUser.id, tourSteps);
 
@@ -325,7 +325,9 @@ export function UserManagementPage({
           </div>
         ) : (
           <>
-            <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); setPage(1); }} ariaLabel={t("users.col.status")} />
+            <div data-tour="users-tabs">
+              <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); setPage(1); }} ariaLabel={t("users.col.status")} />
+            </div>
             <div data-tour="users-search">
               <ListToolbar
                 search={search}

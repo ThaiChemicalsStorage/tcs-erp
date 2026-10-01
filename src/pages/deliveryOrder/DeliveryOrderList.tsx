@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Info } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -28,10 +27,11 @@ export function DeliveryOrderList({
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="do-summary"]', popover: { title: t("tour.do.tabs.title"), description: t("tour.do.tabs.desc"), side: "bottom" } },
-    { element: '[data-tour="do-filters"]', popover: { title: t("tour.do.filters.title"), description: t("tour.do.toolbar.desc"), side: "bottom" } },
-    { element: '[data-tour="do-table"]', popover: { title: t("tour.do.table.title"), description: t("tour.do.table.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="do-create-hint"]', manual: "ch9-1", popover: { title: t("tour.do.create.title"), description: t("tour.do.create.desc"), side: "bottom" } },
+    { element: '[data-tour="do-summary"]', manual: "ch9-4", popover: { title: t("tour.do.tabs.title"), description: t("tour.do.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="do-filters"]', manual: "ch2-6", popover: { title: t("tour.do.filters.title"), description: t("tour.do.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="do-table"]', manual: "ch9-1", popover: { title: t("tour.do.table.title"), description: t("tour.do.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("deliveryOrder", currentUserId, tourSteps);
 
@@ -74,7 +74,7 @@ export function DeliveryOrderList({
         title={t("deliveryOrder.pageTitle")}
         help={<TourReplayButton variant="title" onClick={tour.start} />}
         actions={
-          <p className="max-w-[460px] text-[13px] leading-relaxed text-muted-foreground flex items-start gap-2 sm:text-right">
+          <p data-tour="do-create-hint" className="max-w-[460px] text-[13px] leading-relaxed text-muted-foreground flex items-start gap-2 sm:text-right">
             <Info size={16} className="text-[#1a5fb4] flex-shrink-0 mt-0.5" />
             <span>{t("deliveryOrder.empty.description")}</span>
           </p>

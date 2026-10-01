@@ -13,9 +13,8 @@ import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCar
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
@@ -82,7 +81,7 @@ function InstallmentCard({ installment, index, total, items, onChange, disabled,
           <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
         </div>
         {onPrint && (
-          <button type="button" onClick={onPrint} className={`${btn.secondarySm} flex-shrink-0`}>
+          <button type="button" data-tour={index === 0 ? "dodoc-print-installment" : undefined} onClick={onPrint} className={`${btn.secondarySm} flex-shrink-0`}>
             <Printer size={15} /> {t("deliveryOrderDoc.printInstallment")}
           </button>
         )}
@@ -230,9 +229,12 @@ export function DeliveryOrderDocument({
     return () => { cancelled = true; };
   }, [deliveryOrderId, reloadKey, dirty]);
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions2.desc"), side: "bottom" } },
-    { element: '[data-tour="dodoc-installments"]', popover: { title: t("tour.dodoc.installments.title"), description: t("tour.dodoc.installments.desc"), side: "top" } },
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="dodoc-submit"]', manual: "ch9-4", popover: { title: t("tour.dodoc.submit.title"), description: t("tour.dodoc.submit.desc"), side: "bottom" } },
+    { element: '[data-tour="dodoc-more"]', manual: "ch9-4", popover: { title: t("tour.dodoc.more.title"), description: t("tour.dodoc.more.desc"), side: "bottom" } },
+    { element: '[data-tour="dodoc-routing"]', manual: "ch9-3", popover: { title: t("tour.dodoc.routing.title"), description: t("tour.dodoc.routing.desc"), side: "top" } },
+    { element: '[data-tour="dodoc-installments"]', manual: "ch9-1", popover: { title: t("tour.dodoc.installments.title"), description: t("tour.dodoc.installments.desc"), side: "top" } },
+    { element: '[data-tour="dodoc-print-installment"]', manual: "ch9-2", popover: { title: t("tour.dodoc.print.title"), description: t("tour.dodoc.print.desc"), side: "bottom" } },
   ];
   const docTour = useModuleTour("deliveryOrderDoc", currentUserId, docTourSteps, {
     autoStart: !!deliveryOrder && deliveryOrder.installments.length > 0,
@@ -461,6 +463,9 @@ export function DeliveryOrderDocument({
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t("deliveryOrderDoc.saveNumbers")}
                 </button>
               )}
+              {/* ห่อไว้ให้คำแนะนำชี้ปุ่ม "เพิ่มเติม" ได้ — แสดงเฉพาะเมื่อมีคำสั่งในเมนู (ไม่งั้น MoreMenu ไม่วาดปุ่มเลย) */}
+              {(editable || canEdit || canCreate || canDelete) && (
+              <span data-tour="dodoc-more" className="inline-flex">
               <MoreMenu
                 items={[
                   editable && { key: "refresh", label: t("deliveryOrderDoc.refreshFromScope"), icon: RotateCw, hint: t("deliveryOrderDoc.refreshMenuHint").replace("{number}", deliveryOrder.scopeNumber), disabled: refreshing, onSelect: () => setConfirmAction("refresh") },
@@ -469,6 +474,8 @@ export function DeliveryOrderDocument({
                   canDelete && { key: "delete", label: t("deliveryOrderDoc.confirmDelete.title"), icon: Trash2, danger: true, onSelect: () => setConfirmAction("delete") },
                 ]}
               />
+              </span>
+              )}
               {pendingApproval && canFinalize && (
                 <>
                   <button type="button" onClick={() => setRejectPromptOpen(true)} className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-lg border border-[#e5b8b8] bg-white text-[#b93636] text-sm font-medium hover:bg-[#fcebeb] transition-colors whitespace-nowrap">
@@ -480,7 +487,7 @@ export function DeliveryOrderDocument({
                 </>
               )}
               {canEdit && isDraft && (
-                <button type="button" onClick={() => setConfirmAction("submit")} className={btn.primary}>
+                <button type="button" data-tour="dodoc-submit" onClick={() => setConfirmAction("submit")} className={btn.primary}>
                   <Send size={16} /> {t("deliveryOrderDoc.submit")}
                 </button>
               )}
@@ -522,12 +529,14 @@ export function DeliveryOrderDocument({
                 </SectionCard>
 
                 {/* ส่งเอกสารถึงแผนก — ไม่ผูกกับล็อก Draft เพราะเซลล์มักส่งต่อหลังเอกสารอนุมัติแล้ว */}
-                <DeliveryOrderDepartmentRouting
-                  deliveryOrder={deliveryOrder}
-                  canEdit={canEdit}
-                  onUpdated={(updated) => { setDeliveryOrder(updated); dirty.markSaved(toUpdateFields(updated)); }}
-                  showToast={showToast}
-                />
+                <div data-tour="dodoc-routing">
+                  <DeliveryOrderDepartmentRouting
+                    deliveryOrder={deliveryOrder}
+                    canEdit={canEdit}
+                    onUpdated={(updated) => { setDeliveryOrder(updated); dirty.markSaved(toUpdateFields(updated)); }}
+                    showToast={showToast}
+                  />
+                </div>
 
                 {/* ไฟล์แนบ — เจ้าของสั่ง 2026-09-03 ให้แนบใบส่งของที่ลูกค้าเซ็นกลับมาได้ "เหมือนกับ cost control"
                     ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะใบเซ็นกลับมักมาหลังเอกสารอนุมัติแล้ว */}

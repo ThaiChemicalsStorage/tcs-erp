@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Contact, ChevronRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import {
   type Customer, type CustomerDraft,
   createCustomer, updateCustomer, setCustomerArchived,
@@ -49,10 +48,11 @@ export function CustomersPage({
   const { t } = useI18n();
   const { message, show } = useToast();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="customers-create"]', popover: { title: t("tour.customers.create.title"), description: t("tour.customers.create.desc"), side: "bottom" } },
-    { element: '[data-tour="customers-toolbar"]', popover: { title: t("tour.customers.toolbar.title"), description: t("tour.customers.toolbar.desc"), side: "bottom" } },
-    { element: '[data-tour="customers-table"]', popover: { title: t("tour.customers.table.title"), description: t("tour.customers.table.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="customers-create"]', manual: "ch10-1", popover: { title: t("tour.customers.create.title"), description: t("tour.customers.create.desc"), side: "bottom" } },
+    { element: '[data-tour="customers-tabs"]', manual: "ch10-2", popover: { title: t("tour.customers.tabs.title"), description: t("tour.customers.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="customers-search"]', manual: "ch10-2", popover: { title: t("tour.customers.search.title"), description: t("tour.customers.search.desc"), side: "bottom" } },
+    { element: '[data-tour="customers-table"]', manual: "ch10-3", popover: { title: t("tour.customers.table.title"), description: t("tour.customers.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("customers", currentUserId, tourSteps);
 
@@ -190,18 +190,22 @@ export function CustomersPage({
         ) : (
           <>
             <div data-tour="customers-toolbar">
-              <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); setPage(1); }} ariaLabel={t("customers.col.status")} />
-              <ListToolbar
-                search={search}
-                onSearch={(v) => { setSearch(v); setPage(1); }}
-                searchPlaceholder={t("customers.searchPlaceholder")}
-                count={t("ui.itemCount").replace("{n}", String(filtered.length))}
-              >
-                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173]">
-                  <input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }} className="w-[18px] h-[18px] rounded accent-[#0b1d3a]" />
-                  {t("customers.showArchived")}
-                </label>
-              </ListToolbar>
+              <div data-tour="customers-tabs">
+                <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); setPage(1); }} ariaLabel={t("customers.col.status")} />
+              </div>
+              <div data-tour="customers-search">
+                <ListToolbar
+                  search={search}
+                  onSearch={(v) => { setSearch(v); setPage(1); }}
+                  searchPlaceholder={t("customers.searchPlaceholder")}
+                  count={t("ui.itemCount").replace("{n}", String(filtered.length))}
+                >
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173]">
+                    <input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }} className="w-[18px] h-[18px] rounded accent-[#0b1d3a]" />
+                    {t("customers.showArchived")}
+                  </label>
+                </ListToolbar>
+              </div>
             </div>
 
             <div data-tour="customers-table">

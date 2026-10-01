@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Lock } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import type { AuditLogEntry } from "../../lib/auditLog";
 import { fetchAuditLog } from "../../lib/auditLog";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListCard, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
@@ -21,9 +20,11 @@ export function AuditLogPage({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="audit-search"]', popover: { title: t("tour.audit.search.title"), description: t("tour.audit.search.desc"), side: "bottom" } },
-    { element: '[data-tour="audit-table"]', popover: { title: t("tour.audit.table.title"), description: t("tour.audit.table.desc"), side: "top" } },
+  // ปุ่มเปลี่ยนหน้าขึ้นเมื่อมีรายการแล้วเท่านั้น — ระหว่างโหลดทัวร์ข้ามขั้นนั้นเอง
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="audit-search"]', manual: "ch27-4", popover: { title: t("tour.audit.search.title"), description: t("tour.audit.search.desc"), side: "bottom" } },
+    { element: '[data-tour="audit-table"]', manual: "ch27-4", popover: { title: t("tour.audit.table.title"), description: t("tour.audit.table.desc"), side: "top" } },
+    { element: '[data-tour="audit-pages"]', manual: "ch27-4", popover: { title: t("tour.audit.pages.title"), description: t("tour.audit.pages.desc"), side: "top" } },
   ];
   const tour = useModuleTour("auditLog", currentUserId, tourSteps);
 
@@ -125,14 +126,16 @@ export function AuditLogPage({
         </div>
 
         {filtered.length > 0 && (
-          <ListPagination
-            page={currentPage}
-            pageCount={pageCount}
-            from={(currentPage - 1) * PAGE_SIZE + 1}
-            to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
-            total={filtered.length}
-            onPage={setPage}
-          />
+          <div data-tour="audit-pages">
+            <ListPagination
+              page={currentPage}
+              pageCount={pageCount}
+              from={(currentPage - 1) * PAGE_SIZE + 1}
+              to={Math.min(currentPage * PAGE_SIZE, filtered.length)}
+              total={filtered.length}
+              onPage={setPage}
+            />
+          </div>
         )}
       </ListCard>
     </div>

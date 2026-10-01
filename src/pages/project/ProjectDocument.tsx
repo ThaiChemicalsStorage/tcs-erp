@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { RotateCw, Trash2, Loader2, AlertTriangle, Building2, Info, CheckCircle2, Undo2, ArrowRight } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import {
   type Project, type ProjectStatus,
   fetchProject, updateProjectStatus, refreshProjectFromScope, deleteProject,
 } from "../../lib/project";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { DocumentHeader, DocumentStepper, DocumentColumns, NextStepHint } from "../../components/ui/DocumentLayout";
 import { SectionCard } from "../../components/ui/SectionCard";
@@ -76,10 +75,12 @@ export function ProjectDocument({
     return () => { cancelled = true; };
   }, [projectId, reloadKey, t]);
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="projectdoc-actions"]', popover: { title: t("tour.projectdoc.actions.title"), description: t("project.tour.actionsDesc"), side: "bottom" } },
-    { element: '[data-tour="projectdoc-header"]', popover: { title: t("tour.projectdoc.header.title"), description: t("tour.projectdoc.header.desc"), side: "bottom" } },
-    { element: '[data-tour="projectdoc-items"]', popover: { title: t("tour.projectdoc.items.title"), description: t("tour.projectdoc.items.desc"), side: "top" } },
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="projectdoc-actions"]', manual: "ch15-2", popover: { title: t("tour.projectdoc.actions.title"), description: t("tour.projectdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="projectdoc-steps"]', manual: "ch15-2", popover: { title: t("tour.projectdoc.steps.title"), description: t("tour.projectdoc.steps.desc"), side: "bottom" } },
+    { element: '[data-tour="projectdoc-header"]', manual: "ch15-1", popover: { title: t("tour.projectdoc.header.title"), description: t("tour.projectdoc.header.desc"), side: "bottom" } },
+    { element: '[data-tour="projectdoc-progress"]', manual: "ch15-2", popover: { title: t("tour.projectdoc.progress.title"), description: t("tour.projectdoc.progress.desc"), side: "left" } },
+    { element: '[data-tour="projectdoc-items"]', manual: "ch15-2", popover: { title: t("tour.projectdoc.items.title"), description: t("tour.projectdoc.items.desc"), side: "top" } },
   ];
   const docTour = useModuleTour("projectDoc", currentUserId, docTourSteps, { autoStart: !!project });
 
@@ -207,11 +208,13 @@ export function ProjectDocument({
       </div>
 
       <div className="px-4 md:px-8 py-6 flex flex-col gap-5">
-        <DocumentStepper
-          steps={STATUS_ORDER.map((s) => ({ label: statusLabel(s) }))}
-          current={stepperCurrent}
-          ariaLabel={t("project.doc.stepsAria")}
-        />
+        <div data-tour="projectdoc-steps">
+          <DocumentStepper
+            steps={STATUS_ORDER.map((s) => ({ label: statusLabel(s) }))}
+            current={stepperCurrent}
+            ariaLabel={t("project.doc.stepsAria")}
+          />
+        </div>
 
         <DocumentColumns
           main={
@@ -252,6 +255,7 @@ export function ProjectDocument({
           rail={
             <>
               <RailSummaryCard
+                dataTour="projectdoc-progress"
                 label={t("project.itemStatus.fulfilled")}
                 value={`${summary.byStatus.fulfilled} / ${summary.total}`}
                 unit={itemsUnit}

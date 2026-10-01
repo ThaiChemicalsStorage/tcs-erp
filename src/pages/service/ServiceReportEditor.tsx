@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
-import type { DriveStep } from "driver.js";
 import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, Printer, Plus, Send, HelpCircle, Copy, Check, Link2, X, Info } from "lucide-react";
 import {
   type ServiceReport, type ServiceReportDraft, type ServiceChecklistSectionValue, type ServiceChecklistItemValue,
@@ -14,7 +13,7 @@ import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { ServiceChecklistItemControl } from "../../components/ServiceChecklistItemControl";
 import { SignaturePad } from "../../components/SignaturePad";
 import { InlineEditableLabel } from "../../components/InlineEditableLabel";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { MAX_CHECKLIST_GROUP_TITLE_LENGTH } from "../../lib/validation/serviceReportValidation";
 import { ServiceReportPrintDocument } from "./ServiceReportPrintDocument";
 import { PromptDialog } from "../../components/PromptDialog";
@@ -217,10 +216,12 @@ export function ServiceReportEditor({
   const engineerUser = users.find((u) => u.id === form.assignedServiceEngineerId);
   const isEditable = isNew || (canEdit && report?.status === "Draft");
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="servicedoc-actions"]', popover: { title: t("tour.servicedoc.actions.title"), description: t("tour.servicedoc.actions.desc"), side: "bottom" } },
-    { element: '[data-tour="servicedoc-checklist"]', popover: { title: t("tour.servicedoc.checklist.title"), description: t("tour.servicedoc.checklist.desc"), side: "top" } },
-    { element: '[data-tour="servicedoc-signature"]', popover: { title: t("tour.servicedoc.signature.title"), description: t("tour.servicedoc.signature.desc"), side: "top" } },
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="servicedoc-actions"]', manual: "ch12-3", popover: { title: t("tour.servicedoc.actions.title"), description: t("tour.servicedoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="servicedoc-steps"]', manual: "ch12-3", popover: { title: t("tour.servicedoc.steps.title"), description: t("tour.servicedoc.steps.desc"), side: "bottom" } },
+    { element: '[data-tour="servicedoc-visit"]', manual: "ch12-1", popover: { title: t("tour.servicedoc.visit.title"), description: t("tour.servicedoc.visit.desc"), side: "top" } },
+    { element: '[data-tour="servicedoc-checklist"]', manual: "ch12-2", popover: { title: t("tour.servicedoc.checklist.title"), description: t("tour.servicedoc.checklist.desc"), side: "top" } },
+    { element: '[data-tour="servicedoc-signature"]', manual: "ch12-4", popover: { title: t("tour.servicedoc.signature.title"), description: t("tour.servicedoc.signature.desc"), side: "top" } },
   ];
   // Waits for the record: the steps describe controls that only exist once the report is loaded
   // (and the sign-off card renders only for a saved report) — same autoStart gating as
@@ -928,14 +929,16 @@ export function ServiceReportEditor({
         )}
 
         {status !== "Cancelled" && (
-          <DocumentStepper
-            ariaLabel={t("service.stepperAria")}
-            current={status === "Completed" ? 2 : 0}
-            steps={[
-              { label: t("service.status.draft"), hint: t("service.step.draftHint") },
-              { label: t("service.status.completed") },
-            ]}
-          />
+          <div data-tour="servicedoc-steps">
+            <DocumentStepper
+              ariaLabel={t("service.stepperAria")}
+              current={status === "Completed" ? 2 : 0}
+              steps={[
+                { label: t("service.status.draft"), hint: t("service.step.draftHint") },
+                { label: t("service.status.completed") },
+              ]}
+            />
+          </div>
         )}
 
         {isNew && (
@@ -946,7 +949,7 @@ export function ServiceReportEditor({
 
         <DocumentColumns
           main={(
-            <>
+            <div data-tour="servicedoc-visit" className="flex flex-col gap-5">
               <SectionCard title={t("service.section.customer")}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-[18px]">
                   <Field label={t("service.form.customer")} required className="md:col-span-3" error={form.customerId ? errorOf("customerSnapshot.companyName") : undefined}>
@@ -1023,7 +1026,7 @@ export function ServiceReportEditor({
                   </Field>
                 </div>
               </SectionCard>
-            </>
+            </div>
           )}
           rail={(
             <>

@@ -1,8 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Plus, ChevronUp, ChevronDown, ChevronRight, Tags, Package, Upload, Layers } from "lucide-react";
-import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, isKitProduct, kitBreakdownText } from "../../lib/products";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { EmptyState } from "../../components/EmptyState";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
@@ -41,12 +40,12 @@ export function ProductList({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="products-create"]', popover: { title: t("tour.products.create.title"), description: t("tour.products.create.desc"), side: "bottom" } },
-    { element: '[data-tour="products-import"]', popover: { title: t("tour.products.import.title"), description: t("tour.products.import.desc"), side: "bottom" } },
-    { element: '[data-tour="products-categories"]', popover: { title: t("tour.products.categories.title"), description: t("tour.products.categories.desc"), side: "bottom" } },
-    { element: '[data-tour="products-toolbar"]', popover: { title: t("tour.products.toolbar.title"), description: t("tour.products.toolbar.descTabs"), side: "bottom" } },
-    { element: '[data-tour="products-table"]', popover: { title: t("tour.products.table.title"), description: t("tour.products.table.descDrawer"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="products-create"]', manual: "ch21", popover: { title: t("tour.products.create.title"), description: t("tour.products.create.desc"), side: "bottom" } },
+    { element: '[data-tour="products-import"]', manual: "ch21-1", popover: { title: t("tour.products.import.title"), description: t("tour.products.import.desc"), side: "bottom" } },
+    { element: '[data-tour="products-categories"]', manual: "ch21-2", popover: { title: t("tour.products.categories.title"), description: t("tour.products.categories.desc"), side: "bottom" } },
+    { element: '[data-tour="products-toolbar"]', manual: "ch2-6", popover: { title: t("tour.products.toolbar.title"), description: t("tour.products.toolbar.desc"), side: "bottom" } },
+    { element: '[data-tour="products-table"]', manual: "ch21", popover: { title: t("tour.products.table.title"), description: t("tour.products.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("products", currentUserId, tourSteps);
   const [search, setSearch] = useState("");

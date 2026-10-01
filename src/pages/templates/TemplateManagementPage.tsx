@@ -2,8 +2,7 @@ import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
   Plus, Power, Archive, ArchiveRestore, Copy, Eye, FileStack, X, Loader2, Upload, FileText, MoreVertical,
 } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import {
   type QuotationTemplateSummary, type QuotationTemplate,
   fetchQuotationTemplates, fetchQuotationTemplate, setQuotationTemplateActive, setQuotationTemplateArchived,
@@ -189,11 +188,12 @@ export function TemplateManagementPage({
 }) {
   const { t } = useI18n();
 
-  const tourSteps: DriveStep[] = [
-    { element: '[data-tour="templates-import"]', popover: { title: t("tour.templates.import.title"), description: t("tour.templates.import.desc"), side: "bottom" } },
-    { element: '[data-tour="templates-create"]', popover: { title: t("tour.templates.create.title"), description: t("tour.templates.create.desc"), side: "bottom" } },
-    { element: '[data-tour="templates-toolbar"]', popover: { title: t("tour.templates.toolbar.title"), description: t("tour.templates.toolbar.desc"), side: "bottom" } },
-    { element: '[data-tour="templates-list"]', popover: { title: t("tour.templates.list.title"), description: t("tour.templates.list.desc"), side: "top" } },
+  const tourSteps: TourStep[] = [
+    { element: '[data-tour="templates-import"]', manual: "ch11-5", popover: { title: t("tour.templates.import.title"), description: t("tour.templates.import.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-create"]', manual: "ch11-2", popover: { title: t("tour.templates.create.title"), description: t("tour.templates.create.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-tabs"]', manual: "ch11-1", popover: { title: t("tour.templates.tabs.title"), description: t("tour.templates.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-filters"]', manual: "ch11-1", popover: { title: t("tour.templates.filters.title"), description: t("tour.templates.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-rowmenu"]', manual: "ch11-3", popover: { title: t("tour.templates.rowMenu.title"), description: t("tour.templates.rowMenu.desc"), side: "left" } },
   ];
   const tour = useModuleTour("templates", currentUserId, tourSteps);
   const { message, show } = useToast();
@@ -386,7 +386,10 @@ export function TemplateManagementPage({
       <section className={`${surface.card} flex flex-col min-w-0`}>
         {templates.length > 0 && (
           <div data-tour="templates-toolbar">
-            <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); resetPage(); }} ariaLabel={t("templates.col.status")} />
+            <div data-tour="templates-tabs">
+              <ListTabs tabs={tabs} active={statusTab} onChange={(k) => { setStatusTab(k); resetPage(); }} ariaLabel={t("templates.col.status")} />
+            </div>
+            <div data-tour="templates-filters">
             <ListToolbar
               search={search}
               onSearch={(v) => { setSearch(v); resetPage(); }}
@@ -410,6 +413,7 @@ export function TemplateManagementPage({
                 onChange={(v) => { setSourceFilter(v); resetPage(); }}
               />
             </ListToolbar>
+            </div>
           </div>
         )}
 
@@ -443,7 +447,7 @@ export function TemplateManagementPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {pageRows.map((tpl) => {
+                  {pageRows.map((tpl, rowIndex) => {
                     return (
                       <tr key={tpl.id} onClick={() => openRow(tpl)} className={`${table.row} cursor-pointer ${tpl.isDeleted ? "opacity-60" : ""}`}>
                         <td className={table.td}>
@@ -474,6 +478,7 @@ export function TemplateManagementPage({
                               trigger={({ open, toggle }) => (
                                 <button
                                   type="button"
+                                  data-tour={rowIndex === 0 ? "templates-rowmenu" : undefined}
                                   onClick={toggle}
                                   aria-haspopup="menu"
                                   aria-expanded={open}

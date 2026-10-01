@@ -3,8 +3,7 @@ import {
   Printer, Copy, Save, Send, CheckCircle2, ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, ClipboardList, GitBranch, Wand2,
   Lock, ChevronRight, Building2, type LucideIcon,
 } from "lucide-react";
-import type { DriveStep } from "driver.js";
-import { useModuleTour } from "../../components/GuidedTour";
+import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { Combobox } from "../../components/Combobox";
 import { DocumentHeader, DocumentTabs, DocumentStepper, DocumentColumns, RailTotalCard, RailCard, NextStepHint } from "../../components/ui/DocumentLayout";
@@ -352,10 +351,12 @@ export function QuoteDocument({
     }
   };
 
-  const docTourSteps: DriveStep[] = [
-    { element: '[data-tour="qdoc-actions"]', popover: { title: t("tour.qdoc.actions.title"), description: t("tour.qdoc.actions.desc"), side: "bottom" } },
-    { element: '[data-tour="qdoc-customer"]', popover: { title: t("tour.qdoc.customer.title"), description: t("tour.qdoc.customer.desc"), side: "right" } },
-    { element: '[data-tour="qdoc-items"]', popover: { title: t("tour.qdoc.items.title"), description: t("tour.qdoc.items.desc"), side: "top" } },
+  const docTourSteps: TourStep[] = [
+    { element: '[data-tour="qdoc-primary"]', manual: "ch6-3", popover: { title: t("tour.qdoc.primary.title"), description: t("tour.qdoc.primary.desc"), side: "bottom" } },
+    { element: '[data-tour="qdoc-more"]', manual: "ch6-4", popover: { title: t("tour.qdoc.more.title"), description: t("tour.qdoc.more.desc"), side: "bottom" } },
+    { element: '[data-tour="qdoc-stepper"]', manual: "ch6-3", popover: { title: t("tour.qdoc.stepper.title"), description: t("tour.qdoc.stepper.desc"), side: "bottom" } },
+    { element: '[data-tour="qdoc-customer"]', manual: "ch6-2", popover: { title: t("tour.qdoc.customer.title"), description: t("tour.qdoc.customer.desc"), side: "top" } },
+    { element: '[data-tour="qdoc-items"]', manual: "ch6-2", popover: { title: t("tour.qdoc.items.title"), description: t("tour.qdoc.items.desc"), side: "top" } },
   ];
   const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps, { autoStart: isDetail });
 
@@ -718,14 +719,14 @@ export function QuoteDocument({
           <Save size={16} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
         </button>
       )}
-      <MoreMenu items={moreItems} />
+      {moreItems.some(Boolean) && <div data-tour="qdoc-more"><MoreMenu items={moreItems} /></div>}
       {secondaryAction && (
         <button type="button" onClick={() => runAction(secondaryAction)} disabled={actionBlocked(secondaryAction)} title={actionBlocked(secondaryAction) ? blockedTooltip : undefined} className={btn.secondary}>
           <XCircle size={16} className="text-[#b93636]" /> {actionButtonLabel(secondaryAction)}
         </button>
       )}
       {primaryAction && PrimaryIcon && (
-        <button type="button" onClick={() => runAction(primaryAction)} disabled={actionBlocked(primaryAction)} title={actionBlocked(primaryAction) ? blockedTooltip : undefined} className={btn.primary}>
+        <button type="button" data-tour="qdoc-primary" onClick={() => runAction(primaryAction)} disabled={actionBlocked(primaryAction)} title={actionBlocked(primaryAction) ? blockedTooltip : undefined} className={btn.primary}>
           <PrimaryIcon size={16} /> {actionButtonLabel(primaryAction)}
         </button>
       )}
@@ -1136,7 +1137,7 @@ export function QuoteDocument({
 
         {tab === "details" && (
           <>
-            {stepper && <DocumentStepper ariaLabel={t("quotation.stepper.ariaLabel")} steps={stepper.steps} current={stepper.current} />}
+            {stepper && <div data-tour="qdoc-stepper"><DocumentStepper ariaLabel={t("quotation.stepper.ariaLabel")} steps={stepper.steps} current={stepper.current} /></div>}
             <DocumentColumns main={contentEditable ? editableMain : readonlyMain} rail={rail} />
             <div data-tour="qdoc-items" className="print:hidden">
               {contentEditable ? (
