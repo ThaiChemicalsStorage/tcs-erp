@@ -139,7 +139,7 @@ export function DocumentRecipientsPicker({
             </CountBadge>
             <span className="flex-1" />
             {!disabled && (
-              <label className="w-full sm:w-[300px] h-9 px-2.5 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
+              <label data-field-box="" className="w-full sm:w-[300px] h-9 px-2.5 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors">
                 <Search size={15} className="text-muted-foreground flex-shrink-0" />
                 <input
                   type="text"
