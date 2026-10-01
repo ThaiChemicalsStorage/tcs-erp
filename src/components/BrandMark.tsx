@@ -22,8 +22,8 @@ export function BrandMark({ size = 32, variant = "full", theme = "dark", classNa
         />
         {variant === "full" && (
           <div className="min-w-0 flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-white truncate" title="Thai Chemicals Storage">Thai Chemicals Storage</span>
-            <span className="text-xs text-[#8fa6c8] truncate">ระบบองค์กร</span>
+            <span className={`text-sm font-semibold truncate ${theme === "dark" ? "text-white" : "text-foreground"}`} title="Thai Chemicals Storage">Thai Chemicals Storage</span>
+            <span className={`text-xs truncate ${theme === "dark" ? "text-[#8fa6c8]" : "text-muted-foreground"}`}>ระบบองค์กร</span>
           </div>
         )}
       </div>

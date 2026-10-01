@@ -17,7 +17,7 @@ Session gate in front of the whole app, backed by real multi-user accounts and s
 
 - `src/pages/SetupWizardPage.tsx` — first-run Super Admin creation.
 - `src/pages/SignInPage.tsx` — username/email + password, real server-verified credential check.
-- `src/pages/AuthLayout.tsx` — shared two-pane layout (navy branding panel + form panel), used by both.
+- `src/pages/AuthLayout.tsx` — shared two-pane layout (navy branding panel + form panel), used by both. REDESIGN phase 7 (2026-10-01): brand panel with gold rings/bar and the real `BrandMark` (`appearance="sidebar"`, light variant above the card on phones), white 440px `AuthCard`, icons inside inputs, "ลืมรหัสผ่าน?" beside the password label, `autocomplete` hints on every field. `ForceChangePasswordDialog` restyled (no ✕, backdrop does not close, scrolls on short screens, hidden in print).
 
 ## Components
 

@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { KeyRound, Loader2, LogOut } from "lucide-react";
+import { KeyRound, Loader2, LogOut, Save } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/apiClient";
 import { updateUser, type User } from "../lib/users";
@@ -43,10 +43,10 @@ export function ForceChangePasswordDialog({ user, onChanged, onSignOut }: {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 print:hidden">
       <div className="absolute inset-0 bg-[#0b1d3a]/45" aria-hidden="true" />
       <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby={ids.title} aria-describedby={ids.desc}
-        className="relative w-full max-w-[480px] bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] flex flex-col">
+        className="relative w-full max-w-[480px] max-h-full overflow-y-auto bg-card rounded-xl shadow-[0_24px_48px_-12px_rgba(11,29,58,0.35)] flex flex-col">
         <div className="flex items-start gap-4 px-6 pt-6">
           <span className="w-11 h-11 rounded-full bg-[#fdf3e0] text-[#8a5a00] flex items-center justify-center flex-shrink-0">
             <KeyRound size={20} />
@@ -64,7 +64,7 @@ export function ForceChangePasswordDialog({ user, onChanged, onSignOut }: {
             <input id={ids.next} type="password" autoComplete="new-password" placeholder={t("settings.security.lengthHint")} value={next} onChange={(e) => setNext(e.target.value)} className={`${field.input} w-full`} />
           </Field>
           <Field label={t("settings.security.confirmLabel")} htmlFor={ids.confirm} required>
-            <input id={ids.confirm} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${field.input} w-full`} />
+            <input id={ids.confirm} type="password" autoComplete="new-password" placeholder={t("setup.confirmPlaceholder")} value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${field.input} w-full`} />
           </Field>
           {error && <p role="alert" className="rounded-lg bg-[#fcebeb] text-[#b93636] text-[13px] px-3.5 py-2.5">{error}</p>}
         </div>
@@ -74,7 +74,7 @@ export function ForceChangePasswordDialog({ user, onChanged, onSignOut }: {
           </button>
           <span className="flex-1" />
           <button type="submit" disabled={saving} className={btn.primary}>
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />} {t("forcePassword.submit")}
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} aria-hidden="true" />} {t("forcePassword.submit")}
           </button>
         </div>
       </form>

@@ -1,9 +1,14 @@
 import { useId, useState } from "react";
-import { ArrowLeft, Eye, EyeOff, KeyRound, LogIn, MailCheck, MonitorSmartphone, User as UserIcon } from "lucide-react";
-import { AuthLayout } from "./AuthLayout";
+import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, Lock, LogIn, MailCheck, MonitorSmartphone, User as UserIcon } from "lucide-react";
+import { AuthCard, AuthLayout } from "./AuthLayout";
+import { Field } from "../components/ui/Field";
+import { btn, field } from "../components/ui/styles";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/apiClient";
 import { requestPasswordReset } from "../lib/passwordResets";
+
+const boxInputCls = "flex-1 min-w-0 h-[38px] bg-transparent text-sm text-foreground placeholder:text-[#8a97ad] outline-none";
+const errorBoxCls = "rounded-lg bg-[#fcebeb] text-[#b93636] text-[13px] px-3.5 py-2.5";
 
 // หน้าเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน
 // Sign-in page for authenticating with username/identifier and password.
@@ -46,43 +51,56 @@ export function SignInPage({
     }
   };
 
-  if (view !== "signin") {
+  if (view === "sent") {
     return (
       <AuthLayout>
-        <button type="button" onClick={() => setView("signin")} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-5">
-          <ArrowLeft size={13} /> {t("signin.forgot.back")}
-        </button>
-        {view === "sent" ? (
-          <div role="status" className="space-y-3">
-            <MailCheck size={28} className="text-[#207e52]" />
-            <h1 className="text-2xl font-semibold text-foreground">{t("signin.forgot.sentTitle")}</h1>
-            <p className="text-sm text-muted-foreground">{t("signin.forgot.sentBody")}</p>
+        <AuthCard role="status" className="p-6 sm:p-10 gap-6">
+          <span className="w-14 h-14 rounded-full bg-[#e6f4ec] text-[#1b7f4f] flex items-center justify-center">
+            <MailCheck size={26} aria-hidden="true" />
+          </span>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-2xl font-semibold leading-tight text-foreground">{t("signin.forgot.sentTitle")}</h1>
+            <p className="text-sm text-[#3d5173]">{t("signin.forgot.sentBody")}</p>
           </div>
-        ) : (
-          <>
-            <h1 className="text-2xl font-semibold text-foreground">{t("signin.forgot.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-1 mb-7">{t("signin.forgot.subtitle")}</p>
-            <form onSubmit={submitForgot} className="space-y-4">
-              <div>
-                <label htmlFor={forgotIdentifierId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.identifierLabel")}</label>
-                <input id={forgotIdentifierId} type="text" value={forgotIdentifier} onChange={(e) => setForgotIdentifier(e.target.value)} autoFocus
-                  placeholder={t("signin.identifierPlaceholder")}
-                  className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors" />
-              </div>
-              <div>
-                <label htmlFor={forgotNoteId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.forgot.noteLabel")}</label>
-                <textarea id={forgotNoteId} rows={2} value={forgotNote} onChange={(e) => setForgotNote(e.target.value)} maxLength={500}
-                  placeholder={t("signin.forgot.notePlaceholder")}
-                  className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg px-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors resize-y" />
-              </div>
-              {forgotError && <p role="alert" className="text-xs text-[#e05252]">{forgotError}</p>}
-              <button type="submit" disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60">
-                <KeyRound size={15} /> {submitting ? t("signin.forgot.sending") : t("signin.forgot.submit")}
-              </button>
-            </form>
-          </>
-        )}
+          <button type="button" onClick={() => setView("signin")} className={`${btn.primary} w-full`}>
+            <ArrowLeft size={16} aria-hidden="true" /> {t("signin.forgot.back")}
+          </button>
+        </AuthCard>
+      </AuthLayout>
+    );
+  }
+
+  if (view === "forgot") {
+    return (
+      <AuthLayout>
+        <AuthCard className="px-6 py-6 sm:px-10 sm:pt-8 sm:pb-10 gap-6">
+          <button type="button" onClick={() => setView("signin")}
+            className="self-start inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors">
+            <ArrowLeft size={16} aria-hidden="true" /> {t("signin.forgot.back")}
+          </button>
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-2xl font-semibold leading-tight text-foreground">{t("signin.forgot.title")}</h1>
+            <p className="text-sm text-[#3d5173]">{t("signin.forgot.subtitle")}</p>
+          </div>
+          <form onSubmit={submitForgot} className="flex flex-col gap-[18px]">
+            <Field label={t("signin.identifierLabel")} htmlFor={forgotIdentifierId} required>
+              <span className={field.box}>
+                <UserIcon size={16} aria-hidden="true" className="text-muted-foreground flex-shrink-0" />
+                <input id={forgotIdentifierId} type="text" autoComplete="username" value={forgotIdentifier} onChange={(e) => setForgotIdentifier(e.target.value)} autoFocus
+                  placeholder={t("signin.identifierPlaceholder")} className={boxInputCls} />
+              </span>
+            </Field>
+            <Field label={t("signin.forgot.noteLabel")} htmlFor={forgotNoteId}>
+              <textarea id={forgotNoteId} rows={3} value={forgotNote} onChange={(e) => setForgotNote(e.target.value)} maxLength={500}
+                placeholder={t("signin.forgot.notePlaceholder")} className={`${field.textarea} w-full resize-y`} />
+            </Field>
+            {forgotError && <p role="alert" className={errorBoxCls}>{forgotError}</p>}
+            <button type="submit" disabled={submitting} className={`${btn.primary} w-full mt-1.5`}>
+              {submitting ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} aria-hidden="true" />}
+              {submitting ? t("signin.forgot.sending") : t("signin.forgot.submit")}
+            </button>
+          </form>
+        </AuthCard>
       </AuthLayout>
     );
   }
@@ -103,74 +121,79 @@ export function SignInPage({
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold text-foreground">{t("signin.title")}</h1>
-      <p className="text-sm text-muted-foreground mt-1 mb-7">{t("signin.subtitle")}</p>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor={identifierId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.identifierLabel")}</label>
-          <div className="relative">
-            <UserIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              id={identifierId}
-              type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              placeholder={t("signin.identifierPlaceholder")}
-              className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg pl-9 pr-3 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
+      <div className="flex flex-col gap-5">
+        <AuthCard className="p-6 sm:p-10 gap-7">
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-2xl font-semibold leading-tight text-foreground">{t("signin.title")}</h1>
+            <p className="text-sm text-[#3d5173]">{t("signin.subtitle")}</p>
           </div>
-        </div>
 
-        <div>
-          <label htmlFor={passwordId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.passwordLabel")}</label>
-          <div className="relative">
-            <input
-              id={passwordId}
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full text-sm text-foreground bg-white border border-[#c3ccda] rounded-lg pl-3 pr-10 py-2.5 outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? t("signin.hidePassword") : t("signin.showPassword")}
-              aria-pressed={showPassword}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-[18px]">
+            <Field label={t("signin.identifierLabel")} htmlFor={identifierId}>
+              <span className={field.box}>
+                <UserIcon size={16} aria-hidden="true" className="text-muted-foreground flex-shrink-0" />
+                <input
+                  id={identifierId}
+                  type="text"
+                  autoComplete="username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder={t("signin.identifierPlaceholder")}
+                  className={boxInputCls}
+                />
+              </span>
+            </Field>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={passwordId} className={field.label}>{t("signin.passwordLabel")}</label>
+                <button type="button" onClick={() => { setForgotIdentifier(identifier); setForgotError(""); setView("forgot"); }}
+                  className="text-[13px] font-medium text-[#1a5fb4] hover:underline underline-offset-[3px] rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40">
+                  {t("signin.forgot.link")}
+                </button>
+              </div>
+              <span className={`${field.box} pr-1`}>
+                <Lock size={16} aria-hidden="true" className="text-muted-foreground flex-shrink-0" />
+                <input
+                  id={passwordId}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={boxInputCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? t("signin.hidePassword") : t("signin.showPassword")}
+                  aria-pressed={showPassword}
+                  className="w-8 h-8 flex-shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </span>
+            </div>
+
+            {/* บอกสาเหตุที่ถูกเด้งออกมา ก่อนที่ผู้ใช้จะพิมพ์อะไร — ไม่ใช่ error ของการกรอกฟอร์ม
+                จึงแยกกล่องกัน และหายไปเองเมื่อมี error จริงจากการกดเข้าสู่ระบบ */}
+            {!error && signedOutReason === "superseded" && (
+              <p role="status" className="flex items-start gap-2 rounded-lg bg-[#fdf3e0] border border-[#efd3a0] text-[#6b4600] text-[13px] px-3.5 py-2.5">
+                <MonitorSmartphone size={16} aria-hidden="true" className="flex-shrink-0 mt-0.5 text-[#8a5a00]" />
+                {t("signin.signedOutElsewhere")}
+              </p>
+            )}
+            {error && <p role="alert" className={errorBoxCls}>{error}</p>}
+
+            <button type="submit" disabled={submitting} className={`${btn.primary} w-full mt-1.5`}>
+              {submitting ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} aria-hidden="true" />}
+              {submitting ? t("signin.submitting") : t("signin.submit")}
             </button>
-          </div>
-        </div>
+          </form>
+        </AuthCard>
 
-        {/* บอกสาเหตุที่ถูกเด้งออกมา ก่อนที่ผู้ใช้จะพิมพ์อะไร — ไม่ใช่ error ของการกรอกฟอร์ม
-            จึงแยกกล่องกัน และหายไปเองเมื่อมี error จริงจากการกดเข้าสู่ระบบ */}
-        {!error && signedOutReason === "superseded" && (
-          <p role="status" className="flex items-start gap-2 text-xs text-[#a75d1a] bg-[#e08a3c]/10 border border-[#e08a3c]/20 rounded-lg px-3 py-2.5">
-            <MonitorSmartphone size={14} className="flex-shrink-0 mt-px" />
-            {t("signin.signedOutElsewhere")}
-          </p>
-        )}
-        {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#0b1d3a] text-white rounded-lg font-semibold hover:bg-[#1a2f55] transition-colors disabled:opacity-60"
-        >
-          <LogIn size={15} /> {submitting ? t("signin.submitting") : t("signin.submit")}
-        </button>
-      </form>
-
-      <p className="text-center text-xs text-muted-foreground mt-7">
-        <button type="button" onClick={() => { setForgotIdentifier(identifier); setForgotError(""); setView("forgot"); }}
-          className="font-medium text-[#866d28] hover:underline underline-offset-2">
-          {t("signin.forgot.link")}
-        </button>
-        <span className="block mt-1.5">{t("signin.forgotHelp")}</span>
-      </p>
+        <p className="px-6 text-center text-[13px] text-muted-foreground">{t("signin.forgotHelp")}</p>
+      </div>
     </AuthLayout>
   );
 }

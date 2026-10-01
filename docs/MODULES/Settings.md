@@ -19,7 +19,7 @@ Personal account settings (self-service) plus single-company configuration (Supe
 
 ## Pages
 
-- `src/pages/SettingsPage.tsx` — the entire module is one file (tabs + all sections + `Toggle`/`SavedNote`/`ImageUploadField` sub-components).
+- `src/pages/SettingsPage.tsx` — the entire module is one file. Since REDESIGN phase 7 (2026-10-01): a 220px left sub-nav (a horizontal scrolling row on phones) instead of pill tabs, each section split into cards, and a **sticky save bar only on Profile and Company** (Security has its own "อัปเดตรหัสผ่าน" button in a real form; Notifications has no save). The shared `Toggle` lives in `src/components/Toggle.tsx`; images still go through `ImageUploadField` (browser-side WebP, base64 — the documented exception in CLAUDE.md).
 
 ## Components
 
