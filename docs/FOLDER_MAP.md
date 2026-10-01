@@ -31,6 +31,7 @@ ERP/
 │       # Note: a duplicate `api/{auth,users,roles,products,categories,notifications,quotes}/[[...segments]].ts` catch-all layer existed
 │       # pre-2026-07-09 but was confirmed dead (unreachable under the routing of the time — see ARCHITECTURE.md) and deleted.
 ├── server/                        # standalone Express server (added 2026-08-06, the only runtime) — app.ts (createApp: `API_ROUTES` table + static dist/ serving), index.ts (entry), env.ts (dotenv, loads `.env`) — see DEPLOYMENT.md
+├── scripts/seed-demo.mjs          # (2026-10-01) seeds the SEPARATE demo DB tcs_erp_demo through the real REST API for the manual screenshots — refuses unless MONGODB_DB ends in _demo; needs MONGODB_DB set (the app picks the DB by MONGODB_DB, not by the URI path). Other scripts/: backups, upload compression/usage
 ├── .env.example                   # every env var documented — copy to .env for the standalone server
 ├── tsconfig.api.json              # Node-target tsconfig covering api/ (separate from root tsconfig.json which covers src/)
 ├── src/

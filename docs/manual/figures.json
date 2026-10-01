@@ -1,5 +1,5 @@
 {
-  "about": "Shot list for the user manual's figures (public/manual.html). Each entry is one <figure>: the page expects the image at public/<file> (WebP). Until a file exists the page shows a placeholder. Take every shot from the REAL app signed in to a SEPARATE demo database (never the dev DB tcs_erp, never a real person's name in demo data). 'route' is the app's hash route; 'state' says what to open/click; 'viewport' the browser size; 'crop' which part of the screen to keep; 'demoData' the records the demo DB must contain. 'designRef' points at the REDESIGN canvas board the figure was planned from (board px, 1440 wide: crop starts at y, height h) — use it for framing only; where the board and the real app differ, shoot the real app.",
+  "about": "Shot list for the user manual's figures (public/manual.html). Each entry is one <figure>: the page expects the image at public/<file> (WebP). Until a file exists the page shows a placeholder. Take every shot from the REAL app signed in to a SEPARATE demo database (never the dev DB tcs_erp, never a real person's name in demo data). 'route' is the app's hash route; 'state' says what to open/click; 'viewport' the browser size; 'crop' which part of the screen to keep; 'demoData' the records the demo DB must contain. 'designRef' points at the REDESIGN canvas board the figure was planned from (board px, 1440 wide: crop starts at y, height h) — use it for framing only; where the board and the real app differ, shoot the real app. — SHOT 2026-10-01: all 94 images were taken from the real app (standalone server on :3200) against the demo database tcs_erp_demo, seeded by scripts/seed-demo.mjs (demo login admin / Demo@2026; every demo user shares that password). Where the real app differed from the plan, the entry below carries a \"shotNote\" saying what was actually shot.",
   "generated": "2026-10-01",
   "count": 94,
   "figures": [
@@ -55,7 +55,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Shot with demo user store02 (not sales02): the seed has a Super Admin issue store02 a temporary password, so the modal is the real one, not a stubbed API."
     },
     {
       "file": "manual-images/ch01-4.webp",
@@ -73,7 +74,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Shot against the empty demo database before seeding (real Setup Wizard, no API stub)."
     },
     {
       "file": "manual-images/ch02-1.webp",
@@ -109,7 +111,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Searched the demo quotation Q#260701-0001 (has Scope of Work PQ202607-112-SC-OR, a delivery order and a project)."
     },
     {
       "file": "manual-images/ch02-3.webp",
@@ -163,7 +166,8 @@
         "y": 0,
         "h": 420,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Draft quotation Q#260930-0002 (owner sales01); the remark was edited to trigger the real auto-save."
     },
     {
       "file": "manual-images/ch03-2.webp",
@@ -271,7 +275,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Same Draft Q#260930-0002 — it has 2 Section rows and 4 items (plan said 1 Section + 3 items)."
     },
     {
       "file": "manual-images/ch06-3.webp",
@@ -289,7 +294,8 @@
         "y": 1040,
         "h": 1000,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "2 Section rows + 4 items; first item has 2 sub-detail lines and the tags ผลิตเอง / รับประกัน 1 ปี; ส่วนลดพิเศษ 5%."
     },
     {
       "file": "manual-images/ch06-4.webp",
@@ -325,7 +331,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Quotation Q#260903-0001 (ปิดการขายสำเร็จ, no Scope of Work yet)."
     },
     {
       "file": "manual-images/ch07-2.webp",
@@ -343,7 +350,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Draft Scope of Work PQ202609-131-SC-OR (not PQ202607-15-LI-SK). Header shows no auto-save time because nothing was edited in this session."
     },
     {
       "file": "manual-images/ch07-3.webp",
@@ -361,7 +369,8 @@
         "y": 2460,
         "h": 820,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Same Draft PQ202609-131-SC-OR; เอกสารส่งถึง has Purchase, Factory and อื่น ๆ (with a note)."
     },
     {
       "file": "manual-images/ch07-4.webp",
@@ -397,7 +406,8 @@
         "y": 3220,
         "h": 1080,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Final Scope of Work PQ202607-112-SC-OR, shot signed in as the Super Admin: the footer line \"ส่งไปพร้อมกับ Cost Control\" only renders for users who can view Cost Control, which the default Sales User role cannot."
     },
     {
       "file": "manual-images/ch09-1.webp",
@@ -415,7 +425,8 @@
         "y": 900,
         "h": 880,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Draft delivery order of PQ202608-121-SC-OR (30/40/30 terms → 2 cards; card 1 has 2 items ticked + number + date, card 2 has 1)."
     },
     {
       "file": "manual-images/ch09-2.webp",
@@ -433,7 +444,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Same Draft delivery order; Project ticked under ส่งใบส่งมอบงานถึงแผนก. Header shows no auto-save time (nothing edited in this session)."
     },
     {
       "file": "manual-images/ch09-3.webp",
@@ -505,7 +517,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "The ⋮ menu is opened on the Wet Scrubber row (5th row), not the first row."
     },
     {
       "file": "manual-images/ch11-2.webp",
@@ -577,7 +590,8 @@
         "y": 1060,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "The progress card sits at the top of the right rail while the checklist is further down the page, so the crop is a tall slice (≈1550px) from the progress card down to the first checklist rows."
     },
     {
       "file": "manual-images/ch12-3.webp",
@@ -595,7 +609,8 @@
         "y": 0,
         "h": 1000,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Phone shot at 2x, cut in two: the report header + job info + the first (abnormal) checklist row, a grey ⋯ separator, then the approval section. Report SR-202609-0002."
     },
     {
       "file": "manual-images/ch12-4.webp",
@@ -649,7 +664,8 @@
         "y": 0,
         "h": 1000,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Job PQ202607-112-SC-OR: deposit 30% billed (AR + BI + RE), installment 2 (60%) expanded with ประเภทงาน = สินค้า and only the PO-copy box ticked."
     },
     {
       "file": "manual-images/ch13-3.webp",
@@ -685,7 +701,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Current month (October 2569): 2 AR, 3 IV (one cancelled), 5 BI, 2 RE."
     },
     {
       "file": "manual-images/ch14-1.webp",
@@ -703,7 +720,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Month field set to กันยายน 2026."
     },
     {
       "file": "manual-images/ch14-2.webp",
@@ -721,7 +739,8 @@
         "y": 0,
         "h": 1000,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Month field set to กันยายน 2026."
     },
     {
       "file": "manual-images/ch14-3.webp",
@@ -865,7 +884,8 @@
         "y": 1050,
         "h": 820,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Same image as ch24-2 (store issue slip PP-202609-0002 made from MR-202609-0002, round 1 posted)."
     },
     {
       "file": "manual-images/ch17-1.webp",
@@ -937,7 +957,8 @@
         "y": 1380,
         "h": 460,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Final production order SC-202607-0001 (the only Final one in the demo data)."
     },
     {
       "file": "manual-images/ch18-1.webp",
@@ -1099,7 +1120,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Uploaded a fictional workbook (Manhole 5 mm. + SC sheets). The SC sheet parses to 0 rows; the warnings box shows the cost-total mismatch."
     },
     {
       "file": "manual-images/ch20-3.webp",
@@ -1117,7 +1139,8 @@
         "y": 0,
         "h": 1100,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Draft CC-202609-0004 from a file, linked to Scope of Work PQ202609-131-SC-OR."
     },
     {
       "file": "manual-images/ch21-1.webp",
@@ -1207,7 +1230,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Zero-stock (red) rows are more than 1-2: made-to-order equipment and service codes carry no stock."
     },
     {
       "file": "manual-images/ch22-2.webp",
@@ -1423,7 +1447,8 @@
         "y": 0,
         "h": 1000,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Quantities typed into เครื่องเจียร 4 นิ้ว and ตลับเมตร 5 เมตร (กองกลาง) for Project / ทีมติดตั้ง B."
     },
     {
       "file": "manual-images/ch25-3.webp",
@@ -1531,7 +1556,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Drawer of the Sales User ภานุวัฒน์ ทองมา."
     },
     {
       "file": "manual-images/ch27-2.webp",
@@ -1567,7 +1593,8 @@
         "y": 0,
         "h": 900,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Department Factory (3 teams); departments are named with the English labels the Scope of Work recipient list matches on (Purchase, Factory, Project…)."
     },
     {
       "file": "manual-images/ch27-4.webp",
@@ -1603,7 +1630,8 @@
         "y": 0,
         "h": 1000,
         "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
-      }
+      },
+      "shotNote": "Signed in as sales01 (อรอุมา แก้วประเสริฐ)."
     },
     {
       "file": "manual-images/ch28-2.webp",
