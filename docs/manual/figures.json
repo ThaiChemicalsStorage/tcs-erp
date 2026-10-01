@@ -1,0 +1,1699 @@
+{
+  "about": "Shot list for the user manual's figures (public/manual.html). Each entry is one <figure>: the page expects the image at public/<file> (WebP). Until a file exists the page shows a placeholder. Take every shot from the REAL app signed in to a SEPARATE demo database (never the dev DB tcs_erp, never a real person's name in demo data). 'route' is the app's hash route; 'state' says what to open/click; 'viewport' the browser size; 'crop' which part of the screen to keep; 'demoData' the records the demo DB must contain. 'designRef' points at the REDESIGN canvas board the figure was planned from (board px, 1440 wide: crop starts at y, height h) — use it for framing only; where the board and the real app differ, shoot the real app.",
+  "generated": "2026-10-01",
+  "count": 94,
+  "figures": [
+    {
+      "file": "manual-images/ch01-1.webp",
+      "chapter": 1,
+      "figure": "1.1",
+      "section": "ch1",
+      "caption": "หน้าเข้าสู่ระบบ — ลิงก์ “ลืมรหัสผ่าน?” อยู่ขวาของชื่อช่องรหัสผ่าน",
+      "route": "",
+      "state": "Signed out (fresh browser context with no session cookie), open the site root '/'. The sign-in card 'เข้าสู่ระบบ' shows with fields 'ชื่อผู้ใช้ หรือ อีเมล' and 'รหัสผ่าน', the blue link 'ลืมรหัสผ่าน?' to the right of the password label, and the navy 'เข้าสู่ระบบ' button. Leave both fields empty; do not submit (no red error box). Make sure the yellow 'ถูกออกจากระบบเพราะเข้าจากเครื่องอื่น' notice is NOT shown (it only appears after being superseded).",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (navy brand panel on the left + white card on the right)",
+      "demoData": "At least one user must exist so the setup wizard does not appear instead",
+      "designRef": {
+        "board": "SignIn",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch01-2.webp",
+      "chapter": 1,
+      "figure": "1.2",
+      "section": "ch1-2",
+      "caption": "หน้าลืมรหัสผ่าน — กรอกชื่อผู้ใช้หรืออีเมล ฝากเบอร์ติดต่อกลับไว้ในช่องข้อความถึงผู้ดูแล",
+      "route": "",
+      "state": "Signed out, open '/'. Type a demo username (e.g. 'sales01') into 'ชื่อผู้ใช้ หรือ อีเมล', then click the link 'ลืมรหัสผ่าน?'. The forgot-password card opens with the username pre-filled. Type a sample note into 'ข้อความถึงผู้ดูแล (ไม่บังคับ)', e.g. 'โทรกลับ 08x-xxx-xxxx'. Do NOT press 'ส่งคำขอกู้รหัสผ่าน'.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page",
+      "demoData": "A demo user with username 'sales01' (any fictional user)",
+      "designRef": {
+        "board": "SignIn-ForgotPassword",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch01-3.webp",
+      "chapter": 1,
+      "figure": "1.3",
+      "section": "ch1-3",
+      "caption": "กล่องตั้งรหัสผ่านใหม่ — ปิดไม่ได้ ทางออกมีแค่บันทึกรหัสใหม่ หรือออกจากระบบ",
+      "route": "#dashboard",
+      "state": "Sign in as a demo user whose account has mustChangePassword = true (i.e. a Super Admin issued a temporary password via การจัดการระบบ › คำขอกู้รหัสผ่าน › ออกรหัสผ่านชั่วคราว, then sign in with that temporary password). The modal 'ตั้งรหัสผ่านใหม่' appears over the app with fields 'รหัสผ่านชั่วคราว' / 'รหัสผ่านใหม่' / 'ยืนยันรหัสผ่านใหม่', 'ออกจากระบบ' bottom-left and 'บันทึกรหัสผ่านใหม่' bottom-right. Leave the fields empty. Alternative without a real reset: stub GET of the current user with page.route so it returns mustChangePassword: true.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (dimmed app behind the centred 480px dialog)",
+      "demoData": "A demo user (e.g. 'sales02') with a temporary password issued (mustChangePassword true)",
+      "designRef": {
+        "board": "Dlg-ForceChangePassword",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch01-4.webp",
+      "chapter": 1,
+      "figure": "1.4",
+      "section": "ch1-4",
+      "caption": "หน้าตั้งค่าเริ่มต้นระบบ — สร้างบัญชี Super Admin คนแรก ขึ้นเพียงครั้งเดียว",
+      "route": "",
+      "state": "Only appears when the database has no users. Either point at an empty database, or (as done in the 2026-10-01c verification) stub the setup-status API with page.route so it answers needsSetup: true, then open '/'. The card shows the gold badge 'การตั้งค่าเริ่มต้นระบบ', title 'สร้างบัญชี Super Admin', fields ชื่อ-นามสกุล · รหัสพนักงาน · ชื่อผู้ใช้ (Username) · อีเมล · รหัสผ่าน · ยืนยันรหัสผ่าน and the button 'สร้างบัญชี Super Admin'. Leave fields empty, do not submit.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page",
+      "demoData": "None (empty users collection, or stubbed needsSetup)",
+      "designRef": {
+        "board": "SetupWizard",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch02-1.webp",
+      "chapter": 2,
+      "figure": "2.1",
+      "section": "ch2-1",
+      "caption": "แถบเมนูด้านซ้าย — กลุ่มที่เปิดอยู่มีลูกศรชี้ลง เมนูที่เลือกเป็นแถบสีทอง",
+      "route": "#quotations",
+      "state": "Signed in as a Super Admin (sees every menu group). Sidebar expanded (not collapsed). The group 'งานขาย' is open because 'ใบเสนอราคา' is the active page (gold bar); other groups collapsed with right-pointing chevrons. 'ตั้งค่า' sits at the bottom of the sidebar. If the page tour auto-starts on first visit, press Esc to close it before the shot.",
+      "viewport": "1440x900 desktop",
+      "crop": "the left sidebar only (248px wide, full height), optionally with the topbar's left part",
+      "demoData": "Any; a Super Admin account",
+      "designRef": {
+        "board": "Sidebar",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch02-2.webp",
+      "chapter": 2,
+      "figure": "2.2",
+      "section": "ch2-3",
+      "caption": "พิมพ์เลขที่ใบเสนอราคา — ใบที่ตรงเลขที่ขึ้นบนสุดและเลือกไว้ให้แล้ว เอกสารที่อ้างถึงใบนั้นเรียงตามลงมา ปุ่มกรองด้านบนบอกจำนวนของแต่ละชนิด",
+      "route": "#dashboard",
+      "state": "Signed in as a Super Admin. Press Ctrl+K (or click the topbar search box) and type the full number of a demo quotation that already has a Scope of Work and a delivery order (e.g. 'Q#260915-0003'). Wait for results: the 'ตรงเลขที่เอกสาร' group shows that quotation pinned and highlighted on top, followed by groups (Scope of Work, ใบส่งมอบสินค้า, ...) and the filter chips row with counts. Do not press Enter.",
+      "viewport": "1440x900 desktop (≥1024px so the panel is a dropdown under the search box, not full screen)",
+      "crop": "topbar + the search dropdown panel (about 900px tall)",
+      "demoData": "A quotation (status อนุมัติแล้ว or later) for customer 'บริษัท ตัวอย่าง จำกัด' with a Scope of Work and a delivery order that reference it; a few other documents mentioning the same job",
+      "designRef": {
+        "board": "Pop-GlobalSearch",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch02-3.webp",
+      "chapter": 2,
+      "figure": "2.3",
+      "section": "ch2-4",
+      "caption": "คำแนะนำหน้าใบเสนอราคา ขั้นที่ 1 — กล่องชี้ไปที่ปุ่มที่กำลังอธิบาย มีประโยคสั้นหนึ่งประโยคและลิงก์ “ยังไม่เข้าใจ? อ่านในคู่มือ”",
+      "route": "#quotations",
+      "state": "Signed in as a user who can create quotations (so the 'สร้างใบเสนอราคา' step is not skipped). Click the round '?' button right next to the page title 'ใบเสนอราคา'. The tour opens at step 1 ('ขั้นที่ 1 จาก N') highlighting the 'สร้างใบเสนอราคา' button, with the progress bars, the one-sentence description, the 'ยังไม่เข้าใจ? อ่านในคู่มือ' link and ย้อนกลับ/ถัดไป buttons.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (dimmed page with the highlighted button and the tour popover)",
+      "demoData": "Several quotations so the list behind is not empty",
+      "designRef": {
+        "board": "Guide-QuoteList-1",
+        "y": 0,
+        "h": 960,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch02-4.webp",
+      "chapter": 2,
+      "figure": "2.4",
+      "section": "ch2-6",
+      "caption": "หน้ารายการใบเสนอราคา — ปุ่มสร้างมุมขวาบน · แท็บสถานะพร้อมจำนวน · ช่องค้นหาและปุ่มตัวกรอง · ตาราง · เปลี่ยนหน้าด้านล่าง",
+      "route": "#quotations",
+      "state": "Signed in as a sales manager/Super Admin. Tab 'ทั้งหมด' selected, search empty, all filters at 'ทั้งหมด' (ประเภทงาน / พนักงานขาย / สถานะ). If the page tour auto-starts, press Esc first. Scroll so the pagination row 'แสดง 1–20 จาก N รายการ' is visible if possible.",
+      "viewport": "1440x900 desktop",
+      "crop": "main content: page header with 'สร้างใบเสนอราคา', the list card (tabs, toolbar, table) down to the pagination row (about 960px; full-page capture if needed)",
+      "demoData": "More than 20 quotations in mixed statuses (ร่าง, รออนุมัติ, อนุมัติแล้ว, ส่งให้ลูกค้าแล้ว, ปิดการขายสำเร็จ, ลูกค้าปฏิเสธ) from 2-3 fictional salespeople and 2-3 job types, a few marked น่าสนใจ / Potential Opportunity, one revision (-R1)",
+      "designRef": {
+        "board": "QuoteList",
+        "y": 0,
+        "h": 960,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch03-1.webp",
+      "chapter": 3,
+      "figure": "3.1",
+      "section": "ch3-1",
+      "caption": "หัวเอกสารฉบับร่าง — ข้อความ “บันทึกอัตโนมัติแล้ว 14:32” อยู่ถัดจากเลขที่และป้ายสถานะ ปุ่มบันทึกอยู่ในกลุ่มปุ่มด้านขวา",
+      "route": "#quotations",
+      "state": "Open an existing quotation in status ร่าง (click its row in the list; NOT a brand-new one from 'สร้างใบเสนอราคา', which only shows 'เก็บร่างไว้ในเครื่องให้อัตโนมัติ'). Make a small real edit (e.g. change the remark text) and wait ~3 s until the header shows the green 'บันทึกอัตโนมัติแล้ว HH:MM' next to the number and the ร่าง badge. Header right shows ? · พิมพ์ / PDF · บันทึก · เพิ่มเติม · ส่งขออนุมัติ. If the document tour auto-starts, press Esc first. This writes to the DB — demo DB only.",
+      "viewport": "1440x900 desktop",
+      "crop": "document header + tabs (รายละเอียด / ตัวอย่างก่อนพิมพ์ / ประวัติ) + stepper (about 420px from the top of the content area)",
+      "demoData": "A quotation in ร่าง for customer 'บริษัท ตัวอย่าง จำกัด' with all required fields and 2-3 items, owned by the signed-in user",
+      "designRef": {
+        "board": "QuoteDocument",
+        "y": 0,
+        "h": 420,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch03-2.webp",
+      "chapter": 3,
+      "figure": "3.2",
+      "section": "ch3-3",
+      "caption": "กล่อง “ยังไม่ได้บันทึก” — ปุ่มไม่บันทึกเป็นตัวอักษรสีแดงทางซ้าย ปุ่มบันทึกอยู่ขวาสุด",
+      "route": "#quotations",
+      "state": "Click 'สร้างใบเสนอราคา', complete the 3-step wizard to reach the new-quotation page (header 'สร้างใหม่', 'เก็บร่างไว้ในเครื่องให้อัตโนมัติ'), type a customer name e.g. 'บริษัท ตัวอย่าง จำกัด'. Do NOT press บันทึกร่าง. Then click another sidebar menu (e.g. 'ลูกค้า'). The dialog 'ยังไม่ได้บันทึก' appears with the 'never saved' message, the label line, red 'ไม่บันทึก' on the left, 'กลับไปแก้ต่อ' and navy 'บันทึก' on the right. Do not click any button except 'กลับไปแก้ต่อ' afterwards.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (dimmed document behind the centred 480px dialog)",
+      "demoData": "A quotation template / job type so the wizard can be completed; customer 'บริษัท ตัวอย่าง จำกัด'",
+      "designRef": {
+        "board": "Dlg-UnsavedChanges",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch04-1.webp",
+      "chapter": 4,
+      "figure": "4.1",
+      "section": "ch4",
+      "caption": "แท็บภาพรวม — ช่วงเวลามุมขวาบน · แท็บแผนกใต้ชื่อหน้า · ตัวเลขหลัก 4 ใบ · กล่องเอกสารรออนุมัติทุกแผนกทางขวา · ต้องจัดการก่อนคู่กับสรุปแต่ละแผนกด้านล่าง",
+      "route": "#dashboard",
+      "state": "Signed in as an admin/manager who can see every dashboard tab (so all tabs show: ภาพรวม · ขาย · บริการ · จัดซื้อ · คลังสินค้า · ผลิต · โครงการ · BD · บัญชี). Click tab 'ภาพรวม'. Leave ช่วงเวลา = 'ทั้งหมด'. Wait until the 4 KPI cards, the revenue chart, the 'เอกสารรออนุมัติทุกแผนก' card, 'ต้องจัดการก่อน' and 'สรุปแต่ละแผนก' have loaded (no skeletons). Do not open any popover.",
+      "viewport": "1440x900 desktop",
+      "crop": "main content area from the page header (title 'ภาพรวมผู้บริหาร' + greeting line) down to the bottom of the 'ต้องจัดการก่อน' / 'สรุปแต่ละแผนก' row (about 1100px tall; scroll-capture full page and crop); sidebar may be included",
+      "demoData": "Closed (Win) quotations spread over the last 12 months so the revenue chart has bars; several active quotations; at least 2 unpaid invoices (one overdue >60 days) so ยอดค้างชำระ shows an aging bar; products with stock value and at least 1 below its alert level; pending documents of 2-3 kinds (e.g. 2 quotations รออนุมัติ, 1 PO รออนุมัติ, 1 Cost Control รออนุมัติ); 1 PO past its required receive date and 1 service report waiting for customer approval (so 'ต้องจัดการก่อน' has rows); some audit-log activity for 'กิจกรรมล่าสุด'",
+      "designRef": {
+        "board": "Dashboard",
+        "y": 0,
+        "h": 1100,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch04-2.webp",
+      "chapter": 4,
+      "figure": "4.2",
+      "section": "ch4-1",
+      "caption": "แท็บขาย — แถวตัวกรองแผนก พนักงานขาย และสวิตช์ VAT ใต้แท็บ · ปุ่มส่งออกมุมขวาบน · การ์ดรายการรออนุมัติกดอนุมัติได้จากที่นี่",
+      "route": "#dashboard/sales",
+      "state": "Signed in as a sales manager/admin who sees all salespeople and can approve quotations. Click tab 'ขาย'. Leave แผนก = 'ทุกแผนก', พนักงานขาย = 'พนักงานขายทั้งหมด', VAT switch OFF (label reads 'ก่อนภาษี'). Do not open the 'ส่งออก' menu.",
+      "viewport": "1440x900 desktop",
+      "crop": "first screen: page header with ช่วงเวลา + 'ส่งออก' buttons, tab bar, filter row (แผนก · พนักงานขาย · VAT switch), 4 KPI cards, and the 'รายการรออนุมัติ' + 'การติดตามลูกค้า' row (about 900px)",
+      "demoData": "At least 3 quotations in status รออนุมัติ from 2 salespeople (so the approval table has rows with ✕ ปฏิเสธ / ✓ อนุมัติ), quotations in every status across 2 departments, several with follow-up dates (one overdue), some flagged as Potential Opportunity, closed (Win) quotations over the last months",
+      "designRef": {
+        "board": "Dashboard-Sales",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch05-1.webp",
+      "chapter": 5,
+      "figure": "5.1",
+      "section": "ch5",
+      "caption": "หน้าเอกสารรออนุมัติ — จำนวนที่รอมุมขวาบน · แท็บชนิดเอกสารพร้อมจำนวน · ช่องค้นหา · คอลัมน์รอมานานบอกจำนวนวัน",
+      "route": "#pendingApprovals",
+      "state": "Signed in as a Super Admin (or an approver with approve rights on several document kinds). Tab 'ทั้งหมด' selected, search empty. Header shows the yellow pill 'รออยู่ N ใบ' top-right; tabs ทั้งหมด + one tab per kind present with counts; table columns เลขที่ (kind under the number) · ลูกค้า / ผู้ขาย · งานต้นทาง · ผู้ขอ · รอมานาน; footer hint line about the yellow color.",
+      "viewport": "1440x900 desktop",
+      "crop": "main content from the page header to the footer hint line under the table (about 1040px; full-page capture)",
+      "demoData": "7-10 pending documents of 4-5 kinds: 2-3 quotations รออนุมัติ, 1 Scope of Work, 1 ใบขอซื้อ, 1 ใบสั่งซื้อ, 1 Cost Control, 1 คำขอเพิ่มสินค้า (no number yet); submitted by 2-3 fictional users; waitingSince spread so at least 2 rows are ≥3 days old (yellow) and one is from today (pill reads 'วันนี้')",
+      "designRef": {
+        "board": "PendingApprovals",
+        "y": 0,
+        "h": 1040,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch06-1.webp",
+      "chapter": 6,
+      "figure": "6.1",
+      "section": "ch6-1",
+      "caption": "ขั้นที่ 1 ของการสร้างใบเสนอราคา — แถบ 4 ขั้นด้านบน และการ์ดประเภทงานพร้อมป้ายบอกว่ามี Template หรือไม่",
+      "route": "#quotations",
+      "state": "Signed in as a salesperson with quotations:create. On the quotation list click the navy button 'สร้างใบเสนอราคา' (top right). Stay on step 1 'เลือกประเภทงาน' — do not click any job-type card. Wait until every card's badge has finished loading (no 'กำลังตรวจสอบ...').",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header 'สร้างใบเสนอราคา' with 'ยกเลิก' button, the 4-step stepper, and the job-type card grid",
+      "demoData": "Active job types incl. SC Wet Scrubber / Activated Carbon System (2 active templates), BF Dust Collector System (1 active template) and TA Fiberglass Tank (no template), so the badges read 'มี Template 2 แบบ', 'มี Template', 'ยังไม่มี Template'",
+      "designRef": {
+        "board": "QuoteWizard",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch06-2.webp",
+      "chapter": 6,
+      "figure": "6.2",
+      "section": "ch6-2",
+      "caption": "ใบเสนอราคาฉบับร่าง — หัวเอกสารพร้อมสถานะและเวลาบันทึกอัตโนมัติ ปุ่ม “บันทึก” “เพิ่มเติม” และปุ่มหลัก “ส่งขออนุมัติ” มุมขวาบน การ์ดลูกค้า ข้อมูลเอกสาร และแถบยอดรวมด้านขวา",
+      "route": "#quotations",
+      "state": "Signed in as the salesperson who OWNS the quotation. In the list click tab 'ทั้งหมด' and open the row of the Draft (ร่าง) quotation for customer 'บริษัท ตัวอย่าง จำกัด'. Stay on document tab 'รายละเอียด'. Type one character in หมายเหตุ and wait ~3s so the header shows 'บันทึกอัตโนมัติแล้ว HH:MM' (or use a document that was just auto-saved). Do not open the 'เพิ่มเติม' menu.",
+      "viewport": "1440x900 desktop",
+      "crop": "first screen (0-900px): back link, document header with status pill + autosave time + completion indicator + buttons [พิมพ์ / PDF][บันทึก][เพิ่มเติม ▾][ส่งขออนุมัติ], the 6-step stepper, customer card, document-info card and right rail (ยอดรวมทั้งสิ้น card, ติดตามการขาย card)",
+      "demoData": "A Draft quotation owned by the signed-in user, linked to registered customer 'บริษัท ตัวอย่าง จำกัด' (address, tax ID, contact filled), job type with template, 3 line items + 1 Section header, all required fields complete so 'ส่งขออนุมัติ' is enabled",
+      "designRef": {
+        "board": "QuoteDocument",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch06-3.webp",
+      "chapter": 6,
+      "figure": "6.3",
+      "section": "ch6-2",
+      "caption": "ตารางรายการสินค้า / บริการ — ปุ่มเพิ่ม Section และเลือกจากคลังสินค้าด้านบน บรรทัดรายละเอียดย่อยและแท็กใต้รายการ และกล่องยอดรวมพร้อมส่วนลดพิเศษด้านล่าง",
+      "route": "#quotations",
+      "state": "Same Draft quotation as figure 2, tab 'รายละเอียด'. Scroll down to the card 'รายการสินค้า / บริการ'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 'รายการสินค้า / บริการ' card only, from its header buttons (เพิ่ม Section · เลือกจากคลังสินค้า) through the totals box (ยอดรวมก่อนหักส่วนลด · ส่วนลดพิเศษ · VAT · ยอดรวมทั้งสิ้น) and the 'เพิ่มรายการเอง' button",
+      "demoData": "The Draft quotation has 1 Section row (e.g. 'งานระบบ'), 3 line items; the first item has 2 sub-detail lines and 2 tags ('ผลิตเอง', 'รับประกัน 1 ปี'); ส่วนลดพิเศษ = 5% so the discount line shows",
+      "designRef": {
+        "board": "QuoteDocument",
+        "y": 1040,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch06-4.webp",
+      "chapter": 6,
+      "figure": "6.4",
+      "section": "ch6-6",
+      "caption": "หน้ารายการใบเสนอราคา — แท็บพร้อมจำนวนใบ ช่องค้นหาและตัวกรอง และปุ่ม “สร้างใบเสนอราคา” มุมขวาบน",
+      "route": "#quotations",
+      "state": "Signed in as a sales manager who can see others' quotations. Tab 'ทั้งหมด' selected, search empty, filters at their default (all).",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'สร้างใบเสนอราคา', tabs ทั้งหมด/รออนุมัติ/อนุมัติแล้ว/น่าสนใจ/โอกาสในการขาย/ใบแก้ไข with counts, toolbar (search + ประเภทงาน · พนักงานขาย · สถานะ), and the first ~10 rows",
+      "demoData": "About 15 quotations from 2-3 salespeople across statuses ร่าง, รออนุมัติ, อนุมัติแล้ว, ส่งให้ลูกค้าแล้ว, ปิดการขายสำเร็จ, เสียโอกาส; some flagged โอกาสในการขาย, some interest 'น่าสนใจ'; at least one revision (-R1); customers with project names",
+      "designRef": {
+        "board": "QuoteList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch07-1.webp",
+      "chapter": 7,
+      "figure": "7.1",
+      "section": "ch7-1",
+      "caption": "กล่องสร้าง Scope of Work — พิมพ์เลขที่เอกสารเอง ระบบตรวจว่าไม่ซ้ำกับใบอื่น",
+      "route": "#quotations",
+      "state": "Signed in as a salesperson with quotation + Scope of Work create rights. In the quotation list open the row of the quotation in status 'ปิดการขายสำเร็จ' (or 'อนุมัติแล้ว') for customer 'บริษัท ตัวอย่าง จำกัด' that has NO Scope of Work yet. Click 'เพิ่มเติม ▾' in the document header, then 'สร้าง Scope of Work'. The dialog 'สร้าง Scope of Work' opens; leave the เลขที่เอกสาร field empty (placeholder 'เช่น PQ202607-15-LI-SK' visible).",
+      "viewport": "1440x900 desktop",
+      "crop": "the dialog only (480px wide) with a little dimmed background around it",
+      "demoData": "A quotation with at least 2 line items, status ปิดการขายสำเร็จ, customer 'บริษัท ตัวอย่าง จำกัด', not yet linked to any Scope of Work",
+      "designRef": {
+        "board": "Dlg-QuoteCreateScopeOfWork",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch07-2.webp",
+      "chapter": 7,
+      "figure": "7.2",
+      "section": "ch7-2",
+      "caption": "Scope of Work ฉบับร่าง — ปุ่ม “บันทึกร่าง” “เพิ่มเติม” และปุ่มหลัก “ส่งขออนุมัติ” มุมขวาบน แถบขั้นตอน 3 ขั้น การ์ดข้อมูลเอกสาร และการ์ดความครบถ้วนกับเอกสารต้นทางด้านขวา",
+      "route": "#scopeOfWork",
+      "state": "Signed in as the salesperson who created it. In the Scope of Work list click tab 'Draft' and open the row 'PQ202607-15-LI-SK'. Do not open any menu.",
+      "viewport": "1440x900 desktop",
+      "crop": "first screen (0-900px): sticky header with number + 'Draft' pill + autosave time + buttons [พิมพ์ / PDF][บันทึกร่าง][เพิ่มเติม ▾][ส่งขออนุมัติ], the 3-step stepper (จัดทำร่าง · รออนุมัติ · อนุมัติแล้ว), customer + document-info cards and the right rail (ข้อมูลที่จำเป็นก่อนส่งขออนุมัติ, เอกสารต้นทาง, เอกสารที่เกี่ยวข้อง)",
+      "demoData": "A Draft Scope of Work 'PQ202607-15-LI-SK' created from the quotation above, with 2 sections and 4 items, delivery/billing contacts filled, 2 payment installments totalling 100%, all required checklist groups picked so 'ส่งขออนุมัติ' is enabled",
+      "designRef": {
+        "board": "ScopeOfWorkDocument",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch07-3.webp",
+      "chapter": 7,
+      "figure": "7.3",
+      "section": "ch7-2",
+      "caption": "การ์ดเช็คลิสต์เงื่อนไขงาน — กลุ่มที่มี * ต้องเลือกก่อนส่งขออนุมัติ",
+      "route": "#scopeOfWork",
+      "state": "Same Draft Scope of Work as figure 2. Scroll down to the card 'เช็คลิสต์เงื่อนไขงาน'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 'เช็คลิสต์เงื่อนไขงาน' card only (title, note 'หัวข้อที่มี * ต้องเลือกก่อนส่งขออนุมัติ', and the groups Safety · เอกสารส่งถึง · เอกสาร ปจ.2 · งานขนส่ง · Logo · Name plate · Test Report · เงื่อนไขการวางบิล · เงื่อนไขการส่งมอบงาน)",
+      "demoData": "Same record; most groups have a choice selected, one 'อื่น ๆ' option ticked with text filled",
+      "designRef": {
+        "board": "ScopeOfWorkDocument",
+        "y": 2460,
+        "h": 820,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch07-4.webp",
+      "chapter": 7,
+      "figure": "7.4",
+      "section": "ch7-4",
+      "caption": "หน้ารายการ Scope of Work — แท็บสถานะและแท็บ “ยังไม่มี PO” คอลัมน์ PO พร้อมป้าย “ยังไม่มี PO”",
+      "route": "#scopeOfWork",
+      "state": "Signed in as a sales manager who sees all Scope of Work. Tab 'ทั้งหมด', ช่วงวันที่ = 'ทั้งหมด', no other filters.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header, tabs ทั้งหมด · Draft · รออนุมัติ · Final · ยังไม่มี PO with counts, toolbar (search, ช่วงวันที่, ประเภทงาน, พนักงานขาย) and the table",
+      "demoData": "About 8 Scope of Work in Draft / รออนุมัติ / Final; at least 3 without a PO number (orange 'ยังไม่มี PO' badge) and 1 Final with 2 PO numbers",
+      "designRef": {
+        "board": "ScopeOfWorkList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch08-1.webp",
+      "chapter": 8,
+      "figure": "8.1",
+      "section": "ch8-1",
+      "caption": "การ์ดผู้รับเอกสาร — รายชื่อแยกตามแผนกที่ติ๊กไว้ ช่องผู้รับเพิ่มเติม ไฟล์แนบ ข้อความถึงผู้รับ และปุ่ม “ส่งแจ้งเตือนผู้รับเอกสาร”",
+      "route": "#scopeOfWork",
+      "state": "Signed in as the salesperson who owns it. In the Scope of Work list click tab 'Final' and open the row 'PQ202607-15-LI-SK' (Final). Scroll to the bottom card 'ผู้รับเอกสาร'. Do not press 'ส่งแจ้งเตือนผู้รับเอกสาร'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 'ผู้รับเอกสาร' card only: intro text, one block per ticked department (Purchase, Factory) with 'เลือกแล้ว N คน', the 'ผู้รับเพิ่มเติม' search block, ไฟล์แนบ list with 'แนบไฟล์' button, ข้อความเพิ่มเติมถึงผู้รับ, and the footer with 'ส่งไปพร้อมกับ Cost Control: CC-…' link + 'ส่งแจ้งเตือนผู้รับเอกสาร' button",
+      "demoData": "A Final Scope of Work whose checklist 'เอกสารส่งถึง' has Purchase and Factory ticked; users exist with department Purchase (2 people) and Factory (2 people), one ticked in each; 1 extra recipient from Accounting under ผู้รับเพิ่มเติม; 2 attachments (a PDF and an image); a recipient message filled; a Cost Control linked to this Scope of Work",
+      "designRef": {
+        "board": "ScopeOfWorkDocument",
+        "y": 3220,
+        "h": 1080,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch09-1.webp",
+      "chapter": 9,
+      "figure": "9.1",
+      "section": "ch9-1",
+      "caption": "การ์ดรายงวดวางคู่กัน — แต่ละงวดมีเลขที่ วันที่ ช่องติ๊กรายการ Remark และปุ่ม “พิมพ์ใบส่งมอบงวดนี้” ของตัวเอง",
+      "route": "#deliveryOrder",
+      "state": "Signed in as the salesperson who created it. In the delivery-order list click tab 'Draft' and open the row 'PQ202607-15-LI-SK'. Scroll down until the two instalment cards ('งวดชำระเงิน 1 จาก 2', 'งวดชำระเงิน 2 จาก 2') are fully visible side by side.",
+      "viewport": "1440x900 desktop",
+      "crop": "the two instalment cards only (each: header with 'พิมพ์ใบส่งมอบงวดนี้', เลขที่ + วันที่ fields, item table with 'เลือก N จาก M' and checkboxes, Remark)",
+      "demoData": "A Draft delivery order created from Scope of Work 'PQ202607-15-LI-SK' whose payment terms are 30% Down Payment / 40% After Delivery (Credit 30 Days) / 30% After Job Complete (so 2 delivery cards, no card for the down payment); 4 items; card 1 has 2 items ticked + เลขที่ + วันที่ filled; card 2 has 1 item ticked",
+      "designRef": {
+        "board": "DeliveryOrderDocument",
+        "y": 900,
+        "h": 880,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch09-2.webp",
+      "chapter": 9,
+      "figure": "9.2",
+      "section": "ch9-3",
+      "caption": "หน้าใบส่งมอบสินค้าฉบับร่าง — ปุ่ม “บันทึกร่าง” “เพิ่มเติม” และปุ่มหลัก “ส่งขออนุมัติ” มุมขวาบน การ์ดลูกค้า การ์ดส่งใบส่งมอบงานถึงแผนก และไฟล์แนบ พร้อมเอกสารต้นทางด้านขวา",
+      "route": "#deliveryOrder",
+      "state": "Same Draft delivery order as figure 1, top of the page. Do not open any menu.",
+      "viewport": "1440x900 desktop",
+      "crop": "first screen (0-900px): sticky header with number + 'Draft' pill + autosave time + buttons [บันทึกร่าง][เพิ่มเติม ▾][ส่งขออนุมัติ], the 3-step stepper, customer card, 'ส่งใบส่งมอบงานถึงแผนก' card, attachments card, and the right rail (เอกสารต้นทาง, ขั้นต่อไป)",
+      "demoData": "Same record; departments Project and Production exist (หน้าแผนกและทีม) with at least one user each; Project ticked under 'เอกสารส่งถึง'; 1 attachment (a signed delivery note image)",
+      "designRef": {
+        "board": "DeliveryOrderDocument",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch09-3.webp",
+      "chapter": 9,
+      "figure": "9.3",
+      "section": "ch9-4",
+      "caption": "หน้ารายการใบส่งมอบสินค้า — แท็บ Draft / รออนุมัติ / Final และคอลัมน์จำนวนงวดของแต่ละงาน",
+      "route": "#deliveryOrder",
+      "state": "Signed in as a sales manager. Tab 'ทั้งหมด', ช่วงวันที่ 'ทั้งหมด', search empty.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header, tabs ทั้งหมด · Draft · รออนุมัติ · Final with counts, toolbar (search 'ค้นหารหัสงาน / ลูกค้า' + ช่วงวันที่) and the table (รหัสงาน · ลูกค้า · จำนวนงวด · สถานะ · แก้ไขล่าสุด)",
+      "demoData": "About 6 delivery orders in Draft / รออนุมัติ / Final with 1-3 instalments each",
+      "designRef": {
+        "board": "DeliveryOrderList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch10-1.webp",
+      "chapter": 10,
+      "figure": "10.1",
+      "section": "ch10-1",
+      "caption": "แผงข้อมูลลูกค้าที่เลื่อนออกมาจากด้านขวา — ข้อมูลบริษัท ผู้ติดต่อ ค่าเริ่มต้นในใบเสนอราคา ปุ่ม “ยกเลิก” กับ “บันทึก” ที่ท้ายแผงด้านขวา และเมนู “เพิ่มเติม” ท้ายแผงด้านซ้าย",
+      "route": "#customers",
+      "state": "Signed in as a user with customer edit + archive rights. On the customer list click the row of 'บริษัท ตัวอย่าง จำกัด' (status ใช้งาน). The drawer opens from the right with the company name as title and 'ใช้งาน' badge + 'แก้ไขล่าสุด …' under it. Do not open the 'เพิ่มเติม' menu.",
+      "viewport": "1440x900 desktop",
+      "crop": "the right-hand drawer (560px) full height, with a sliver of the dimmed list on the left",
+      "demoData": "Customer 'บริษัท ตัวอย่าง จำกัด' active, with 13-digit tax ID, address, contact name/phone/email, วิธีจัดส่ง 'จัดส่งทางรถขนส่ง', a project name and a delivery address",
+      "designRef": {
+        "board": "Drawer-Customer",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch10-2.webp",
+      "chapter": 10,
+      "figure": "10.2",
+      "section": "ch10-2",
+      "caption": "หน้ารายชื่อลูกค้า — ปุ่ม “เพิ่มข้อมูลลูกค้า” มุมขวาบน แท็บสถานะ ช่องค้นหา และช่องแสดงที่เก็บถาวร",
+      "route": "#customers",
+      "state": "Tab 'ทั้งหมด', search empty, 'แสดงที่เก็บถาวร' unticked, no drawer open.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'เพิ่มข้อมูลลูกค้า', tabs ทั้งหมด · เปิดใช้งาน · ปิดใช้งาน with counts, toolbar (search + 'แสดงที่เก็บถาวร' checkbox) and the table",
+      "demoData": "About 10 customers: 8 active, 1 inactive (ปิดใช้งาน), 1 archived (hidden until the checkbox is ticked); most with tax ID, contact, email and phone",
+      "designRef": {
+        "board": "Customers",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch11-1.webp",
+      "chapter": 11,
+      "figure": "11.1",
+      "section": "ch11-1",
+      "caption": "หน้า Template ใบเสนอราคา — ปุ่ม “นำเข้าจาก Excel” และ “สร้าง Template ใหม่” มุมขวาบน แท็บสถานะ ตัวกรองประเภทงานและที่มา และเมนู ⋮ ท้ายแถว",
+      "route": "#quotationTemplates",
+      "state": "Signed in as an admin with every quotation-template permission (create, import, activate, archive). Tab 'ทั้งหมด', no search, filters at default. Click the ⋮ ('เพิ่มเติม') button at the end of the FIRST row so its menu is open (ดูตัวอย่าง · สร้างใบเสนอราคาจาก Template นี้ · ทำสำเนา · ปิดใช้งาน · เก็บถาวร). Use a real click.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'นำเข้าจาก Excel' + 'สร้าง Template ใหม่', tabs ทั้งหมด · ใช้งาน · ปิดใช้งาน · เก็บถาวร with counts, toolbar (search, ประเภทงาน, ที่มา), table and the open row menu",
+      "demoData": "The 5 standard templates imported from Excel (Wet Scrubber, Activated Carbon, Bag Filter, FRP Tank, FRP Lining — source 'นำเข้าจาก Excel', active) plus 1 manual template that is inactive and 1 archived",
+      "designRef": {
+        "board": "TemplateManagement",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch11-2.webp",
+      "chapter": 11,
+      "figure": "11.2",
+      "section": "ch11-2",
+      "caption": "หน้าแก้ไข Template — ข้อมูล Template การตั้งค่าประเภทงานและสวิตช์เปิดใช้งาน และตาราง Section กับรายการ",
+      "route": "#quotationTemplates",
+      "state": "Same user. In the list click the row of the active Wet Scrubber template to open its editor. Scroll to the top. Do not change anything (the editor saves only on 'บันทึก').",
+      "viewport": "1440x900 desktop",
+      "crop": "from the header (back link, title, 'ยกเลิก' + 'บันทึก') through the 'ข้อมูล Template' and 'การตั้งค่า' cards and the first Section table with its rows showing the up/down arrow, duplicate and delete buttons (about 1000px)",
+      "demoData": "The Wet Scrubber template with at least 2 Sections, each with 3+ items of mixed type (รายการหลัก / รายการย่อย / ข้อกำหนด), one item with a sub-detail line and one item picked from the product catalogue (shows product code)",
+      "designRef": {
+        "board": "TemplateEditor",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch11-3.webp",
+      "chapter": 11,
+      "figure": "11.3",
+      "section": "ch11-3",
+      "caption": "ดูตัวอย่าง Template จากเมนู ⋮ — หมวดหมู่งาน รายการ รายละเอียดย่อย และเงื่อนไขการชำระเงิน",
+      "route": "#quotationTemplates",
+      "state": "On the template list, open the ⋮ menu of the Wet Scrubber row and click 'ดูตัวอย่าง'. Wait until the preview dialog finishes loading.",
+      "viewport": "1440x900 desktop",
+      "crop": "the preview dialog (880px wide) with a little dimmed background",
+      "demoData": "Same Wet Scrubber template, with payment terms, warranty terms and tax notes filled",
+      "designRef": {
+        "board": "Dlg-TemplatePreview",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch12-1.webp",
+      "chapter": 12,
+      "figure": "12.1",
+      "section": "ch12-1",
+      "caption": "หน้าสร้างรายงานบริการ — เลือก Template ตรวจเช็คในการ์ดบนสุด กรอกลูกค้าและข้อมูลการเข้าบริการ แล้วกด \"สร้างรายงานร่าง\" มุมขวาบน",
+      "route": "#service",
+      "state": "On the service report list, click the primary button 'สร้างรายงานบริการ' (top right). The full-page create form opens (title 'สร้างรายงานบริการ'). In the card 'Template ตรวจเช็ค' click the row of the template 'ระบบบำบัดอากาศทั่วไป' so its radio is selected; in the 'ลูกค้า' card search and pick customer 'บริษัท ตัวอย่าง จำกัด'; fill 'สถานที่ให้บริการ' and 'ระบบที่ให้บริการ'. Do NOT click 'สร้างรายงานร่าง'.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page from the header (back link + title + 'สร้างรายงานร่าง' button) down through the Template card and the customer card",
+      "demoData": "2+ active service templates (e.g. 'ระบบบำบัดอากาศทั่วไป' with 4 sections, 'Activated Carbon / Wet Scrubber'); customer 'บริษัท ตัวอย่าง จำกัด' with contact name, phone, address; signed-in user with service:create",
+      "designRef": {
+        "board": "ServiceReportNew",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch12-2.webp",
+      "chapter": 12,
+      "figure": "12.2",
+      "section": "ch12-2",
+      "caption": "รายการตรวจเช็คในรายงาน — กดปกติ/ผิดปกติหรือกรอกค่าที่วัดได้ รายการผิดปกติต้องมีรายละเอียดและรูป แถบขวาบอกความคืบหน้า",
+      "route": "#service",
+      "state": "Open a service report in status 'ร่าง' (Draft) from the list (tab 'ร่าง'). Scroll so the right-rail navy progress card 'ตรวจเช็คแล้ว x / y รายการ' and the 'รายการตรวจเช็ค' card are both visible; the first section expanded.",
+      "viewport": "1440x900 desktop",
+      "crop": "the checklist card with the first expanded section plus the right rail (progress card + ผู้ตรวจสอบ card); include one abnormal item with detail text and a photo thumbnail",
+      "demoData": "Draft service report SR-202609-0014 for 'บริษัท ตัวอย่าง จำกัด' from template 'ระบบบำบัดอากาศทั่วไป'; about half the items answered: several 'ปกติ', one 'ผิดปกติ' with abnormal detail and 1 photo, one measurement item filled (e.g. Air Flow Rate 1,250)",
+      "designRef": {
+        "board": "ServiceReportEditor",
+        "y": 1060,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch12-3.webp",
+      "chapter": 12,
+      "figure": "12.3",
+      "section": "ch12-4",
+      "caption": "หน้าที่ลูกค้าเห็นบนมือถือเมื่อเปิดลิงก์อนุมัติ — อ่านรายงานด้านบน แล้วเลื่อนลงไปเซ็นและกดอนุมัติ หรือแจ้งไม่อนุมัติพร้อมเหตุผลท้ายหน้า",
+      "route": "",
+      "state": "Public page, no sign-in needed: open /approve?report=<reportId>&key=<approval key> (the link produced by 'ส่งให้ลูกค้าอนุมัติ (ลิงก์/LINE)' on a Draft report, shown in the dialog 'สร้างลิงก์อนุมัติแล้ว (ใช้ได้ 7 วัน)'). Take a full-page screenshot without signing or answering.",
+      "viewport": "390x844 phone",
+      "crop": "full page (scrolling) from the company header down to the 'การอนุมัติรายงาน' section with the signature box and the buttons 'อนุมัติรายงาน' / 'ไม่อนุมัติ / แจ้งแก้ไข'; if too tall, keep the job info top part and the approval section",
+      "demoData": "the Draft report from figure 2 with a pending (unanswered, not expired) customer approval link",
+      "designRef": {
+        "board": "CustomerApproval",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch12-4.webp",
+      "chapter": 12,
+      "figure": "12.4",
+      "section": "ch12-5",
+      "caption": "หน้า Template รายงานบริการ — แท็บใช้งานอยู่/เก็บถาวร และปุ่มสร้าง Template ใหม่มุมขวาบน",
+      "route": "#serviceTemplates",
+      "state": "Template list, tab 'ใช้งานอยู่' selected (default).",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (header with 'สร้าง Template ใหม่' button, tabs, table)",
+      "demoData": "3+ service templates, one of them archived (so the 'เก็บถาวร' tab has a count); signed-in user with service template manage permission",
+      "designRef": {
+        "board": "ServiceTemplates",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch13-1.webp",
+      "chapter": 13,
+      "figure": "13.1",
+      "section": "ch13-1",
+      "caption": "หน้าใบแจ้งหนี้/ใบวางบิล — แท็บสถานะ ค้นหา กรองเดือน และคอลัมน์ \"อ้างถึงใบกำกับภาษี\" บอกว่า BI ใบนี้คู่กับ AR/IV ใบไหน",
+      "route": "#arBilling",
+      "state": "BI list (menu บัญชี › ใบแจ้งหนี้/ใบวางบิล), tab 'ทั้งหมด', month filter left at its default (all). No dialog open.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header, tabs ทั้งหมด/ใช้งาน/ยกเลิกแล้ว with counts, search + month filter, table with the 'อ้างถึงใบกำกับภาษี' column",
+      "demoData": "5+ BI documents (e.g. BI6909001…) each referencing an AR or IV (AR6909001, IV6909002 …) for customers like 'บริษัท ตัวอย่าง จำกัด'; one BI cancelled; one created from a Manual invoice (badge 'แบบ Manual', เลขที่งาน '—')",
+      "designRef": {
+        "board": "ArDocumentList-BI",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch13-2.webp",
+      "chapter": 13,
+      "figure": "13.2",
+      "section": "ch13-2",
+      "caption": "หน้าวางบิลของงานที่เลือก — เปิดงวด เลือกประเภทงาน ติ๊กและแนบเอกสาร แล้วกดออกเอกสารมุมขวาบน",
+      "route": "#accounting",
+      "state": "Menu บัญชี › วางบิลตามงาน: click 'สร้างวางบิล', in the dialog 'เลือกงานที่จะวางบิล' click the row of the demo Scope of Work. On the job page click the second installment (a non-deposit installment with status 'ยังไม่ได้วางบิล') to expand it; choose ประเภทงาน 'สินค้า'; leave the checklist partly ticked. Do NOT click 'ออกเอกสาร (IV + BI)'.",
+      "viewport": "1440x900 desktop",
+      "crop": "header (job number, customer, 'ออกเอกสาร (IV + BI)' button) + the installments accordion with the expanded installment + the right rail (deposit status card, next step)",
+      "demoData": "Final Scope of Work SC-202609-0003 for 'บริษัท ตัวอย่าง จำกัด' with 3 installments (มัดจำ 30% already issued as AR + BI with receipt, งวดส่งมอบ 60%, งวดสุดท้าย 10%); user with AR create/issue permissions",
+      "designRef": {
+        "board": "AccountingJobBillingDetail",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch13-3.webp",
+      "chapter": 13,
+      "figure": "13.3",
+      "section": "ch13-3",
+      "caption": "แดชบอร์ดบัญชี — ตัวกรองช่วงเวลาและพนักงานขาย การ์ดสรุป กราฟแนวโน้มใบกำกับภาษี และสัดส่วนประเภทเอกสาร",
+      "route": "#accountingDashboard",
+      "state": "Accounting dashboard page, preset 'เดือนนี้', salesperson 'พนักงานขายทั้งหมด'.",
+      "viewport": "1440x900 desktop",
+      "crop": "top of page: header with filters, the 4 KPI cards (with 'ช่วงที่เลือก' / 'ณ ปัจจุบัน' chips), the trend chart and the document-type breakdown",
+      "demoData": "AR/IV/BI/RE documents spread over the last 12 months (several in the current month), some IV without receipts and past due (so outstanding + aging bar are non-zero), 1–2 Scope of Work without deposit AR",
+      "designRef": {
+        "board": "AccountingDashboard",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch13-4.webp",
+      "chapter": 13,
+      "figure": "13.4",
+      "section": "ch13-4",
+      "caption": "สรุปเอกสารประจำเดือน — ยอดรวมใบกำกับภาษีสำหรับกระทบยอดภาษีขาย และตารางแยกตามประเภทเอกสาร",
+      "route": "#arMonthly",
+      "state": "Monthly summary page with the current month selected in 'เดือน' (screen view, not print).",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with month field and 'พิมพ์สรุป', totals strip 'ยอดรวมใบกำกับภาษี (AR + IV) เดือน …', first one or two document-type tables",
+      "demoData": "current month: 2 AR, 3 IV, 5 BI, 2 RE; one IV cancelled (shown struck through)",
+      "designRef": {
+        "board": "ArMonthly",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch14-1.webp",
+      "chapter": 14,
+      "figure": "14.1",
+      "section": "ch14-1",
+      "caption": "ทะเบียนภาษีซื้อ — เลือกเดือนตามวันที่บนใบกำกับภาษีของผู้ขาย ยอดรวมอยู่ด้านบน รายการอยู่ด้านล่าง",
+      "route": "#purchaseTaxRegister",
+      "state": "Purchase tax register (menu บัญชี › ทะเบียนภาษีซื้อ), month field set to the demo month. Screen view (not print).",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'เดือน' field and 'พิมพ์สรุป', summary strip 'ยอดรวมภาษีซื้อ ประจำเดือน …', the 'รายการภาษีซื้อ' table",
+      "demoData": "6+ AP entries (from receiving-report receive rounds) whose vendor tax-invoice dates fall in the demo month, from 3 vendors (e.g. 'บริษัท ผู้ขายตัวอย่าง จำกัด'), each with invoice number, tax ID, RR reference",
+      "designRef": {
+        "board": "PurchaseTaxRegister",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch14-2.webp",
+      "chapter": 14,
+      "figure": "14.2",
+      "section": "ch14-2",
+      "caption": "ทะเบียนเจ้าหนี้บนจอ — ยอดค้างจ่ายและจ่ายแล้วของเดือน ตารางเดียวมีแถวหัวกลุ่มของแต่ละผู้ขาย และปุ่มบันทึกจ่ายแล้วท้ายแถว",
+      "route": "#apRegister",
+      "state": "AP register (menu บัญชี › ทะเบียนเจ้าหนี้), same demo month. Screen view, no dialog open.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with month + 'พิมพ์สรุป', the three summary figures (จำนวนรายการ / ยอดค้างจ่าย / จ่ายแล้ว), the table 'รายการเจ้าหนี้ตามผู้ขาย' with 2–3 vendor group rows",
+      "demoData": "same AP entries as figure 1; at least one entry already 'จ่ายแล้ว' (with cheque ref) and the rest 'ค้างจ่าย'; signed-in user with AP manage permission so 'บันทึกจ่ายแล้ว' / 'ยกเลิกการจ่าย' buttons show",
+      "designRef": {
+        "board": "ApRegister",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch14-3.webp",
+      "chapter": 14,
+      "figure": "14.3",
+      "section": "ch14-3",
+      "caption": "หน้าใบรับวางบิล — แท็บค้างจ่าย/จ่ายครบแล้ว และปุ่มรับวางบิลมุมขวาบน",
+      "route": "#vendorBills",
+      "state": "Vendor bill list (menu คลังสินค้า › ใบรับวางบิล), tab 'ทั้งหมด'.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'รับวางบิล' button, tabs ทั้งหมด/ค้างจ่าย/จ่ายครบแล้ว with counts, search + date-range filter, table",
+      "demoData": "3+ vendor bills BR-202609-0001… for different vendors; one fully paid (all its AP rows marked paid) so it appears under 'จ่ายครบแล้ว'",
+      "designRef": {
+        "board": "VendorBillList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch14-4.webp",
+      "chapter": 14,
+      "figure": "14.4",
+      "section": "ch14-4",
+      "caption": "หน้าใบรับวางบิล — ข้อมูลผู้จำหน่าย วันที่รับวางบิล เครดิต วันจ่ายชำระ ยอดคงค้างทางขวา และตารางใบรับสินค้าในใบ",
+      "route": "#vendorBills",
+      "state": "From the list open an unpaid vendor bill (tab 'ค้างจ่าย', first row). Do not edit any field (the page auto-saves).",
+      "viewport": "1440x900 desktop",
+      "crop": "header (number, autosave indicator, 'บันทึก', 'เพิ่มเติม', primary 'พิมพ์') + vendor card + bill info card + right navy 'เงินคงค้าง' card + the top of 'ใบรับสินค้าในใบนี้' table",
+      "demoData": "vendor bill for 'บริษัท ผู้ขายตัวอย่าง จำกัด' containing 3 receiving-report rows (one a multi-round RR shown as RR…/2), none paid, credit 30 days, payment date set",
+      "designRef": {
+        "board": "VendorBillDocument",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch15-1.webp",
+      "chapter": 15,
+      "figure": "15.1",
+      "section": "ch15",
+      "caption": "หน้ารายการโครงการ — ปุ่ม \"สร้างโครงการ\" มุมขวาบน แท็บแยกตามสถานะ และตารางรหัสงาน ลูกค้า จำนวนรายการ",
+      "route": "#project",
+      "state": "Project list (no sidebar entry — navigate by hash #project). Tab 'ทั้งหมด', date range 'ทั้งหมด'. Signed-in user has project create permission so the 'สร้างโครงการ' button shows.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'สร้างโครงการ', tabs ทั้งหมด/วางแผน/กำลังดำเนินการ/เสร็จสิ้น with counts, search + date range, table",
+      "demoData": "4+ projects: 2 'วางแผน', 1 'กำลังดำเนินการ', 1 'เสร็จสิ้น', each created from a Final Scope of Work for customers like 'บริษัท ตัวอย่าง จำกัด'",
+      "designRef": {
+        "board": "ProjectList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch15-2.webp",
+      "chapter": 15,
+      "figure": "15.2",
+      "section": "ch15-2",
+      "caption": "หน้าโครงการ — แถบขั้นตอนสถานะ ข้อมูลโครงการ ความคืบหน้าการจัดหา และปุ่มสร้างเอกสาร 3 ปุ่มในแถวที่ยังไม่กำหนด",
+      "route": "#project",
+      "state": "Open the project in status 'กำลังดำเนินการ' from the list (tab 'กำลังดำเนินการ'). No menu open. The header primary button reads 'เปลี่ยนสถานะเป็นเสร็จสิ้น'.",
+      "viewport": "1440x900 desktop",
+      "crop": "from the header (job number, status pill, เพิ่มเติม, primary button) through the stepper, 'ข้อมูลโครงการ' card with the 4 sourcing tiles, the navy 'จัดหาแล้ว' rail card, and the top of 'รายการที่ต้องจัดหา' table (data-h ~1100)",
+      "demoData": "project with 6 items: 2 'ยังไม่กำหนด' (rows show the 3 buttons สร้างใบเบิกวัสดุ / สร้างใบสั่งงาน / สร้างใบขอซื้อ), 2 with a Draft ใบเบิก/ใบขอซื้อ ('สร้างเอกสารแล้ว'), 2 whose ใบสั่งงาน/ใบเบิก is Final ('จัดหาแล้ว'); user can create MR/JO/PR",
+      "designRef": {
+        "board": "ProjectDocument",
+        "y": 0,
+        "h": 1100,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch16-1.webp",
+      "chapter": 16,
+      "figure": "16.1",
+      "section": "ch16",
+      "caption": "หน้ารายการใบเบิกและใบคืนวัสดุ — ปุ่ม \"เปิดใบเปล่า\" และ \"สร้างใบเบิก-คืนวัสดุ\" มุมขวาบน แท็บสถานะ และป้าย \"ค้างเบิก\" ในคอลัมน์สถานะ",
+      "route": "#materialRequisition",
+      "state": "Menu โครงการ › ใบเบิกและใบคืนวัสดุ, tab 'ทั้งหมด', date range all. Signed-in user can create MR (both header buttons visible).",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'เปิดใบเปล่า' + 'สร้างใบเบิก-คืนวัสดุ', tabs ทั้งหมด/Draft/รออนุมัติ/Final with counts, search + date range, table",
+      "demoData": "5+ MRs MR-202609-0001…: 1 Draft, 1 รออนุมัติ, 3 Final of which 1 partly issued by store (shows amber 'ค้างเบิก' badge next to status) and 1 blank MR without job code ('—')",
+      "designRef": {
+        "board": "MaterialRequisitionList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch16-2.webp",
+      "chapter": 16,
+      "figure": "16.2",
+      "section": "ch16-2",
+      "caption": "การ์ดรายการวัสดุในใบเบิกฉบับร่าง — ปุ่ม \"ใช้เทมเพลต\" และ \"เพิ่มรายการจากแคตตาล็อก\" คอลัมน์คงเหลือในสต๊อก ช่องเบิกของ และป้ายของไม่พอ",
+      "route": "#materialRequisition",
+      "state": "Open the Draft MR (tab 'Draft'). Scroll to the 'รายการวัสดุ' card. Do not type or click add buttons (the page auto-saves). The two buttons only exist on a Draft the user may edit.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 'รายการวัสดุ' card: its header with 'ใช้เทมเพลต' and 'เพิ่มรายการจากแคตตาล็อก', and the lines table",
+      "demoData": "Draft MR (created by the signed-in user) with 4 lines from stock products, one requesting more than stock so 'ของไม่พอ ขาด n' shows next to the name; one kit product (ป้าย 'ชุด'); at least one MR template exists",
+      "designRef": {
+        "board": "MaterialRequisitionDocument",
+        "y": 640,
+        "h": 720,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch16-3.webp",
+      "chapter": 16,
+      "figure": "16.3",
+      "section": "ch16-3",
+      "caption": "หน้าใบสั่งงานฉบับร่าง — ข้อมูลใบสั่งงาน ไฟล์แนบในแถบขวา และรายการดำเนินงานพร้อมรายละเอียดย่อยและบรรทัดต่อ",
+      "route": "#jobOrder",
+      "state": "Menu โครงการ › ใบสั่งงาน, tab 'Draft', open the demo Draft job order. Do not edit fields (auto-save).",
+      "viewport": "1440x900 desktop",
+      "crop": "from the header (พิมพ์, เพิ่มเติม, บันทึกร่าง, primary ส่งขออนุมัติ) through stepper, 'ข้อมูลใบสั่งงาน' card, right rail (summary, ไฟล์แนบ card, ขั้นต่อไป) and the top of 'รายการดำเนินงาน' (data-h ~1000)",
+      "demoData": "Draft JO JO-202609-0001 linked to a project/job code for 'บริษัท ตัวอย่าง จำกัด', ถึงหน่วยงาน set, 3 lines incl. one sub-detail and one continuation line, 2 attachments (a PDF and a photo), several scope checklist items ticked",
+      "designRef": {
+        "board": "JobOrderDocument",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch16-4.webp",
+      "chapter": 16,
+      "figure": "16.4",
+      "section": "ch16-4",
+      "caption": "ใบจ่ายของสโตร์ที่ทำจากใบเบิกของแผนก — การ์ด \"จ่ายของรอบที่ 2\" และประวัติการจ่าย ยอดที่บันทึกตรงนี้ขึ้นในคอลัมน์จ่ายแล้วของใบเบิก",
+      "route": "#storeDocuments",
+      "state": "Menu คลังสินค้า › ใบเบิก-คืนวัสดุ (สโตร์), tab 'ใบเบิก', open the store issue document (e.g. PP-202609-0042) made from the department MR that already has 1 recorded round. Scroll down to the card 'จ่ายของรอบที่ 2 (สโตร์)' and 'ประวัติการจ่ายของ'. Do not click 'บันทึกการจ่ายรอบที่ 2'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 'จ่ายของรอบที่ 2 (สโตร์)' card and the 'ประวัติการจ่ายของ' card below it",
+      "demoData": "department MR MR-202609-0042 (Final) with matching store issue doc PP-202609-0042 having round 1 recorded (partial), lines still outstanding; signed-in user has store issue permission",
+      "designRef": {
+        "board": "StoreIssueDocument",
+        "y": 1050,
+        "h": 820,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch17-1.webp",
+      "chapter": 17,
+      "figure": "17.1",
+      "section": "ch17",
+      "caption": "หน้ารายการใบสั่งผลิต — เริ่มจากปุ่ม \"สร้างใบสั่งผลิต\" มุมขวาบน กดที่แถวเพื่อเปิดใบ",
+      "route": "#productionOrder",
+      "state": "Menu ผลิต › ใบสั่งผลิต, tab 'ทั้งหมด', date range all. Signed-in user can create production orders.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'สร้างใบสั่งผลิต', tabs ทั้งหมด/Draft/รออนุมัติ/Final with counts, search + date range, table (เลขที่ใบสั่งผลิต, รหัสงาน, ลูกค้า, ชื่อสินค้า, สถานะ)",
+      "demoData": "4+ production orders SC-202609-0010…0013 for 'บริษัท ตัวอย่าง จำกัด' etc.: 2 Draft, 1 รออนุมัติ, 1 Final, each with a product name",
+      "designRef": {
+        "board": "ProductionOrderList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch17-2.webp",
+      "chapter": 17,
+      "figure": "17.2",
+      "section": "ch17-1",
+      "caption": "หน้าใบสั่งผลิตฉบับร่าง — ปุ่ม \"ส่งขออนุมัติ\" มุมขวาบน แถบขั้นตอน ข้อมูลใบสั่งผลิต และการ์ดงานต้นทางด้านขวา",
+      "route": "#productionOrder",
+      "state": "Open a Draft production order created by the signed-in user (tab 'Draft'). No menu open, do not edit fields (auto-save).",
+      "viewport": "1440x900 desktop",
+      "crop": "from the header (พิมพ์, บันทึกฉบับร่าง, เพิ่มเติม, primary ส่งขออนุมัติ) through the stepper จัดทำร่าง › รออนุมัติ › อนุมัติแล้ว, 'ข้อมูลใบสั่งผลิต' card, the navy 'งานต้นทาง (Scope of Work)' rail card and next-step hint, plus the top of 'รายการสั่งผลิต'",
+      "demoData": "Draft production order SC-202609-0012 from a Scope of Work, ชื่อพนักงานดูแล filled, ชื่อสินค้า 'ถังเก็บสารเคมี 2,000 ลิตร', start/due dates set, lines: 1 header line 'ตัวถัง (Shell)', 3 items, 1 continuation line, 1 sub-detail",
+      "designRef": {
+        "board": "ProductionOrderDocument",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch17-3.webp",
+      "chapter": 17,
+      "figure": "17.3",
+      "section": "ch17-2",
+      "caption": "ขั้นที่ 2 ของการสร้างใบสั่งผลิต — ติ๊กรายการสินค้าที่ใบนี้จะผลิต แล้วกด \"สร้างเอกสาร\"",
+      "route": "#productionOrder",
+      "state": "On the list click 'สร้างใบสั่งผลิต'; in dialog 'เลือกงานที่จะสร้างใบสั่งผลิต' click the row of the demo Scope of Work, then 'ถัดไป: เลือกรายการ'. In step 2 tick 2 of the items. Do NOT click 'สร้างเอกสาร'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the dialog only (step indicator 1→2, items table with checkboxes, footer with 'กลับไปเลือกงาน', 'เลือกไว้ 2 รายการ', 'สร้างเอกสาร')",
+      "demoData": "Scope of Work with 4 non-header items (e.g. ถังเก็บสารเคมี, Scrubber, ปั๊ม, ท่อ)",
+      "designRef": {
+        "board": "Dlg-ProductionOrderScopeItems",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch17-4.webp",
+      "chapter": 17,
+      "figure": "17.4",
+      "section": "ch17-4",
+      "caption": "การ์ดผู้เกี่ยวข้องท้ายใบสั่งผลิต — ช่องผู้อนุมัติระบบเติมให้ ส่วนผู้ส่งมอบงาน ผู้ตรวจรับงาน และแผนกต้นทุนกรอกได้แม้อนุมัติแล้ว",
+      "route": "#productionOrder",
+      "state": "Open the Final production order (tab 'Final'), scroll to the bottom card 'ผู้เกี่ยวข้อง'. Do not click 'บันทึกช่องเซ็นท้ายฟอร์ม'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 'ผู้เกี่ยวข้อง' card only (title, hint, 'บันทึกช่องเซ็นท้ายฟอร์ม' button, the 5 signer blocks)",
+      "demoData": "Final production order with ผู้สั่งผลิต and approver filled by the system, ผู้ส่งมอบงาน filled, ผู้ตรวจรับงาน / แผนกต้นทุน empty; signed-in user can edit production orders",
+      "designRef": {
+        "board": "ProductionOrderDocument",
+        "y": 1380,
+        "h": 460,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch18-1.webp",
+      "chapter": 18,
+      "figure": "18.1",
+      "section": "ch18-3",
+      "caption": "กล่องงานเข้า \"ใบขอซื้อ (ทุกฝ่าย)\" — แท็บถึงคิวจัดซื้อ / ยังอยู่ที่สโตร์ / ทั้งหมด และคอลัมน์แผนกกับป้ายขั้นของแต่ละใบ",
+      "route": "#purchasingRequestInbox",
+      "state": "Sidebar group 'จัดซื้อ' › 'ใบขอซื้อ (ทุกฝ่าย)'. Page opens on tab 'ถึงคิวจัดซื้อ' (default) — leave it there. Do not open any row.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header (module line, title 'ใบขอซื้อ (ทุกฝ่าย)', 'สร้างใบขอซื้อ' button) + the list card with the three counted tabs, toolbar and table",
+      "demoData": "8+ purchase requests in status Final from different departments (project / production / general — codes ED, FD, PR, SD): at least 4 forwarded to purchasing (storeStage 'forwarded', tag 'รอจัดซื้อ'), 1 of them also purchasingStage 'approved' (extra tag 'จัดซื้ออนุมัติแล้ว'), 2 still at the store (storeStage 'pending', tag 'รอสโตร์เช็คของ'), 1 closed from stock (tag 'จ่ายจากสต๊อกแล้ว'), plus 1-2 Draft ones (counted only under 'ทั้งหมด'); job codes filled on the project ones; signed-in user with purchaseRequest:view + purchaseOrder:create + purchaseRequest:editApproved + purchaseRequest:create",
+      "designRef": {
+        "board": "PurchasingRequestInbox",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch18-2.webp",
+      "chapter": 18,
+      "figure": "18.2",
+      "section": "ch18-7",
+      "caption": "ใบสั่งซื้อฉบับร่าง — ปุ่ม บันทึก และ ส่งขออนุมัติ มุมขวาบน แถบขั้นตอน ส่วนผู้ขาย การ์ดยอดสุทธิ และการ์ด \"การอนุมัติ\" ทางขวาที่มีช่องส่งให้ใครอนุมัติ",
+      "route": "#purchaseOrder",
+      "state": "On the PO list click tab 'Draft', then click the row of the Draft PO for 'บริษัท ไทยสตีลซัพพลาย จำกัด'. The document page opens (header: back link 'ใบสั่งซื้อทั้งหมด', number, pill 'Draft', autosave time; buttons 'พิมพ์', 'เพิ่มเติม', 'บันทึก', primary 'ส่งขออนุมัติ'). Do not type into any field (autosave). Leave 'ส่งให้ใครอนุมัติ' showing a chosen approver name.",
+      "viewport": "1440x900 desktop",
+      "crop": "top of the page: sticky header + stepper (จัดทำร่าง/รออนุมัติ/อนุมัติแล้ว) + vendor card and info card on the left + right rail (navy 'ยอดสุทธิ' card and 'การอนุมัติ' card); about the first 900px",
+      "demoData": "Draft PO (e.g. PO-202609-0007) created from an approved purchase request with job code, vendor 'บริษัท ไทยสตีลซัพพลาย จำกัด' picked from the register (accounting-approved, active), contact/phone/tax id/address filled, vendor quotation ref, credit 30 days, 3 lines with unit prices and department/account codes, VAT 7%, intendedApprover set to a fictional approver user; signed-in user with purchaseOrder:edit + print",
+      "designRef": {
+        "board": "PurchaseOrderDocument",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch18-3.webp",
+      "chapter": 18,
+      "figure": "18.3",
+      "section": "ch18-8",
+      "caption": "หน้ารายการใบสั่งซื้อ — ปุ่ม \"สร้างใบสั่งซื้อ\" มุมขวาบน และแท็บสถานะเหนือตาราง",
+      "route": "#purchaseOrder",
+      "state": "Sidebar 'จัดซื้อ' › 'ใบสั่งซื้อ'. Tab 'ทั้งหมด' (default). Nothing opened.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'สร้างใบสั่งซื้อ' button, tabs ทั้งหมด/Draft/รออนุมัติ/Final with counts, toolbar (search + ช่วงวันที่), table",
+      "demoData": "7+ POs PO-202609-0001…0007 mixing Draft, รออนุมัติ (PendingApproval) and Final, vendors 'บริษัท สยามเคมีภัณฑ์ จำกัด', 'บริษัท ไทยสตีลซัพพลาย จำกัด', 'บริษัท เอเชียวาล์วแอนด์ฟิตติ้ง จำกัด', 'ร้าน ศรีสุขการไฟฟ้า', most with a source PR number (ED-/FD-…) and job code, needed-by dates filled",
+      "designRef": {
+        "board": "PurchaseOrderList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch18-4.webp",
+      "chapter": 18,
+      "figure": "18.4",
+      "section": "ch18-11",
+      "caption": "ใบสั่งซื้อที่อนุมัติแล้ว — สถานะ Final อ่านอย่างเดียว ปุ่มหลัก \"รับสินค้า\" มุมขวาบน และชื่อผู้อนุมัติพร้อมวันที่ในการ์ดทางขวา",
+      "route": "#purchaseOrder",
+      "state": "On the PO list click tab 'Final', then click the row of a Final PO that has NO receiving report yet. Document shows pill 'Final' and 'ล็อกแล้ว · อ่านอย่างเดียว'; header buttons 'พิมพ์', 'เพิ่มเติม', primary 'รับสินค้า'. Do NOT click 'รับสินค้า'.",
+      "viewport": "1440x900 desktop",
+      "crop": "top ~900px: header + stepper (all three steps done) + vendor/info cards + right rail (navy 'ยอดสุทธิ' card, 'การอนุมัติ' card with ผู้อนุมัติ + วันที่อนุมัติ, 'ขั้นต่อไป' box)",
+      "demoData": "Final PO (e.g. PO-202609-0005) for 'บริษัท สยามเคมีภัณฑ์ จำกัด' approved by a fictional approver with approvedAt date, 3-4 lines with prices; signed-in user with purchaseOrder:view/edit/approve and the receiving-report create permission so 'รับสินค้า' shows (check canReceiveGoods in App.tsx)",
+      "designRef": {
+        "board": "PurchaseOrderDocumentApproved",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch19-1.webp",
+      "chapter": 19,
+      "figure": "19.1",
+      "section": "ch19-1",
+      "caption": "หน้าทะเบียนผู้ขาย — ปุ่ม \"เพิ่มผู้ขาย\" มุมขวาบน แท็บทั้งหมด / ใช้งานอยู่ / ปิดใช้งาน และคอลัมน์การอนุมัติของบัญชี",
+      "route": "#vendors",
+      "state": "Sidebar 'จัดซื้อ' › 'ทะเบียนผู้ขาย'. Tab 'ทั้งหมด' (default), 'แสดงที่เก็บถาวร' unticked. No drawer open.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header (title, description, 'เพิ่มผู้ขาย' button), tabs with counts, toolbar, table with columns รหัส/ชื่อผู้ขาย/ผู้ติดต่อ/เบอร์โทร/สถานะ/การอนุมัติของบัญชี",
+      "demoData": "6+ vendors: 'บริษัท สยามเคมีภัณฑ์ จำกัด' and 'บริษัท ไทยสตีลซัพพลาย จำกัด' (บัญชีอนุมัติแล้ว), 'บริษัท โกลบอล แก๊ส ซัพพลาย จำกัด' (รอบัญชีอนุมัติ), 'บริษัท บางนา ทูลส์ แอนด์ ฮาร์ดแวร์ จำกัด' (ร่าง), 'บริษัท พีเอ็นเค ไฮดรอลิก จำกัด' (บัญชีไม่อนุมัติ with a short rejection reason), 'บริษัท อีสเทิร์น ปั๊ม แอนด์ วาล์ว จำกัด' inactive (ปิดใช้งาน); codes like V-001…, tax ids, contacts, phones; signed-in user with vendor:create/edit",
+      "designRef": {
+        "board": "Vendors",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch19-2.webp",
+      "chapter": 19,
+      "figure": "19.2",
+      "section": "ch19-2",
+      "caption": "หน้าทะเบียนรหัส แท็บรหัสบัญชี — ปุ่ม \"นำเข้าผังบัญชีจากไฟล์\" และ \"เพิ่มรหัส\" มุมขวาบน บัญชีคุมมีป้ายกำกับในตาราง",
+      "route": "#codeRegister",
+      "state": "Sidebar 'จัดซื้อ' › 'ทะเบียนรหัส', then click tab 'รหัสบัญชี' (the 'นำเข้าผังบัญชีจากไฟล์' button only appears on this tab). No drawer open.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with both buttons, the three tabs รหัสแผนก/รหัสบัญชี/ประเภทงาน (ใบเบิก) with counts, table with columns รหัส/ชื่อ/หมวด/บัญชีคุม/สถานะ",
+      "demoData": "department codes (e.g. G143, G120), work types (งานเหล็ก, งานโรงงาน, งานผลิต) and 10+ account codes from a chart of accounts with categories, at least 2 control accounts (isControl) and child accounts pointing to them; signed-in user with codeRegister:create",
+      "designRef": {
+        "board": "CodeRegister",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch19-3.webp",
+      "chapter": 19,
+      "figure": "19.3",
+      "section": "ch19-3",
+      "caption": "แผงข้อมูลผู้ขายที่รอบัญชีอนุมัติ — แถบการอนุมัติของบัญชีด้านบนมีปุ่มอนุมัติ / ไม่อนุมัติ ปิดใช้งานและเก็บถาวรอยู่ในเมนูเพิ่มเติมท้ายแผง",
+      "route": "#vendors",
+      "state": "On the vendor list click the row 'บริษัท โกลบอล แก๊ส ซัพพลาย จำกัด' (approval 'รอบัญชีอนุมัติ'). The right-side drawer opens with the amber banner 'การอนุมัติของบัญชี: รอบัญชีอนุมัติ' and buttons 'ไม่อนุมัติ' / 'อนุมัติ'. Optionally click 'เพิ่มเติม' (bottom-left of the drawer) so its menu with 'ปิดใช้งาน' and 'เก็บถาวรผู้ขาย' is open. Do NOT click อนุมัติ/ไม่อนุมัติ.",
+      "viewport": "1440x900 desktop",
+      "crop": "the drawer only (full height), including the footer with 'เพิ่มเติม', 'ยกเลิก', 'บันทึก'",
+      "demoData": "vendor 'บริษัท โกลบอล แก๊ส ซัพพลาย จำกัด' in pendingApproval with code, tax id, contact, phone, address filled; signed-in user who has vendor:edit + vendor:approve + vendor:archive (e.g. admin)",
+      "designRef": {
+        "board": "Drawer-Vendor",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch20-1.webp",
+      "chapter": 20,
+      "figure": "20.1",
+      "section": "ch20",
+      "caption": "หน้ารายการ Cost Control — ปุ่มหลัก \"สร้างจากไฟล์ Excel\" และปุ่ม \"สร้างใบเปล่า\" มุมขวาบน แท็บสถานะเหนือตาราง",
+      "route": "#costControl",
+      "state": "Sidebar 'BD' › 'Cost Control'. Tab 'ทั้งหมด' (default). Nothing opened.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'สร้างใบเปล่า' and primary 'สร้างจากไฟล์ Excel', status tabs with counts, toolbar (search + ช่วงวันที่), table เลขที่/ชื่องาน/เลขที่งาน/สถานะ/แก้ไขล่าสุด",
+      "demoData": "6+ Cost Control docs CC-202609-0001… in Draft, รออนุมัติ and Final, job names (e.g. 'ระบบบำบัดอากาศ ถังเก็บสารเคมี'), job orders like PQ202608-118-SC-SK; signed-in user with costControl:create",
+      "designRef": {
+        "board": "CostControlList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch20-2.webp",
+      "chapter": 20,
+      "figure": "20.2",
+      "section": "ch20-2",
+      "caption": "หน้าต่างสร้างจากไฟล์ Excel — รายการชีตให้ติ๊ก กล่องคำเตือน ช่องหัวใบ และตารางตัวอย่างก่อนกด \"สร้างเอกสาร\"",
+      "route": "#costControl",
+      "state": "Click 'สร้างจากไฟล์ Excel'; the dialog 'สร้าง Cost Control จากไฟล์ Excel' opens. Upload (setInputFiles on the dialog's file input) a sample job workbook that has one COST CONTROL sheet and one SC sheet, so the sheet list, the warnings box 'ตรวจสอบก่อนกดสร้าง', the header fields and the preview table ('จะสร้าง N บรรทัด') appear. Do NOT click 'สร้างเอกสาร'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the dialog only",
+      "demoData": "a fictional .xlsx with a sheet named e.g. 'Manhole 5 mm.' laid out as a Cost Control (ลำดับที่/รายละเอียด header row, a few groups and items, a 'ราคาต้นทุน' total that does NOT match the line sum so a warning shows) and a second SC estimate sheet (ITEM/DESCRIPTION header); no DB records needed",
+      "designRef": {
+        "board": "Dlg-CostControlImport",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch20-3.webp",
+      "chapter": 20,
+      "figure": "20.3",
+      "section": "ch20-3",
+      "caption": "หน้าเอกสาร Cost Control — ปุ่ม บันทึก และ ส่งขออนุมัติ มุมขวาบน ข้อมูลงานและช่องผูกกับ Scope of Work ด้านซ้าย การ์ดนับบรรทัด ผู้ลงนาม และขั้นต่อไปด้านขวา ตารางรายการต้นทุนอยู่ถัดลงมา",
+      "route": "#costControl",
+      "state": "On the list click tab 'Draft' and open the Draft doc that was created from a file and is linked to a Scope of Work. Header shows 'พิมพ์', 'บันทึก', 'เพิ่มเติม', primary 'ส่งขออนุมัติ'. Do not type anything (autosave).",
+      "viewport": "1440x1100 desktop",
+      "crop": "from the sticky header down through the 'ข้อมูลงาน' card + right rail ('รายการต้นทุน' counts card, 'ผู้ลงนาม' card, 'ขั้นต่อไป' box) and the top ~8 rows of the 'รายการต้นทุน' table",
+      "demoData": "Draft CC-202609-0008 with Job Name, Work type, Job order, date, scopeOfWorkId linked to an existing Scope of Work (number shown in the field), sourceFileName set (shows 'ไฟล์ต้นทาง'), submittedBy filled, ~15 lines mixing หัวกลุ่ม/รายการ/รายละเอียดย่อย with qty, unit and unit cost on items; signed-in user with costControl:edit + print + scopeOfWork:view",
+      "designRef": {
+        "board": "CostControlDocument",
+        "y": 0,
+        "h": 1100,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch21-1.webp",
+      "chapter": 21,
+      "figure": "21.1",
+      "section": "ch21",
+      "caption": "หน้าคลังสินค้า — ปุ่ม จัดการหมวดหมู่ นำเข้าจากไฟล์ และเพิ่มสินค้าใหม่ มุมขวาบน แท็บ ใช้งาน / เก็บถาวร และป้าย \"สินค้าชุด\" / \"เครื่องมือ\" ใต้ชื่อสินค้า",
+      "route": "#products",
+      "state": "Sidebar 'คลังสินค้า' › 'คลังสินค้า' (page title 'คลังสินค้า / บริการ'). Tab 'ใช้งาน' (default), category filter 'ทุกหมวดหมู่'. No drawer.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with the three buttons, tabs, toolbar (search + category filter), table first page",
+      "demoData": "20+ active products in 4+ categories (codes like MAT-0008, unit, price), including kit 'ชุดน็อตยึดแท่น M6' (KIT-0003 = สกรู M6x30 ×1 + แหวน M6 ×2 + หัวน็อต M6 ×1, all three components exist) and 2 tool products (isTool, e.g. 'สว่านไฟฟ้า'); 2-3 archived products so the 'เก็บถาวร' tab has a count; signed-in user with products:create/edit",
+      "designRef": {
+        "board": "Products",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch21-2.webp",
+      "chapter": 21,
+      "figure": "21.2",
+      "section": "ch21-1",
+      "caption": "หน้าต่างนำเข้าสินค้า — การ์ดสรุป จะสร้างใหม่ / ข้าม / หมวดหมู่ใหม่ ตัวอย่างรายการ และแถวที่ถูกข้ามพร้อมเลขแถว",
+      "route": "#products",
+      "state": "Click 'นำเข้าจากไฟล์'; the dialog 'นำเข้าสินค้าจากไฟล์ Excel' opens. Upload (setInputFiles) a sample .xlsx so the stat cards 'จะสร้างใหม่' / 'ข้าม (รหัสซ้ำกับของเดิม)' / 'หมวดหมู่ใหม่', the preview list and the 'แถวที่ข้ามเพราะข้อมูลไม่ครบ' box appear. Do NOT click 'นำเข้า N รายการ'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the dialog only",
+      "demoData": "a fictional .xlsx with Thai/English headers (รหัสสินค้า, ชื่อสินค้า, หมวดหมู่, หน่วย/U.O.M, ราคา) of ~12 rows: 8 new codes, 2 codes that already exist in the DB, 2 rows missing the name; one category name that does not exist yet; plus one unknown extra column",
+      "designRef": {
+        "board": "Dlg-ProductImport",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch21-3.webp",
+      "chapter": 21,
+      "figure": "21.3",
+      "section": "ch21-2",
+      "caption": "หน้าหมวดหมู่สินค้า — ปุ่มเพิ่มหมวดหมู่ใหม่ จำนวนสินค้าต่อหมวด สถานะ ใช้งาน / เก็บถาวร และไอคอนแก้ชื่อ/เก็บถาวรท้ายแถว",
+      "route": "#productCategories",
+      "state": "Sidebar 'คลังสินค้า' › 'หมวดหมู่สินค้า'. No row in edit mode, add form closed.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'เพิ่มหมวดหมู่ใหม่' and the single table (ชื่อหมวดหมู่ / จำนวนสินค้า / สถานะ / icons)",
+      "demoData": "5+ categories with product counts (e.g. วัตถุดิบ, บรรจุภัณฑ์, อะไหล่, เครื่องมือ, บริการ), one archived; signed-in user with products:create or products:edit",
+      "designRef": {
+        "board": "ProductCategories",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch21-4.webp",
+      "chapter": 21,
+      "figure": "21.4",
+      "section": "ch21-3",
+      "caption": "แผงแก้ไขสินค้าด้านขวา — ข้อมูลสินค้า ช่องเป็นเครื่องมือ และส่วน \"สูตรชุด\" พร้อมชิ้นส่วน จำนวนต่อชุด และยอดคงเหลือของชิ้นส่วน",
+      "route": "#products",
+      "state": "Click the row of kit 'ชุดน็อตยึดแท่น M6' (KIT-0003). The product drawer opens. Scroll inside the drawer so the 'เป็นเครื่องมือ — เบิกแล้วต้องคืน' checkbox and the 'สูตรชุด (สินค้าชุด)' section with its three component rows (each showing 'คงเหลือ') and the 'เพิ่มชิ้นส่วน' link are visible. Do not change anything.",
+      "viewport": "1440x900 desktop",
+      "crop": "the drawer only; if it does not fit, keep from the product fields down to the kit section and the footer ('เพิ่มเติม', 'ยกเลิก', 'บันทึกสินค้า')",
+      "demoData": "kit KIT-0003 'ชุดน็อตยึดแท่น M6' unit 'ชุด', never issued, own stock 0; components สกรู M6x30 (stock e.g. 240), แหวน M6 (stock 500), หัวน็อต M6 (stock 180)",
+      "designRef": {
+        "board": "Drawer-Product",
+        "y": 140,
+        "h": 1100,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch22-1.webp",
+      "chapter": 22,
+      "figure": "22.1",
+      "section": "ch22",
+      "caption": "หน้าสต๊อกสินค้า — ปุ่ม พิมพ์ใบนับสต๊อก เมนูส่งออก และนำเข้าจาก Excel มุมขวาบน การ์ดสรุป 5 ใบ ช่องค้นหา และตารางคงเหลือ ต้นทุนเฉลี่ย ราคาซื้อล่าสุด มูลค่า จุดเตือน พร้อมไอคอนประวัติ/การ์ดสต๊อก และปุ่มปรับสต๊อกท้ายแถว",
+      "route": "#stock",
+      "state": "Sidebar 'คลังสินค้า' › 'สต๊อกสินค้า'. Empty search. No dialog, 'ส่งออก' menu closed.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'พิมพ์ใบนับสต๊อก', 'ส่งออก', 'นำเข้าจาก Excel', the 5 stat cards, toolbar (search + 'ใกล้ถึงจุดเตือน' legend), first ~10 table rows",
+      "demoData": "15+ products with stock, average cost, last purchase cost and reorder points; 1-2 at zero stock (red), 2 at or below their reorder point (amber with warning icon), the kit 'ชุดน็อตยึดแท่น M6' row (badge 'สินค้าชุด', no row actions); signed-in user with stock:view + stock:adjust",
+      "designRef": {
+        "board": "Stock",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch22-2.webp",
+      "chapter": 22,
+      "figure": "22.2",
+      "section": "ch22-2",
+      "caption": "แท็บติดตามรายสินค้า — สมการยอดในช่วง ตัดไปใช้กับงานไหนบ้าง การ์ดคงเหลือสีกรมท่าและรับเข้ามาจากไหนทางขวา และปุ่มการ์ดสต๊อก Excel / PDF มุมขวาบน",
+      "route": "#stockHistory",
+      "state": "Sidebar 'คลังสินค้า' › 'ประวัติสต๊อก', tab 'ทุกความเคลื่อนไหว'; click any row of product 'สกรู M6x30' (whole row is clickable) → tab 'ติดตามรายสินค้า' opens for that product. Set the date range to cover all demo movements (e.g. 'ปีนี้').",
+      "viewport": "1440x1000 desktop",
+      "crop": "from the page header (with 'การ์ดสต๊อก Excel' / 'การ์ดสต๊อก PDF') down through the product picker row, the 'ยอดเคลื่อนไหวในช่วง' equation box, 'ตัดไปใช้กับงานไหนบ้าง' and the right column (navy 'คงเหลือตอนนี้' card + 'รับเข้ามาจากไหน'); stop before the full-width สต๊อกการ์ด if it does not fit",
+      "demoData": "product 'สกรู M6x30' with an opening balance, 2 receipts from receiving reports (with PO numbers, vendor 'บริษัท ไทยสตีลซัพพลาย จำกัด', unit cost), 3+ issues via material requisitions to 2 different job codes, one kit issue of 'ชุดน็อตยึดแท่น M6', one return and one manual adjustment",
+      "designRef": {
+        "board": "StockHistoryTrace",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch22-3.webp",
+      "chapter": 22,
+      "figure": "22.3",
+      "section": "ch22-3",
+      "caption": "หน้าประวัติสต๊อก — การ์ดสรุปตามตัวกรอง ช่องค้นหา ตัวกรองวันที่/แหล่งที่มา/ประเภท และปุ่มส่งออก Excel / PDF มุมขวาบน",
+      "route": "#stockHistory",
+      "state": "Sidebar 'คลังสินค้า' › 'ประวัติสต๊อก', tab 'ทุกความเคลื่อนไหว' (default), no filters set.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'ส่งออก Excel' and 'PDF', the 4 summary cards, tabs, toolbar (search, ช่วงวันที่, ทุกแหล่งที่มา, ทุกประเภท, ล้างตัวกรอง), first ~10 rows",
+      "demoData": "30+ stock movements of mixed kinds (รับเข้า/ตัดออก/คืนของ/ปรับยอด) and sources (ใบรับสินค้า, ใบเบิกวัสดุ, ใบรับคืน / รับเข้า (สโตร์), ใบขอซื้อ (สโตร์จ่ายของ), ใบจ่ายเครื่องมือ, เอกสารขาย, นำเข้าจาก Excel, ปรับด้วยมือ) with job codes and fictional users; at least one kit-component row ('จากชุด … ×n')",
+      "designRef": {
+        "board": "StockHistory",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch22-4.webp",
+      "chapter": 22,
+      "figure": "22.4",
+      "section": "ch22-6",
+      "caption": "หน้าต่างนำเข้ายอดสต๊อก — ปุ่มดาวน์โหลดไฟล์ตั้งต้น การ์ดจะเปลี่ยนยอด / ยอดเท่าเดิม / ไม่พบรหัส และตารางส่วนต่างทีละสินค้า",
+      "route": "#stock",
+      "state": "Click 'นำเข้าจาก Excel' (top right); dialog 'นำเข้ายอดสต๊อกจาก Excel' opens. Upload (setInputFiles) a sample file so the stat cards 'จะเปลี่ยนยอด' / 'ยอดเท่าเดิม' / 'ไม่พบรหัส', the preview table (รหัสสินค้า/ชื่อสินค้า/ยอดปัจจุบัน/ยอดในไฟล์/ส่วนต่าง/ต้นทุน) and the note field appear. Do NOT click 'นำเข้า N รายการ'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the dialog only",
+      "demoData": "a fictional .xlsx with headers รหัสสินค้า / ยอดคงเหลือ / ต้นทุนต่อหน่วย: ~10 existing codes with new balances (some up with cost, some down), 2 unchanged, 0 unknown codes (so the import button is enabled; 'ไม่พบรหัส' shows 0); signed-in user with stock:adjust",
+      "designRef": {
+        "board": "Dlg-StockImport",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch23-1.webp",
+      "chapter": 23,
+      "figure": "23.1",
+      "section": "ch23",
+      "caption": "หน้ารายการใบรับสินค้า — ปุ่มสร้างใบรับสินค้า แท็บ ยังรับไม่ครบ / ปิดใบแล้ว และยอดรับแล้ว / ค้างรับของแต่ละใบ",
+      "route": "#receivingReport",
+      "state": "Receiving report list (menu คลังสินค้า › ใบรับสินค้า), tab 'ทั้งหมด' active, no search, date range = all. Do not click anything.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'สร้างใบรับสินค้า' button, tabs ทั้งหมด/ยังรับไม่ครบ/ปิดใบแล้ว with counts, toolbar, table (เลขที่ · ผู้ขาย / ใบสั่งซื้อ · มูลค่าสั่งซื้อ · รับแล้ว · ค้างรับ · สถานะ · แก้ไขล่าสุด)",
+      "demoData": "6+ receiving reports: mix of codes RR/RX/RI, at least 3 'ยังรับไม่ครบ' (some partly received so รับแล้ว and ค้างรับ are both non-zero) and 2 'ปิดใบแล้ว'; one blank RR (no PO, shows 'ใบเปล่า (ไม่มีใบสั่งซื้อ)'); vendors like 'บริษัท ผู้ขายตัวอย่าง จำกัด'",
+      "designRef": {
+        "board": "ReceivingReportList",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch23-2.webp",
+      "chapter": 23,
+      "figure": "23.2",
+      "section": "ch23-2",
+      "caption": "หน้าใบรับสินค้า — ปุ่ม พิมพ์ / บันทึก / เพิ่มเติม และปุ่มหลักบันทึกรับของมุมขวาบน แถบขั้นตอน ข้อมูลใบพร้อมป้ายใบสั่งซื้อและปุ่มเพิ่ม PO เงื่อนไขราคา และการ์ดค้างรับ / สรุปยอดด้านขวา",
+      "route": "#receivingReport",
+      "state": "Open (click the row of) a receiving report in status 'ยังรับไม่ครบ' created from a PO, with 1 receive round already posted and one extra PO added (two PO chips under 'ใบสั่งซื้อ' + the 'เพิ่ม PO' text button). Header shows พิมพ์ · บันทึก · เพิ่มเติม · บันทึกรับของ (navy primary). Do not type in any field (autosave writes).",
+      "viewport": "1440x900 desktop",
+      "crop": "top ~1000px of the page: sticky header, 3-step bar (เปิดใบจากใบสั่งซื้อ › รับของ · รับแล้ว 1 รอบ › ปิดใบแล้ว), card 'ข้อมูลใบรับสินค้า', card 'เงื่อนไขราคาและการชำระ', right rail cards 'ค้างรับ' (navy, progress bar) and 'สรุปยอด'",
+      "demoData": "RR document from 2 Final POs of the same vendor (main PO + 1 added PO), 4-6 lines, one receive round posted (some lines fully received, some outstanding), price type แยก VAT 7%, credit 30 days",
+      "designRef": {
+        "board": "ReceivingReportDocument",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch23-3.webp",
+      "chapter": 23,
+      "figure": "23.3",
+      "section": "ch23-3",
+      "caption": "แผงบันทึกรับของ — บิลของผู้ขาย เงื่อนไขราคาที่ดึงจากหัวใบ รายการที่รับรอบนี้พร้อมส่วนลดต่อรายการ และยอดสุทธิรอบนี้",
+      "route": "#receivingReport",
+      "state": "Open the same 'ยังรับไม่ครบ' receiving report and click the primary header button 'บันทึกรับของ' — the side panel 'บันทึกรับของ ครั้งที่ 2' slides in from the right (880px wide). Do not press the panel's submit button.",
+      "viewport": "1440x900 desktop",
+      "crop": "the side panel only, full height: sections 'บิลของผู้ขาย' and 'รายการที่รับรอบนี้', remark, and the footer with 'ยอดสุทธิรอบนี้' + 'บันทึกรับของ' button",
+      "demoData": "same RR as figure 2 with at least 3 outstanding lines (one with a line discount)",
+      "designRef": {
+        "board": "Dlg-ReceiveBatch",
+        "y": 0,
+        "h": 1040,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch24-1.webp",
+      "chapter": 24,
+      "figure": "24.1",
+      "section": "ch24-1",
+      "caption": "แท็บใบเบิกจากแผนก — ใบเบิกที่อนุมัติแล้วรอจ่าย จำนวนที่ค้างเบิก ใบจ่ายของสโตร์ที่ทำแล้ว และปุ่มทำใบจ่ายท้ายแถว",
+      "route": "#storeDocuments",
+      "state": "Store documents page (menu คลังสินค้า › ใบเบิก-คืนวัสดุ (สโตร์)), click tab 'ใบเบิกจากแผนก'. Do not click 'ทำใบจ่าย'.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header buttons 'ใบรับคืน / รับเข้า' + 'สร้างใบเบิก', the 4 tabs with counts, the hint box, the table (เลขที่ใบเบิก with ฝ่ายโครงการ/ฝ่ายผลิต line · รหัสงาน / ลูกค้า · แผนก / ทีม · 'ค้างเบิก N รายการ' · ใบจ่ายของสโตร์ · 'ทำใบจ่าย' button)",
+      "demoData": "3-4 Final department requisitions (project and production) with outstanding lines; at least one already has a store issue slip (PP-… number shown in the 'ใบจ่ายของสโตร์' column); customer e.g. 'บริษัท ตัวอย่าง จำกัด'",
+      "designRef": {
+        "board": "StoreDocuments-Incoming",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch24-2.webp",
+      "chapter": 24,
+      "figure": "24.2",
+      "section": "ch24-1",
+      "caption": "การ์ดจ่ายของรอบนี้ในใบจ่าย — ช่องตัดของให้แผนก/ทีม/ประเภทงาน ผู้จ่ายของ วันที่ ช่องจ่ายรอบนี้ทีละรายการ ปุ่มเพิ่มรายการ และประวัติการจ่ายของ",
+      "route": "#storeDocuments",
+      "state": "Tab 'ทั้งหมด' → open a store issue slip (code PP) that references a department requisition and has 1 issue round posted, still with outstanding lines. Header primary button reads 'บันทึกการจ่ายรอบที่ 2'. Scroll down to the card 'จ่ายของรอบที่ 2 (สโตร์)'. Do not type into quantities (autosave) and do not press the primary button.",
+      "viewport": "1440x900 desktop",
+      "crop": "the card 'จ่ายของรอบที่ 2 (สโตร์)' (charge department/team/work type, ผู้จ่ายของ, วันที่จ่าย, หมายเหตุรอบนี้, table with คงเหลือในสต๊อก and จ่ายรอบนี้ columns, 'เพิ่มรายการ' button) plus the 'ประวัติการจ่ายของ' card below it",
+      "demoData": "PP slip linked to an MR-YYYYMM-NNNN requisition, 4-5 lines, round 1 posted with partial quantities, one line with insufficient stock (red frame) and one 'สโตร์เพิ่ม' line",
+      "designRef": {
+        "board": "StoreIssueDocument",
+        "y": 1150,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch24-3.webp",
+      "chapter": 24,
+      "figure": "24.3",
+      "section": "ch24-2",
+      "caption": "หน้าใบเบิกและใบคืนวัสดุ (สโตร์) — ปุ่มสร้างใบเบิก และใบรับคืน / รับเข้า แท็บสี่แท็บพร้อมจำนวน ตัวกรองรหัส/สถานะ และป้ายค้างเบิก / รอรับเข้าคลัง / รับเข้าคลังแล้ว",
+      "route": "#storeDocuments",
+      "state": "Store documents page, tab 'ทั้งหมด', no filters.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'ใบรับคืน / รับเข้า' and 'สร้างใบเบิก', tabs ทั้งหมด / ใบเบิก / ใบรับคืน / รับเข้า / ใบเบิกจากแผนก with counts, toolbar with date range + รหัส + สถานะ filters, table rows",
+      "demoData": "8+ store documents: issue slips (OU, PM, PP) incl. one Final with the 'ค้างเบิก' tag; receipts (JP, FG, JU) incl. one Final with 'รอรับเข้าคลัง' and one with 'รับเข้าคลังแล้ว'; statuses Draft / รออนุมัติ / Final",
+      "designRef": {
+        "board": "StoreDocuments",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch24-4.webp",
+      "chapter": 24,
+      "figure": "24.4",
+      "section": "ch24-5",
+      "caption": "ใบรับคืนที่อนุมัติแล้ว — แถบขั้นตอนสี่ขั้น ข้อมูลที่ดึงจากใบเบิก การ์ดการอนุมัติ และปุ่มบันทึกรับเข้าคลังมุมขวาบน",
+      "route": "#storeDocuments",
+      "state": "Tab 'ใบรับคืน / รับเข้า' → open a JP return receipt in status Final that is NOT yet posted (tag 'รอรับเข้าคลัง'). Header shows พิมพ์ · เพิ่มเติม · primary 'บันทึกรับเข้าคลัง' (signed-in user must have stock-adjust permission). Do not press it.",
+      "viewport": "1440x900 desktop",
+      "crop": "top ~1000px: header, 4-step bar (จัดทำร่าง › รออนุมัติ › อนุมัติแล้ว › รับเข้าคลังแล้ว), header info pulled from the requisition, right-rail navy code card ('คืนครั้งนี้ x จาก y รายการ'), approval card, post card",
+      "demoData": "JP receipt referencing a Final MR with 3 lines (จ่ายไป / คืนแล้ว / คืนครั้งนี้ filled), approved by a sample approver",
+      "designRef": {
+        "board": "StoreReceiptDocument-Approved",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch25-1.webp",
+      "chapter": 25,
+      "figure": "25.1",
+      "section": "ch25-1",
+      "caption": "แท็บ \"ในครอบครอง\" — เลือกแผนกแล้วเลือกทีม เพื่อดูว่าทีมนั้นถือเครื่องมืออะไรอยู่ ตัวเลขสรุปอยู่ด้านขวาของแถบตัวกรอง",
+      "route": "#toolControl",
+      "state": "Tool control page (menu คลังสินค้า › เครื่องมือประจำทีม), click tab 'ในครอบครอง', choose a department in the first filter and a team in the second.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'พิมพ์รายงาน', tabs จ่าย / รับคืน · ในครอบครอง · รายงานเบิก-คืน, filter bar with the summary text at its right ('ทีมที่ถือเครื่องมืออยู่ … · จำนวนชิ้นที่ถืออยู่รวม …'), holdings table",
+      "demoData": "2 departments with 2 teams each; 5+ tool products (isTool) incl. 1 common tool; TL- slips so the chosen team holds 3-4 tools (เบิกรวม / คืนรวม / ถืออยู่ non-zero)",
+      "designRef": {
+        "board": "ToolControl",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch25-2.webp",
+      "chapter": 25,
+      "figure": "25.2",
+      "section": "ch25-2",
+      "caption": "แท็บ \"จ่าย / รับคืน\" — เลือกแผนกและทีม ใส่จำนวนท้ายแถว (แถวที่กรอกเป็นสีฟ้าอ่อน) แล้วกดปุ่มบันทึกมุมขวาล่างข้างตัวนับ \"เลือกไว้ N รายการ\"",
+      "route": "#toolControl",
+      "state": "Tab 'จ่าย / รับคืน' (signed-in user needs stock adjust permission), mode 'จ่ายเครื่องมือ', choose แผนกที่เบิก and ทีมที่ถือของ, type quantities into 2 rows (rows turn light blue). Do NOT press 'บันทึกจ่ายเครื่องมือ'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the tab card from the mode switch down to the footer showing 'เลือกไว้ 2 รายการ' and the 'บันทึกจ่ายเครื่องมือ' button",
+      "demoData": "6+ tool products with stock (one common tool with the 'กองกลาง' tag, one with 0 stock shown red)",
+      "designRef": {
+        "board": "ToolControl-Issue",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch25-3.webp",
+      "chapter": 25,
+      "figure": "25.3",
+      "section": "ch25-3",
+      "caption": "แผงเพิ่มเครื่องมือกองกลาง — ช่องรหัสเว้นว่างได้ ระบบจะออกเลข CT-0001 ให้",
+      "route": "#toolControl",
+      "state": "Tab 'จ่าย / รับคืน', click 'เพิ่มเครื่องมือกองกลาง' (right of the search box) — side panel opens from the right. Leave fields empty or type a sample name only; do not press 'เพิ่มเครื่องมือ'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the side panel only: groups 'ข้อมูลเครื่องมือ' (รหัส with placeholder 'เว้นว่าง = ระบบออกให้ (CT-0001)', ชื่อเครื่องมือ, หน่วย) and 'สต๊อกเริ่มต้น', footer buttons",
+      "demoData": "none beyond figure 2",
+      "designRef": {
+        "board": "Dlg-AddCommonTool",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch25-4.webp",
+      "chapter": 25,
+      "figure": "25.4",
+      "section": "ch25-3",
+      "caption": "หน้าต่างอัปเดตจำนวนสต๊อก — กรอกยอดที่มีจริง แล้วดูว่าเพิ่มหรือลดกี่ชิ้นก่อนกดบันทึก",
+      "route": "#toolControl",
+      "state": "Tab 'จ่าย / รับคืน', click the code/name of a common tool (row tagged 'กองกลาง') — dialog 'อัปเดตจำนวนสต๊อก' opens. Type a new quantity different from the current one so the 'เพิ่มขึ้น/ลดลง N' hint shows; do not press 'บันทึกจำนวน'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 480px dialog only",
+      "demoData": "one common tool e.g. 'บันไดอะลูมิเนียม 6 ขั้น' (CT-0001) with stock 4",
+      "designRef": {
+        "board": "Dlg-CommonToolStock",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch26-1.webp",
+      "chapter": 26,
+      "figure": "26.1",
+      "section": "ch26-1",
+      "caption": "แผงขอเพิ่มสินค้าใหม่ — กรอกชื่อ หน่วย หมวดที่เสนอ สเปก และเหตุผล ไม่มีช่องรหัสสินค้า",
+      "route": "#productRequest",
+      "state": "Product request page (menu คลังสินค้า › คำขอเพิ่มสินค้า), click 'ขอเพิ่มสินค้า' — side panel 'ขอเพิ่มสินค้าใหม่' opens. Fill sample values but do not press 'ส่งคำขอ'.",
+      "viewport": "1440x900 desktop",
+      "crop": "the side panel only: groups 'สินค้าที่ต้องการ' (ชื่อสินค้า, หน่วย, หมวดหมู่ที่เสนอ, รายละเอียด / สเปก) and 'เหตุผล', the no-code hint, footer with 'ส่งคำขอ'",
+      "demoData": "at least 3 product categories exist",
+      "designRef": {
+        "board": "Dlg-ProductRequestCreate",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch26-2.webp",
+      "chapter": 26,
+      "figure": "26.2",
+      "section": "ch26-2",
+      "caption": "หน้าคำขอเพิ่มสินค้า — คำขอที่รอสโตร์มีปุ่ม \"ไม่อนุมัติ\" กับ \"อนุมัติและตั้งรหัส\" ท้ายแถว ส่วนที่ตั้งรหัสแล้วแสดงรหัสที่ได้รับ",
+      "route": "#productRequest",
+      "state": "Product request page, tab 'ทั้งหมด', signed in as a user with productRequest:review (store) so the row buttons show.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page: header with 'ขอเพิ่มสินค้า', tabs ทั้งหมด / รอสโตร์ตั้งรหัส / ตั้งรหัสแล้ว / ไม่อนุมัติ with counts, search, table with 'ไม่อนุมัติ' + 'อนุมัติและตั้งรหัส' buttons and the trash icon on pending rows",
+      "demoData": "5+ requests: 2-3 pending (one with spec and 'จากใบขอซื้อ PR-…'), 1-2 approved with รหัสที่ได้รับ, 1 rejected with a reason shown in red under the name; requesters from different departments",
+      "designRef": {
+        "board": "ProductRequest",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch26-3.webp",
+      "chapter": 26,
+      "figure": "26.3",
+      "section": "ch26-4",
+      "caption": "หน้าต่างตั้งรหัสสินค้าและอนุมัติ — ต้องกรอกรหัสและเลือกหมวดก่อน ปุ่มอนุมัติจึงกดได้",
+      "route": "#productRequest",
+      "state": "As a reviewer, on a pending request click 'อนุมัติและตั้งรหัส' — dialog 'ตั้งรหัสสินค้าและอนุมัติ' opens. Leave the code empty and the category unselected (confirm button disabled). Do not confirm.",
+      "viewport": "1440x900 desktop",
+      "crop": "the 480px dialog only (summary box, รหัสสินค้า, หมวดหมู่ที่เสนอ select, 'หมวดที่ต้องการยังไม่มี — พิมพ์ชื่อหมวดใหม่' link, footer)",
+      "demoData": "a pending request with unit, spec and source PR number",
+      "designRef": {
+        "board": "Dlg-ProductRequestReview",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch27-1.webp",
+      "chapter": 27,
+      "figure": "27.1",
+      "section": "ch27-1",
+      "caption": "แผงข้อมูลผู้ใช้งาน — แก้ข้อมูลแล้วกดบันทึก รีเซ็ตรหัสผ่าน ระงับ หรือลบ อยู่ในเมนู \"เพิ่มเติม\"",
+      "route": "#users",
+      "state": "Signed in as a Super Admin. If the page tour auto-starts, press Esc. Tab 'ทั้งหมด'. Click the row of an active non-self demo user (e.g. a Sales User). The 560px drawer opens from the right (kicker 'ข้อมูลผู้ใช้งาน', sections ข้อมูลพนักงาน / บัญชีเข้าระบบ / ตำแหน่งและสิทธิ์, footer: 'เพิ่มเติม ▾' bottom-left, 'ยกเลิก' + 'บันทึก' bottom-right). Click 'เพิ่มเติม' to open the menu (รีเซ็ตรหัสผ่าน · ระงับการใช้งาน · ลบผู้ใช้งาน in red). Do not click any menu item.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (dimmed user list behind the drawer, with the open เพิ่มเติม menu)",
+      "demoData": "8-10 fictional users across 3 departments with teams, mixed roles, one suspended (ระงับการใช้งาน)",
+      "designRef": {
+        "board": "Drawer-User",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch27-2.webp",
+      "chapter": 27,
+      "figure": "27.2",
+      "section": "ch27-2",
+      "caption": "หน้าแก้ไขบทบาท — ข้อมูลบทบาทด้านบน ตารางสิทธิ์แยกตามเมนู ปุ่มบันทึกและเมนู \"เพิ่มเติม\" อยู่มุมขวาบน",
+      "route": "#roles",
+      "state": "Signed in as a Super Admin. If the page tour auto-starts, press Esc. Click the row of a non-system role (e.g. 'Sales User') — NOT 'Super Admin' (that opens read-only with only 'ปิด'). The full-page editor opens: sticky header with back link 'บทบาทและสิทธิ์ทั้งหมด', role name, 'ยกเลิก' · 'เพิ่มเติม ▾' · 'บันทึก'; card 'ข้อมูลบทบาท'; permission matrix with columns ดู · ของผู้อื่น · ของทีม · ของแผนก · สร้าง · แก้ไข · อนุมัติ · พิมพ์ / ส่งออก · ลบ · สิทธิ์อื่น ๆ. Do not change any tick and do not press บันทึก.",
+      "viewport": "1440x900 desktop",
+      "crop": "from the sticky header down through 'ข้อมูลบทบาท' and the first matrix section (about 1000px)",
+      "demoData": "Default seeded roles; 'Sales User' with a few users assigned",
+      "designRef": {
+        "board": "Roles-Edit",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch27-3.webp",
+      "chapter": 27,
+      "figure": "27.3",
+      "section": "ch27-3",
+      "caption": "หน้าแผนกและทีม — กดแถวแผนกเพื่อเปิดแผงแก้ชื่อ เพิ่มทีม หรือเก็บถาวร ปุ่มบันทึกปุ่มเดียวอยู่มุมขวาล่างของแผง",
+      "route": "#departments",
+      "state": "Signed in as a Super Admin. Click the row of a department that has 2-3 teams. The drawer opens from the right with 'ข้อมูลแผนก' (ชื่อแผนก), 'ทีมในแผนกนี้' with team rows and 'เพิ่มทีม', footer 'เพิ่มเติม ▾' bottom-left and 'ยกเลิก' + 'บันทึก' bottom-right. Do not edit or save.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page (department table behind, drawer on the right)",
+      "demoData": "4-5 departments (e.g. ฝ่ายขาย, ฝ่ายบริการ, ฝ่ายผลิต, สโตร์, บัญชี), two with 2-3 teams each, one archived (เก็บถาวรแล้ว)",
+      "designRef": {
+        "board": "Departments-Teams",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch27-4.webp",
+      "chapter": 27,
+      "figure": "27.4",
+      "section": "ch27-5",
+      "caption": "หน้าคำขอกู้รหัสผ่าน — คำขอที่รอดำเนินการอยู่ด้านบน มีปุ่ม \"ปิดคำขอ\" กับ \"ออกรหัสผ่านชั่วคราว\" ท้ายแถว ประวัติอยู่ด้านล่าง",
+      "route": "#passwordResets",
+      "state": "Signed in as a Super Admin. No dialog open. Card 'คำขอที่รอดำเนินการ' at the top with rows showing ผู้ใช้ · ขอเมื่อ · ข้อความ (one with 'ขอซ้ำ 2 ครั้ง') and row buttons 'ปิดคำขอ' / 'ออกรหัสผ่านชั่วคราว'; card 'ประวัติคำขอ' below with results ออกรหัสชั่วคราวแล้ว / ปิดโดยไม่ออกรหัส.",
+      "viewport": "1440x900 desktop",
+      "crop": "main content from the page header to the end of the history card (about 960px)",
+      "demoData": "2 pending password-reset requests from fictional users (create them signed-out via 'ลืมรหัสผ่าน?', one sent twice, one with a note like 'โทรกลับ 08x-xxx-xxxx'); 2-3 handled requests in history (one issued, one dismissed) by a fictional Super Admin",
+      "designRef": {
+        "board": "PasswordResets",
+        "y": 0,
+        "h": 960,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch28-1.webp",
+      "chapter": 28,
+      "figure": "28.1",
+      "section": "ch28-1",
+      "caption": "หมวดโปรไฟล์ — เมนูย่อยทางซ้าย ข้อมูลส่วนตัว รูปโปรไฟล์และลายเซ็น ภาษา และแถบบันทึกด้านล่าง",
+      "route": "#settings",
+      "state": "Signed in as a normal demo user (e.g. a Sales User) who has a profile picture and a confirmed signature. If the page tour auto-starts, press Esc. Left sub-menu item 'โปรไฟล์' selected. Cards: ข้อมูลส่วนตัว (with the read-only 'ข้อมูลที่ผู้ดูแลระบบกำหนด' block), รูปโปรไฟล์และลายเซ็น, ภาษา (ไทย selected). Sticky bottom bar with 'บันทึกการเปลี่ยนแปลง'. Do not press it.",
+      "viewport": "1440x900 desktop",
+      "crop": "full page including the sticky save bar at the bottom (about 1000px; full-page capture so the ภาษา card and the bar both show)",
+      "demoData": "A fictional user with phone, department, position, role, a profile picture and a signature image",
+      "designRef": {
+        "board": "Settings",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch28-2.webp",
+      "chapter": 28,
+      "figure": "28.2",
+      "section": "ch28-2",
+      "caption": "หมวดข้อมูลบริษัท (เฉพาะ Super Admin) — โลโก้ ตราประทับ และข้อมูลที่พิมพ์บนหัวเอกสาร",
+      "route": "#settings",
+      "state": "Signed in as a Super Admin. Click 'ข้อมูลบริษัท' in the left sub-menu. Blue info note at top, cards โลโก้และตราประทับ / ข้อมูลบริษัท / ข้อมูลบัญชีธนาคาร / เงื่อนไขและข้อตกลง (Terms & Conditions) เริ่มต้น, sticky 'บันทึกการเปลี่ยนแปลง' bar. Do not press it.",
+      "viewport": "1440x900 desktop",
+      "crop": "from the page header down through the logo/stamp card and the company-info card (about 1000px)",
+      "demoData": "Fictional company data (name, one-line address, phone, email, website, tax ID, VAT 7), a logo and a stamp image, bank info, default terms text",
+      "designRef": {
+        "board": "Settings-Company",
+        "y": 0,
+        "h": 1000,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch28-3.webp",
+      "chapter": 28,
+      "figure": "28.3",
+      "section": "ch28-3",
+      "caption": "หมวดความปลอดภัย — กรอกรหัสผ่านปัจจุบันและรหัสใหม่ แล้วกดอัปเดตรหัสผ่านท้ายการ์ด",
+      "route": "#settings",
+      "state": "Signed in as any demo user. Click 'ความปลอดภัย' in the left sub-menu. Card 'เปลี่ยนรหัสผ่าน' with รหัสผ่านปัจจุบัน / รหัสผ่านใหม่ (hint 'อย่างน้อย 6 ตัวอักษร') / ยืนยันรหัสผ่านใหม่ and the 'อัปเดตรหัสผ่าน' button at the card footer; no sticky save bar. Leave the fields empty, do not submit.",
+      "viewport": "1440x900 desktop",
+      "crop": "page header + sub-menu + the security card (about 700px)",
+      "demoData": "None beyond a signed-in user",
+      "designRef": {
+        "board": "Settings-Security",
+        "y": 0,
+        "h": 700,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch29-1.webp",
+      "chapter": 29,
+      "figure": "29.1",
+      "section": "ch29-1",
+      "caption": "ใบเสนอราคา — ปุ่มพิมพ์ / PDF อยู่ในกลุ่มปุ่มบนหัวเอกสาร · แท็บตัวอย่างก่อนพิมพ์อยู่ใต้หัวเอกสาร",
+      "route": "#quotations",
+      "state": "Signed in as a user with quotation print/export permission. Open (click its row) a quotation in status อนุมัติแล้ว with all required fields complete so 'พิมพ์ / PDF' is enabled. If the document tour auto-starts, press Esc. Click the tab 'ตัวอย่างก่อนพิมพ์' under the header so the paper preview shows below. Do not press พิมพ์ / PDF (it opens the browser print dialog).",
+      "viewport": "1440x900 desktop",
+      "crop": "document header (number, status badge, buttons) + the tab row + the top of the paper preview (about 560px)",
+      "demoData": "An approved quotation for 'บริษัท ตัวอย่าง จำกัด' with 3 items, company logo set in Settings",
+      "designRef": {
+        "board": "QuoteDocument",
+        "y": 0,
+        "h": 560,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch29-2.webp",
+      "chapter": 29,
+      "figure": "29.2",
+      "section": "ch29-1",
+      "caption": "ใบส่งมอบสินค้าพิมพ์ทีละงวด — ปุ่มพิมพ์ใบส่งมอบงวดนี้อยู่ในการ์ดของแต่ละงวด",
+      "route": "#deliveryOrder",
+      "state": "Signed in as a user with delivery-order print permission. Open a delivery order (click its row) that has 2 installments, each with at least one product ticked. If the document tour auto-starts, press Esc. Scroll down to the installment cards (small label 'งวดชำระเงิน 1 จาก 2' / 'งวดชำระเงิน 2 จาก 2' above each card title) each with the button 'พิมพ์ใบส่งมอบงวดนี้' at the card's top-right. Do not click it.",
+      "viewport": "1440x900 desktop",
+      "crop": "the installment cards area (about 700px, starting just above the first installment card)",
+      "demoData": "A delivery order linked to an approved quotation/Scope of Work, 2 installments with products ticked in each",
+      "designRef": {
+        "board": "DeliveryOrderDocument",
+        "y": 780,
+        "h": 700,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    },
+    {
+      "file": "manual-images/ch30-1.webp",
+      "chapter": 30,
+      "figure": "30.1",
+      "section": "ch30-2",
+      "caption": "เมนูผู้ใช้ใต้ชื่อของคุณมุมขวาบน — ตั้งค่า · วิธีใช้งาน · มีอะไรใหม่ · ออกจากระบบ",
+      "route": "#dashboard",
+      "state": "Any page (e.g. the dashboard). Click the avatar/name button at the top-right of the top bar to open the user menu.",
+      "viewport": "1440x900 desktop",
+      "crop": "top-right corner: the user button (avatar, full name, role) and the open dropdown with ตั้งค่า · วิธีใช้งาน · มีอะไรใหม่ · ออกจากระบบ",
+      "demoData": "signed-in demo user with a fictional name and a role",
+      "designRef": {
+        "board": "Pop-UserMenu",
+        "y": 0,
+        "h": 900,
+        "note": "REDESIGN canvas board (1440 wide): crop starts at y, height h — the intended framing"
+      }
+    }
+  ]
+}

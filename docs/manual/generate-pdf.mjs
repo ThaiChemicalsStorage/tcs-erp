@@ -24,13 +24,18 @@
  *
  * Usage (from the repo root, with `npm run dev` running — Vite serves `public/` on :3000):
  *   npm install --no-save puppeteer-core   # not a devDependency on purpose — only needed here
- *   node docs/manual/generate-pdf.mjs [outputPath] [--url <address>]
+ *   node docs/manual/generate-pdf.mjs [outputPath] [--url <address>] [--strict-images]
  *
  * Use `npm run dev`, not `npm start`. `npm start` listens on **:3001** (`server/index.ts`) and
  * serves the *built* `dist/`, so it needs `--url http://localhost:3001/manual.html` AND a fresh
  * `npm run build` — otherwise it renders whatever copy of the manual the last build froze, which is
  * bug 1 below all over again. `npm run dev` serves `public/manual.html` itself, so it is always the
  * file you just edited.
+ *
+ * Figures (2026-10-01, REDESIGN manual): every <figure> points at manual-images/chNN-<n>.webp. A file that does not
+ * exist yet renders as a placeholder box on purpose (the shot list is docs/manual/figures.json), so missing figures are
+ * reported as a WARNING and the PDF is still written. Pass --strict-images to fail instead (use that once the screenshots
+ * have been taken). Any OTHER image that fails to load still fails the build.
  *
  * Uses the system Chrome (no browser download). The page is self-contained apart from those
  * screenshots (system font stack, no external requests) and its @media print block swaps the dark
@@ -46,8 +51,13 @@ const repoRoot = join(here, "..", "..");
 
 const argv = process.argv.slice(2);
 let pageUrl = "http://localhost:3000/manual.html";
+let strictImages = false;
 const positional = [];
 for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--strict-images") {
+    strictImages = true;
+    continue;
+  }
   if (argv[i] !== "--url") {
     positional.push(argv[i]);
     continue;
@@ -116,11 +126,22 @@ try {
     );
   });
 
-  // Fail loudly rather than shipping a PDF with blank figures.
-  const brokenImages = await page.evaluate(() =>
-    [...document.images].filter((img) => !img.complete || img.naturalWidth === 0).map((img) => img.getAttribute("src")),
-  );
+  // Fail loudly rather than shipping a PDF with blank figures — except manual figures whose file does not exist yet:
+  // the page shows those as a deliberate placeholder (.shot.missing), so they are only a warning unless --strict-images.
+  const { brokenImages, missingFigures } = await page.evaluate(() => {
+    const bad = [...document.images].filter((img) => !img.complete || img.naturalWidth === 0);
+    const isFigure = (img) => img.closest(".shot") !== null;
+    return {
+      brokenImages: bad.filter((img) => !isFigure(img)).map((img) => img.getAttribute("src")),
+      missingFigures: bad.filter(isFigure).map((img) => img.getAttribute("src")),
+    };
+  });
   if (brokenImages.length) throw new Error(`images failed to load:\n  ${brokenImages.join("\n  ")}`);
+  if (missingFigures.length) {
+    const msg = `${missingFigures.length} manual figure(s) not taken yet (printed as placeholders) — see docs/manual/figures.json`;
+    if (strictImages) throw new Error(`${msg}:\n  ${missingFigures.join("\n  ")}`);
+    console.warn(`WARNING: ${msg}`);
+  }
 
   await page.pdf({
     path: outPath,
