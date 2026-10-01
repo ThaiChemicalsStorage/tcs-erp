@@ -1,72 +1,80 @@
-import { ChevronRight, GitBranch } from "lucide-react";
 import type { PipelineStage, DashboardVatMode } from "../../lib/dashboard";
-import { type QuoteStatus, statusLabelKey, statusStyle } from "../../lib/quotes";
+import { type QuoteStatus, statusLabelKey } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
-import { ChartCard } from "./ChartCard";
-import { EmptyState } from "../../components/EmptyState";
+import { QuoteStatusPill } from "../quotation/statusIcons";
+import { ChartCard, ScopeTag } from "./ChartCard";
 import { fmtShort, fmtPercent } from "./format";
+import { BAR, TONE } from "./tabs/dashboardTokens";
+import { fmtCount } from "./tabs/countFormat";
 
 const MAIN_FLOW: QuoteStatus[] = ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว", "ส่งให้ลูกค้าแล้ว", "ลูกค้ายอมรับ", "ปิดการขายสำเร็จ"];
 const OFF_RAMP: QuoteStatus[] = ["ลูกค้าปฏิเสธ", "เสียโอกาส", "ยกเลิก"];
 
-// การ์ดแสดงข้อมูลของแต่ละขั้นตอนในไปป์ไลน์ พร้อมอัตราการแปลงจากขั้นก่อนหน้า
-// Renders a single pipeline stage card, including conversion rate from the previous stage
-function StageCard({ stage, onStageClick }: { stage: PipelineStage; onStageClick: (s: QuoteStatus) => void }) {
-  const { t } = useI18n();
-  const status = stage.stage as QuoteStatus;
-  return (
-    <button
-      onClick={() => onStageClick(status)}
-      className="flex-1 min-w-[136px] bg-card border border-border rounded-xl p-3.5 text-left hover:border-[#c3ccda] hover:shadow-sm hover:shadow-md transition-all"
-    >
-      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-2 ${statusStyle[status]}`}>
-        {t(statusLabelKey[status])}
-      </span>
-      <p className="text-xl font-bold text-foreground font-mono leading-none">{stage.count.toLocaleString("th-TH")}</p>
-      <p className="text-[10px] text-muted-foreground mt-1 font-mono">{fmtShort(stage.totalValue)}</p>
-      {stage.conversionFromPrevious !== null && (
-        <p className="text-[10px] text-[#2aa36b] mt-1.5 font-mono">
-          {fmtPercent(stage.conversionFromPrevious)} <span className="text-muted-foreground">{t("dashboard.pipelineSteps.conversion")}</span>
-        </p>
-      )}
-    </button>
-  );
-}
+/** จอแคบซ่อนแถบ (ซ้ำกับตัวเลขจำนวน) เพื่อให้ "ต่อจากขั้นก่อน" ยังอยู่ครบ */
+const GRID = "grid grid-cols-[minmax(0,1fr)_36px_72px_56px] sm:grid-cols-[150px_minmax(0,1fr)_48px_96px_110px] gap-2 sm:gap-3 items-center px-4 sm:px-6";
 
-// แสดงไปป์ไลน์ใบเสนอราคาเป็นการ์ดขั้นตอนแนวนอนที่เชื่อมต่อกัน แยกแถวสำหรับสถานะที่ออกจากไปป์ไลน์
-// Renders the quotation pipeline as connected horizontal step cards, with off-ramp statuses in a separate row
+/**
+ * ใบเสนอราคาแต่ละขั้น (บอร์ด Dashboard-Sales, ดีไซน์ใหม่ 2026-09-30) — แทนการ์ดขั้นตอนแนวนอนกับรายการขั้นเดิมที่ซ้ำกัน
+ * แถวละขั้น: ป้ายสถานะ · แถบเทียบขั้นที่มากสุด · จำนวน · มูลค่า · "ต่อจากขั้นก่อน" · ขั้นที่หลุดจากเส้นทางอยู่ใต้เส้นคั่น
+ * กดแถวเปิดรายการใบเสนอราคาที่กรองสถานะนั้น (เหมือนเดิม)
+ */
 export function PipelineSteps({ pipeline, onStageClick, vatMode }: { pipeline: PipelineStage[]; onStageClick: (stage: QuoteStatus) => void; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
-  const hasData = pipeline.some((p) => p.count > 0);
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const byStage = new Map(pipeline.map((p) => [p.stage, p]));
   const mainStages = MAIN_FLOW.map((s) => byStage.get(s)).filter((s): s is PipelineStage => !!s);
   const offRampStages = OFF_RAMP.map((s) => byStage.get(s)).filter((s): s is PipelineStage => !!s);
-  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
-  const pipelineSub = `${t("dashboard.pipeline.sub")} ${vatSuffix}`;
+  const max = Math.max(1, ...pipeline.map((p) => p.count));
+  const hasData = pipeline.some((p) => p.count > 0);
+
+  const row = (stage: PipelineStage, offRamp: boolean) => {
+    const status = stage.stage as QuoteStatus;
+    const label = t(statusLabelKey[status]);
+    return (
+      <li key={stage.stage}>
+        <button
+          type="button" onClick={() => onStageClick(status)}
+          className={`${GRID} w-full min-h-10 py-1 text-left hover:bg-[#f8f9fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 transition-colors`}
+        >
+          <span className="min-w-0"><QuoteStatusPill status={status} label={label} /></span>
+          <span className="hidden sm:block h-2 rounded-full bg-[#eef1f6] overflow-hidden" aria-hidden="true">
+            <span className="block h-full rounded-full" style={{ width: `${(stage.count / max) * 100}%`, background: offRamp ? TONE.empty : BAR.rank }} />
+          </span>
+          <span className="text-right font-semibold tabular-nums">{fmtCount(stage.count)}</span>
+          <span className="text-right text-[#26395a] tabular-nums whitespace-nowrap">{fmtShort(stage.totalValue)}</span>
+          <span className="text-right text-[13px] text-muted-foreground tabular-nums">
+            {offRamp ? "" : stage.conversionFromPrevious === null ? "—" : fmtPercent(stage.conversionFromPrevious)}
+          </span>
+        </button>
+      </li>
+    );
+  };
 
   return (
-    <ChartCard title={t("dashboard.pipeline.title")} sub={pipelineSub}>
+    <ChartCard
+      flush className="h-full" bodyClassName="flex-1 flex flex-col"
+      title={t("dashboard.sales.stages.title")} tag={vatSuffix} sub={t("dashboard.sales.stages.sub2")}
+      actions={<ScopeTag>{t("dashboard.dept.periodTag")}</ScopeTag>}
+    >
       {!hasData ? (
-        <EmptyState icon={GitBranch} title={t("dashboard.noData")} description={pipelineSub} compact />
+        <p className="flex-1 flex items-center justify-center text-[13px] text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
       ) : (
-        <div className="space-y-4">
-          <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
-            {mainStages.map((stage, i) => (
-              <div key={stage.stage} className="flex items-center gap-1.5 flex-1">
-                <StageCard stage={stage} onStageClick={onStageClick} />
-                {i < mainStages.length - 1 && <ChevronRight size={16} className="text-muted-foreground/50 flex-shrink-0" />}
-              </div>
-            ))}
+        <>
+          <div className={`${GRID} h-10 bg-[#f8f9fc] border-b border-border text-[12.5px] font-semibold text-[#3d5173]`} aria-hidden="true">
+            <span>{t("dashboard.sales.stages.col.stage")}</span>
+            <span className="hidden sm:block" />
+            <span className="text-right">{t("dashboard.sales.stages.col.count")}</span>
+            <span className="text-right">{t("dashboard.sales.stages.col.value")}</span>
+            <span className="text-right truncate sm:whitespace-nowrap" title={t("dashboard.sales.stages.col.conversion")}>{t("dashboard.sales.stages.col.conversion")}</span>
           </div>
+          <ul className="py-1">{mainStages.map((s) => row(s, false))}</ul>
           {offRampStages.length > 0 && (
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">{t("dashboard.pipeline.offRamp")}</p>
-              <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
-                {offRampStages.map((stage) => <StageCard key={stage.stage} stage={stage} onStageClick={onStageClick} />)}
-              </div>
-            </div>
+            <>
+              <p className="px-5 sm:px-6 pt-2.5 pb-1.5 border-t border-[#eef1f6] text-xs font-semibold text-muted-foreground">{t("dashboard.pipeline.offRamp")}</p>
+              <ul className="pb-2">{offRampStages.map((s) => row(s, true))}</ul>
+            </>
           )}
-        </div>
+        </>
       )}
     </ChartCard>
   );

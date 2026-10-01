@@ -1,174 +1,82 @@
 import { useState } from "react";
-import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from "recharts";
-import type { JobTypeStat, Forecast, RevenueTrend, DashboardVatMode } from "../../lib/dashboard";
+import type { Forecast, RevenueTrend, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { fmtShort, periodLabel, fmtDateShort } from "./format";
+import { EmptyNote, MonthlyBars, ProgressBar, Segmented } from "./tabs/DepartmentWidgets";
+import { BAR } from "./tabs/dashboardTokens";
+import { fmtAxis } from "./tabs/countFormat";
 
-const PALETTE = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252", "#1f9d8a", "#e08a3c", "#3b6fc9"];
+/**
+ * กราฟของแท็บขาย (ดีไซน์ใหม่ 2026-09-30, บอร์ด Dashboard-Sales) — รายได้ตามช่วงเวลาเป็นแท่ง (ล่าสุดสีเข้ม) +
+ * ปุ่มแบ่งส่วน รายสัปดาห์/เดือน/ไตรมาส/ปี · ยอดคาดการณ์เป็นแถบสามแถว
+ * กราฟรายได้/สัดส่วนตามประเภทงานสองกราฟเดิมรวมเข้าตาราง "การวิเคราะห์ตามประเภทงาน" แล้ว (เจ้าของอนุมัติ 2026-09-30)
+ */
 
-interface TooltipEntry { name: string; value: number; color: string }
-function SimpleTooltip({ active, payload, label, formatter }: { active?: boolean; payload?: TooltipEntry[]; label?: string; formatter: (v: number) => string }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-[#c9a84c]/30 rounded-lg p-3 shadow-xl">
-      <p className="text-muted-foreground text-xs font-mono mb-1">{label}</p>
-      {payload.map((p, i) => <p key={i} className="text-xs font-mono" style={{ color: p.color }}>{p.name}: {formatter(p.value)}</p>)}
-    </div>
-  );
-}
-
-// แสดงข้อความ "ไม่มีข้อมูล" ตรงกลางเมื่อกราฟไม่มีข้อมูลให้แสดง
-// Renders a centered "no data" message when a chart has nothing to show.
-function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs text-muted-foreground text-center py-10">{children}</p>;
-}
-
-type TrendGrouping = "weekly" | "monthly" | "quarterly" | "yearly";
+export type TrendGrouping = "weekly" | "monthly" | "quarterly" | "yearly";
 const TREND_GROUPINGS: TrendGrouping[] = ["weekly", "monthly", "quarterly", "yearly"];
 
-// กราฟแนวโน้มรายได้ เลือกดูแบบรายสัปดาห์/เดือน/ไตรมาส/ปีได้
-// Area chart of revenue trend, switchable between weekly/monthly/quarterly/yearly grouping.
-export function RevenueTrendChart({ trend, anchorDate, vatMode }: { trend: RevenueTrend; anchorDate: string; vatMode: DashboardVatMode }) {
-  const { t, lang } = useI18n();
-  const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
-  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
-  const groupingLabel: Record<TrendGrouping, string> = {
+/** ปุ่มแบ่งส่วน รายสัปดาห์/รายเดือน/รายไตรมาส/รายปี — ใช้ทั้งกราฟรายได้และกิจกรรมของฝ่ายขาย */
+export function GroupingSegmented({ value, onChange }: { value: TrendGrouping; onChange: (g: TrendGrouping) => void }) {
+  const { t } = useI18n();
+  const label: Record<TrendGrouping, string> = {
     weekly: t("dashboard.chart.revenue.grouping.week"),
     monthly: t("dashboard.chart.revenue.grouping.month"),
     quarterly: t("dashboard.chart.revenue.grouping.quarter"),
     yearly: t("dashboard.chart.revenue.grouping.year"),
   };
-  const data = trend[grouping];
-  const hasData = data.some((d) => d.revenue > 0);
+  return <Segmented options={TREND_GROUPINGS.map((g) => ({ key: g, label: label[g] }))} value={value} onChange={onChange} ariaLabel={t("dashboard.grouping.label")} />;
+}
+
+// กราฟรายได้ เลือกดูแบบรายสัปดาห์/เดือน/ไตรมาส/ปีได้
+// Revenue bars, switchable between weekly/monthly/quarterly/yearly grouping.
+export function RevenueTrendChart({ trend, anchorDate, vatMode }: { trend: RevenueTrend; anchorDate: string; vatMode: DashboardVatMode }) {
+  const { t, lang } = useI18n();
+  const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
+  const rows = trend[grouping].map((r) => ({ month: r.period, revenue: r.revenue }));
   return (
     <ChartCard
-      title={`${t("dashboard.chart.revenue.title")} ${vatSuffix}`}
+      fill
+      title={t("dashboard.chart.revenue.title")} tag={vatSuffix}
       sub={`${t("dashboard.chart.revenue.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
-      className="xl:col-span-2"
-      actions={
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          {TREND_GROUPINGS.map((g) => (
-            <button key={g} onClick={() => setGrouping(g)}
-              className={`px-2 py-1 text-[10px] rounded-md font-medium transition-all ${grouping === g ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {groupingLabel[g]}
-            </button>
-          ))}
-        </div>
-      }
+      actions={<GroupingSegmented value={grouping} onChange={setGrouping} />}
     >
-      {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data.map((r) => ({ ...r, label: periodLabel(r.period) }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#c9a84c" stopOpacity={0.3} /><stop offset="95%" stopColor="#c9a84c" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} minTickGap={24} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
-            <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Area type="monotone" dataKey="revenue" name={`${t("dashboard.kpi.closedSales")} ${vatSuffix}`} stroke="#c9a84c" strokeWidth={2} fill="url(#revGrad)" dot={false} activeDot={{ r: 4, fill: "#c9a84c" }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
+      <MonthlyBars
+        rows={rows}
+        series={[{ key: "revenue", name: `${t("dashboard.kpi.closedSales")} ${vatSuffix}` }]}
+        format={fmtShort} axisFormat={fmtAxis} height={240} empty={t("dashboard.noData")}
+        labelOf={grouping === "monthly" ? undefined : (r) => periodLabel(r.month)}
+      />
     </ChartCard>
   );
 }
 
-// กราฟแท่งแสดงมูลค่ารวมและมูลค่าที่ชนะ แยกตามประเภทงาน (แสดงทุกประเภท ไม่ใช่แค่ top-N)
-// Bar chart of total vs. won value per job type; shows all active job types, not just top-N.
-export function RevenueByJobTypeChart({ jobTypeAnalytics, vatMode }: { jobTypeAnalytics: JobTypeStat[]; vatMode: DashboardVatMode }) {
-  const { t } = useI18n();
-  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
-  const data = jobTypeAnalytics;
-  const hasData = data.some((d) => d.totalValue > 0);
-  return (
-    <ChartCard title={`${t("dashboard.chart.revenueByJobType.title")} ${vatSuffix}`} sub={`${t("dashboard.chart.revenueByJobType.sub")} ${vatSuffix}`}>
-      {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" horizontal={false} />
-            <XAxis type="number" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
-            <YAxis type="category" dataKey="jobTypeCode" width={60} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} />
-            <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="totalValue" name={`${t("dashboard.chart.revenueByJobType.totalValue")} ${vatSuffix}`} fill="#5a7299" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="revenue" name={`${t("dashboard.chart.revenueByJobType.wonValue")} ${vatSuffix}`} fill="#c9a84c" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </ChartCard>
-  );
-}
-
-// กราฟวงกลมแสดงสัดส่วนจำนวนใบเสนอราคาแยกตามประเภทงาน
-// Donut chart showing the share of quotation count by job type.
-export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
-  const { t } = useI18n();
-  const data = jobTypeAnalytics.filter((j) => j.count > 0).map((j) => ({ name: j.jobTypeCode, value: j.count }));
-  return (
-    <ChartCard title={t("dashboard.chart.jobTypeDistribution.title")} sub={t("dashboard.chart.jobTypeDistribution.sub")}>
-      {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <>
-          <div className="flex justify-center mb-4">
-            <div className="w-[160px] h-[160px] flex-shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                    {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {data.map((d, i) => (
-              <div key={d.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 min-w-0"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} /><span className="text-muted-foreground font-mono truncate" title={d.name}>{d.name}</span></div>
-                <span className="font-mono text-foreground">{d.value}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </ChartCard>
-  );
-}
-
-// กราฟคาดการณ์ยอดขายที่คาดว่าจะได้ในเดือนนี้/ไตรมาสนี้/ปีนี้
-// Area chart of expected sales forecast for this month/quarter/year.
+// ยอดขายที่คาดว่าจะได้ เดือนนี้/ไตรมาสนี้/ปีนี้ — แถบเทียบกับค่าที่มากสุด
+// Expected sales forecast for this month/quarter/year as three bars.
 export function ExpectedSalesForecastChart({ forecast, vatMode }: { forecast: Forecast; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const data = [
-    { label: t("dashboard.forecast.thisMonth"), value: forecast.thisMonth },
-    { label: t("dashboard.forecast.thisQuarter"), value: forecast.thisQuarter },
-    { label: t("dashboard.forecast.thisYear"), value: forecast.thisYear },
+    { key: "month", label: t("dashboard.forecast.thisMonth"), value: forecast.thisMonth },
+    { key: "quarter", label: t("dashboard.forecast.thisQuarter"), value: forecast.thisQuarter },
+    { key: "year", label: t("dashboard.forecast.thisYear"), value: forecast.thisYear },
   ];
-  const hasData = data.some((d) => d.value > 0);
+  const max = Math.max(0, ...data.map((d) => d.value));
   return (
-    <ChartCard title={`${t("dashboard.chart.expectedSales.title")} ${vatSuffix}`} sub={`${t("dashboard.chart.expectedSales.sub")} ${vatSuffix} · ${t("dashboard.forecast.basedOn")} ${forecast.historicalWinRate}%`}>
-      {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="fcGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#1a5fb4" stopOpacity={0.3} /><stop offset="95%" stopColor="#1a5fb4" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
-            <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Area type="monotone" dataKey="value" name={`${t("dashboard.kpi.expectedSales")} ${vatSuffix}`} stroke="#1a5fb4" strokeWidth={2} fill="url(#fcGrad)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
+    <ChartCard
+      title={t("dashboard.chart.expectedSales.title")} tag={vatSuffix} className="h-full" bodyClassName="flex-1 px-5 py-[18px] flex flex-col justify-around gap-4"
+      sub={`${t("dashboard.chart.expectedSales.sub")} · ${t("dashboard.forecast.basedOn")} ${forecast.historicalWinRate}%`}
+    >
+      {max === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : data.map((d) => (
+        <div key={d.key} className="flex flex-col gap-2">
+          <div className="flex items-baseline gap-2">
+            <span className="flex-1 text-[13px] text-[#26395a]">{d.label}</span>
+            <span className="text-lg font-semibold tabular-nums">{fmtShort(d.value)}</span>
+          </div>
+          <ProgressBar value={d.value} max={max} color={BAR.rank} label={`${d.label} ${fmtShort(d.value)}`} />
+        </div>
+      ))}
     </ChartCard>
   );
 }

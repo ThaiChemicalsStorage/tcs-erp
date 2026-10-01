@@ -20,7 +20,8 @@ export function ListPageHeader({ module, title, description, help, actions }: {
 }) {
   return (
     <div className="flex items-end gap-4 flex-wrap">
-      <div className="flex-1 min-w-0 flex flex-col gap-1">
+      {/* ขั้นต่ำ 16rem: จอแคบให้ปุ่มด้านขวาตกลงบรรทัดใหม่ แทนที่จะบีบชื่อหน้าจนเหลือ "ภา…" */}
+      <div className="flex-1 min-w-[min(100%,16rem)] flex flex-col gap-1">
         {module && <p className="text-[13px] text-muted-foreground">{module}</p>}
         <div className="flex items-center gap-1.5 min-w-0">
           <h1 className="text-2xl font-semibold leading-tight text-foreground truncate">{title}</h1>

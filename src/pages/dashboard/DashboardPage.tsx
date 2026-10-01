@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, FileSpreadsheet, HelpCircle, LayoutDashboard } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FileText, LayoutDashboard } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import type { QuotationListFilter } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardFilters, type DashboardStats } from "../../lib/dashboard";
@@ -13,17 +13,22 @@ import {
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour } from "../../components/GuidedTour";
 import { hasTourCompleted } from "../../lib/tour";
-import { PageHeader } from "../../components/PageHeader";
+import { ListPageHeader } from "../../components/ui/ListPage";
+import { MoreMenu } from "../../components/ui/MoreMenu";
+import { btn } from "../../components/ui/styles";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { useUserDirectory } from "../../lib/userDirectory";
 import { EmptyState } from "../../components/EmptyState";
 import { Tabs } from "../../components/Tabs";
 import { tabPanelProps } from "../../components/tabPanelProps";
-import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
+import { DashboardPeriodFilter, DashboardSalesFilters, type DashboardFilterState } from "./DashboardFilterBar";
 import { todayIsoBangkok } from "../../lib/dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
 import { exportDashboardXlsx } from "./xlsxExport";
 import { DashboardContentSkeleton, ErrorState } from "./DashboardStates";
 import { DashboardDataCache, useDashboardData } from "./useDashboardData";
 import { DASHBOARD_TAB_META, DEPARTMENT_META } from "./tabs/tabMeta";
+import { fmtLongDate } from "./tabs/countFormat";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SalesTab } from "./tabs/SalesTab";
 import { ServiceTab } from "./tabs/ServiceTab";
@@ -67,6 +72,8 @@ function departmentViewOf(tab: DashboardTabKey | null): DepartmentDashboardView 
  * - แท็บที่เปิดอยู่อยู่ใน URL (`#dashboard/inventory`) และจำไว้ต่อผู้ใช้ — รีเฟรช/ส่งลิงก์แล้วกลับมาที่เดิม
  * - หัวหน้า แถบแท็บ และตัวกรองขึ้นทันที เนื้อหาของแต่ละแท็บโหลดของตัวเอง (shell-first)
  * - ข้อมูลที่โหลดแล้วเก็บไว้จนกว่าหน้าจะถูกปิด สลับแท็บกลับมาไม่ต้องรอใหม่ (`useDashboardData.ts`)
+ * - ดีไซน์ใหม่ (2026-10-01, บอร์ด Dashboard*): หัวหน้าแบบหน้ารายการ (กลุ่มเมนู · ชื่อ · คำทักทาย + วันที่) ช่วงเวลาและ
+ *   ปุ่ม "ส่งออก ▾" (Excel/CSV, แท็บขาย) ชิดขวาบนหัว · แถบแท็บไม่มีไอคอน · แท็บขายมีแถวตัวกรองแผนก/พนักงานขาย/VAT ใต้แท็บ
  */
 export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOpenQuote, onNavigatePage }: {
   currentUserId: string;
@@ -75,8 +82,12 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   onOpenQuote: (quoteId: string) => void;
   onNavigatePage: (navKey: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const visibleTabs = visibleDashboardTabs(can);
+  // ชื่อผู้ใช้สำหรับบรรทัดทักทาย — ทะเบียนผู้ใช้โหลดแบบ best-effort ใน App ยังไม่มา/ไม่มีสิทธิ์ = แสดงแค่วันที่
+  const userName = useUserDirectory().byId(currentUserId)?.fullName ?? "";
+  const todayText = fmtLongDate(todayIsoBangkok(), lang);
+  const greeting = userName ? t("dashboard.header.greeting").replace("{name}", userName).replace("{date}", todayText) : todayText;
 
   const [requestedTab, setRequestedTab] = useState<DashboardTabKey | null>(() => resolveInitialTab({
     hashTab: tabFromHash(window.location.hash),
@@ -179,40 +190,42 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   const departmentTabProps = { result: departments, onRetry: reload, onNavigatePage };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
       <div data-tour="dashboard-title">
-        <PageHeader
+        <ListPageHeader
+          module={t("nav.group.main")}
           title={t("dashboard.title")}
-          description={t("dashboard.subtitle")}
+          description={greeting}
+          help={<TourReplayButton variant="title" onClick={tour.start} />}
           actions={
             <>
-              {tab !== "accounting" && tabLoading && (
-                hasShownData
-                  ? <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><div className="w-3.5 h-3.5 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin flex-shrink-0" />{t("dashboard.refreshing")}</div>
-                  : <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />
+              {tab !== null && tab !== "accounting" && tabLoading && (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#1a5fb4] border-t-transparent animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true" />
+                  {hasShownData && t("dashboard.refreshing")}
+                </span>
               )}
-              {tab === "sales" && sales.data?.hasAnyData && (
-                <div data-tour="dashboard-export" className="flex items-center gap-2">
-                  <button
-                    onClick={exportXlsx}
-                    disabled={exportingXlsx}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c9a84c]/40 bg-[#c9a84c]/10 rounded-lg text-foreground hover:bg-[#c9a84c]/20 transition-all disabled:opacity-50 font-medium"
-                  >
-                    <FileSpreadsheet size={13} className="text-[#c9a84c]" /> {exportingXlsx ? t("dashboard.export.xlsx.loading") : t("dashboard.export.xlsx")}
-                  </button>
-                  <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
-                    <Download size={13} /> {t("dashboard.export.csv")}
-                  </button>
+              {tab !== null && tab !== "accounting" && (
+                <div data-tour="dashboard-filters">
+                  <DashboardPeriodFilter filters={filters} onChange={setFilters} />
                 </div>
               )}
-              <button
-                onClick={tour.start}
-                title={t("tour.replay")}
-                aria-label={t("tour.replay")}
-                className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-[#c3ccda] bg-white rounded-lg hover:bg-[#f4f6fa] hover:text-foreground transition-all"
-              >
-                <HelpCircle size={14} />
-              </button>
+              {tab === "sales" && sales.data?.hasAnyData && (
+                <div data-tour="dashboard-export">
+                  <MoreMenu
+                    trigger={({ open, toggle }) => (
+                      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={toggle} className={open ? btn.secondary.replace("bg-white", "bg-[#f4f6fa]") : btn.secondary}>
+                        <Download size={16} className="text-[#3d5173]" /> {t("dashboard.export.menu")}
+                        <ChevronDown size={16} className="text-muted-foreground" />
+                      </button>
+                    )}
+                    items={[
+                      { key: "xlsx", label: exportingXlsx ? t("dashboard.export.xlsx.loading") : t("dashboard.export.xlsx"), icon: FileSpreadsheet, onSelect: exportXlsx, disabled: exportingXlsx },
+                      { key: "csv", label: t("dashboard.export.csv"), icon: FileText, onSelect: exportCsv },
+                    ]}
+                  />
+                </div>
+              )}
             </>
           }
         />
@@ -221,30 +234,28 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
       {tab === null ? (
         <EmptyState icon={LayoutDashboard} title={t("dashboard.noTabs.title")} description={t("dashboard.noTabs.desc")} />
       ) : (<>
-      <div data-tour="dashboard-tabs">
-        <Tabs
-          items={visibleTabs.map((key) => ({ key, label: tabLabel(key), icon: DASHBOARD_TAB_META[key].icon }))}
-          active={tab}
-          onChange={setRequestedTab}
-          idPrefix="dashboard"
-          ariaLabel={t("dashboard.tabs.label")}
-        />
-      </div>
-
-      {tab !== "accounting" && (
-        <div data-tour="dashboard-filters">
-          <DashboardFilterBar
+      <div className="flex flex-col gap-2.5">
+        <div data-tour="dashboard-tabs">
+          <Tabs
+            items={visibleTabs.map((key) => ({ key, label: tabLabel(key) }))}
+            active={tab}
+            onChange={setRequestedTab}
+            idPrefix="dashboard"
+            ariaLabel={t("dashboard.tabs.label")}
+          />
+        </div>
+        {tab === "sales" && (
+          <DashboardSalesFilters
             filters={filters}
             onChange={setFilters}
-            mode={tab === "sales" ? "full" : "dateOnly"}
             availableSalespeople={sales.data?.availableSalespeople ?? []}
             availableDepartments={sales.data?.availableDepartments ?? []}
             hidePeopleFilters={sales.data?.visibilityScope === "own"}
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      <div {...tabPanelProps("dashboard", tab)} className="space-y-6 outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded-lg">
+      <div {...tabPanelProps("dashboard", tab)} className="flex flex-col gap-5 outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 rounded-lg">
         {tab === "overview" && (
           <OverviewTab
             visibleTabs={visibleTabs}

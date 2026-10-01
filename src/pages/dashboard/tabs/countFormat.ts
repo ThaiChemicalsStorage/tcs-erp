@@ -22,3 +22,10 @@ export function fmtAxis(n: number): string {
   if (abs >= 1_000) return `${sign}${Number((abs / 1_000).toFixed(abs >= 100_000 ? 0 : 1))}K`;
   return `${sign}${abs.toLocaleString("th-TH")}`;
 }
+
+/** "2026-10-01" → "วันพฤหัสบดีที่ 1 ตุลาคม 2569" / "Thursday, October 1, 2026" — บรรทัดทักทายบนหัวแดชบอร์ด */
+export function fmtLongDate(iso: string, lang: "th" | "en"): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(lang === "th" ? "th-TH" : "en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}

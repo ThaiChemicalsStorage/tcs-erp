@@ -1,70 +1,89 @@
 import { useState } from "react";
-import { ArrowUpDown } from "lucide-react";
 import type { JobTypeStat, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
+import { ChartCard, ScopeTag } from "./ChartCard";
 import { fmtShort, fmtPercent } from "./format";
+import { SortHeader } from "./tabs/DepartmentWidgets";
+import { BAR, CHART, TD, TH, TR } from "./tabs/dashboardTokens";
+import { fmtCount } from "./tabs/countFormat";
 
 type SortKey = "totalValue" | "revenue" | "count" | "winRate" | "avgDealSize";
 
-// ตารางวิเคราะห์ประเภทงาน เรียงลำดับได้ตามมูลค่า/จำนวน/อัตราชนะ/ขนาดดีลเฉลี่ย
-// Sortable table of job-type analytics — total value, count, win rate, and average deal size.
+/**
+ * การวิเคราะห์ตามประเภทงาน (บอร์ด Dashboard-Sales) — ตารางเดียวแทนตารางเดิม + กราฟมูลค่าตามประเภทงาน + โดนัทสัดส่วน
+ * (เจ้าของอนุมัติให้รวมกราฟเข้าตาราง 2026-09-30) · คอลัมน์ "สัดส่วนที่ปิดได้": แถบอ่อน = มูลค่ารวมเทียบประเภทที่มากสุด
+ * ส่วนเข้ม = มูลค่าที่ปิดสำเร็จ · จำนวนใบของแต่ละประเภท (ที่โดนัทเคยแสดง) อยู่ในคอลัมน์ "งาน" · เรียงได้ทุกคอลัมน์ตัวเลขเหมือนเดิม
+ */
 export function JobTypeAnalytics({ jobTypeAnalytics, vatMode }: { jobTypeAnalytics: JobTypeStat[]; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState<SortKey>("totalValue");
   const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
 
   const sorted = [...jobTypeAnalytics].sort((a, b) => b[sortKey] - a[sortKey]);
-
-  const columns: { key: SortKey | null; label: string }[] = [
-    { key: null, label: t("dashboard.jobType.col.name") },
-    { key: "count", label: t("dashboard.jobType.col.count") },
-    { key: "totalValue", label: `${t("dashboard.jobType.col.totalValue")} ${vatSuffix}` },
-    { key: "revenue", label: `${t("dashboard.jobType.col.wonValue")} ${vatSuffix}` },
-    { key: "winRate", label: t("dashboard.jobType.col.winRate") },
-    { key: "avgDealSize", label: `${t("dashboard.jobType.col.avgDealSize")} ${vatSuffix}` },
-  ];
+  const maxTotal = Math.max(0, ...jobTypeAnalytics.map((j) => j.totalValue));
+  const sortable = (key: SortKey, label: string) => (
+    <th className={`${TH} text-right`} aria-sort={sortKey === key ? "descending" : undefined}>
+      <SortHeader label={label} active={sortKey === key} onClick={() => setSortKey(key)} />
+    </th>
+  );
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-foreground">{t("dashboard.jobType.title")}</h2>
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">{`${t("dashboard.jobType.sub")} ${vatSuffix}`}</p>
-      </div>
+    <ChartCard
+      flush className="h-full"
+      title={t("dashboard.jobType.title")} tag={vatSuffix} sub={t("dashboard.jobType.sub2")}
+      actions={<ScopeTag>{t("dashboard.dept.periodTag")}</ScopeTag>}
+    >
       {sorted.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
+        <p className="text-[13px] text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-border">
-                {columns.map((c) => (
-                  <th key={c.label} className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                    {c.key ? (
-                      <button onClick={() => setSortKey(c.key as SortKey)} className={`flex items-center gap-1 hover:text-foreground transition-colors ${sortKey === c.key ? "text-[#c9a84c]" : ""}`}>
-                        {c.label} <ArrowUpDown size={9} />
-                      </button>
-                    ) : c.label}
-                  </th>
-                ))}
+              <tr className="bg-[#f8f9fc] border-b border-border">
+                <th className={`${TH} text-left`}>{t("dashboard.jobType.col.name")}</th>
+                {sortable("count", t("dashboard.jobType.col.count"))}
+                {sortable("totalValue", t("dashboard.jobType.col.totalValue"))}
+                {sortable("revenue", t("dashboard.jobType.col.wonValue"))}
+                <th className={`${TH} text-left`}>{t("dashboard.jobType.col.share")}</th>
+                {sortable("winRate", t("dashboard.jobType.col.winRate"))}
+                {sortable("avgDealSize", t("dashboard.jobType.col.avgDealSize"))}
               </tr>
             </thead>
-            <tbody>
-              {sorted.map((j) => (
-                <tr key={j.jobTypeCode} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                  <td className="px-3 py-2.5 text-xs text-foreground font-medium">
-                    <span className="font-mono text-muted-foreground mr-1.5">{j.jobTypeCode}</span>{j.jobTypeName}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{j.count}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-foreground">{fmtShort(j.totalValue)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-[#157347] font-semibold">{fmtShort(j.revenue)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtPercent(j.winRate)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtShort(j.avgDealSize)}</td>
-                </tr>
-              ))}
+            <tbody className="tabular-nums">
+              {sorted.map((j) => {
+                const totalPct = maxTotal > 0 ? (j.totalValue / maxTotal) * 100 : 0;
+                const wonPct = j.totalValue > 0 ? Math.min(100, (j.revenue / j.totalValue) * 100) : 0;
+                return (
+                  <tr key={j.jobTypeCode} className={`${TR} hover:bg-[#f8f9fc] transition-colors`}>
+                    <td className={TD}>
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <span className="min-w-11 h-[22px] px-1.5 rounded-md bg-[#eef1f6] text-[#3d5173] text-xs font-semibold font-mono inline-flex items-center justify-center flex-shrink-0">{j.jobTypeCode}</span>
+                        <span className="truncate text-[#26395a] max-w-[260px]" title={j.jobTypeName}>{j.jobTypeName}</span>
+                      </span>
+                    </td>
+                    <td className={`${TD} text-right`}>{fmtCount(j.count)}</td>
+                    <td className={`${TD} text-right text-[#3d5173] whitespace-nowrap`}>{fmtShort(j.totalValue)}</td>
+                    <td className={`${TD} text-right font-semibold whitespace-nowrap`}>{fmtShort(j.revenue)}</td>
+                    <td className={`${TD} min-w-[100px]`}>
+                      <span
+                        className="block h-2 rounded-full bg-[#eef1f6] overflow-hidden" role="img"
+                        title={t("dashboard.jobType.shareHint")}
+                        aria-label={`${j.jobTypeCode} ${fmtShort(j.revenue)} / ${fmtShort(j.totalValue)}`}
+                      >
+                        <span className="block h-full" style={{ width: `${totalPct}%`, background: BAR.light }}>
+                          <span className="block h-full" style={{ width: `${wonPct}%`, background: CHART.blue }} />
+                        </span>
+                      </span>
+                    </td>
+                    <td className={`${TD} text-right`}>{fmtPercent(j.winRate)}</td>
+                    <td className={`${TD} text-right text-[#3d5173] whitespace-nowrap`}>{fmtShort(j.avgDealSize)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
-    </div>
+    </ChartCard>
   );
 }

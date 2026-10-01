@@ -1,32 +1,30 @@
-import { Bell } from "lucide-react";
 import type { NotificationSummary as NotificationSummaryData } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
+import { ChartCard } from "./ChartCard";
+import { fmtCount } from "./tabs/countFormat";
 
-// แสดงสรุปการแจ้งเตือน จำนวนที่ยังไม่อ่าน แยกตามประเภท
+// สรุปการแจ้งเตือนของผู้ใช้ — จำนวนที่ยังไม่อ่าน แยกตามประเภท (ข้อมูลส่วนตัว ไม่ขึ้นกับตัวกรอง)
+// บอร์ดดีไซน์ใหม่ไม่มีการ์ดนี้ แต่เป็นข้อมูลที่แท็บขายแสดงอยู่ จึงคงไว้ในคอลัมน์ข้างตามหน้าตาการ์ดใหม่
 // Shows a notification summary — unread count broken down by type
 export function NotificationSummary({ summary }: { summary: NotificationSummaryData }) {
   const { t } = useI18n();
   const byType = Object.entries(summary.byType);
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-0.5 flex items-center gap-1.5">
-        <Bell size={15} /> {t("dashboard.notifications.title")}
-      </h2>
-      <p className="text-[10px] text-muted-foreground mb-4">{t("dashboard.notifications.personalNote")}</p>
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-3xl font-bold font-mono text-[#c9a84c]">{summary.unreadCount}</span>
-        <span className="text-xs text-muted-foreground">{t("dashboard.notifications.unread")}</span>
+    <ChartCard title={t("dashboard.notifications.title")} sub={t("dashboard.notifications.personalNote")} bodyClassName="px-5 py-4 flex flex-col gap-3">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[22px] leading-tight font-semibold tabular-nums">{fmtCount(summary.unreadCount)}</span>
+        <span className="text-[13px] text-muted-foreground">{t("dashboard.notifications.unread")}</span>
       </div>
       {byType.length > 0 && (
-        <div className="space-y-1.5">
+        <ul className="flex flex-col">
           {byType.map(([type, count]) => (
-            <div key={type} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{type}</span>
-              <span className="font-mono text-foreground">{count}</span>
-            </div>
+            <li key={type} className="flex items-baseline gap-2 py-1 border-t border-[#eef1f6] text-[13px]">
+              <span className="flex-1 min-w-0 truncate text-[#26395a]" title={type}>{type}</span>
+              <span className="font-semibold tabular-nums">{fmtCount(count)}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </ChartCard>
   );
 }

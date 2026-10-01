@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronRight, Info, UserRound } from "lucide-react";
+import { ArrowDownWideNarrow, ChevronRight, Info, UserRound } from "lucide-react";
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie } from "recharts";
 import { useI18n } from "../../../lib/i18n";
 import { btn } from "../../../components/ui/styles";
@@ -90,7 +90,7 @@ export interface Segment { key: string; label: string; value: number; color: str
  * `tone` ทาสีตัวเลขเฉพาะเมื่อมีของค้างจริง ผู้เรียกต้องส่งมาเฉพาะตอนค่ามากกว่าศูนย์
  * · เส้นแนวโน้มใส่ได้เฉพาะตัวเลขที่มีประวัติจริง (DASHBOARD_DESIGN.md ข้อ 5)
  */
-export function KpiCard({ label, value, unit, scope, tone, caption, help, sparkline, segments, progress, badge }: {
+export function KpiCard({ label, value, unit, scope, tone, caption, help, sparkline, segments, segmentFormat, segmentLegend = true, progress, badge }: {
   label: string;
   value: string;
   unit?: string;
@@ -101,6 +101,10 @@ export function KpiCard({ label, value, unit, scope, tone, caption, help, sparkl
   help?: string;
   sparkline?: { values: number[]; color?: string };
   segments?: Segment[];
+  /** รูปแบบตัวเลขของแถบสัดส่วน (ค่าเริ่มต้น = จำนวนนับ) — ใช้ fmtShort เมื่อแถบเป็นยอดเงิน */
+  segmentFormat?: (n: number) => string;
+  /** false = ไม่แสดงคำอธิบายสีใต้แถบ ใช้ `caption` อธิบายแทน (บอร์ดยอดค้างชำระ) — ชื่อ+ยอดแต่ละช่วงยังอยู่ใน title/aria ของแถบ */
+  segmentLegend?: boolean;
   progress?: { value: number; max: number; color?: string; label?: string };
   /** ป้ายสถานะแทนบรรทัดอธิบาย (เช่น "สินค้าถึงจุดเตือน 7 รายการ") */
   badge?: ReactNode;
@@ -123,11 +127,11 @@ export function KpiCard({ label, value, unit, scope, tone, caption, help, sparkl
         </span>
         {sparkline && <Sparkline values={sparkline.values} color={sparkline.color ?? BAR.latest} />}
       </div>
-      {segments && <SegmentBar segments={segments} legend={false} />}
+      {segments && <SegmentBar segments={segments} legend={false} format={segmentFormat} />}
       {progress && <ProgressBar {...progress} />}
       <div className="flex-1" />
       {badge}
-      {segments ? <SegmentLegend segments={segments} /> : caption ? <div className="text-xs text-muted-foreground">{caption}</div> : null}
+      {segments && segmentLegend ? <SegmentLegend segments={segments} format={segmentFormat} /> : caption ? <div className="text-xs text-muted-foreground">{caption}</div> : null}
     </section>
   );
 }
@@ -196,28 +200,28 @@ export function Sparkline({ values, color }: { values: number[]; color: string }
 }
 
 /** แถบสัดส่วนสูง 8px · คำอธิบายสีเป็นข้อความเสมอ (ห้ามพึ่งสีอย่างเดียว) */
-export function SegmentBar({ segments, height = 8, legend = true }: { segments: Segment[]; height?: number; legend?: boolean }) {
+export function SegmentBar({ segments, height = 8, legend = true, format = fmtCount }: { segments: Segment[]; height?: number; legend?: boolean; format?: (n: number) => string }) {
   const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
   const visible = segments.filter((s) => s.value > 0);
   return (
     <div className="space-y-2">
-      <div className="flex gap-0.5 overflow-hidden rounded-full mt-0.5" style={{ height }} role="img" aria-label={segments.map((s) => `${s.label} ${fmtCount(s.value)}`).join(", ")}>
+      <div className="flex gap-0.5 overflow-hidden rounded-full mt-0.5" style={{ height }} role="img" aria-label={segments.map((s) => `${s.label} ${format(s.value)}`).join(", ")}>
         {total === 0
           ? <span className="flex-1 bg-[#eef1f6]" />
-          : visible.map((s) => <span key={s.key} title={`${s.label} ${fmtCount(s.value)}`} style={{ flexGrow: s.value, background: s.color }} />)}
+          : visible.map((s) => <span key={s.key} title={`${s.label} ${format(s.value)}`} style={{ flexGrow: s.value, background: s.color }} />)}
       </div>
-      {legend && <SegmentLegend segments={segments} />}
+      {legend && <SegmentLegend segments={segments} format={format} />}
     </div>
   );
 }
 
-export function SegmentLegend({ segments }: { segments: Segment[] }) {
+export function SegmentLegend({ segments, format = fmtCount }: { segments: Segment[]; format?: (n: number) => string }) {
   return (
     <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
       {segments.map((s) => (
         <span key={s.key} className="inline-flex items-center gap-1.5 whitespace-nowrap">
           <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color }} />
-          {s.label} <Num>{fmtCount(s.value)}</Num>
+          {s.label} <Num>{format(s.value)}</Num>
         </span>
       ))}
     </div>
@@ -274,7 +278,7 @@ export function SeriesLegend({ series }: { series: MonthSeries[] }) {
  * · หลายชุด: แท่งคู่ตามชุดสีกราฟ (คำอธิบายสีใส่ที่หัวการ์ดด้วย `SeriesLegend`)
  * `rows` เรียงเก่าสุดก่อน · ป้ายแกน X จาก `month` ("YYYY-MM") หรือ `labelOf`
  */
-export function MonthlyBars<T extends { month?: string }>({ rows, series, format, axisFormat, height = 220, empty, labelOf }: {
+export function MonthlyBars<T extends { month?: string }>({ rows, series, format, axisFormat, height = 220, empty, labelOf, stacked = false }: {
   rows: T[];
   series: MonthSeries[];
   format: (v: number) => string;
@@ -282,6 +286,8 @@ export function MonthlyBars<T extends { month?: string }>({ rows, series, format
   height?: number;
   empty: string;
   labelOf?: (row: T) => string;
+  /** หลายชุดซ้อนเป็นแท่งเดียว (กิจกรรมของฝ่ายขาย) แทนแท่งคู่ */
+  stacked?: boolean;
 }) {
   const { lang } = useI18n();
   const data = rows.map((r) => ({ ...r, label: labelOf ? labelOf(r) : fmtMonthShort(r.month ?? "", lang) })) as (T & { label: string })[];
@@ -299,7 +305,7 @@ export function MonthlyBars<T extends { month?: string }>({ rows, series, format
       {/* วางแบบ absolute เพื่อให้ ResponsiveContainer วัดขนาดได้แน่นอนในการ์ดที่ถูกยืด */}
       <div className="absolute inset-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 4, left: 0, bottom: 0 }} barGap={2} barCategoryGap={single ? "30%" : "24%"}>
+          <BarChart data={data} margin={{ top: 20, right: 4, left: 0, bottom: 0 }} barGap={2} barCategoryGap={single || stacked ? "30%" : "24%"}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis
               dataKey="label" axisLine={{ stroke: "#c3ccda" }} tickLine={false} interval={rows.length > 14 ? "preserveStartEnd" : 0} minTickGap={4}
@@ -314,7 +320,10 @@ export function MonthlyBars<T extends { month?: string }>({ rows, series, format
             {series.map((s, si) => {
               const color = s.color ?? CHART_SEQUENCE[si % CHART_SEQUENCE.length];
               return (
-                <Bar key={s.key} dataKey={s.key} name={s.name} fill={single ? BAR.muted : color} radius={[4, 4, 0, 0]} maxBarSize={single ? 36 : 16} isAnimationActive={false}>
+                <Bar
+                  key={s.key} dataKey={s.key} name={s.name} fill={single ? BAR.muted : color} stackId={stacked ? "stack" : undefined}
+                  radius={!stacked || si === series.length - 1 ? [4, 4, 0, 0] : undefined} maxBarSize={single || stacked ? 36 : 16} isAnimationActive={false}
+                >
                   {single && data.map((_, i) => <Cell key={i} fill={i === lastIndex ? BAR.latest : BAR.muted} />)}
                   {showLabels && (
                     <LabelList
@@ -585,4 +594,71 @@ export function SharedStatusPill({ status }: { status: string }) {
   if (status === "PendingApproval") return <StatusChip tone="warn">{t("dashboard.dept.status.pending")}</StatusChip>;
   if (status === "Final") return <StatusChip tone="good">{t("dashboard.dept.status.final")}</StatusChip>;
   return <StatusChip tone="neutral">{t("dashboard.dept.status.draft")}</StatusChip>;
+}
+
+export interface StatCell {
+  key: string;
+  label: string;
+  value: string;
+  /** บรรทัดเล็กใต้ตัวเลข */
+  sub?: string;
+  /** ป้ายเล็กต่อท้ายชื่อ (เช่น "ช่วงที่เลือก") */
+  tag?: string;
+  tone?: "alert" | "warn";
+  /** ช่องที่กดได้ (เช่น "รอการอนุมัติ" → รายการใบเสนอราคา) */
+  onClick?: () => void;
+}
+
+/**
+ * แถวช่องตัวเลขคั่นเส้นบาง (บอร์ด: แถบสรุปในการ์ดรออนุมัติ · จำนวน Cost Control · ประสิทธิภาพการขาย)
+ * — วางเต็มความกว้างการ์ด (ใช้ใน ChartCard `flush`) · จอแคบเหลือ 2 คอลัมน์
+ */
+export function StatCells({ cells, cols = 4, size = "md" }: { cells: StatCell[]; cols?: 4 | 5; size?: "md" | "lg" }) {
+  const grid = cols === 5 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2 sm:grid-cols-4";
+  return (
+    <div className={`grid ${grid} overflow-hidden`}>
+      {cells.map((c) => {
+        const toneClass = c.tone === "alert" ? "text-[#b93636]" : c.tone === "warn" ? "text-[#8a5a00]" : "text-foreground";
+        const body = (
+          <>
+            <span className={`flex items-center gap-2 min-w-0 ${size === "lg" ? "text-[13px] text-[#3d5173]" : "text-xs text-muted-foreground"}`}>
+              <span className="truncate" title={c.label}>{c.label}</span>
+              {c.tag && <ScopeTag>{c.tag}</ScopeTag>}
+            </span>
+            <span className={`${size === "lg" ? "text-[22px]" : "text-xl"} leading-snug font-semibold tabular-nums ${toneClass}`}>{c.value}</span>
+            {c.sub && <span className="text-xs text-muted-foreground truncate" title={c.sub}>{c.sub}</span>}
+          </>
+        );
+        const cls = `px-5 sm:px-6 ${size === "lg" ? "py-3.5" : "py-3"} flex flex-col gap-0.5 min-w-0 text-left border-r border-b border-[#eef1f6] -mr-px -mb-px`;
+        return c.onClick
+          ? <button key={c.key} type="button" onClick={c.onClick} className={`${cls} hover:bg-[#f8f9fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 transition-colors`}>{body}</button>
+          : <div key={c.key} className={cls}>{body}</div>;
+      })}
+    </div>
+  );
+}
+
+/** ตัวเลขสีเหลืองอำพันบนหัวการ์ด (จำนวนที่รอ) — ศูนย์ = สีเทา */
+export function CountPill({ count, label }: { count: number; label?: string }) {
+  return (
+    <span
+      aria-label={label}
+      className={`h-[26px] min-w-8 px-2.5 rounded-full text-[13px] font-bold tabular-nums inline-flex items-center justify-center flex-shrink-0 ${count > 0 ? "bg-[#fdf3e0] text-[#8a5a00]" : "bg-[#eef1f6] text-[#3d5173]"}`}
+    >
+      {fmtCount(count)}
+    </span>
+  );
+}
+
+/** หัวคอลัมน์ที่กดเรียงได้ (ตารางพนักงานขาย / ประเภทงาน) — คอลัมน์ที่ใช้เรียงอยู่ตัวเข้ม + ไอคอน */
+export function SortHeader({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button" onClick={onClick} aria-pressed={active}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 ${active ? "text-foreground" : ""}`}
+    >
+      {label}
+      <ArrowDownWideNarrow size={14} className={active ? "text-foreground" : "text-[#c3ccda]"} aria-hidden="true" />
+    </button>
+  );
 }

@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { ArrowUpDown } from "lucide-react";
 import type { SalesPerformanceEntry, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
+import { ChartCard, ScopeTag } from "./ChartCard";
 import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
+import { SortHeader } from "./tabs/DepartmentWidgets";
+import { CHART, TD, TH, TR } from "./tabs/dashboardTokens";
+import { fmtCount } from "./tabs/countFormat";
 
 type SortKey = "totalValue" | "revenue" | "quotationCount" | "won" | "lost" | "pending" | "conversionRate" | "avgClosingTime" | "avgDealSize" | "expectedRevenue";
 
-// ตารางผลงานพนักงานขาย ใช้ได้ทั้งแบบรายการเต็มและแบบจัดอันดับ Top N พร้อมการเรียงลำดับคอลัมน์
-// Sales performance table, usable both as a full list and a top-N ranking, with sortable columns
+// ตารางผลงานพนักงานขาย (บอร์ด Dashboard-Sales) — ทุกคน เรียงตามรายได้ กดหัวคอลัมน์เพื่อเรียงใหม่ · คอลัมน์รายได้มีแถบเทียบคนที่มากสุด
+// Sales performance table with sortable columns; the revenue column carries a bar against the top performer
 export function SalesPerformanceTable({ title, sub, entries, limit, vatMode }: { title: string; sub: string; entries: SalesPerformanceEntry[]; limit?: number; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
@@ -16,13 +19,13 @@ export function SalesPerformanceTable({ title, sub, entries, limit, vatMode }: {
 
   const sorted = [...entries].sort((a, b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
   const rows = limit ? sorted.slice(0, limit) : sorted;
+  const maxRevenue = Math.max(0, ...entries.map((e) => e.revenue));
 
-  const columns: { key: SortKey | null; label: string }[] = [
-    { key: null, label: t("dashboard.ranking.col.salesperson") },
+  const columns: { key: SortKey; label: string }[] = [
     { key: "quotationCount", label: t("dashboard.ranking.col.jobs") },
-    { key: "totalValue", label: `${t("dashboard.ranking.col.totalValue")} ${vatSuffix}` },
-    { key: "revenue", label: `${t("dashboard.ranking.col.revenue")} ${vatSuffix}` },
-    { key: "expectedRevenue", label: `${t("dashboard.ranking.col.expectedRevenue")} ${vatSuffix}` },
+    { key: "totalValue", label: t("dashboard.ranking.col.totalValue") },
+    { key: "revenue", label: t("dashboard.ranking.col.revenue") },
+    { key: "expectedRevenue", label: t("dashboard.ranking.col.expectedRevenue") },
     { key: "won", label: t("dashboard.ranking.col.won") },
     { key: "lost", label: t("dashboard.ranking.col.lost") },
     { key: "pending", label: t("dashboard.ranking.col.pending") },
@@ -32,52 +35,52 @@ export function SalesPerformanceTable({ title, sub, entries, limit, vatMode }: {
   ];
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">{sub}</p>
-      </div>
+    <ChartCard flush title={title} tag={vatSuffix} sub={sub} actions={<ScopeTag>{t("dashboard.dept.periodTag")}</ScopeTag>}>
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
+        <p className="text-[13px] text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-border">
+              <tr className="bg-[#f8f9fc] border-b border-border">
+                <th className={`${TH} text-left`}>{t("dashboard.ranking.col.salesperson")}</th>
                 {columns.map((c) => (
-                  <th key={c.label} className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                    {c.key ? (
-                      <button onClick={() => setSortKey(c.key as SortKey)} className={`flex items-center gap-1 hover:text-foreground transition-colors ${sortKey === c.key ? "text-[#c9a84c]" : ""}`}>
-                        {c.label} <ArrowUpDown size={9} />
-                      </button>
-                    ) : c.label}
+                  <th key={c.key} className={`${TH} ${c.key === "revenue" ? "text-left min-w-[130px]" : "text-right"}`} aria-sort={sortKey === c.key ? "descending" : undefined}>
+                    <SortHeader label={c.label} active={sortKey === c.key} onClick={() => setSortKey(c.key)} />
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="tabular-nums">
               {rows.map((r, i) => (
-                <tr key={r.salesperson} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                  <td className="px-3 py-2.5 text-xs text-foreground font-medium whitespace-nowrap">
-                    {limit && <span className="text-muted-foreground font-mono mr-2">#{i + 1}</span>}
+                <tr key={r.salesperson} className={`${TR} hover:bg-[#f8f9fc] transition-colors`}>
+                  <td className={`${TD} font-medium whitespace-nowrap max-w-[220px] truncate`} title={r.salesperson}>
+                    {limit && <span className="text-muted-foreground mr-2">#{i + 1}</span>}
                     {r.salesperson}
                   </td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{r.quotationCount}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-foreground">{fmtShort(r.totalValue)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-foreground font-semibold">{fmtShort(r.revenue)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtShort(r.expectedRevenue)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-[#157347]">{r.won}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-[#e05252]">{r.lost}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-[#c9a84c]">{r.pending}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtPercent(r.conversionRate)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtShort(r.avgDealSize)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtDaysOrDash(r.avgClosingTime, days)}</td>
+                  <td className={`${TD} text-right`}>{fmtCount(r.quotationCount)}</td>
+                  <td className={`${TD} text-right text-[#3d5173] whitespace-nowrap`}>{fmtShort(r.totalValue)}</td>
+                  <td className={TD}>
+                    <span className="flex flex-col gap-1">
+                      <span className="font-semibold whitespace-nowrap">{fmtShort(r.revenue)}</span>
+                      <span className="block h-1 rounded-full bg-[#eef1f6] overflow-hidden" aria-hidden="true">
+                        <span className="block h-full" style={{ width: `${maxRevenue > 0 ? (r.revenue / maxRevenue) * 100 : 0}%`, background: CHART.blue }} />
+                      </span>
+                    </span>
+                  </td>
+                  <td className={`${TD} text-right text-[#3d5173] whitespace-nowrap`}>{fmtShort(r.expectedRevenue)}</td>
+                  <td className={`${TD} text-right`}>{fmtCount(r.won)}</td>
+                  <td className={`${TD} text-right`}>{fmtCount(r.lost)}</td>
+                  <td className={`${TD} text-right`}>{fmtCount(r.pending)}</td>
+                  <td className={`${TD} text-right`}>{fmtPercent(r.conversionRate)}</td>
+                  <td className={`${TD} text-right text-[#3d5173] whitespace-nowrap`}>{fmtShort(r.avgDealSize)}</td>
+                  <td className={`${TD} text-right text-[#3d5173] whitespace-nowrap`}>{fmtDaysOrDash(r.avgClosingTime, days)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-    </div>
+    </ChartCard>
   );
 }

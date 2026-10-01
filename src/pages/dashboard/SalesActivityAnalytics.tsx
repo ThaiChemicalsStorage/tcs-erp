@@ -1,35 +1,30 @@
 import { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { Activity } from "lucide-react";
 import type { SalesActivityTrend, SalesActivityBySalespersonRow } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
-import { EmptyState } from "../../components/EmptyState";
 import { periodLabel, fmtDateShort } from "./format";
-
-type Grouping = "weekly" | "monthly" | "quarterly" | "yearly";
-const GROUPINGS: Grouping[] = ["weekly", "monthly", "quarterly", "yearly"];
+import { GroupingSegmented, type TrendGrouping } from "./DashboardCharts";
+import { MonthlyBars, SeriesLegend, type MonthSeries } from "./tabs/DepartmentWidgets";
+import { CHART, TD, TH, TONE, TR } from "./tabs/dashboardTokens";
+import { fmtCount } from "./tabs/countFormat";
 
 type ActivityCategory = "created" | "edited" | "statusChanged" | "approvalRequested" | "approvalCompleted";
 const CATEGORIES: { key: ActivityCategory; color: string }[] = [
-  { key: "created", color: "#c9a84c" },
-  { key: "edited", color: "#5a7299" },
-  { key: "statusChanged", color: "#1a5fb4" },
-  { key: "approvalRequested", color: "#e08a3c" },
-  { key: "approvalCompleted", color: "#2aa36b" },
+  { key: "created", color: CHART.blue },
+  { key: "edited", color: TONE.neutral },
+  { key: "statusChanged", color: CHART.violet },
+  { key: "approvalRequested", color: CHART.orange },
+  { key: "approvalCompleted", color: CHART.aqua },
 ];
 
-// แสดงกิจกรรมใบเสนอราคาแบบแยกตามช่วงเวลาและตำแหน่งพนักงานขาย เป็นกราฟแท่งซ้อนกันพร้อมตาราง
-// Renders quotation activity grouped by period and by salesperson as a stacked bar chart plus tables
+/**
+ * กิจกรรมของฝ่ายขาย (บอร์ด Dashboard-Sales, ดีไซน์ใหม่ 2026-09-30) — บอร์ดเหลือแค่สองตาราง แต่เจ้าของสั่งคงกราฟไว้
+ * จึงเป็น: กราฟแท่งซ้อนตามช่วงเวลา (ชุดสีกราฟใหม่) → ตาราง "ตามช่วงเวลา" (8 ช่วงล่าสุด) คู่กับ "สรุปตามพนักงานขาย"
+ * Stacked activity bars by period, then the per-period and per-salesperson tables side by side
+ */
 export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { data: SalesActivityTrend; anchorDate: string; dateFiltered: boolean }) {
   const { t, lang } = useI18n();
-  const [grouping, setGrouping] = useState<Grouping>("monthly");
-  const groupingLabel: Record<Grouping, string> = {
-    weekly: t("dashboard.chart.revenue.grouping.week"),
-    monthly: t("dashboard.chart.revenue.grouping.month"),
-    quarterly: t("dashboard.chart.revenue.grouping.quarter"),
-    yearly: t("dashboard.chart.revenue.grouping.year"),
-  };
+  const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
   const categoryLabel: Record<ActivityCategory, string> = {
     created: t("dashboard.salesActivity.created"),
     edited: t("dashboard.salesActivity.edited"),
@@ -37,99 +32,87 @@ export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { dat
     approvalRequested: t("dashboard.salesActivity.approvalRequested"),
     approvalCompleted: t("dashboard.salesActivity.approvalCompleted"),
   };
+  const series: MonthSeries[] = CATEGORIES.map((c) => ({ key: c.key, name: categoryLabel[c.key], color: c.color }));
   const rows = data[grouping];
   const hasData = rows.some((r) => CATEGORIES.some((c) => r[c.key] > 0));
-  const chartData = rows.map((r) => ({ ...r, label: periodLabel(r.period) }));
   const bySalespersonRows: (SalesActivityBySalespersonRow & { total: number })[] = data.bySalesperson[grouping]
     .map((r) => ({ ...r, total: r.created + r.edited }))
     .slice(0, 12);
 
   return (
     <ChartCard
+      flush
       title={t("dashboard.salesActivity.title")}
       sub={dateFiltered
         ? t("dashboard.salesActivity.sub.filtered")
         : `${t("dashboard.salesActivity.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
-      actions={
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          {GROUPINGS.map((g) => (
-            <button key={g} onClick={() => setGrouping(g)}
-              className={`px-2 py-1 text-[10px] rounded-md font-medium transition-all ${grouping === g ? "bg-[#0b1d3a] text-white" : "text-muted-foreground hover:text-foreground"}`}>
-              {groupingLabel[g]}
-            </button>
-          ))}
-        </div>
-      }
+      actions={<GroupingSegmented value={grouping} onChange={setGrouping} />}
     >
       {!hasData ? (
-        <EmptyState icon={Activity} title={t("dashboard.salesActivity.empty")} description={t("dashboard.salesActivity.sub")} compact />
+        <p className="text-[13px] text-muted-foreground text-center py-10">{t("dashboard.salesActivity.empty")}</p>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-              <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} minTickGap={16} />
-              <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              {CATEGORIES.map((c, i) => (
-                <Bar key={c.key} dataKey={c.key} name={categoryLabel[c.key]} stackId="activity" fill={c.color} radius={i === CATEGORIES.length - 1 ? [4, 4, 0, 0] : undefined} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.salesActivity.col.period")}</th>
-                  {CATEGORIES.map((c) => (
-                    <th key={c.key} className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{categoryLabel[c.key]}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {chartData.slice(-8).reverse().map((r) => (
-                  <tr key={r.period} className="border-b border-border/40 last:border-0">
-                    <td className="px-2 py-1.5 text-xs text-foreground font-mono">{r.label}</td>
-                    {CATEGORIES.map((c) => (
-                      <td key={c.key} className="px-2 py-1.5 text-xs font-mono text-right" style={{ color: c.color }}>{r[c.key]}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="px-6 pt-4 pb-3 flex flex-col gap-3 border-b border-[#eef1f6]" role="group" aria-label={t("dashboard.salesActivity.chartLabel")}>
+            <SeriesLegend series={series} />
+            <MonthlyBars
+              rows={rows.map((r) => ({ ...r, month: r.period }))} series={series} stacked
+              format={fmtCount} height={220} empty={t("dashboard.salesActivity.empty")}
+              labelOf={grouping === "monthly" ? undefined : (r) => periodLabel(r.month)}
+            />
           </div>
-
-          <div className="mt-5 pt-4 border-t border-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.salesActivity.bySalesperson.title")}</p>
-            {bySalespersonRows.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">{t("dashboard.salesActivity.bySalesperson.empty")}</p>
-            ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_520px]">
+            <div className="min-w-0 xl:border-r border-[#eef1f6]">
+              <p className="px-6 pt-3 pb-2 text-[13px] font-semibold text-[#26395a]">{t("dashboard.salesActivity.byPeriod.title")}</p>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.col.period")}</th>
-                      <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.salesActivity.col.salesperson")}</th>
-                      <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.created")}</th>
-                      <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.edited")}</th>
-                      <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.col.total")}</th>
+                    <tr className="bg-[#f8f9fc] border-y border-border">
+                      <th className={`${TH} text-left`}>{t("dashboard.salesActivity.col.period")}</th>
+                      {CATEGORIES.map((c) => <th key={c.key} className={`${TH} text-right`}>{categoryLabel[c.key]}</th>)}
                     </tr>
                   </thead>
-                  <tbody>
-                    {bySalespersonRows.map((r) => (
-                      <tr key={`${r.period}-${r.salesperson}`} className="border-b border-border/40 last:border-0">
-                        <td className="px-2 py-1.5 text-xs text-foreground font-mono whitespace-nowrap">{periodLabel(r.period)}</td>
-                        <td className="px-2 py-1.5 text-xs text-foreground truncate max-w-[160px]" title={r.salesperson}>{r.salesperson}</td>
-                        <td className="px-2 py-1.5 text-xs font-mono text-[#c9a84c] text-right">{r.created}</td>
-                        <td className="px-2 py-1.5 text-xs font-mono text-[#5a7299] text-right">{r.edited}</td>
-                        <td className="px-2 py-1.5 text-xs font-mono font-semibold text-foreground text-right">{r.total}</td>
+                  <tbody className="tabular-nums">
+                    {rows.slice(-8).reverse().map((r) => (
+                      <tr key={r.period} className={TR}>
+                        <td className={`${TD} text-[#3d5173] whitespace-nowrap`}>{periodLabel(r.period)}</td>
+                        {CATEGORIES.map((c) => <td key={c.key} className={`${TD} text-right`}>{fmtCount(r[c.key])}</td>)}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
+            <div className="min-w-0 border-t xl:border-t-0 border-[#eef1f6]">
+              <p className="px-6 pt-3 pb-2 text-[13px] font-semibold text-[#26395a]">{t("dashboard.salesActivity.bySalesperson.title")}</p>
+              {bySalespersonRows.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground text-center py-6">{t("dashboard.salesActivity.bySalesperson.empty")}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-[#f8f9fc] border-y border-border">
+                        <th className={`${TH} text-left`}>{t("dashboard.salesActivity.col.period")}</th>
+                        <th className={`${TH} text-left`}>{t("dashboard.salesActivity.col.salesperson")}</th>
+                        <th className={`${TH} text-right`}>{t("dashboard.salesActivity.created")}</th>
+                        <th className={`${TH} text-right`}>{t("dashboard.salesActivity.edited")}</th>
+                        <th className={`${TH} text-right`}>{t("dashboard.salesActivity.col.total")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="tabular-nums">
+                      {bySalespersonRows.map((r) => (
+                        <tr key={`${r.period}-${r.salesperson}`} className={TR}>
+                          <td className={`${TD} text-[#3d5173] whitespace-nowrap`}>{periodLabel(r.period)}</td>
+                          <td className={`${TD} max-w-[180px] truncate`} title={r.salesperson}>{r.salesperson}</td>
+                          <td className={`${TD} text-right`}>{fmtCount(r.created)}</td>
+                          <td className={`${TD} text-right`}>{fmtCount(r.edited)}</td>
+                          <td className={`${TD} text-right font-semibold`}>{fmtCount(r.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}

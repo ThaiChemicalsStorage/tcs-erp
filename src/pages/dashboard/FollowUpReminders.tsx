@@ -1,51 +1,50 @@
-import { CalendarClock } from "lucide-react";
 import type { FollowUps, FollowUpSummary, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
+import { todayIsoBangkok } from "../../lib/dateRanges";
+import { ChartCard } from "./ChartCard";
+import { fmtDateShort, fmtShort } from "./format";
+import { DueBadge, Pill } from "./tabs/DepartmentWidgets";
 
-// แถวรายการติดตามงานหนึ่งรายการ กดแล้วเปิดรายชื่อใบเสนอราคาของลูกค้ารายนั้น
-// A single follow-up row; clicking it opens that customer's filtered quotation list.
-function Row({ f, onClick }: { f: FollowUpSummary; onClick: (client: string) => void }) {
-  return (
-    <button onClick={() => onClick(f.client)} className="w-full flex items-center justify-between text-xs py-2 border-b border-border/40 last:border-0 hover:bg-secondary/40 transition-colors px-1 rounded text-left">
-      <span className="text-foreground min-w-0 truncate">{f.client}{f.salesperson && <span className="text-muted-foreground"> · {f.salesperson}</span>}</span>
-      <span className="flex items-center gap-2 font-mono text-muted-foreground flex-shrink-0 ml-2">
-        <span>{f.followUpDate}</span>
-        <span className="text-foreground font-semibold">฿{f.amount.toLocaleString("th-TH")}</span>
-      </span>
-    </button>
-  );
-}
-
-// แสดงรายการติดตามงานที่เกินกำหนด/วันนี้/กำลังจะถึง แบ่งเป็นกลุ่ม
-// Shows follow-up reminders grouped into overdue, today, and upcoming sections.
+/**
+ * การติดตามลูกค้า (บอร์ด Dashboard-Sales, ดีไซน์ใหม่ 2026-09-30) — รวมสองการ์ดเดิม (รายการ 6 แถวบนแท็บ +
+ * การ์ดแบ่งกลุ่มเลยกำหนด/วันนี้/กำลังจะถึง ในรายละเอียดเชิงลึก) เป็นรายการเดียวครบทุกแถว: เลยกำหนดก่อน
+ * แล้ววันนี้ แล้วกำลังจะถึง · ป้ายท้ายแถวบอกเลย/อีกกี่วัน (ชี้ดูวันนัด) · กดแถวเปิดใบเสนอราคาของลูกค้ารายนั้น
+ */
 export function FollowUpReminders({ followUps, onOpenClient, vatMode }: { followUps: FollowUps; onOpenClient: (client: string) => void; vatMode: DashboardVatMode }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
-  const sections: { key: keyof FollowUps; label: string; accent: string }[] = [
-    { key: "overdue", label: t("dashboard.followUps.overdue"), accent: "#e05252" },
-    { key: "today", label: t("dashboard.followUps.today"), accent: "#c9a84c" },
-    { key: "upcoming", label: t("dashboard.followUps.upcoming"), accent: "#2aa36b" },
-  ];
-  const total = followUps.today.length + followUps.overdue.length + followUps.upcoming.length;
-
+  const rows: FollowUpSummary[] = [...followUps.overdue, ...followUps.today, ...followUps.upcoming];
+  const today = todayIsoBangkok();
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-1 flex items-center gap-1.5">
-        <CalendarClock size={15} /> {t("dashboard.followUps.title")}
-      </h2>
-      <p className="text-[10px] text-muted-foreground mb-3">{`${t("dashboard.followUps.amountNote")} ${vatSuffix}`}</p>
-      {total === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
+    <ChartCard
+      flush className="h-full" bodyClassName="flex-1 min-h-0 flex flex-col"
+      title={t("dashboard.followUps.title")} sub={t("dashboard.followUps.sub").replace("{vat}", vatSuffix)}
+      actions={followUps.overdue.length > 0 ? <Pill tone="alert">{t("dashboard.followUps.overdueCount").replace("{n}", String(followUps.overdue.length))}</Pill> : undefined}
+    >
+      {rows.length === 0 ? (
+        <p className="flex-1 flex items-center justify-center text-[13px] text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
       ) : (
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          {sections.filter((s) => followUps[s.key].length > 0).map((s) => (
-            <div key={s.key}>
-              <p className="text-[10px] font-mono uppercase tracking-wider mb-1.5" style={{ color: s.accent }}>{s.label} ({followUps[s.key].length})</p>
-              {followUps[s.key].map((f) => <Row key={f.id} f={f} onClick={onOpenClient} />)}
-            </div>
+        <ul className="max-h-[420px] overflow-y-auto">
+          {rows.map((f) => (
+            <li key={f.id} className="border-b border-[#eef1f6] last:border-0">
+              <button
+                type="button" onClick={() => onOpenClient(f.client)}
+                className="w-full min-h-[52px] px-5 py-2 flex items-center gap-3 text-left hover:bg-[#f8f9fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 transition-colors"
+              >
+                <span className="flex-1 min-w-0 flex flex-col leading-snug">
+                  <span className="font-medium truncate" title={f.client}>{f.client}</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    <span className="font-mono">{f.id}</span>{f.salesperson ? ` · ${f.salesperson}` : ""} · {fmtShort(f.amount)}
+                  </span>
+                </span>
+                <span title={t("dashboard.followUps.dateTitle").replace("{date}", f.followUpDate ? fmtDateShort(f.followUpDate.slice(0, 10), lang) : "—")} className="flex-shrink-0">
+                  <DueBadge date={f.followUpDate} today={today} />
+                </span>
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </ChartCard>
   );
 }

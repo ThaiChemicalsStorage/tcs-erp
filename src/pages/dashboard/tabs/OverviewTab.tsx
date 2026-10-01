@@ -1,33 +1,45 @@
 import type { ReactNode } from "react";
-import { ArrowRight, Inbox, RotateCw, UserRound, TrendingUp, FileText, Wallet, Warehouse, Truck, CalendarClock, Hourglass, FileClock } from "lucide-react";
+import { ChevronRight, Info, RotateCw, UserRound } from "lucide-react";
 import { tabOfDepartment, type DashboardTabKey, type DepartmentKey } from "../../../lib/dashboardTabs";
 import type { DashboardStats } from "../../../lib/dashboard";
-import { AGING_BUCKET_COLORS, AGING_BUCKET_LABEL_KEY, type ArDashboardStats } from "../../../lib/accountingDashboard";
+import type { ArAgingBucketKey, ArDashboardStats } from "../../../lib/accountingDashboard";
 import type { AttentionItem, DepartmentDashboardResponse } from "../../../lib/departmentDashboard";
 import { useI18n } from "../../../lib/i18n";
+import { btn } from "../../../components/ui/styles";
 import { fmtShort, fmtDateShort } from "../format";
 import { todayIsoBangkok } from "../../../lib/dateRanges";
 import { ActivityTimeline } from "../ActivityTimeline";
-import { SkeletonBar } from "../DashboardStates";
+import { HeaderFigure } from "../ChartCard";
+import { KpiSkeleton, SkeletonBar } from "../DashboardStates";
 import type { DashboardData } from "../useDashboardData";
 import { PENDING_KIND_LABEL_KEY } from "../../pendingApprovals/kindLabels";
 import { DEPARTMENT_META } from "./tabMeta";
-import { ChartCard, DueBadge, EmptyNote, KpiCard, KpiGrid, MonthlyBars, Pill, SplitRow, type Segment } from "./DepartmentWidgets";
-import { GOLD, SERIF } from "./dashboardTokens";
-import { daysBetweenIso, fmtCount } from "./countFormat";
+import {
+  CardFooterLink, ChartCard, CountPill, DueBadge, EmptyNote, KpiCard, KpiGrid, MonthlyBars, Num, Pill, SplitRow, StatusChip, type Segment,
+} from "./DepartmentWidgets";
+import { BAR } from "./dashboardTokens";
+import { daysBetweenIso, fmtAxis, fmtCount } from "./countFormat";
 
 /**
- * แท็บภาพรวม — "Dashboard ที่ดูข้อมูลรวมได้ทุกอย่าง" ตามที่เจ้าของขอ (2026-09-14) ออกแบบใหม่เป็นแดชบอร์ดเต็ม
- * ตาม docs/DASHBOARD_DESIGN.md: KPI 4 ใบ → ยอดขายรายเดือน + การ์ดเด่นรออนุมัติทุกแผนก → การ์ดแผนก →
- * ต้องจัดการก่อน + กิจกรรมล่าสุด
+ * แท็บภาพรวม — "Dashboard ที่ดูข้อมูลรวมได้ทุกอย่าง" ตามที่เจ้าของขอ (2026-09-14) · หน้าตาตามบอร์ด `Dashboard`
+ * (ดีไซน์ใหม่ 2026-09-30): KPI 4 ใบ → รายได้รายเดือน + เอกสารรออนุมัติทุกแผนก → ต้องจัดการก่อน + สรุปแต่ละแผนก
+ * → กิจกรรมล่าสุด (บอร์ดไม่มี แต่เป็นข้อมูลที่หน้านี้แสดงอยู่ จึงคงไว้ท้ายหน้า)
  *
  * ทุกชิ้นโหลด/พังแยกกัน — ขายกับบัญชีมาจาก endpoint เดิมของตัวเอง ส่วนที่เหลือจาก
  * `/api/dashboard/departments?dept=overview` · ชิ้นที่ผู้ใช้ไม่มีสิทธิ์ไม่แสดงเลย
  */
 
-const DEPARTMENT_ORDER: DepartmentKey[] = ["purchasing", "inventory", "production", "project", "service", "bd"];
+const DEPARTMENT_ORDER: DepartmentKey[] = ["purchasing", "inventory", "service", "production", "project", "bd"];
 
 interface CardMetric { label: string; value: number | null | undefined; tone?: "alert" | "warn" }
+
+/** แทน `{name}` ในข้อความด้วยชิ้น React (ตัวเลขเน้น) — ข้อความแปลยังมาจาก t() ทั้งประโยค */
+function fill(template: string, parts: Record<string, ReactNode>): ReactNode[] {
+  return template.split(/(\{\w+\})/).map((chunk, i) => {
+    const m = /^\{(\w+)\}$/.exec(chunk);
+    return m && m[1] in parts ? <span key={i}>{parts[m[1]]}</span> : chunk;
+  });
+}
 
 export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, onOpenQuote, onOpenPendingApprovals, onRetry }: {
   visibleTabs: DashboardTabKey[];
@@ -44,6 +56,8 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
   const overviewLoading = !overview && !departments.error;
   const salesData = sales?.data ?? null;
   const vatSuffix = salesData ? t(salesData.filters.vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre") : "";
+  const now = t("dashboard.dept.caption.asOfNow");
+  const docs = t("dashboard.unit.docs");
 
   // ── KPI 4 ใบ: เลือกจากชิ้นที่ผู้ใช้เห็นตามลำดับความสำคัญ ──
   const kpis: { key: string; node: ReactNode | "loading" }[] = [];
@@ -55,18 +69,18 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
         key: "closedSales",
         node: (
           <KpiCard
-            icon={TrendingUp} chip={DEPARTMENT_META.accounting.accent} label={`${t("dashboard.kpi.closedSales")} ${vatSuffix}`} value={fmtShort(salesData.kpis.closedSales)}
-            sparkline={{ values: salesData.revenueTrend.monthly.map((p) => p.revenue), color: DEPARTMENT_META.accounting.accent }}
-            caption={t("dashboard.overview.kpi.closedSalesCaption").replace("{n}", fmtCount(salesData.kpis.wonDeals))}
+            label={t("dashboard.kpi.closedSales")} scope="period" value={fmtShort(salesData.kpis.closedSales)}
+            sparkline={{ values: salesData.revenueTrend.monthly.map((p) => p.revenue) }}
+            caption={`${vatSuffix} · ${t("dashboard.kpi.wonSparkCaption").replace("{n}", fmtCount(salesData.kpis.wonDeals))}`}
           />
         ),
       }, {
         key: "activeQuotations",
         node: (
           <KpiCard
-            icon={FileText} chip={DEPARTMENT_META.sales.accent} label={t("dashboard.kpi.activeQuotations")} value={fmtCount(salesData.kpis.activeQuotations)}
-            sparkline={salesData.salesActivity ? { values: salesData.salesActivity.monthly.map((p) => p.created), color: DEPARTMENT_META.sales.accent } : undefined}
-            caption={salesData.salesActivity ? t("dashboard.overview.kpi.activeQuotationsCaption") : t("dashboard.dept.periodTag")}
+            label={t("dashboard.kpi.activeQuotations")} scope="period" value={fmtCount(salesData.kpis.activeQuotations)} unit={docs}
+            sparkline={salesData.salesActivity ? { values: salesData.salesActivity.monthly.map((p) => p.created) } : undefined}
+            caption={salesData.salesActivity ? t("dashboard.kpi.sparkCreatedCaption") : undefined}
           />
         ),
       });
@@ -76,19 +90,24 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
     if (!ar.data) kpis.push({ key: "ar", node: "loading" });
     else {
       const buckets = new Map(ar.data.aging.buckets.map((b) => [b.key, b.amount]));
-      const over60 = (buckets.get("d61_90") ?? 0) + (buckets.get("d90plus") ?? 0);
+      const amount = (key: ArAgingBucketKey) => buckets.get(key) ?? 0;
+      const over60 = amount("d61_90") + amount("d90plus");
+      const overdue = amount("d1_30") + amount("d31_60") + over60;
+      // ช่วงอายุหนี้ใช้น้ำเงินไล่ระดับตามบอร์ด (ยิ่งเกินนานยิ่งเข้ม) — ชื่อและยอดของแต่ละช่วงอยู่ใน title/aria ของแถบ
       const segments: Segment[] = [
-        { key: "notDue", label: t(AGING_BUCKET_LABEL_KEY.notDue), value: buckets.get("notDue") ?? 0, color: AGING_BUCKET_COLORS.notDue },
-        { key: "d1_30", label: t(AGING_BUCKET_LABEL_KEY.d1_30), value: buckets.get("d1_30") ?? 0, color: AGING_BUCKET_COLORS.d1_30 },
-        { key: "d31_60", label: t(AGING_BUCKET_LABEL_KEY.d31_60), value: buckets.get("d31_60") ?? 0, color: AGING_BUCKET_COLORS.d31_60 },
-        { key: "over60", label: t("dashboard.overview.aging.over60"), value: over60, color: AGING_BUCKET_COLORS.d90plus },
+        { key: "notDue", label: t("accounting.agingBucket.notDue"), value: amount("notDue"), color: BAR.light },
+        { key: "d1_30", label: t("accounting.agingBucket.d1_30"), value: amount("d1_30"), color: BAR.muted },
+        { key: "d31_60", label: t("accounting.agingBucket.d31_60"), value: amount("d31_60"), color: BAR.rank },
+        { key: "over60", label: t("dashboard.overview.aging.over60"), value: over60, color: BAR.latest },
       ];
       kpis.push({
         key: "ar",
         node: (
           <KpiCard
-            icon={Wallet} chip={DEPARTMENT_META.accounting.accent} label={t("accountingDashboard.kpi.outstanding.title")} value={fmtShort(ar.data.kpis.outstandingNet)}
-            caption={<AgingLegend segments={segments} count={ar.data.kpis.outstandingCount} />}
+            label={t("accountingDashboard.kpi.outstanding.title")} value={fmtShort(ar.data.kpis.outstandingNet)}
+            scope={t("dashboard.overview.ar.scope").replace("{n}", fmtCount(ar.data.kpis.outstandingCount))}
+            segments={segments} segmentFormat={fmtShort} segmentLegend={false}
+            caption={fill(t("dashboard.overview.ar.caption"), { overdue: <Num>{fmtShort(overdue)}</Num>, over60: <Num>{fmtShort(over60)}</Num> })}
           />
         ),
       });
@@ -102,42 +121,51 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
     const svc = overview.blocks.service;
     const bd = overview.blocks.bd;
     if (inv && inv.summary.stockValue !== null) {
+      const low = inv.summary.lowStock;
       kpis.push({
         key: "stock",
         node: (
           <KpiCard
-            icon={Warehouse} chip={DEPARTMENT_META.inventory.accent} label={t("dashboard.inventory.stockValue")} value={fmtShort(inv.summary.stockValue)}
-            caption={inv.summary.lowStock !== null
-              ? <>{t("dashboard.inventory.lowStock")} <span className={`font-mono ${inv.summary.lowStock > 0 ? "text-[#a75d1a]" : "text-foreground"}`}>{fmtCount(inv.summary.lowStock)}</span></>
-              : t("dashboard.dept.caption.asOfNow")}
+            label={t("dashboard.inventory.stockValue")} value={fmtShort(inv.summary.stockValue)} scope={now}
+            badge={low !== null
+              ? <div><StatusChip tone={low > 0 ? "warn" : "neutral"}>{t("dashboard.overview.stock.lowBadge").replace("{n}", fmtCount(low))}</StatusChip></div>
+              : undefined}
           />
         ),
       });
     }
     // สำรองสำหรับคนที่ไม่เห็นขาย/บัญชี/สต๊อก — ให้แถวบนมีตัวเลขของแผนกตัวเองแทน
-    if (pur?.summary.poAwaitingReceipt != null) kpis.push({ key: "po", node: <KpiCard icon={Truck} chip={DEPARTMENT_META.purchasing.accent} label={t("dashboard.purchasing.poAwaitingReceipt")} value={fmtCount(pur.summary.poAwaitingReceipt)} caption={t("dashboard.dept.caption.asOfNow")} /> });
-    if (prod) kpis.push({ key: "production", node: <KpiCard icon={CalendarClock} chip="#e08a3c" tone={prod.summary.dueSoon > 0 ? "warn" : undefined} label={t("dashboard.production.dueSoon")} value={fmtCount(prod.summary.dueSoon)} caption={t("dashboard.dept.caption.asOfNow")} /> });
-    if (svc) kpis.push({ key: "service", node: <KpiCard icon={Hourglass} chip="#e08a3c" tone={svc.summary.approvalPending > 0 ? "warn" : undefined} label={t("dashboard.serviceTab.approvalPending")} value={fmtCount(svc.summary.approvalPending)} caption={t("dashboard.dept.caption.asOfNow")} /> });
-    if (bd) kpis.push({ key: "bd", node: <KpiCard icon={FileClock} chip={GOLD} label={t("dashboard.bd.pending")} value={fmtCount(bd.summary.pending)} caption={t("dashboard.dept.caption.asOfNow")} /> });
+    if (pur?.summary.poAwaitingReceipt != null) kpis.push({ key: "po", node: <KpiCard label={t("dashboard.purchasing.poAwaitingReceipt")} value={fmtCount(pur.summary.poAwaitingReceipt)} unit={docs} scope={now} /> });
+    if (prod) kpis.push({ key: "production", node: <KpiCard tone={prod.summary.dueSoon > 0 ? "warn" : undefined} label={t("dashboard.production.dueSoon")} value={fmtCount(prod.summary.dueSoon)} unit={docs} scope={now} /> });
+    if (svc) kpis.push({ key: "service", node: <KpiCard tone={svc.summary.approvalPending > 0 ? "warn" : undefined} label={t("dashboard.serviceTab.approvalPending")} value={fmtCount(svc.summary.approvalPending)} unit={docs} scope={now} /> });
+    if (bd) kpis.push({ key: "bd", node: <KpiCard label={t("dashboard.bd.pending")} value={fmtCount(bd.summary.pending)} unit={docs} scope={now} /> });
   }
   const topKpis = kpis.slice(0, 4);
 
   const pending = overview?.pendingApprovals ?? null;
+  const months = salesData?.revenueTrend.monthly ?? [];
   const revenueChart = sales && !sales.error && (
     <ChartCard
       fill
-      title={`${t("dashboard.chart.revenue.title")} ${vatSuffix}`}
+      title={t("dashboard.chart.revenue.title")}
+      tag={vatSuffix || undefined}
       sub={salesData ? `${t("dashboard.overview.revenue.sub")} ${fmtDateShort(salesData.filters.to || todayIsoBangkok(), lang)}` : undefined}
+      actions={salesData && months.length > 0
+        ? <HeaderFigure label={t("dashboard.overview.revenue.total").replace("{n}", String(months.length))} value={fmtShort(months.reduce((s, p) => s + p.revenue, 0))} />
+        : undefined}
     >
       {salesData
-        ? <MonthlyBars rows={salesData.revenueTrend.monthly.map((p) => ({ month: p.period, revenue: p.revenue }))} series={[{ key: "revenue", name: t("dashboard.kpi.closedSales"), color: DEPARTMENT_META.sales.accent }]} format={fmtShort} empty={t("dashboard.noData")} />
-        : <SkeletonBar className="h-[220px] w-full" />}
+        ? <MonthlyBars rows={months.map((p) => ({ month: p.period, revenue: p.revenue }))} series={[{ key: "revenue", name: t("dashboard.kpi.closedSales") }]} format={fmtShort} axisFormat={fmtAxis} height={240} empty={t("dashboard.noData")} />
+        : <SkeletonBar className="h-[240px] w-full" />}
     </ChartCard>
   );
 
   return (
     <>
-      <p className="text-xs text-muted-foreground -mt-2">{t("dashboard.overview.caption")}</p>
+      <p className="flex items-start gap-2 text-[13px] text-muted-foreground -mt-2">
+        <Info size={16} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <span>{t("dashboard.overview.intro")}</span>
+      </p>
 
       {topKpis.length > 0 && (
         <KpiGrid>
@@ -148,30 +176,23 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
       <SplitRow
         main={revenueChart}
         side={pending
-          ? <PendingHighlight rows={pending} wide={!revenueChart} onOpen={onOpenPendingApprovals} />
+          ? <PendingCard rows={pending} onOpen={onOpenPendingApprovals} />
           : overviewLoading ? <div className="h-full min-h-[280px] rounded-xl bg-muted animate-pulse" /> : null}
       />
 
-      <div data-tour="dashboard-overview-cards" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {overviewLoading
-          ? [...Array(3)].map((_, i) => <div key={i} className="h-44 rounded-xl bg-muted animate-pulse" />)
-          : departments.error && !overview
-            ? <ErrorCard onRetry={onRetry} />
-            : overview && DEPARTMENT_ORDER.map((key) => {
-              if (!(key in overview.blocks)) return null;
-              if (overview.failed.includes(key)) return <DepartmentCard key={key} dept={key} metrics={null} own={false} onOpen={() => onOpenTab(tabOfDepartment(key))} onRetry={onRetry} />;
-              const metrics = departmentMetrics(key, overview, t);
-              if (!metrics) return null;
-              const own = overview.blocks[key]?.scope === "own";
-              return <DepartmentCard key={key} dept={key} metrics={metrics} own={own} onOpen={() => onOpenTab(tabOfDepartment(key))} onRetry={onRetry} />;
-            })}
+      <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-5 items-stretch">
+        {overview?.attention && <AttentionList items={overview.attention} today={overview.today} visibleTabs={visibleTabs} onOpenTab={onOpenTab} />}
+        <div data-tour="dashboard-overview-cards" className={`min-w-0 ${overview?.attention ? "" : "xl:col-span-2"}`}>
+          {overviewLoading
+            ? <div className="h-64 rounded-xl bg-muted animate-pulse" />
+            : departments.error && !overview
+              ? <ErrorCard onRetry={onRetry} />
+              : overview && <DepartmentSummary overview={overview} onOpenTab={onOpenTab} onRetry={onRetry} />}
+        </div>
       </div>
 
-      {overview && (overview.attention || overview.activityTimeline) && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-          {overview.attention && <AttentionList items={overview.attention} today={overview.today} visibleTabs={visibleTabs} onOpenTab={onOpenTab} />}
-          {overview.activityTimeline && <ActivityTimeline entries={overview.activityTimeline} onOpenQuote={onOpenQuote} actorLabel={t("dashboard.overview.activityActor")} />}
-        </div>
+      {overview?.activityTimeline && (
+        <ActivityTimeline entries={overview.activityTimeline} onOpenQuote={onOpenQuote} actorLabel={t("dashboard.overview.activityActor")} sub={t("dashboard.overview.activity.sub")} />
       )}
     </>
   );
@@ -179,7 +200,7 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
 
 type T = ReturnType<typeof useI18n>["t"];
 
-/** ตัวเลขของการ์ดแผนก — ตัวแรกที่ไม่เป็น null เป็นตัวหลัก · null ทั้งบล็อก = ไม่มีสิทธิ์ ไม่แสดงการ์ด */
+/** ตัวเลขของการ์ดแผนก — null ทั้งบล็อก = ไม่มีสิทธิ์ ไม่แสดงแผนกนั้น */
 function departmentMetrics(key: DepartmentKey, overview: DepartmentDashboardResponse, t: T): CardMetric[] | null {
   const warn = (v: number | null | undefined) => (v ? "warn" as const : undefined);
   const alert = (v: number | null | undefined) => (v ? "alert" as const : undefined);
@@ -238,81 +259,68 @@ function departmentMetrics(key: DepartmentKey, overview: DepartmentDashboardResp
   }
 }
 
-function KpiSkeleton() {
-  return (
-    <div className="bg-card border border-border rounded-xl p-[18px] space-y-3" aria-hidden="true">
-      <div className="flex items-center gap-2.5"><SkeletonBar className="h-[34px] w-[34px] rounded-lg" /><SkeletonBar className="h-3 w-24" /></div>
-      <SkeletonBar className="h-6 w-20" />
-      <SkeletonBar className="h-2 w-full" />
-    </div>
-  );
-}
-
-/** แถบอายุลูกหนี้ในการ์ด KPI — ใช้สีชุดเดียวกับแดชบอร์ดบัญชี · คำอธิบายสีเป็นข้อความเสมอ */
-function AgingLegend({ segments, count }: { segments: Segment[]; count: number }) {
-  const { t } = useI18n();
-  const total = segments.reduce((s, x) => s + x.value, 0);
-  return (
-    <span className="block space-y-1.5">
-      <span className="flex gap-0.5 h-2 overflow-hidden rounded" role="img" aria-label={segments.map((s) => `${s.label} ${fmtShort(s.value)}`).join(", ")}>
-        {total === 0 ? <span className="flex-1 bg-muted" /> : segments.filter((s) => s.value > 0).map((s) => <span key={s.key} style={{ flexGrow: s.value, background: s.color }} />)}
-      </span>
-      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5">
-        {segments.map((s) => (
-          <span key={s.key} className="inline-flex items-center gap-1 whitespace-nowrap">
-            <span className="w-2 h-2 rounded-sm" style={{ background: s.color }} />{s.label}
-          </span>
-        ))}
-      </span>
-      <span className="block">{t("dashboard.dept.caption.asOfNow")} · {fmtCount(count)} {t("dashboard.unit.docs")}</span>
-    </span>
-  );
-}
-
-/** การ์ดเด่นพื้นเข้มหนึ่งใบต่อหน้า (DASHBOARD_DESIGN.md ข้อ 4) — จำนวนเอกสารที่รอผู้ใช้อนุมัติ ทุกแผนก */
-function PendingHighlight({ rows, wide, onOpen }: { rows: { kind: keyof typeof PENDING_KIND_LABEL_KEY; count: number }[]; wide: boolean; onOpen: () => void }) {
+/** เอกสารรออนุมัติทุกแผนก (บอร์ด: การ์ดขาว · ตัวเลขรวมสีอำพันบนหัว · แถวต่อชนิดเอกสาร · ลิงก์ท้ายการ์ด) */
+function PendingCard({ rows, onOpen }: { rows: { kind: keyof typeof PENDING_KIND_LABEL_KEY; count: number }[]; onOpen: () => void }) {
   const { t } = useI18n();
   const shown = rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count);
   const total = shown.reduce((s, r) => s + r.count, 0);
-  const max = Math.max(1, ...shown.map((r) => r.count));
   if (rows.length === 0) return null;
   return (
-    <section className="rounded-xl p-5 h-full flex flex-col gap-4" style={{ background: "#0b1d3a", color: "#e8edf5" }} aria-label={t("dashboard.overview.pending.title")}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold" style={SERIF}>{t("dashboard.overview.pending.title")}</h2>
-          <p className="text-xs mt-0.5" style={{ color: "#a8bed8" }}>{t("dashboard.overview.pending.sub")}</p>
-        </div>
-        <p className="text-4xl font-semibold font-mono leading-none" style={{ color: GOLD }}>{fmtCount(total)}</p>
-      </div>
+    <ChartCard
+      flush title={t("dashboard.overview.pending.title")} sub={t("dashboard.overview.pending.sub")} className="h-full" bodyClassName="flex-1 flex flex-col"
+      actions={<CountPill count={total} />}
+    >
       {total === 0 ? (
-        <p className="text-sm flex-1 flex items-center justify-center py-6" style={{ color: "#a8bed8" }}>{t("dashboard.overview.pending.none")}</p>
+        <EmptyNote>{t("dashboard.overview.pending.none")}</EmptyNote>
       ) : (
-        <ul className={`flex-1 grid gap-x-6 gap-y-3 content-start ${wide ? "sm:grid-cols-2 xl:grid-cols-4" : ""}`}>
+        <ul className="flex-1 px-2 py-1.5">
           {shown.map((r) => (
-            <li key={r.kind} className="space-y-1.5 min-w-0">
-              <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="truncate" title={t(PENDING_KIND_LABEL_KEY[r.kind])}>{t(PENDING_KIND_LABEL_KEY[r.kind])}</span>
-                <span className="font-mono font-semibold" style={{ color: "#ffffff" }}>{fmtCount(r.count)}</span>
-              </div>
-              <div className="h-1.5 rounded" style={{ background: "rgba(168,190,216,0.15)" }}>
-                <div className="h-full rounded" style={{ width: `${(r.count / max) * 100}%`, background: GOLD }} />
-              </div>
+            <li key={r.kind}>
+              <button
+                type="button" onClick={onOpen}
+                className="w-full min-h-[31px] px-3 py-1 rounded-md flex items-center gap-2.5 text-sm text-left hover:bg-[#f8f9fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#d89614] flex-shrink-0" aria-hidden="true" />
+                <span className="flex-1 min-w-0 truncate text-[#26395a]" title={t(PENDING_KIND_LABEL_KEY[r.kind])}>{t(PENDING_KIND_LABEL_KEY[r.kind])}</span>
+                <span className="font-semibold tabular-nums">{fmtCount(r.count)}</span>
+              </button>
             </li>
           ))}
         </ul>
       )}
-      <button
-        onClick={onOpen}
-        className="self-start flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg bg-[#0b1d3a] text-white hover:bg-[#1a2f55] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b1d3a] transition-colors"
-      >
-        <Inbox size={15} /> {t("dashboard.overview.pending.open")}
-      </button>
-    </section>
+      <CardFooterLink label={t("dashboard.overview.pending.open")} onClick={onOpen} />
+    </ChartCard>
   );
 }
 
-function DepartmentCard({ dept, metrics, own, onOpen, onRetry }: {
+/** สรุปแต่ละแผนก — การ์ดเดียว แบ่งคอลัมน์ต่อแผนก · กดชื่อแผนกเปิดแท็บ · ตัวเลขชิดซ้ายหน้าชื่อตัวชี้วัด */
+function DepartmentSummary({ overview, onOpenTab, onRetry }: {
+  overview: DepartmentDashboardResponse;
+  onOpenTab: (key: DashboardTabKey) => void;
+  onRetry: () => void;
+}) {
+  const { t } = useI18n();
+  const blocks = DEPARTMENT_ORDER.filter((key) => key in overview.blocks);
+  return (
+    <ChartCard title={t("dashboard.overview.depts.title")} sub={t("dashboard.overview.depts.sub")} className="h-full" bodyClassName="px-5 pt-4 pb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4">
+        {blocks.map((key) => {
+          const failed = overview.failed.includes(key);
+          const metrics = failed ? null : departmentMetrics(key, overview, t);
+          if (!failed && !metrics) return null;
+          return (
+            <DepartmentBlock
+              key={key} dept={key} metrics={metrics} own={overview.blocks[key]?.scope === "own"}
+              onOpen={() => onOpenTab(tabOfDepartment(key))} onRetry={onRetry}
+            />
+          );
+        })}
+      </div>
+    </ChartCard>
+  );
+}
+
+function DepartmentBlock({ dept, metrics, own, onOpen, onRetry }: {
   dept: DepartmentKey;
   /** null = บล็อกนี้คำนวณพัง */
   metrics: CardMetric[] | null;
@@ -321,53 +329,39 @@ function DepartmentCard({ dept, metrics, own, onOpen, onRetry }: {
   onRetry: () => void;
 }) {
   const { t } = useI18n();
-  const meta = DEPARTMENT_META[dept];
-  const Icon = meta.icon;
-  const title = t(meta.labelKey);
+  const title = t(DEPARTMENT_META[dept].labelKey);
   const present = metrics?.filter((m) => m.value !== null && m.value !== undefined) ?? [];
-  const [main, ...rest] = present;
-  const toneClass = (tone?: "alert" | "warn") => (tone === "alert" ? "text-[#d22626]" : tone === "warn" ? "text-[#a75d1a]" : "text-foreground");
+  const toneClass = (tone?: "alert" | "warn") => (tone === "alert" ? "text-[#b93636]" : tone === "warn" ? "text-[#8a5a00]" : "text-foreground");
   return (
-    <section aria-label={title} className="bg-card border border-border rounded-xl p-[18px] flex flex-col gap-3 min-w-0">
-      <button onClick={onOpen} className="group flex items-center gap-2.5 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40">
-        <span className="w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${meta.accent}18` }}>
- <Icon size={15} style={{ color: meta.accent }} />
- </span>
- <span className="text-[15px] font-semibold text-foreground truncate" style={SERIF}>{title}</span>
- {own && (
- <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap" title={t("dashboard.dept.ownScope")}>
- <UserRound size={11} className="text-[#c9a84c]" /> {t("dashboard.dept.ownScopeShort")}
- </span>
- )}
- <ArrowRight size={14} className="ml-auto text-muted-foreground group-hover:text-[#c9a84c] transition-colors flex-shrink-0" aria-label={t("dashboard.dept.openTab")} />
- </button>
-
- {metrics === null ? (
- <div className="flex flex-col items-start gap-2">
- <p className="text-xs text-muted-foreground">{t("dashboard.dept.loadError")}</p>
- <button onClick={onRetry} className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:bg-[#f4f6fa] transition-all">
- <RotateCw size={12} /> {t("dashboard.dept.retry")}
- </button>
- </div>
- ) : !main ? (
- <p className="text-xs text-muted-foreground">{t("dashboard.dept.noPermittedMetrics")}</p>
- ) : (
- <>
- <div className="flex items-baseline gap-2 min-w-0">
- <span className={`text-2xl font-semibold font-mono leading-none ${toneClass(main.tone)}`}>{fmtCount(main.value ?? 0)}</span>
-            <span className="text-sm text-muted-foreground truncate" title={main.label}>{main.label}</span>
-          </div>
-          {rest.length > 0 && (
-            <dl className="grid grid-cols-2 gap-2 pt-2.5 border-t border-border">
-              {rest.slice(0, 2).map((m) => (
-                <div key={m.label} className="min-w-0">
-                  <dd className={`text-base font-semibold font-mono ${toneClass(m.tone)}`}>{fmtCount(m.value ?? 0)}</dd>
-                  <dt className="text-xs text-muted-foreground truncate" title={m.label}>{m.label}</dt>
-                </div>
-              ))}
-            </dl>
-          )}
-        </>
+    <section aria-label={title} className="flex flex-col gap-1.5 min-w-0">
+      <button
+        type="button" onClick={onOpen} aria-label={`${t("dashboard.dept.openTab")} ${title}`}
+        className="-mx-2 h-8 px-2 rounded-md flex items-center gap-1.5 text-left text-sm font-semibold text-foreground hover:bg-[#f4f6fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors"
+      >
+        <span className="flex-1 min-w-0 truncate">{title}</span>
+        {own && (
+          <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground whitespace-nowrap" title={t("dashboard.dept.ownScope")}>
+            <UserRound size={12} aria-hidden="true" /> {t("dashboard.dept.ownScopeShort")}
+          </span>
+        )}
+        <ChevronRight size={16} className="text-muted-foreground flex-shrink-0" aria-hidden="true" />
+      </button>
+      {metrics === null ? (
+        <div className="flex flex-col items-start gap-2 pt-1 border-t border-[#eef1f6]">
+          <p className="text-xs text-muted-foreground pt-1">{t("dashboard.dept.loadError")}</p>
+          <button type="button" onClick={onRetry} className={btn.secondarySm}><RotateCw size={14} /> {t("dashboard.dept.retry")}</button>
+        </div>
+      ) : present.length === 0 ? (
+        <p className="text-xs text-muted-foreground pt-1 border-t border-[#eef1f6]">{t("dashboard.dept.noPermittedMetrics")}</p>
+      ) : (
+        <ul className="flex flex-col">
+          {present.map((m) => (
+            <li key={m.label} className="flex items-baseline gap-2.5 py-[3px] border-t border-[#eef1f6]">
+              <span className={`w-8 flex-shrink-0 text-right text-base font-semibold tabular-nums ${toneClass(m.tone)}`}>{fmtCount(m.value ?? 0)}</span>
+              <span className="text-[13px] leading-snug text-[#3d5173] min-w-0">{m.label}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -376,11 +370,9 @@ function DepartmentCard({ dept, metrics, own, onOpen, onRetry }: {
 function ErrorCard({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="bg-card border border-border rounded-xl p-5 flex flex-col items-start gap-2">
+    <div className="bg-card border border-border rounded-xl p-5 flex flex-col items-start gap-2.5 h-full">
       <p className="text-sm text-muted-foreground">{t("dashboard.dept.loadError")}</p>
-      <button onClick={onRetry} className="flex items-center gap-1.5 px-2.5 py-1 text-xs border border-[#c3ccda] bg-white rounded-lg text-foreground hover:border-[#c3ccda] hover:shadow-sm transition-all">
-        <RotateCw size={12} /> {t("dashboard.dept.retry")}
-      </button>
+      <button type="button" onClick={onRetry} className={btn.secondarySm}><RotateCw size={14} /> {t("dashboard.dept.retry")}</button>
     </div>
   );
 }
@@ -401,29 +393,25 @@ function AttentionList({ items, today, visibleTabs, onOpenTab }: {
 }) {
   const { t, lang } = useI18n();
   return (
-    <ChartCard title={t("dashboard.overview.attention.title")} sub={t("dashboard.overview.attention.sub")}>
+    <ChartCard flush title={t("dashboard.overview.attention.title")} sub={t("dashboard.overview.attention.sub")} className="h-full">
       {items.length === 0 ? <EmptyNote>{t("dashboard.overview.attention.empty")}</EmptyNote> : (
-        <ul className="-my-2">
+        <ul>
           {items.map((item) => {
-            const meta = DEPARTMENT_META[item.dept];
-            const Icon = meta.icon;
             const tab = tabOfDepartment(item.dept);
             const waited = item.kind === "serviceApproval" && item.date ? Math.max(0, daysBetweenIso(item.date, today)) : null;
             return (
-              <li key={`${item.kind}-${item.id}`} className="border-b border-border/50 last:border-0">
+              <li key={`${item.kind}-${item.id}`} className="border-b border-[#eef1f6] last:border-0">
                 <button
-                  onClick={() => onOpenTab(tab)} disabled={!visibleTabs.includes(tab)}
-                  className="w-full flex items-center gap-3 py-3 text-left rounded-lg hover:bg-muted/40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]/40 transition-colors"
+                  type="button" onClick={() => onOpenTab(tab)} disabled={!visibleTabs.includes(tab)}
+                  className="w-full min-h-[54px] px-5 py-2 flex items-center gap-3 text-left hover:bg-[#f8f9fc] disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40 transition-colors"
                 >
-                  <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${meta.accent}18` }}>
-                    <Icon size={15} style={{ color: meta.accent }} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-foreground truncate" title={item.party}>
-                      <span className="font-mono">{item.docNumber}</span>{item.party ? ` · ${item.party}` : ""}
+                  <span className="min-w-0 flex-1 flex flex-col leading-snug">
+                    <span className="truncate" title={item.party}>
+                      <span className="font-mono text-[13px] font-medium">{item.docNumber}</span>
+                      {item.party && <span className="text-sm text-[#3d5173]"> · {item.party}</span>}
                     </span>
-                    <span className="block text-xs text-muted-foreground truncate">
-                      {t(meta.labelKey)} · {t(ATTENTION_KIND_LABEL[item.kind])}{item.date ? ` · ${fmtDateShort(item.date, lang)}` : ""}
+                    <span className="text-xs text-muted-foreground truncate">
+                      {t(DEPARTMENT_META[item.dept].labelKey)} · {t(ATTENTION_KIND_LABEL[item.kind])}{item.date ? ` · ${fmtDateShort(item.date, lang)}` : ""}
                     </span>
                   </span>
                   {waited !== null
