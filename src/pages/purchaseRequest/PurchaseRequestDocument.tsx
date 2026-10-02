@@ -13,7 +13,9 @@ import {
   purchasingApprovePurchaseRequest, purchasingReopenPurchaseRequest, pullPurchaseRequestToPurchasing,
   storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
   purchaseRequestCodeOf, PURCHASE_REQUEST_CODE_LABEL_KEY,
+  fetchPurchaseRequestJobCodes, type JobCodeOption, type PurchaseRequestPoRef,
 } from "../../lib/purchaseRequest";
+import { UrgentBadge, UrgentCard, PurchasingAgeCard, PurchaseRequestTimeline } from "./purchasingAging";
 import { createPurchaseOrder } from "../../lib/purchaseOrder";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { createProductRequest } from "../../lib/productRequest";
@@ -67,6 +69,10 @@ function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
     approvedAt: p.approvedAt,
     purchasingDeptBy: p.purchasingDeptBy,
     purchasingDeptAt: p.purchasingDeptAt,
+    // งานด่วน + รหัสงานของใบที่ไม่มีเอกสารต้นทาง (2026-10-02) — เซิร์ฟเวอร์รับ jobCode เฉพาะใบ "general"
+    urgent: p.urgent === true,
+    urgentReason: p.urgentReason ?? "",
+    jobCode: p.jobCode,
   };
 }
 
@@ -152,6 +158,12 @@ export function PurchaseRequestDocument({
   const [confirmPurchasingPull, setConfirmPurchasingPull] = useState(false);
   /** บรรทัดไหนออกใบสั่งซื้อไปแล้วในใบไหน — เซิร์ฟเวอร์คำนวณจากใบสั่งซื้อจริง (2026-09-21) */
   const [purchasedLines, setPurchasedLines] = useState<Record<string, string[]>>({});
+  /** ใบสั่งซื้อที่เปิดจากใบนี้ + วันที่ออกครบ — การ์ดเส้นเวลาและตัวนับวัน (2026-10-02) */
+  const [purchaseOrderRefs, setPurchaseOrderRefs] = useState<PurchaseRequestPoRef[]>([]);
+  const [purchasingCompletedAt, setPurchasingCompletedAt] = useState("");
+  /** รหัสงานที่มีในระบบ — ตัวช่วยเติมของช่องรหัสงานในใบที่ไม่มีเอกสารต้นทาง โหลดล้มก็พิมพ์เองได้ */
+  const [jobCodeOptions, setJobCodeOptions] = useState<JobCodeOption[]>([]);
+  const [urgentReasonError, setUrgentReasonError] = useState(false);
   /** บรรทัดที่ติ๊กไว้รอเปิดใบสั่งซื้อ — เป็น state ของหน้าจอล้วน ไม่เคยถูกบันทึก */
   const [buySelection, setBuySelection] = useState<string[]>([]);
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
@@ -177,6 +189,8 @@ export function PurchaseRequestDocument({
         if (cancelled) return;
         setDoc(res.purchaseRequest); setDraft(res.purchaseRequest); setStockByProduct(res.stockByProduct);
         setPurchasedLines(res.purchasedLines);
+        setPurchaseOrderRefs(res.purchaseOrders);
+        setPurchasingCompletedAt(res.purchasingCompletedAt);
         setProducts(prod); setCategories(cat); dirty.markSaved(toUpdateFields(res.purchaseRequest));
         setStoreRemark(res.purchaseRequest.storeRemark ?? "");
         // ตั้งค่าเริ่มต้นของตัวเลือกให้ตรงกับที่บันทึกไว้ สโตร์จะได้เห็นผลการเช็คครั้งก่อนไม่ใช่ช่องว่าง
@@ -197,6 +211,7 @@ export function PurchaseRequestDocument({
   useEffect(() => {
     let cancelled = false;
     fetchCodeEntries().then((codes) => { if (!cancelled) setCodeEntries(codes); }).catch(() => { /* เติมรหัสให้ไม่ได้ ก็พิมพ์เองได้ */ });
+    fetchPurchaseRequestJobCodes().then((codes) => { if (!cancelled) setJobCodeOptions(codes); }).catch(() => { /* พิมพ์รหัสงานเองได้ */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -290,7 +305,21 @@ export function PurchaseRequestDocument({
     status: doc?.status ?? "Draft",
     canEdit: !!doc && canEdit,
     canApprove: !!doc && canFinalize,
-    onSubmit: () => submitPurchaseRequestApproval(purchaseRequestId),
+    onSubmit: async () => {
+      /**
+       * ติ๊กงานด่วนแล้วต้องมีเหตุผล (2026-10-02) — เช็คบนหน้าจอก่อน แล้วบันทึกค่าล่าสุดขึ้นไป
+       * ก่อนส่ง เพราะการติ๊กเพิ่งเกิดเมื่อครู่อาจยังไม่ถูกบันทึกอัตโนมัติ (เซิร์ฟเวอร์ตรวจซ้ำอีกชั้น)
+       */
+      if (draft?.urgent && !(draft.urgentReason ?? "").trim()) {
+        setUrgentReasonError(true);
+        throw new ApiError(400, t("purchaseRequest.urgent.reasonRequired"));
+      }
+      if (draft) {
+        const saved = await updatePurchaseRequest(draft.id, toUpdateFields(draft));
+        autoSave.markSaved(toUpdateFields(saved));
+      }
+      return submitPurchaseRequestApproval(purchaseRequestId);
+    },
     onApprove: () => approvePurchaseRequest(purchaseRequestId),
     onReject: (c) => rejectPurchaseRequest(purchaseRequestId, c),
     onWithdraw: () => withdrawPurchaseRequestApproval(purchaseRequestId),
@@ -551,6 +580,8 @@ export function PurchaseRequestDocument({
       showToast(t("purchaseRequestDoc.buy.createdToast").replace("{id}", po.documentNumber || po.id));
       const refreshed = await fetchPurchaseRequestWithStock(doc.id);
       setPurchasedLines(refreshed.purchasedLines);
+      setPurchaseOrderRefs(refreshed.purchaseOrders);
+      setPurchasingCompletedAt(refreshed.purchasingCompletedAt);
       onOpenPurchaseOrder?.(po.id);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.errorSave"));
@@ -678,7 +709,7 @@ export function PurchaseRequestDocument({
           backLabel={t("purchaseRequestDoc.backToAll")}
           onBack={() => requestLeave(onBack)}
           number={doc.id}
-          status={<><ApprovalStatusPill status={doc.status} /><StageTag tone="grey">{deptLabel}</StageTag></>}
+          status={<><ApprovalStatusPill status={doc.status} />{(editable ? draft.urgent : doc.urgent) && <UrgentBadge size="md" />}<StageTag tone="grey">{deptLabel}</StageTag></>}
           meta={headerMeta}
           actions={
             <div data-tour="prdoc-actions" className="flex items-center gap-2.5 flex-wrap">
@@ -772,11 +803,34 @@ export function PurchaseRequestDocument({
         <DocumentColumns
           main={
             <>
+              <UrgentCard
+                urgent={(editable ? draft.urgent : doc.urgent) === true}
+                reason={(editable ? draft.urgentReason : doc.urgentReason) ?? ""}
+                editable={editable}
+                reasonError={urgentReasonError && !(draft.urgentReason ?? "").trim()}
+                onChange={(next) => setDraft({ ...draft, ...next })}
+              />
               <SectionCard title={t("purchaseRequestDoc.infoTitle")}>
                 {/* ผู้จำหน่าย / โทร.ผู้จำหน่าย / เครดิต / ขนส่งโดย ถูกถอดออก 2026-08-31 ตามที่เจ้าของสั่ง
                     — คนขอซื้อไม่ใช่คนกรอกช่องพวกนี้ ฝ่ายจัดซื้อกรอกตอนออกใบสั่งซื้อจากทะเบียนผู้ขาย */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-[18px] items-start">
-                  <ReadonlyField label={t("purchaseRequest.col.jobCode")} value={doc.jobCode} mono />
+                  {/* ใบที่ไม่มีเอกสารต้นทาง (สโตร์/จัดซื้อ/ฝ่ายอื่น) พิมพ์รหัสงานเองได้ ไม่บังคับ (เจ้าของตอบ 2026-10-02)
+                      ใบจากโครงการ/ใบสั่งผลิตใช้รหัสของต้นทางเสมอ */}
+                  {editable && doc.ownerDepartment === "general" ? (
+                    <Field label={<>{t("purchaseRequest.col.jobCode")} <span className="font-normal text-muted-foreground">{t("purchaseRequest.jobCode.optional")}</span></>} htmlFor="pr-jobCode" help={t("purchaseRequest.jobCode.help")}>
+                      <Combobox
+                        id="pr-jobCode"
+                        value={draft.jobCode}
+                        onChange={(next) => setDraft({ ...draft, jobCode: next })}
+                        options={jobCodeOptions.map((o) => ({ value: o.code, label: o.label ? `${o.code} — ${o.label}` : o.code }))}
+                        placeholder={t("purchaseRequest.jobCode.placeholder")}
+                        ariaLabel={t("purchaseRequest.col.jobCode")}
+                        className={`${field.input} w-full font-mono`}
+                      />
+                    </Field>
+                  ) : (
+                    <ReadonlyField label={t("purchaseRequest.col.jobCode")} value={doc.jobCode} mono />
+                  )}
                   <ReadonlyField label={t("purchaseRequest.code.label")} value={<><span className="font-mono">{purchaseRequestCodeOf(doc)}</span> — {deptLabel}</>} />
                   {editable ? (
                     <>
@@ -812,6 +866,11 @@ export function PurchaseRequestDocument({
                 </div>
               </SectionCard>
 
+              {/* เส้นเวลาของใบ + วันทำการที่ใช้แต่ละช่วง (2026-10-02) — ใบร่างยังไม่มีอะไรให้ดู */}
+              {doc.status !== "Draft" && (
+                <PurchaseRequestTimeline doc={doc} purchaseOrders={purchaseOrderRefs} completedAt={purchasingCompletedAt} />
+              )}
+
               {/* ไฟล์แนบ — เจ้าของสั่งไว้ 2026-09-02 ("ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย")
                   ใช้ระบบแนบไฟล์กลางตัวเดียวกับใบสั่งงาน · ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้
                   เพราะใบเสนอราคาผู้ขาย/แคตตาล็อกมักตามมาหลังใบอนุมัติแล้ว */}
@@ -841,6 +900,12 @@ export function PurchaseRequestDocument({
           }
           rail={
             <>
+              <PurchasingAgeCard
+                receivedAt={doc.purchasingReceivedAt ?? ""}
+                completedAt={purchasingCompletedAt}
+                urgent={doc.urgent === true}
+                neededByDate={doc.neededByDate}
+              />
               {isFinal && doc.storeStage !== "pending" && doc.storeStage !== "closed" && progress.toBuy > 0 ? (
                 <RailSummaryCard
                   label={t("purchaseRequestDoc.summary.ordered")}

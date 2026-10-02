@@ -35,11 +35,15 @@ export function ApprovalStatusPill({ status }: { status: ApprovableStatus }) {
   );
 }
 
-const TAG: Record<"grey" | "amber" | "blue" | "green", string> = {
+const TAG: Record<"grey" | "amber" | "blue" | "green" | "red" | "urgent", string> = {
   grey: "bg-[#eef1f6] text-[#3d5173]",
   amber: "bg-[#fdf3e0] text-[#8a5a00]",
   blue: "bg-[#e8f0fb] text-[#1a5fb4]",
   green: "bg-[#e6f4ec] text-[#1b7f4f]",
+  // เกินเป้า (2026-10-02)
+  red: "bg-[#fcebeb] text-[#b93636]",
+  // งานด่วน — สีส้มที่เจ้าของอนุมัติ 2026-10-02 แยกจากแดงของ "เกินเป้า"
+  urgent: "bg-[#fff1e8] text-[#a8431a]",
 };
 
 /** ป้ายเหลี่ยมเล็ก 22px — ขั้นหลังอนุมัติ แผนก ผลของบรรทัด */

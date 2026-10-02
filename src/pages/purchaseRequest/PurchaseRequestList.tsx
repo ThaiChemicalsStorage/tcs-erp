@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Zap } from "lucide-react";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
@@ -9,6 +9,8 @@ import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalStatusPill, ListDateRangeSelect, StageTag } from "./docShared";
+import { UrgentBadge, useAgingLabel, useDaysText } from "./purchasingAging";
+import { businessDaysBetween, purchasingTargetDays, todayInThailand } from "../../lib/businessDays";
 
 const PAGE_SIZE = 25;
 
@@ -75,6 +77,11 @@ export function PurchaseRequestList({
   /** กรองช่วงวันที่ (2026-09-21) — เอกสารเก็บ 10 ปี การเลื่อนหาเองไม่ใช่ทางเลือก */
   const [dateRange, setDateRange] = useState<DateRangeValue>(ALL_DATES);
   const [searchQuery, setSearchQuery] = useState("");
+  /** กรองเฉพาะงานด่วน (2026-10-02) */
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const agingLabel = useAgingLabel();
+  const daysText = useDaysText();
+  const today = todayInThailand();
   const [page, setPage] = useState(1);
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -88,6 +95,9 @@ export function PurchaseRequestList({
   const matchesStage = (p: PurchaseRequestSummary, s: StageTab) => s === "all" || (s === "forwarded" ? atPurchasing(p) : atStore(p));
 
   const items = purchaseRequests.map((p) => ({ ...p, jobCode: p.jobCode ?? "", status: p.status ?? "Draft" }));
+  /** วันทำการที่ใบค้างอยู่ที่จัดซื้อ (นับถึงวันนี้ หรือถึงวันที่ออกใบสั่งซื้อครบ) — null = ยังไม่ถึงจัดซื้อ */
+  const purchasingDays = (p: PurchaseRequestSummary) =>
+    p.purchasingReceivedAt ? businessDaysBetween(p.purchasingReceivedAt, p.purchasingCompletedAt || today) : null;
 
   const statusTabs = [
     { key: "all" as const, label: t("quotation.filterAll"), count: items.length },
@@ -107,7 +117,21 @@ export function PurchaseRequestList({
     .filter((p) => (tabsMode === "stage" ? matchesStage(p, stageTab)
       : tabsMode === "status" ? statusTab === "all" || p.status === statusTab
       : true))
+    .filter((p) => !urgentOnly || p.urgent)
     .filter((p) => !normalizedSearch || [p.id, p.jobCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
+  /**
+   * กล่องงานเข้าของจัดซื้อ: งานด่วนขึ้นก่อน แล้วเรียงตามค้างนานสุด (2026-10-02) — ใบที่ออกใบสั่งซื้อครบแล้ว
+   * ไปอยู่ท้าย · หน้าอื่นคงลำดับเดิมของเซิร์ฟเวอร์ (แก้ไขล่าสุดก่อน)
+   */
+  if (tabsMode === "stage") {
+    const waiting = (p: PurchaseRequestSummary) => !!p.purchasingReceivedAt && !p.purchasingCompletedAt;
+    filtered.sort((a, b) => {
+      if (waiting(a) !== waiting(b)) return waiting(a) ? -1 : 1;
+      if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
+      return (purchasingDays(b) ?? -1) - (purchasingDays(a) ?? -1);
+    });
+  }
+  const urgentCount = items.filter((p) => p.urgent).length;
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -124,6 +148,57 @@ export function PurchaseRequestList({
     // "review" ไม่ขึ้นป้าย เพราะป้ายสโตร์ "รอจัดซื้อ" บอกอยู่แล้ว
     if (p.purchasingStage === "approved") tags.push(<StageTag key="purchasing" tone="green">{t("purchaseRequestDoc.purchasing.stageBadge")}</StageTag>);
     return tags;
+  };
+
+  /**
+   * ตัวนับวันทำการ (2026-10-02) — แต่ละหน้าดูคนละช่วง:
+   * - กล่องจัดซื้อ: ค้างที่จัดซื้อกี่วัน + ป้ายเทียบเป้า (ปกติ 7 / ด่วน 3)
+   * - กล่องสโตร์: รอสโตร์มาแล้วกี่วัน (นับจากวันอนุมัติ)
+   * - หน้าของฝ่าย: ส่งขอมาแล้วกี่วัน + บรรทัดย่อยบอกว่าค้างที่ไหน
+   */
+  const doneText = (n: number) => (n === 0 ? t("purchaseRequest.age.doneSameDay") : t("purchaseRequest.age.doneIn").replace("{n}", String(n)));
+  const ageCell = (p: PurchaseRequestSummary): ReactNode => {
+    const muted = (text: string) => <span className="text-[13px] text-[#8a97ad]">{text}</span>;
+    const pDays = purchasingDays(p);
+    const target = purchasingTargetDays(p.urgent);
+    if (tabsMode === "stage") {
+      if (pDays === null) return muted(t("purchaseRequest.age.notAtPurchasing"));
+      if (p.purchasingCompletedAt) {
+        // ออกครบแล้ว: เขียว = ทันเป้า · แดง = เกินเป้า (ตัวเลขนี้คือ KPI ของใบนั้นจริง ๆ)
+        const late = pDays > target;
+        return <span className={`text-[13px] font-semibold ${late ? "text-[#b93636]" : "text-[#1b7f4f]"}`}>{doneText(pDays)}</span>;
+      }
+      const state = agingLabel(pDays, target);
+      return (
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-semibold tabular-nums min-w-[56px]">{daysText(pDays)}</span>
+          <StageTag tone={state.tag}>{state.text}</StageTag>
+        </span>
+      );
+    }
+    if (tabsMode === "none") {
+      const days = p.approvedAt ? businessDaysBetween(p.approvedAt, today) : null;
+      return days === null ? muted("—") : <span className="text-sm font-semibold tabular-nums">{daysText(days)}</span>;
+    }
+    if (p.status === "Draft" || !p.submittedAt) return muted(t("purchaseRequest.age.notSubmitted"));
+    const end = p.purchasingCompletedAt || (p.storeStage === "closed" ? p.approvedAt || today : today);
+    const total = businessDaysBetween(p.submittedAt, end) ?? 0;
+    const finished = !!p.purchasingCompletedAt || p.storeStage === "closed";
+    const lateAtPurchasing = !!p.purchasingCompletedAt && pDays !== null && pDays > target;
+    const sub = pDays !== null && !p.purchasingCompletedAt
+      ? (() => {
+          const state = agingLabel(pDays, target);
+          return { text: `${t("purchaseRequest.age.atPurchasingShort").replace("{n}", String(pDays))}${state.tone === "ok" ? "" : ` · ${state.text}`}`, tone: state.tone };
+        })()
+      : null;
+    return (
+      <span className="flex flex-col leading-tight gap-0.5">
+        <span className={`text-sm font-semibold tabular-nums ${lateAtPurchasing ? "text-[#b93636]" : finished ? "text-[#1b7f4f]" : "text-foreground"}`}>
+          {finished ? doneText(total) : daysText(total)}
+        </span>
+        {sub && <span className={`text-xs font-medium ${sub.tone === "over" ? "text-[#b93636]" : sub.tone === "due" ? "text-[#8a5a00]" : "text-muted-foreground"}`}>{sub.text}</span>}
+      </span>
+    );
   };
 
   const formCode = <span className="font-mono text-xs">{t("purchaseRequest.pageSubtitle")}</span>;
@@ -157,6 +232,15 @@ export function PurchaseRequestList({
               count={<span role="status" aria-live="polite">{t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}</span>}
             >
               <ListDateRangeSelect value={dateRange} onChange={resetPage(setDateRange)} />
+              <button
+                type="button"
+                aria-pressed={urgentOnly}
+                onClick={() => { setUrgentOnly((v) => !v); setPage(1); }}
+                className={`h-10 px-3 rounded-lg border text-sm font-medium inline-flex items-center gap-2 transition-colors ${urgentOnly ? "border-[#a8431a] bg-[#fff1e8] text-[#a8431a]" : "border-[#c3ccda] bg-white text-foreground hover:bg-[#f4f6fa]"}`}
+              >
+                <Zap size={16} aria-hidden="true" /> {t("purchaseRequest.urgent.filter")}
+                <span className={`min-w-[22px] h-5 px-1.5 rounded-full text-xs font-semibold inline-flex items-center justify-center ${urgentOnly ? "bg-[#a8431a] text-white" : "bg-[#fff1e8] text-[#a8431a]"}`}>{urgentCount}</span>
+              </button>
             </ListToolbar>
           </div>
         </div>
@@ -176,7 +260,12 @@ export function PurchaseRequestList({
                     {showDepartment && <th className={table.th}>{t("purchaseRequest.col.department")}</th>}
                     <th className={table.th}>{t("purchaseRequest.col.status")}</th>
                     {!showDepartment && <th data-tour="pr-stage-col" className={table.th}>{t("purchaseRequest.col.afterApproval")}</th>}
-                    <th className={table.th}>{t("purchaseRequest.col.updatedAt")}</th>
+                    {tabsMode === "stage" && <th className={table.th}>{t("purchaseRequest.col.arrived")}</th>}
+                    <th className={table.th} title={t("purchaseRequest.age.rule")}>
+                      {tabsMode === "stage" ? t("purchaseRequest.col.ageAtPurchasing")
+                        : tabsMode === "none" ? t("purchaseRequest.col.ageAtStore")
+                        : t("purchaseRequest.col.ageSinceSubmit")}
+                    </th>
                     <th className={`${table.th} w-10`} aria-hidden="true" />
                   </tr>
                 </thead>
@@ -193,7 +282,12 @@ export function PurchaseRequestList({
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } }}
                         className={`${table.row} group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40`}
                       >
-                        <td className={`${table.td} ${table.code} whitespace-nowrap`}>{p.id}</td>
+                        <td className={`${table.td} whitespace-nowrap`}>
+                          <span className="flex items-center gap-2">
+                            <span className={table.code}>{p.id}</span>
+                            {p.urgent && <UrgentBadge />}
+                          </span>
+                        </td>
                         <td className={`${table.td} font-mono text-[13px] whitespace-nowrap ${p.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{p.jobCode || "—"}</td>
                         {showDepartment && (
                           <td className={table.td}><StageTag tone="grey">{departmentLabel[p.ownerDepartment ?? "project"]}</StageTag></td>
@@ -209,7 +303,12 @@ export function PurchaseRequestList({
                             {tags.length > 0 ? <span className="flex items-center gap-1.5 flex-wrap">{tags}</span> : <span className="text-[#8a97ad]">—</span>}
                           </td>
                         )}
-                        <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                        {tabsMode === "stage" && (
+                          <td className={`${table.td} text-[13px] whitespace-nowrap ${p.purchasingReceivedAt ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>
+                            {p.purchasingReceivedAt ? formatQuoteDateThai(p.purchasingReceivedAt) : "—"}
+                          </td>
+                        )}
+                        <td className={`${table.td} whitespace-nowrap`}>{ageCell(p)}</td>
                         <td className={table.td}>
                           <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                         </td>

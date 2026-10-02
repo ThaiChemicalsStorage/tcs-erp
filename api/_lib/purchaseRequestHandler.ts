@@ -6,7 +6,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   purchaseRequestsCollection, productionOrdersCollection, productsCollection, countersCollection, auditLogCollection,
-  purchaseOrdersCollection,
+  purchaseOrdersCollection, projectsCollection,
   toObjectId, withStringId, type PurchaseRequestFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -26,7 +26,7 @@ import type {
   PurchaseRequestLine, PurchaseRequestSummary, PurchaseRequestIssueBatch, PurchaseRequestStoreStage,
   PurchaseRequestPurchasingStage, PurchaseRequestCode,
 } from "../../src/lib/purchaseRequest.js";
-import { storeIssueBatchesOf, storeIssuedQtyOf, defaultPurchaseRequestCode, isPurchaseRequestCode, purchaseRequestCodeOf } from "../../src/lib/purchaseRequest.js";
+import { storeIssueBatchesOf, storeIssuedQtyOf, defaultPurchaseRequestCode, isPurchaseRequestCode, purchaseRequestCodeOf, purchasingReceivedAtOf } from "../../src/lib/purchaseRequest.js";
 
 /**
  * Purchase Request API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts` alongside
@@ -140,11 +140,25 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
     storeIssues: doc.storeIssues ?? [],
     purchasingEdits: doc.purchasingEdits ?? [],
     requestCode: purchaseRequestCodeOf({ id: doc._id, requestCode: doc.requestCode }),
+    // งานด่วน + เวลาเริ่มนับ (2026-10-02) — ใบเก่าไม่มี เติมตอนอ่าน ไม่ทำ migration
+    urgent: doc.urgent === true,
+    urgentReason: doc.urgentReason ?? "",
+    submittedAt: doc.submittedAt ?? "",
+    purchasingReceivedAt: purchasingReceivedAtOf(doc),
   }));
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
   const full = withStringId(doc);
-  return { id: full.id, requestCode: purchaseRequestCodeOf(full), projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, storeStage: full.storeStage, purchasingStage: full.purchasingStage, updatedAt: full.updatedAt, ownerDepartment: full.ownerDepartment ?? "project" };
+  return {
+    id: full.id, requestCode: purchaseRequestCodeOf(full), projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode,
+    status: full.status, storeStage: full.storeStage, purchasingStage: full.purchasingStage, updatedAt: full.updatedAt,
+    ownerDepartment: full.ownerDepartment ?? "project",
+    // ตัวนับวันในหน้ารายการ (2026-10-02) — ใบก่อนมี submittedAt ใช้วันที่ขอซื้อบนฟอร์มแทน
+    urgent: full.urgent === true,
+    submittedAt: full.status === "Draft" ? "" : (full.submittedAt || full.requestedAt || "").slice(0, 10),
+    approvedAt: full.status === "Final" ? (full.approvedAt ?? "").slice(0, 10) : "",
+    purchasingReceivedAt: purchasingReceivedAtOf(full),
+  };
 }
 
 async function loadOrThrow(id: string) {
@@ -200,7 +214,10 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
    */
   const purchaseStateById = await purchaseStateOf(docs);
   res.status(200).json({
-    purchaseRequests: docs.map((d) => ({ ...toSummary(d), purchaseState: purchaseStateById.get(d._id) })),
+    purchaseRequests: docs.map((d) => {
+      const state = purchaseStateById.get(d._id);
+      return { ...toSummary(d), purchaseState: state?.state, purchasingCompletedAt: state?.completedAt ?? "" };
+    }),
   });
 }
 
@@ -210,30 +227,39 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
  * นับเฉพาะบรรทัดที่**ต้องซื้อ**จริง ๆ คือบรรทัดที่สโตร์ไม่ได้จ่ายจากสต๊อกให้ ตรงกับชุดบรรทัดที่
  * `handleCreate()` ของใบสั่งซื้อจะลอกไป ไม่งั้นใบที่สโตร์จ่ายให้ครึ่งหนึ่งจะไม่มีวันขึ้นเป็น `"full"`
  */
-async function purchaseStateOf(
+export async function purchaseStateOf(
   docs: (PurchaseRequestFields & { _id: string })[],
-): Promise<Map<string, "none" | "partial" | "full">> {
-  const result = new Map<string, "none" | "partial" | "full">();
+): Promise<Map<string, { state: "none" | "partial" | "full"; completedAt: string }>> {
+  const result = new Map<string, { state: "none" | "partial" | "full"; completedAt: string }>();
   const ids = docs.filter((d) => d.status === "Final").map((d) => d._id);
   if (ids.length === 0) return result;
   const purchaseOrders = await purchaseOrdersCollection();
   const pos = await purchaseOrders
-    .find({ purchaseRequestId: { $in: ids }, isDeleted: false }, { projection: { purchaseRequestId: 1, lines: 1 } })
+    .find({ purchaseRequestId: { $in: ids }, isDeleted: false }, { projection: { purchaseRequestId: 1, lines: 1, createdAt: 1 } })
     .toArray();
-  const boughtByPr = new Map<string, Set<string>>();
+  /** บรรทัด → วันที่ใบสั่งซื้อใบแรกที่ซื้อบรรทัดนั้น (หยุดนับเมื่อบรรทัดสุดท้ายถูกซื้อ — 2026-10-02) */
+  const boughtByPr = new Map<string, Map<string, string>>();
   for (const po of pos) {
-    const set = boughtByPr.get(po.purchaseRequestId) ?? new Set<string>();
+    const map = boughtByPr.get(po.purchaseRequestId) ?? new Map<string, string>();
+    const at = (po.createdAt ?? "").slice(0, 10);
     // นิยาม "ซื้อแล้ว" อยู่ที่ `orderedPrLineIdOf()` ที่เดียว — ด่านตอนสร้างใบสั่งซื้อใช้ตัวเดียวกัน
-    for (const l of po.lines ?? []) { const id = orderedPrLineIdOf(l); if (id) set.add(id); }
-    boughtByPr.set(po.purchaseRequestId, set);
+    for (const l of po.lines ?? []) {
+      const id = orderedPrLineIdOf(l);
+      if (!id) continue;
+      const prev = map.get(id);
+      if (prev === undefined || (at && at < prev)) map.set(id, at);
+    }
+    boughtByPr.set(po.purchaseRequestId, map);
   }
   for (const doc of docs) {
     if (doc.status !== "Final") continue;
     const toBuy = (doc.lines ?? []).filter((l) => l.storeDecision !== "stock");
     if (toBuy.length === 0) continue;
-    const bought = boughtByPr.get(doc._id) ?? new Set<string>();
-    const n = toBuy.filter((l) => bought.has(l.id)).length;
-    result.set(doc._id, n === 0 ? "none" : n >= toBuy.length ? "full" : "partial");
+    const bought = boughtByPr.get(doc._id) ?? new Map<string, string>();
+    const dates = toBuy.map((l) => bought.get(l.id)).filter((d): d is string => d !== undefined);
+    const n = dates.length;
+    const state = n === 0 ? "none" : n >= toBuy.length ? "full" : "partial";
+    result.set(doc._id, { state, completedAt: state === "full" ? dates.reduce((a, b) => (b > a ? b : a), "") : "" });
   }
   return result;
 }
@@ -365,7 +391,48 @@ async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
     stockByProduct: await stockByProductFor(doc.lines ?? []),
     // บรรทัดไหนออกใบสั่งซื้อไปแล้วบ้าง — คำนวณจากใบสั่งซื้อจริง ไม่ใช่ธงบนใบนี้ (ดู purchasedPrLineIds)
     purchasedLines: Object.fromEntries(await purchasedPrLineIds(id)),
+    // ใบสั่งซื้อที่เปิดจากใบนี้ + วันที่ — การ์ดเส้นเวลาของใบ (2026-10-02)
+    purchaseOrders: await purchaseOrdersOf(id),
+    purchasingCompletedAt: (await purchaseStateOf([doc])).get(doc._id)?.completedAt ?? "",
   });
+}
+
+async function purchaseOrdersOf(id: string): Promise<{ id: string; documentNumber: string; createdAt: string; vendorName: string; lineCount: number }[]> {
+  const purchaseOrders = await purchaseOrdersCollection();
+  const docs = await purchaseOrders
+    .find({ purchaseRequestId: id, isDeleted: false }, { projection: { documentNumber: 1, createdAt: 1, vendorName: 1, lines: 1 } })
+    .sort({ createdAt: 1 })
+    .toArray();
+  return docs.map((po) => ({
+    id: po._id, documentNumber: po.documentNumber || po._id, createdAt: po.createdAt ?? "", vendorName: po.vendorName ?? "",
+    lineCount: (po.lines ?? []).filter((l) => orderedPrLineIdOf(l)).length,
+  }));
+}
+
+/**
+ * รหัสงานที่มีในระบบ (2026-10-02) — ตัวเลือกของช่องรหัสงานในใบขอซื้อที่ไม่มีเอกสารต้นทาง (ใบของ
+ * สโตร์/จัดซื้อ/ฝ่ายอื่น) · ส่งแค่รหัส + ชื่อลูกค้า/สินค้า ไม่ใช่ตัวโครงการ คนที่ไม่มีสิทธิ์ดูโครงการ
+ * จึงใช้ได้โดยไม่เห็นข้อมูลอื่น · เจ้าของตอบ: *"พิมพ์เองได้ + ไม่บังคับ"* — รายการนี้แค่ช่วยเติม
+ */
+async function handleJobCodes(req: ApiRequest, res: ApiResponse) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  await requirePermission(req, "purchaseRequest:view");
+  const [projects, productionOrders] = await Promise.all([projectsCollection(), productionOrdersCollection()]);
+  const [projectDocs, poDocs] = await Promise.all([
+    projects.find({ isDeleted: { $ne: true } }, { projection: { scopeNumber: 1, customerCompanyName: 1, updatedAt: 1 } }).sort({ updatedAt: -1 }).limit(500).toArray(),
+    productionOrders.find({ isDeleted: { $ne: true } }, { projection: { jobCode: 1, productName: 1, customerCompanyName: 1, updatedAt: 1 } }).sort({ updatedAt: -1 }).limit(500).toArray(),
+  ]);
+  const seen = new Set<string>();
+  const jobCodes: { code: string; label: string }[] = [];
+  const push = (code: string | undefined, label: string) => {
+    const c = (code ?? "").trim();
+    if (!c || seen.has(c)) return;
+    seen.add(c);
+    jobCodes.push({ code: c, label });
+  };
+  for (const p of projectDocs) push(p.scopeNumber, p.customerCompanyName ?? "");
+  for (const p of poDocs) push(p.jobCode, [p.productName, p.customerCompanyName].filter(Boolean).join(" · "));
+  res.status(200).json({ jobCodes });
 }
 
 /**
@@ -450,6 +517,17 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
     if (purchasingEdit) assertStoreIssuesStillCovered(doc, update.lines);
   }
   if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
+  /**
+   * งานด่วน (2026-10-02) — ผู้ขอแก้ได้ตอนร่าง จัดซื้อแก้ได้ตอนตรวจ (ทางเข้าเดียวกับฟิลด์อื่นด้านบน)
+   * เหตุผลบังคับตอน**ส่งขออนุมัติ** ไม่ใช่ตอนบันทึก — บันทึกอัตโนมัติระหว่างพิมพ์ต้องไม่ล้มเพราะยังพิมพ์ไม่เสร็จ
+   */
+  if ("urgent" in body) update.urgent = body.urgent === true;
+  if ("urgentReason" in body) update.urgentReason = sanitizeShortText(body.urgentReason, "เหตุผลที่ด่วน");
+  /**
+   * รหัสงานพิมพ์เองได้เฉพาะใบที่**ไม่มีเอกสารต้นทาง** (ใบของสโตร์/จัดซื้อ/ฝ่ายอื่น — เจ้าของตอบ 2026-10-02
+   * "พิมพ์เองได้ ไม่บังคับ") · ใบจากโครงการ/ใบสั่งผลิตใช้รหัสของต้นทางเสมอ ส่งมาก็ไม่รับ
+   */
+  if ("jobCode" in body && doc.ownerDepartment === "general") update.jobCode = sanitizeShortText(body.jobCode, "รหัสงาน");
   if ("headerRemark" in body) update.headerRemark = sanitizeLongText(body.headerRemark, "หมายเหตุ");
   for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
@@ -508,8 +586,14 @@ const approvalConfig: ApprovalConfig<PurchaseRequestFields & { _id: string }> = 
   approvePermission: "purchaseRequest:finalize",
   submitNotification: {
     type: "purchase_request_submitted", module: "ใบขอซื้อ",
-    relatedField: "relatedPurchaseRequestId", context: (doc) => doc.jobCode || "",
+    relatedField: "relatedPurchaseRequestId",
+    // งานด่วนขึ้นคำว่า "ด่วน" ในแจ้งเตือนของผู้อนุมัติด้วย (2026-10-02)
+    context: (doc) => [doc.urgent ? "ด่วน" : "", doc.jobCode || ""].filter(Boolean).join(" · "),
   },
+  beforeSubmit: (_ctx, doc) => {
+    if (doc.urgent && !(doc.urgentReason ?? "").trim()) throw new HttpError(400, "ติ๊กงานด่วนแล้ว กรุณาใส่เหตุผลที่ด่วนก่อนส่งขออนุมัติ");
+  },
+  submitStamp: () => ({ submittedAt: nowIso() }),
   collection: async () => (await purchaseRequestsCollection()) as unknown as Collection<PurchaseRequestFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,
@@ -617,6 +701,8 @@ ${note}` : note,
       pulledToPurchasingBy: ctx.user.id,
       pulledToPurchasingByName: ctx.user.fullName,
       pulledToPurchasingAt: now.slice(0, 10),
+      // เริ่มนับเวลาออกใบสั่งซื้อ (2026-10-02)
+      purchasingReceivedAt: doc.purchasingReceivedAt || now.slice(0, 10),
       updatedAt: now, updatedBy: ctx.user.id,
     },
   });
@@ -755,6 +841,8 @@ async function handleStoreReview(req: ApiRequest, res: ApiResponse, id: string) 
       // ส่งต่อจัดซื้อ = ใบเข้าขั้น "review" ของจัดซื้อ (2026-09-21) · เขียนเฉพาะตอนเปลี่ยนเป็น forwarded
       // ไม่งั้นการกดเช็คของซ้ำหลังจัดซื้ออนุมัติไปแล้วจะรีเซ็ตขั้นของจัดซื้อกลับเป็น review
       ...(stage === "forwarded" && !doc.purchasingStage ? { purchasingStage: "review" as const } : {}),
+      // วันที่ใบถึงจัดซื้อ = วันที่สโตร์ส่งต่อครั้งแรก (2026-10-02) · เช็คซ้ำทีหลังไม่เลื่อนวันเริ่มนับ
+      ...(stage === "forwarded" && !doc.purchasingReceivedAt ? { purchasingReceivedAt: now.slice(0, 10) } : {}),
       storeReviewedBy: ctx.user.id,
       storeReviewedByName: ctx.user.fullName,
       storeReviewedAt: now.slice(0, 10),
@@ -986,6 +1074,8 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
       storeReviewedAt: _dropStoreAt, storeRemark: _dropStoreRemark,
       pulledToPurchasingBy: _dropPulledBy, pulledToPurchasingByName: _dropPulledName,
       pulledToPurchasingAt: _dropPulledAt,
+      // เวลาส่งขอ/เวลาถึงจัดซื้อเป็นของฉบับเดิม (2026-10-02) — ฉบับใหม่เริ่มนับใหม่ · งานด่วนสืบทอดได้
+      submittedAt: _dropSubmittedAt, purchasingReceivedAt: _dropReceivedAt,
       ...rest
     } = source;
     const doc: PurchaseRequestFields & { _id: string } = {
@@ -1077,6 +1167,7 @@ export async function handlePurchaseRequest(req: ApiRequest, res: ApiResponse): 
     if (req.method === "POST") return handleCreate(req, res);
     return handleList(req, res);
   }
+  if (parts.length === 1 && parts[0] === "job-codes") return handleJobCodes(req, res);
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   // finalize เป็น alias ของ approve — แต่ "ไม่" เข้ากันได้ย้อนหลังจริง: ผู้เรียกเดิมยิงตอนเอกสารยัง
   // เป็นร่าง ซึ่งตอนนี้จะได้ 400 (ต้องส่งขออนุมัติก่อน) เก็บชื่อเดิมไว้เพื่อไม่ให้ URL หาย ไม่ใช่เพื่อ

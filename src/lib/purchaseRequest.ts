@@ -205,6 +205,21 @@ export interface PurchaseRequest {
   deliveryLocation: string;
   lines: PurchaseRequestLine[];
   status: PurchaseRequestStatus;
+  /**
+   * งานด่วน (เจ้าของสั่ง 2026-10-02) — ผู้ขอติ๊กได้ตอนเป็นร่าง หลังส่งแล้วแก้ได้เฉพาะฝ่ายจัดซื้อ
+   * ขึ้นก่อนในคิวของจัดซื้อ และเป้าออกใบสั่งซื้อสั้นลง (ดู `purchasingTargetDays()`) · ไม่พิมพ์ลงใบ FM-PU-05
+   * ใบเก่าไม่มีฟิลด์ = ไม่ด่วน
+   */
+  urgent?: boolean;
+  /** เหตุผลที่ด่วน — บังคับเมื่อ `urgent` ตอนส่งขออนุมัติ */
+  urgentReason?: string;
+  /** เวลาที่ส่งขออนุมัติล่าสุด — เซิร์ฟเวอร์เขียนเท่านั้น (2026-10-02) ใช้นับ "ส่งขอมาแล้วกี่วัน" */
+  submittedAt?: string;
+  /**
+   * วันที่ใบถึงฝ่ายจัดซื้อ (2026-10-02) — **จุดเริ่มนับเวลาออกใบสั่งซื้อ** เซิร์ฟเวอร์เขียนตอนสโตร์ส่งต่อ
+   * หรือตอนจัดซื้อกดดึงมาทำเอง · ใบที่ถึงจัดซื้อก่อนมีฟิลด์นี้ ใช้ `purchasingReceivedAtOf()` เดาจากฟิลด์เดิม
+   */
+  purchasingReceivedAt?: string;
   /** ขั้นของสโตร์หลังอนุมัติ — ดู `PurchaseRequestStoreStage` · ไม่มีค่า = ใบก่อน 2026-09-09 */
   storeStage?: PurchaseRequestStoreStage;
   /** ขั้นของฝ่ายจัดซื้อ — ดู `PurchaseRequestPurchasingStage` · ไม่มีค่า = ใบก่อน 2026-09-21 */
@@ -324,7 +339,41 @@ export interface PurchaseRequestSummary {
    * ไม่มีค่า = ใบที่ยังไม่อนุมัติ หรือไม่มีบรรทัดที่ต้องซื้อเลย
    */
   purchaseState?: "none" | "partial" | "full";
+  /** งานด่วน (2026-10-02) */
+  urgent?: boolean;
+  /** วันที่ส่งขออนุมัติ — ใบเก่าที่ไม่มีใช้ `requestedAt` แทน (เซิร์ฟเวอร์เติมให้) */
+  submittedAt?: string;
+  /** วันที่หัวหน้าอนุมัติ (เริ่มนับเวลาที่สโตร์) */
+  approvedAt?: string;
+  /** วันที่ใบถึงจัดซื้อ (เริ่มนับเวลาของจัดซื้อ) — ว่าง = ยังไม่ถึง */
+  purchasingReceivedAt?: string;
+  /** วันที่ออกใบสั่งซื้อครบทุกรายการที่ต้องซื้อ (หยุดนับ) — ว่าง = ยังไม่ครบ · คำนวณจากใบสั่งซื้อจริง */
+  purchasingCompletedAt?: string;
   updatedAt: string;
+}
+
+/**
+ * วันที่ใบถึงฝ่ายจัดซื้อ (2026-10-02) — ฟิลด์ที่เซิร์ฟเวอร์เขียนมาก่อน ถ้าไม่มี (ใบก่อนวันนั้น) ใช้
+ * วันที่จัดซื้อกดดึงมา / วันที่สโตร์ส่งต่อ / วันที่อนุมัติ (ใบก่อนมีขั้นสโตร์ วิ่งตรงไปจัดซื้อตั้งแต่อนุมัติ)
+ * ใบที่ยังไม่ถึงจัดซื้อได้ "" · ไฟล์นี้ใช้ทั้งหน้าจอและเซิร์ฟเวอร์ — กติกาอยู่ที่นี่ที่เดียว
+ */
+export function purchasingReceivedAtOf(doc: Pick<PurchaseRequest, "status" | "storeStage" | "purchasingReceivedAt" | "pulledToPurchasingAt" | "storeReviewedAt" | "approvedAt">): string {
+  if (doc.status !== "Final") return "";
+  if (doc.purchasingReceivedAt) return doc.purchasingReceivedAt.slice(0, 10);
+  if (doc.storeStage === "pending" || doc.storeStage === "closed") return "";
+  if (doc.pulledToPurchasingAt) return doc.pulledToPurchasingAt.slice(0, 10);
+  if (doc.storeStage === "forwarded" && doc.storeReviewedAt) return doc.storeReviewedAt.slice(0, 10);
+  return (doc.approvedAt ?? "").slice(0, 10);
+}
+
+/** รหัสงานที่มีในระบบ — ตัวเลือกของช่องรหัสงานในใบที่ไม่มีเอกสารต้นทาง (2026-10-02) */
+export interface JobCodeOption {
+  code: string;
+  label: string;
+}
+export async function fetchPurchaseRequestJobCodes(): Promise<JobCodeOption[]> {
+  const { jobCodes } = await apiFetch<{ jobCodes: JobCodeOption[] }>("/purchase-requests/job-codes");
+  return jobCodes;
 }
 
 /**
@@ -431,17 +480,32 @@ export interface PurchaseRequestWithStock {
    * ตารางนี้เอง เป็นเหตุผลเดียวกับที่ไม่เก็บธง (ดู `PurchaseOrderLine.sourcePrLineId`)
    */
   purchasedLines: Record<string, string[]>;
+  /** ใบสั่งซื้อที่เปิดจากใบนี้ เรียงตามวันที่สร้าง — การ์ดเส้นเวลา (2026-10-02) */
+  purchaseOrders: PurchaseRequestPoRef[];
+  /** วันที่ออกใบสั่งซื้อครบทุกรายการ (หยุดนับ) — ว่าง = ยังไม่ครบ */
+  purchasingCompletedAt: string;
+}
+export interface PurchaseRequestPoRef {
+  id: string;
+  documentNumber: string;
+  createdAt: string;
+  vendorName: string;
+  lineCount: number;
 }
 interface PurchaseRequestStockResponse {
   purchaseRequest: PurchaseRequest;
   stockByProduct?: Record<string, number>;
   purchasedLines?: Record<string, string[]>;
+  purchaseOrders?: PurchaseRequestPoRef[];
+  purchasingCompletedAt?: string;
 }
 function unwrapWithStock(res: PurchaseRequestStockResponse): PurchaseRequestWithStock {
   return {
     purchaseRequest: res.purchaseRequest,
     stockByProduct: res.stockByProduct ?? {},
     purchasedLines: res.purchasedLines ?? {},
+    purchaseOrders: res.purchaseOrders ?? [],
+    purchasingCompletedAt: res.purchasingCompletedAt ?? "",
   };
 }
 

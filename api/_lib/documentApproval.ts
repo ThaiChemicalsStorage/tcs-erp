@@ -78,6 +78,10 @@ export interface ApprovalConfig<TDoc extends ApprovableFields> {
    * ซึ่งย้อนกลับไม่ได้ · ใช้ที่นี่สำหรับเงื่อนไขที่ "ถ้าไม่ผ่านต้องไม่อนุมัติเลย"
    */
   beforeApprove?: (ctx: AuthContext, doc: TDoc) => Promise<void>;
+  /** ด่านตรวจก่อนส่งขออนุมัติ — โยน `HttpError` เพื่อไม่ให้ส่ง (เช่นติ๊กงานด่วนแต่ไม่ใส่เหตุผล) */
+  beforeSubmit?: (ctx: AuthContext, doc: TDoc) => Promise<void> | void;
+  /** ฟิลด์เพิ่มเติมที่เขียนพร้อมการส่งขออนุมัติ (เช่น `submittedAt` ของใบขอซื้อ 2026-10-02) */
+  submitStamp?: (ctx: AuthContext, doc: TDoc) => Record<string, unknown>;
   /** ทำงานเพิ่มหลังอนุมัติสำเร็จ เช่น อัปเดตสถานะรายการใน Project ให้เป็น fulfilled */
   onApproved?: (ctx: AuthContext, doc: TDoc) => Promise<void>;
   /** ส่งผลลัพธ์กลับ — แต่ละเอกสารใช้ชื่อ key ไม่เหมือนกัน (materialRequisition/jobOrder/...) */
@@ -139,9 +143,13 @@ export async function handleSubmitApproval<TDoc extends ApprovableFields>(
   const doc = await cfg.load(id);
   if (!cfg.canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
   if (doc.status !== "Draft") throw new HttpError(400, `ส่งขออนุมัติได้เฉพาะ${cfg.label}ที่เป็นฉบับร่างเท่านั้น`);
+  if (cfg.beforeSubmit) await cfg.beforeSubmit(ctx, doc);
 
   // ล้างเหตุผลปฏิเสธเดิมทิ้ง — ไม่งั้นใบที่แก้แล้วส่งใหม่จะยังโชว์เหตุผลรอบก่อนค้างอยู่
-  const updated = await applyStatusChange(cfg, id, ctx, { status: "PendingApproval", rejectionComment: "" });
+  const updated = await applyStatusChange(cfg, id, ctx, {
+    status: "PendingApproval", rejectionComment: "",
+    ...(cfg.submitStamp ? cfg.submitStamp(ctx, doc) : {}),
+  } as Partial<ApprovableFields>);
   await cfg.writeAudit(ctx, `${cfg.label} Submitted`, `ส่งขออนุมัติ${cfg.label} ${id}`, updated);
   await notifyApprovers(cfg, id, ctx, updated);
   cfg.respond(res, updated);
