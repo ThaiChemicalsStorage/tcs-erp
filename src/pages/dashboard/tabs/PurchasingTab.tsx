@@ -8,6 +8,7 @@ import {
 } from "./DepartmentWidgets";
 import { CHART, TONE } from "./dashboardTokens";
 import { daysBetweenIso, fmtAxis, fmtCount } from "./countFormat";
+import { PurchasingLeadTimeSection } from "./PurchasingLeadTime";
 
 /**
  * แท็บจัดซื้อ — ใบขอซื้อที่ถึงคิว ใบสั่งซื้อที่รออนุมัติ/รอรับของ/เลยกำหนด · มูลค่าใบสั่งซื้อ 12 เดือน
@@ -63,6 +64,11 @@ export function PurchasingTab({ result, onRetry, onNavigatePage }: DepartmentTab
                 />
               )}
             </KpiGrid>
+
+            {/* KPI ระยะเวลาออกใบสั่งซื้อ (เจ้าของสั่ง 2026-10-02) — ต่อจากตัวเลขหลักเดิม ตามบอร์ดใน canvas */}
+            {d?.leadTime && (
+              <PurchasingLeadTimeSection data={d.leadTime} onOpenInbox={() => onNavigatePage("purchasingRequestInbox")} />
+            )}
 
             {d && (
               <>

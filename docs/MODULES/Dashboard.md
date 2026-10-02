@@ -462,7 +462,7 @@ block becomes `null` and is listed in `failed`, the rest still render.
 
 | Block | Meaning of the less obvious numbers |
 |---|---|
-| จัดซื้อ | *PR awaiting a PO* = approved, forwarded to purchasing (or pre-2026-09-09 with no `storeStage`), and no non-deleted PO references it · *PO awaiting receipt* = approved with no receiving report or an Open one · *overdue* = of those, `neededByDate` < today · PO value via `purchaseOrderTotals()` |
+| จัดซื้อ | *PR awaiting a PO* = approved, forwarded to purchasing (or pre-2026-09-09 with no `storeStage`), and no non-deleted PO references it · *PO awaiting receipt* = approved with no receiving report or an Open one · *overdue* = of those, `neededByDate` < today · PO value via `purchaseOrderTotals()` · **lead-time KPI (2026-10-02, `detail.leadTime`)**: working days Mon–Fri from `purchasingReceivedAtOf()` until the PO that covers the last line to buy (`purchaseStateOf()`), targets normal 7 / urgent 3 · `from`/`to` filter by the fully-ordered date · waiting/queue are as of today · `avgByMonth` months with no data are `null` · `null` without `purchaseRequest:view` |
 | คลังสินค้า | stock value = Σ `stockValueOf()` over non-archived products · low stock = `reorderPoint > 0 && stockQty <= reorderPoint` (same as StockPage) · MR awaiting issue = `requisitionHasOutstanding()` · outstanding receive value via `receivingReportTotals()` |
 | ผลิต | due soon = approved, due date within 7 days · past due = approved, due date passed (no completion status exists — the tooltip says so) |
 | โครงการ | MR/PR with no `ownerDepartment` count as project (matches the list handlers) · *PR open* = approved, not closed by store, no PO |

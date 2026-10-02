@@ -20,6 +20,10 @@ import type {
   MonthCount, OpenPurchaseRequestStages, ServiceFollowUp, StatusCounts,
 } from "../../src/lib/departmentDashboard.js";
 import { countPendingApprovals } from "./pendingApprovals.js";
+import { purchaseStateOf } from "./purchaseRequestHandler.js";
+import { purchasingReceivedAtOf } from "../../src/lib/purchaseRequest.js";
+import { businessDaysBetween, purchasingTargetDays, PURCHASING_TARGET_DAYS } from "../../src/lib/businessDays.js";
+import type { PurchasingLeadTime, PurchaseRequestDept } from "../../src/lib/departmentDashboard.js";
 import {
   todayIsoDate, addDaysIso, bangkokDayBoundsUtc, fetchActivityTimeline, countDeliveryOrders, serviceOwnershipClause,
 } from "./dashboardShared.js";
@@ -191,7 +195,7 @@ async function purchasingBlock({ ctx, has, from, to, today, months, withDetail }
   const summary: DepartmentBlock<"purchasing">["summary"] = { prAwaitingPo: null, poPending: null, poAwaitingReceipt: null, poOverdue: null };
   const detail: NonNullable<DepartmentBlock<"purchasing">["detail"]> = {
     poApprovedInPeriod: null, poValueByMonth: null, topVendors: null, receiptProgress: null,
-    prAwaitingPoByDepartment: null, prStage: null, overduePurchaseOrders: null,
+    prAwaitingPoByDepartment: null, prStage: null, overduePurchaseOrders: null, leadTime: null,
   };
 
   if (canPo) {
@@ -274,6 +278,7 @@ async function purchasingBlock({ ctx, has, from, to, today, months, withDetail }
       };
       const ofDepartment = (dept: string) => awaitingPo.filter((p) => (p.ownerDepartment ?? "project") === dept).length;
       detail.prAwaitingPoByDepartment = { project: ofDepartment("project"), production: ofDepartment("production"), general: ofDepartment("general") };
+      detail.leadTime = await purchasingLeadTime(prOwn, from, to, today, months);
     }
   }
 
@@ -281,6 +286,116 @@ async function purchasingBlock({ ctx, has, from, to, today, months, withDetail }
     scope: scopeOf(canPo && !has("purchaseOrder:viewAll"), canPr && !has("purchaseRequest:viewAll")),
     summary,
     detail: withDetail ? detail : null,
+  };
+}
+
+// ── KPI ระยะเวลาออกใบสั่งซื้อ (2026-10-02) ──────────────────────────────────────
+
+const LEAD_BUCKETS: { key: string; min: number; max: number | null }[] = [
+  { key: "0", min: 0, max: 0 }, { key: "1", min: 1, max: 1 }, { key: "2", min: 2, max: 2 }, { key: "3", min: 3, max: 3 },
+  { key: "4-5", min: 4, max: 5 }, { key: "6-7", min: 6, max: 7 }, { key: "8+", min: 8, max: null },
+];
+const QUEUE_LIMIT = 10;
+const avg = (xs: number[]) => (xs.length === 0 ? null : round2(xs.reduce((a, b) => a + b, 0) / xs.length));
+
+/**
+ * เจ้าของสั่ง 2026-10-02: *"ได้ใบ PR มาแล้วใช้เวลากี่วันในการออกใบ PO"* — นับวันทำการ จ.–ศ. จากวันที่ใบถึงจัดซื้อ
+ * จนวันที่ใบสั่งซื้อครอบบรรทัดสุดท้ายที่ต้องซื้อ (`purchaseStateOf()` ตัวเดียวกับหน้ารายการ) · ใบที่ถึงจัดซื้อแล้ว
+ * แต่ยังไม่ครบนับเป็น "รออยู่" ถึงวันนี้ · ใช้ clause การมองเห็นเดียวกับหน้ารายการใบขอซื้อ
+ */
+async function purchasingLeadTime(prOwn: Clause, from: string, to: string, today: string, months: string[]): Promise<PurchasingLeadTime> {
+  const prs = await purchaseRequestsCollection();
+  const docs = await prs.find(and({ isDeleted: false, status: "Final" }, prOwn) as never, {
+    projection: {
+      status: 1, storeStage: 1, purchasingStage: 1, purchasingReceivedAt: 1, pulledToPurchasingAt: 1, storeReviewedAt: 1,
+      approvedAt: 1, submittedAt: 1, requestedAt: 1, urgent: 1, ownerDepartment: 1, neededByDate: 1,
+      "lines.id": 1, "lines.storeDecision": 1, "lines.purchasingApproval": 1,
+    },
+  }).toArray();
+  const states = await purchaseStateOf(docs);
+
+  type Row = { id: string; urgent: boolean; dept: PurchaseRequestDept; received: string; completed: string; days: number; target: number; doc: (typeof docs)[number] };
+  const rows: Row[] = [];
+  for (const doc of docs) {
+    const received = purchasingReceivedAtOf(doc);
+    if (!received || doc.storeStage === "closed") continue;
+    const state = states.get(doc._id);
+    if (!state) continue; // ไม่มีบรรทัดที่ต้องซื้อ (สโตร์จ่ายครบ / จัดซื้อไม่อนุมัติทุกบรรทัด)
+    const completed = state.completedAt;
+    const days = businessDaysBetween(received, completed || today) ?? 0;
+    rows.push({
+      id: doc._id, urgent: doc.urgent === true, dept: (doc.ownerDepartment ?? "project") as PurchaseRequestDept,
+      received, completed, days, target: purchasingTargetDays(doc.urgent), doc,
+    });
+  }
+
+  const done = rows.filter((r) => r.completed && inPeriod(r.completed, from, to));
+  const urgentDone = done.filter((r) => r.urgent);
+  const normalDone = done.filter((r) => !r.urgent);
+  const onTime = (xs: Row[]) => xs.filter((r) => r.days <= r.target).length;
+
+  const byMonth = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!r.completed) continue;
+    const m = r.completed.slice(0, 7);
+    byMonth.set(m, [...(byMonth.get(m) ?? []), r.days]);
+  }
+
+  const stageDays = { approval: [] as number[], store: [] as number[], purchasing: [] as number[] };
+  for (const r of done) {
+    const submitted = (r.doc.submittedAt || r.doc.requestedAt || "").slice(0, 10);
+    const approved = (r.doc.approvedAt ?? "").slice(0, 10);
+    const a = submitted && approved ? businessDaysBetween(submitted, approved) : null;
+    const s = approved ? businessDaysBetween(approved, r.received) : null;
+    if (a !== null && s !== null) {
+      stageDays.approval.push(a);
+      stageDays.store.push(s);
+      stageDays.purchasing.push(r.days);
+    }
+  }
+
+  const waiting = rows.filter((r) => !r.completed);
+  const oldest = [...waiting].sort((a, b) => b.days - a.days)[0];
+  const queue = [...waiting]
+    .sort((a, b) => (a.urgent !== b.urgent ? (a.urgent ? -1 : 1) : b.days - a.days))
+    .slice(0, QUEUE_LIMIT)
+    .map((r) => ({
+      id: r.id, urgent: r.urgent, dept: r.dept, receivedAt: r.received, days: r.days, target: r.target,
+      neededByDate: r.doc.neededByDate ?? "", partial: states.get(r.id)?.state === "partial",
+    }));
+
+  return {
+    targets: { normal: PURCHASING_TARGET_DAYS.normal, urgent: PURCHASING_TARGET_DAYS.urgent },
+    completed: {
+      count: done.length, urgentCount: urgentDone.length,
+      avgDays: avg(done.map((r) => r.days)), avgUrgent: avg(urgentDone.map((r) => r.days)), avgNormal: avg(normalDone.map((r) => r.days)),
+      onTime: onTime(done), onTimeUrgent: onTime(urgentDone), onTimeNormal: onTime(normalDone),
+    },
+    distribution: LEAD_BUCKETS.map((b) => {
+      const inBucket = (r: Row) => r.days >= b.min && (b.max === null || r.days <= b.max);
+      return { ...b, urgent: urgentDone.filter(inBucket).length, normal: normalDone.filter(inBucket).length };
+    }),
+    avgByMonth: months.map((month) => {
+      const xs = byMonth.get(month) ?? [];
+      return { month, avgDays: avg(xs), count: xs.length };
+    }),
+    byDepartment: (["project", "production", "general"] as const).map((dept) => {
+      const xs = done.filter((r) => r.dept === dept);
+      return { dept, count: xs.length, avgDays: avg(xs.map((r) => r.days)), onTime: onTime(xs) };
+    }),
+    stages: {
+      approval: avg(stageDays.approval), store: avg(stageDays.store), purchasing: avg(stageDays.purchasing),
+      count: stageDays.purchasing.length,
+    },
+    waiting: {
+      count: waiting.length,
+      urgent: waiting.filter((r) => r.urgent).length,
+      over: waiting.filter((r) => r.days > r.target).length,
+      due: waiting.filter((r) => r.days === r.target).length,
+      oldestDays: oldest ? oldest.days : null,
+      oldestId: oldest ? oldest.id : "",
+    },
+    queue,
   };
 }
 

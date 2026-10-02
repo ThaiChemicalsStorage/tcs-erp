@@ -59,6 +59,38 @@ export interface PurchasingDetail {
   /** ใบขอซื้อที่อนุมัติแล้ว แยกว่าตอนนี้อยู่ขั้นไหน */
   prStage: { atStore: number; atPurchasing: number; closedByStore: number } | null;
   overduePurchaseOrders: DueItem[] | null;
+  /** KPI ระยะเวลาออกใบสั่งซื้อ (2026-10-02) — ไม่มีสิทธิ์ดูใบขอซื้อ = null */
+  leadTime: PurchasingLeadTime | null;
+}
+
+export type PurchaseRequestDept = "project" | "production" | "general";
+
+/**
+ * KPI ระยะเวลาออกใบสั่งซื้อ (เจ้าของสั่ง 2026-10-02 *"ได้ใบ PR มาแล้วใช้เวลากี่วันในการออกใบ PO"*)
+ *
+ * นับเป็น**วันทำการ จ.–ศ.** (`src/lib/businessDays.ts`) ตั้งแต่ใบถึงฝ่ายจัดซื้อ (`purchasingReceivedAtOf()`) จนออกใบสั่งซื้อ
+ * **ครบทุกบรรทัดที่ต้องซื้อ** (คำนวณจากใบสั่งซื้อจริง) · เป้า ปกติ 7 / ด่วน 3 วันทำการ
+ */
+export interface PurchasingLeadTime {
+  targets: { normal: number; urgent: number };
+  /** ช่วงที่เลือก — ใบที่ออกใบสั่งซื้อครบในช่วงนี้ (นับตามวันที่ออกครบ) */
+  completed: {
+    count: number; urgentCount: number;
+    avgDays: number | null; avgUrgent: number | null; avgNormal: number | null;
+    onTime: number; onTimeUrgent: number; onTimeNormal: number;
+  };
+  /** ช่วงที่เลือก — จำนวนใบตามจำนวนวันที่ใช้ แยกด่วน/ปกติ */
+  distribution: { key: string; min: number; max: number | null; urgent: number; normal: number }[];
+  /** 12 เดือนล่าสุด — ค่าเฉลี่ยตามเดือนที่ออกครบ · `null` = เดือนนั้นยังไม่มีข้อมูล (ไม่ใช่ 0) */
+  avgByMonth: { month: string; avgDays: number | null; count: number }[];
+  /** ช่วงที่เลือก — แยกตามฝ่ายที่ขอซื้อ */
+  byDepartment: { dept: PurchaseRequestDept; count: number; avgDays: number | null; onTime: number }[];
+  /** ช่วงที่เลือก — เฉลี่ยวันทำการแต่ละช่วงของใบที่ออกครบ: รอหัวหน้าอนุมัติ / รอสโตร์ / ที่จัดซื้อ */
+  stages: { approval: number | null; store: number | null; purchasing: number | null; count: number };
+  /** ณ ปัจจุบัน — ใบที่ถึงจัดซื้อแล้วยังออกใบสั่งซื้อไม่ครบ */
+  waiting: { count: number; urgent: number; over: number; due: number; oldestDays: number | null; oldestId: string };
+  /** ณ ปัจจุบัน — คิวรอออกใบสั่งซื้อ งานด่วนก่อน แล้วค้างนานสุด (สูงสุด 10 ใบ) */
+  queue: { id: string; urgent: boolean; dept: PurchaseRequestDept; receivedAt: string; days: number; target: number; neededByDate: string; partial: boolean }[];
 }
 
 // ── คลังสินค้า ────────────────────────────────────────────────────────────────
