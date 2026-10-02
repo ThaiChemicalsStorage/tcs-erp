@@ -25,7 +25,9 @@ import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { useUserDirectory } from "../../lib/userDirectory";
 import { Combobox } from "../../components/Combobox";
-import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
+import { type Vendor, fetchVendors, vendorComboboxOptions, vendorTermsForOrder, VENDOR_PAYMENT_TERM_OPTIONS } from "../../lib/vendors";
+import { priceTypeOf, RECEIVING_PRICE_TYPES, RECEIVING_PRICE_TYPE_LABEL_KEY, type ReceivingPriceType } from "../../lib/receivingReport";
+import { VAT_RATE } from "../../lib/quoteMath";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
 import {
   type PurchaseOrder, type PurchaseOrderLine, type PurchaseOrderUpdateFields, blankPurchaseOrderLine,
@@ -57,6 +59,8 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
     orderDate: d.orderDate,
     neededByDate: d.neededByDate,
     creditDays: d.creditDays,
+    paymentTerms: d.paymentTerms ?? "",
+    priceType: d.priceType,
     shippingMethod: d.shippingMethod,
     deliveryLocation: d.deliveryLocation,
     lines: d.lines,
@@ -567,6 +571,9 @@ export function PurchaseOrderDocument({
                     vendorPhone: v.phone,
                     vendorTaxId: v.taxId,
                     vendorAddress: v.address,
+                    // เงื่อนไขที่ผู้ขายตั้งไว้ในทะเบียน (2026-10-02 เจ้าของตอบ: ดึงจากผู้ขาย ยังแก้ในใบได้) —
+                    // เติมเฉพาะช่องที่ผู้ขายมีค่า ไม่เอาค่าว่างของผู้ขายไปลบสิ่งที่จัดซื้อพิมพ์ไว้ในใบนี้
+                    ...vendorTermsForOrder(v),
                   });
                 }}
               />
@@ -643,6 +650,21 @@ export function PurchaseOrderDocument({
             <input id="po-credit-days" type="number" className={`${field.input} w-full text-right tabular-nums`} value={draft.creditDays ?? ""}
               onChange={(e) => set("creditDays", e.target.value === "" ? null : Number(e.target.value))} />
           </Field>
+          <Field label={t("purchaseOrderDoc.paymentTerms")} htmlFor="po-payment-terms">
+            <Combobox id="po-payment-terms" value={draft.paymentTerms ?? ""} onChange={(next) => set("paymentTerms", next)}
+              options={VENDOR_PAYMENT_TERM_OPTIONS.map((x) => ({ value: x, label: x }))} ariaLabel={t("purchaseOrderDoc.paymentTerms")}
+              className={`${field.input} w-full`} />
+          </Field>
+          <Field label={t("purchaseOrderDoc.priceType")} htmlFor="po-price-type">
+            <select id="po-price-type" className={`${field.input} w-full`} value={priceTypeOf(draft)}
+              onChange={(e) => {
+                const next = e.target.value as ReceivingPriceType;
+                // แยก/รวม VAT แต่ยังไม่มีอัตรา = ใช้ 7% ให้เห็นในช่อง ไม่ใช่คิด 7% เงียบ ๆ หลังช่องว่าง
+                setDraft((d) => d && { ...d, priceType: next, vatRate: next !== "none" && d.vatRate === null ? VAT_RATE : d.vatRate });
+              }}>
+              {RECEIVING_PRICE_TYPES.map((p) => <option key={p} value={p}>{t(RECEIVING_PRICE_TYPE_LABEL_KEY[p])}</option>)}
+            </select>
+          </Field>
           <Field label={t("purchaseOrderDoc.shippingMethod")} htmlFor="po-shipping">
             <input id="po-shipping" className={`${field.input} w-full`} value={draft.shippingMethod} onChange={(e) => set("shippingMethod", e.target.value)} />
           </Field>
@@ -658,6 +680,8 @@ export function PurchaseOrderDocument({
           <ReadonlyField label={t("purchaseOrderDoc.jobCode")} value={draft.jobCode} mono />
           <ReadonlyField label={t("purchaseOrderDoc.purchaseRequest")} value={draft.purchaseRequestId} mono />
           <ReadonlyField label={t("purchaseOrderDoc.creditDays")} value={draft.creditDays !== null ? t("purchaseOrderDoc.creditDaysValue").replace("{n}", String(draft.creditDays)) : ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.paymentTerms")} value={draft.paymentTerms ?? ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.priceType")} value={t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(draft)])} />
           <ReadonlyField label={t("purchaseOrderDoc.shippingMethod")} value={draft.shippingMethod} />
           <ReadonlyField className="sm:col-span-2" label={t("purchaseOrderDoc.deliveryLocation")} value={draft.deliveryLocation} />
         </div>
@@ -829,7 +853,7 @@ export function PurchaseOrderDocument({
             <span className="w-[110px] text-right tabular-nums text-[#b93636]">−{fmt(totals.discountAmt)}</span>
           </div>
           <div className="flex items-center gap-3 text-[#3d5173]">
-            <span className="flex-1">{t("purchaseOrderDoc.vatLabel")}</span>
+            <span className="flex-1">{t("purchaseOrderDoc.vatLabel")}{totals.priceType === "inclusive" && <span className="block text-xs text-muted-foreground">{t("purchaseOrderDoc.vatIncluded")}</span>}{totals.priceType === "none" && <span className="block text-xs text-muted-foreground">{t("purchaseOrderDoc.vatNone")}</span>}</span>
             <span className="w-[170px] h-9 rounded-lg border border-[#c3ccda] bg-white flex items-stretch overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20">
               <input
                 type="number"
@@ -913,7 +937,7 @@ export function PurchaseOrderDocument({
             </div>
           )}
           <div className="flex justify-between text-[#3d5173]">
-            <span>{t("purchaseOrderDoc.vatLabel")}{draft.vatRate !== null ? ` (${draft.vatRate}%)` : ""}</span>
+            <span>{t("purchaseOrderDoc.vatLabel")}{totals.priceType === "none" ? ` · ${t("purchaseOrderDoc.vatNone")}` : draft.vatRate !== null ? ` (${draft.vatRate}%)` : ""}{totals.priceType === "inclusive" ? ` · ${t("purchaseOrderDoc.vatIncluded")}` : ""}</span>
             <span className="tabular-nums text-foreground">{fmt(totals.vatAmt)}</span>
           </div>
           <div className="h-px bg-border my-1" />

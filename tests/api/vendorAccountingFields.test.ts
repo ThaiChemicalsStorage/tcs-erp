@@ -135,6 +135,19 @@ describe("ทะเบียนผู้ขาย — ช่องจัดซ�
     expect(on.inactiveAt).toBe("");
   });
 
+  it("ใบสั่งซื้อเก็บเงื่อนไขการชำระเงิน + ประเภทราคา (ค่าที่หน้าจอเติมจากผู้ขาย) · ประเภทราคาผิด = 400", async () => {
+    const admin = (await (await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ identifier: "admin", password: "correct-horse-1" }),
+    })).headers.get("set-cookie") ?? "").split(";")[0];
+    const created = await call(admin, "/api/purchase-orders", { method: "POST", body: "{}" });
+    const poId = ((await created.json()) as { purchaseOrder: { id: string } }).purchaseOrder.id;
+    const ok = await call(admin, `/api/purchase-orders/${poId}`, { method: "PATCH", body: JSON.stringify({ paymentTerms: "1.เครดิต 30วัน", priceType: "inclusive", vatRate: 7 }) });
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { purchaseOrder: Record<string, unknown> }).purchaseOrder).toMatchObject({ paymentTerms: "1.เครดิต 30วัน", priceType: "inclusive" });
+    expect((await call(admin, `/api/purchase-orders/${poId}`, { method: "PATCH", body: JSON.stringify({ priceType: "bogus" }) })).status).toBe(400);
+  });
+
   it("เลขที่บัญชีที่ยังรอบัญชีอนุมัติในทะเบียนรหัสใช้ไม่ได้", async () => {
     const { codeEntriesCollection } = await import("../../api/_lib/collections.js");
     const now = new Date().toISOString();

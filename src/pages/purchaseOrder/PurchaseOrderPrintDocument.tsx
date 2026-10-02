@@ -56,6 +56,12 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
             <td style={cell}><b>โทร:</b> {printText(doc.vendorPhone)}</td>
             <td style={cell}><b>เครดิต:</b> {doc.creditDays !== null ? `${doc.creditDays} วัน` : "-"}</td>
           </tr>
+          {/* เงื่อนไขการชำระเงิน (2026-10-02) — แถวนี้ขึ้นเฉพาะใบที่กรอกไว้ ใบเก่าหน้าตาเดิมทุกประการ */}
+          {doc.paymentTerms && (
+            <tr>
+              <td style={cell} colSpan={3}><b>เงื่อนไขการชำระเงิน:</b> {doc.paymentTerms}</td>
+            </tr>
+          )}
           <tr>
             <td style={cell}><b>วันที่ต้องการรับของ:</b> {printDate(doc.neededByDate)}</td>
             <td style={cell}><b>ขนส่งโดย:</b> {printText(doc.shippingMethod)}</td>
@@ -128,7 +134,9 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
             </tr>
           )}
           <tr>
-            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>ภาษีมูลค่าเพิ่ม {doc.vatRate ?? 0}%</td>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>
+              {totals.priceType === "none" ? "ไม่มีภาษีมูลค่าเพิ่ม" : `ภาษีมูลค่าเพิ่ม ${doc.vatRate ?? 7}%${totals.priceType === "inclusive" ? " (รวมในราคาแล้ว)" : ""}`}
+            </td>
             <td style={{ ...cell, textAlign: "right" }}>{fmt(totals.vatAmt)}</td>
           </tr>
           <tr>

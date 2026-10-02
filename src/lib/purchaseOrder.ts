@@ -23,6 +23,7 @@
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 // ยืมเฉพาะตัวคิดส่วนลดมาใช้ ไม่ยืม computeTotals เพราะมันฮาร์ดโค้ด VAT 7% (ดู purchaseOrderTotals)
 import { resolveDiscountAmount, lineDiscountAmount, lineSubtotal, type DiscountMode, type QuoteAmountLine } from "./quoteMath.js";
+import { priceTypeOf, splitVat, type ReceivingPriceType } from "./receivingReport.js";
 
 export type { DiscountMode };
 
@@ -134,8 +135,15 @@ export interface PurchaseOrder {
   /** วันที่ต้องการรับของ */
   neededByDate: string;
   creditDays: number | null;
+  /** เงื่อนไขการชำระเงิน (2026-10-02) — เติมจากผู้ขายตอนเลือก แก้ในใบได้ · ใบเก่าไม่มี = "" */
+  paymentTerms?: string;
   shippingMethod: string;
   deliveryLocation: string;
+  /**
+   * ประเภทราคา (2026-10-02) ชุดเดียวกับใบรับสินค้า — เติมจากผู้ขายตอนเลือก · อ่านผ่าน `priceTypeOf()` เสมอ:
+   * ใบเก่าไม่มีฟิลด์ = มีอัตรา VAT → แยก VAT · ไม่มี → ไม่มี VAT (สูตรเดิมทุกประการ)
+   */
+  priceType?: ReceivingPriceType;
 
   lines: PurchaseOrderLine[];
   /** อัตราภาษีมูลค่าเพิ่ม (%) — null = ยังไม่ระบุ ยอดรวมคำนวณตอนแสดงผล ไม่ได้เก็บไว้ */
@@ -259,12 +267,14 @@ export function purchaseOrderLineTotal(l: PurchaseOrderLine): number {
  * ยอดรวมทั้งใบ — เหมือน `computeTotals()` ของใบเสนอราคาทุกขั้น **ยกเว้นอัตรา VAT**
  * ซึ่งอ่านจาก `vatRate` ของเอกสารเอง (null = ยังไม่ระบุ = ไม่คิดภาษี)
  */
-export function purchaseOrderTotals(doc: Pick<PurchaseOrder, "lines" | "vatRate" | "discount" | "discountMode">) {
+export function purchaseOrderTotals(doc: Pick<PurchaseOrder, "lines" | "vatRate" | "discount" | "discountMode" | "priceType">) {
   const subtotal = purchaseOrderSubtotal(doc.lines);
   const discountAmt = resolveDiscountAmount(subtotal, doc.discount ?? 0, doc.discountMode);
   const afterDiscount = subtotal - discountAmt;
-  const vatAmt = doc.vatRate !== null && doc.vatRate !== undefined ? (afterDiscount * doc.vatRate) / 100 : 0;
-  return { subtotal, discountAmt, afterDiscount, vatAmt, total: afterDiscount + vatAmt };
+  // ประเภทราคา (2026-10-02) — สูตรเดียวกับใบรับสินค้า (`splitVat()`) · ใบเก่าได้ผลเดิม: มีอัตรา = แยก VAT, ไม่มี = ไม่มี VAT
+  const priceType = priceTypeOf({ priceType: doc.priceType, vatRate: doc.vatRate });
+  const { base, vatAmt, total } = splitVat(afterDiscount, priceType, doc.vatRate);
+  return { subtotal, discountAmt, afterDiscount, base, priceType, vatAmt, total };
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────

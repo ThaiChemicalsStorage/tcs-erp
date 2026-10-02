@@ -131,6 +131,22 @@ export function vendorBranchText(branch: number | undefined | null): string {
   return `สาขาที่ ${String(branch).padStart(5, "0")}`;
 }
 
+/**
+ * เงื่อนไขของผู้ขายที่ใบสั่งซื้อดึงไปเติมตอนเลือกผู้ขาย (2026-10-02 — เจ้าของตอบ: *"ใบสั่งซื้อดึงเงื่อนไขชำระ/เครดิต/VAT จากผู้ขาย"*)
+ * คืนเฉพาะช่องที่ผู้ขายมีค่า — ค่าว่างของผู้ขายต้องไม่ไปลบสิ่งที่จัดซื้อพิมพ์ไว้ในใบ · ใบยังแก้ต่อได้ทุกช่อง
+ */
+export function vendorTermsForOrder(v: Vendor): {
+  paymentTerms?: string; creditDays?: number; vatRate?: number; priceType?: ReceivingPriceType; shippingMethod?: string;
+} {
+  return {
+    ...(v.paymentTerms ? { paymentTerms: v.paymentTerms } : {}),
+    ...(v.creditDays !== null && v.creditDays !== undefined ? { creditDays: v.creditDays } : {}),
+    ...(v.vatRate !== null && v.vatRate !== undefined ? { vatRate: v.vatRate } : {}),
+    ...(v.priceType ? { priceType: v.priceType } : {}),
+    ...(v.shippingMethod ? { shippingMethod: v.shippingMethod } : {}),
+  };
+}
+
 export type VendorDraft = Pick<Vendor, "name" | "code" | "contactName" | "phone" | "taxId" | "address" | "note" | "isActive">
   & Partial<Pick<Vendor, Exclude<VendorPurchasingField | VendorAccountingField, "name" | "code" | "contactName" | "phone" | "taxId" | "address" | "note">>>;
 

@@ -201,7 +201,7 @@ async function purchasingBlock({ ctx, has, from, to, today, months, withDetail }
   if (canPo) {
     const approved = await pos.find(
       and({ isDeleted: false, status: "Final" }, poOwn) as never,
-      { projection: { documentNumber: 1, vendorName: 1, neededByDate: 1, orderDate: 1, lines: 1, vatRate: 1, discount: 1, discountMode: 1 } },
+      { projection: { documentNumber: 1, vendorName: 1, neededByDate: 1, orderDate: 1, lines: 1, vatRate: 1, discount: 1, discountMode: 1, priceType: 1 } },
     ).toArray();
     // ใบรับสินค้ามีได้ใบเดียวต่อใบสั่งซื้อ (unique index) · ไม่มีใบรับ = ยังไม่เริ่มรับ · Closed = รับครบหรือสโตร์ปิดใบ
     const receiving = await rrs.find(
@@ -220,7 +220,7 @@ async function purchasingBlock({ ctx, has, from, to, today, months, withDetail }
 
     if (withDetail) {
       const totalOf = (p: (typeof approved)[number]) => purchaseOrderTotals({
-        lines: p.lines ?? [], vatRate: p.vatRate ?? null, discount: p.discount, discountMode: p.discountMode,
+        lines: p.lines ?? [], vatRate: p.vatRate ?? null, discount: p.discount, discountMode: p.discountMode, priceType: p.priceType,
       }).total;
       const withTotal = approved.map((p) => ({ p, total: totalOf(p) }));
 

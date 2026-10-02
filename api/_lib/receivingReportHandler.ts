@@ -258,7 +258,8 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     orderVatRate: po.vatRate ?? null,
     orderDiscount: po.discount ?? null,
     orderDiscountMode: po.discountMode ?? "percent",
-    priceType: priceTypeOf({ vatRate: po.vatRate ?? null }),
+    // ประเภทราคาของใบสั่งซื้อ (2026-10-02 — เติมจากผู้ขาย) ตามมาด้วย · ใบเก่าไม่มี = กติกาเดิมจากอัตรา VAT
+    priceType: priceTypeOf({ priceType: po.priceType, vatRate: po.vatRate ?? null }),
     creditDays: po.creditDays ?? null,
     billerCustom: false, billerName: "", billerTaxId: "", billerAddress: "",
     lines,

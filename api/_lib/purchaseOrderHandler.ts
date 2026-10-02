@@ -18,6 +18,7 @@ import { sanitizeNullableNumber } from "./projectValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import type { PurchaseOrderLine, PurchaseOrderSummary } from "../../src/lib/purchaseOrder.js";
 import { orderedPrLineIdOf } from "../../src/lib/purchaseOrder.js";
+import { isReceivingPriceType } from "../../src/lib/receivingReport.js";
 import { linePurchasingDecision, purchaseRequestLinesToBuy, type PurchaseRequestLine } from "../../src/lib/purchaseRequest.js";
 import { assertLineCodesApproved } from "./codeEntriesHandler.js";
 
@@ -163,6 +164,7 @@ function toClient(doc: PurchaseOrderFields & { _id: string }) {
     intendedApproverName: doc.intendedApproverName ?? "",
     lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
     revisionNote: doc.revisionNote ?? "",
+    paymentTerms: doc.paymentTerms ?? "",
   }));
 }
 
@@ -437,6 +439,7 @@ const SHORT_TEXT_FIELDS: { key: keyof PurchaseOrderFields; label: string }[] = [
   { key: "vendorQuotationRef", label: "อ้างอิงใบเสนอราคา" },
   { key: "jobCode", label: "รหัสงาน" },
   { key: "shippingMethod", label: "ขนส่งโดย" },
+  { key: "paymentTerms", label: "เงื่อนไขการชำระเงิน" },
   { key: "deliveryLocation", label: "สถานที่ส่งของ" },
   { key: "orderedBy", label: "ผู้สั่งซื้อ" },
   { key: "approvedBy", label: "ผู้อนุมัติ" },
@@ -544,6 +547,11 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   Object.assign(update, await resolveIntendedApprover(body));
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   if ("vatRate" in body) update.vatRate = sanitizeNullableNumber(body.vatRate, "อัตราภาษี (%)");
+  // ประเภทราคา (2026-10-02) — ชุดเดียวกับใบรับสินค้า · ไม่ส่ง/ว่าง = ไม่แตะ (ใบเก่าอ่านผ่าน priceTypeOf())
+  if ("priceType" in body && body.priceType !== undefined && body.priceType !== "") {
+    if (!isReceivingPriceType(body.priceType)) throw new HttpError(400, "ประเภทราคาไม่ถูกต้อง");
+    update.priceType = body.priceType;
+  }
   if ("discount" in body) update.discount = sanitizeNullableNumber(body.discount, "ส่วนลดท้ายใบ");
   if ("discountMode" in body) update.discountMode = body.discountMode === "amount" ? "amount" : "percent";
   if ("documentNumber" in body) {
