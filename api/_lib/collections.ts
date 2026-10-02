@@ -436,6 +436,27 @@ export interface VendorFields {
   approvedByUserId?: string;
   approvedByName?: string;
   rejectionComment?: string;
+  /** ช่องจัดซื้อ/บัญชีและวันที่เลิกใช้ (2026-10-02) — ความหมายของแต่ละช่องดู `Vendor` ใน src/lib/vendors.ts */
+  nameEn?: string;
+  postalCode?: string;
+  branch?: number;
+  paymentTerms?: string;
+  whtIncomeType?: string;
+  whtRate?: number | null;
+  whtCategory?: string;
+  whtCondition?: string;
+  vendorType?: string;
+  accountCode?: string;
+  priceType?: "none" | "exclusive" | "inclusive" | "";
+  vatRate?: number | null;
+  shippingMethod?: string;
+  creditDays?: number | null;
+  currency?: string;
+  discount?: string;
+  creditLimit?: number | null;
+  openingBalance?: number | null;
+  advanceCheque?: number | null;
+  inactiveAt?: string;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;

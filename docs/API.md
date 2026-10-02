@@ -752,10 +752,10 @@ Added 2026-08-31. Master data, not a document — four permissions, no approval 
 
 | Route | Permission | Notes |
 |---|---|---|
-| `GET /api/vendors` | `vendor:view` **or** `purchaseOrder:view` / `purchaseRequest:view` | The carve-out matters: without it the vendor dropdown on a purchase order is empty for the people who actually use it. Callers without `vendor:view` see only active, non-archived rows. Sorted by name. |
-| `POST /api/vendors` | `vendor:create` | `name` required. `code` optional; if set it is upper-cased and must be unique case-insensitively → `409` "รหัสผู้ขายนี้มีผู้ใช้งานแล้ว". `201`. |
+| `GET /api/vendors` | `vendor:view` **or** `purchaseOrder:view` / `purchaseRequest:view` | The carve-out matters: without it the vendor dropdown on a purchase order is empty for the people who actually use it. Callers without `vendor:view` see only active, non-archived rows. Sorted by name. **2026-10-02:** every vendor response carries `balance` (opening balance + unpaid `ap_entries` matched by vendor name) and `lastBillDate` (latest `invoiceDate`) — `balance: null` unless the caller holds `ap:view`. |
+| `POST /api/vendors` | `vendor:create` (+ `vendor:approve` for any non-blank accounting field, else 403 — 2026-10-02) | `name` required. `code` optional; if set it is upper-cased and must be unique case-insensitively → `409` "รหัสผู้ขายนี้มีผู้ใช้งานแล้ว". `201`. |
 | `GET /api/vendors/:id` | `vendor:view` | |
-| `PATCH /api/vendors/:id` | `vendor:edit` | Partial. The uniqueness check excludes the row itself, so re-saving without changing the code is fine. |
+| `PATCH /api/vendors/:id` | `vendor:edit` **or** `vendor:approve` (2026-10-02) | Partial. The uniqueness check excludes the row itself, so re-saving without changing the code is fine. **Field split (2026-10-02):** changing a purchasing field (`VENDOR_PURCHASING_FIELDS` + `isActive`) needs `vendor:edit`, changing an accounting field (`VENDOR_ACCOUNTING_FIELDS`) needs `vendor:approve` → otherwise 403; unchanged values in the body are ignored, so a form can send the whole record. `accountCode` that is pending/rejected in the code register → 400. Toggling `isActive` sets/clears `inactiveAt`. |
 | `POST /api/vendors/:id/archive` | `vendor:archive` | Body `{ isDeleted }`. Soft-delete both ways — a vendor row is never actually removed, because purchase orders reference the name. |
 
 ### Code register (`api/_lib/codeEntriesHandler.ts`, mounted at `/api/code-entries` via `api/handlers/customers.ts`)
@@ -985,7 +985,7 @@ body รับ `newCategoryName` เพิ่มอีกหนึ่งช่�
 ทั้งฝั่งอ่านและฝั่งด่าน — ผู้ขายที่บันทึกไว้ก่อน 2026-09-21 ไม่มีฟิลด์นี้เลย ถ้าอ่านเป็นอย่างอื่น
 จัดซื้อจะอนุมัติใบสั่งซื้อไม่ได้เลยทั้งระบบในวันที่ deploy · ผู้ขายที่สร้างใหม่ตั้ง `"draft"` ชัดเจน
 
-**`PATCH /api/vendors/:id` ที่แตะ `name`/`code`/`taxId`/`address` ทำให้สถานะตกกลับเป็น `"draft"`**
+**`PATCH /api/vendors/:id` ที่แตะ `name`/`code`/`taxId`/`address`/`branch` (สาขาเพิ่ม 2026-10-02) ทำให้สถานะตกกลับเป็น `"draft"`** (ช่องบัญชีไม่ทำให้ตก)
 — ผู้ขายที่อนุมัติแล้วแต่เลขผู้เสียภาษีถูกเปลี่ยนเงียบ ๆ แย่กว่าความยุ่งยากที่ต้องส่งอนุมัติใหม่ ·
 ช่องอื่น (ผู้ติดต่อ/โทร/หมายเหตุ/เปิด-ปิดใช้งาน) แก้ได้โดยไม่ตกสถานะ
 

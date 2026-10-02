@@ -423,6 +423,7 @@ It closes gap #1 below ("No vendor master").
 | Client lib | `src/lib/vendors.ts` — incl. `vendorComboboxOptions()` |
 | Handler | `api/_lib/vendorsHandler.ts` (`handleVendors`), mounted in `api/handlers/customers.ts` |
 | Validation | `api/_lib/vendorValidation.ts` |
+| Fields split (2026-10-02) | `VENDOR_PURCHASING_FIELDS` (`vendor:edit`) / `VENDOR_ACCOUNTING_FIELDS` (`vendor:approve`) in `src/lib/vendors.ts` — enforced in `vendorsHandler.ts` PATCH/POST by **which values actually changed**; balance + last bill date computed from `ap_entries` by vendor **name**, only for `ap:view` |
 | Collection | `vendors` — `VendorFields` in `api/_lib/collections.ts` |
 | Permissions | `vendor:view` / `:create` / `:edit` / `:archive` — four, like `customers:*`, not seven; this is master data, not a document |
 

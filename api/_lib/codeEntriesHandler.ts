@@ -106,6 +106,16 @@ export async function assertLineCodesApproved(
   }
 }
 
+/** รหัสเดี่ยว (เช่นเลขที่บัญชีของผู้ขาย) — กติกาเดียวกับ `assertLineCodesApproved()` ผู้เรียกส่งมาเฉพาะตอนค่าเปลี่ยน */
+export async function assertCodeUsable(kind: "department" | "account", code: string): Promise<void> {
+  const value = code.trim().toUpperCase();
+  if (!value) return;
+  await assertLineCodesApproved(
+    [{ id: "_", ...(kind === "department" ? { departmentCode: value } : { costCode: value }) }],
+    [],
+  );
+}
+
 let codeIndexesEnsured = false;
 async function ensureCodeIndexes(codes: Collection<CodeEntryFields>) {
   if (codeIndexesEnsured) return;

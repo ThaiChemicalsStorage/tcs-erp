@@ -3,11 +3,12 @@ import type { Collection, WithId } from "mongodb";
 import { MongoServerError } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, requireUser, type AuthContext } from "./auth.js";
-import { vendorsCollection, auditLogCollection, toObjectId, withStringId, type VendorFields } from "./collections.js";
+import { vendorsCollection, apEntriesCollection, auditLogCollection, toObjectId, withStringId, type VendorFields } from "./collections.js";
 import { validateVendorDraft } from "./vendorValidation.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
-import { vendorApprovalStatusOf } from "../../src/lib/vendors.js";
+import { vendorApprovalStatusOf, VENDOR_ACCOUNTING_FIELDS, VENDOR_PURCHASING_FIELDS } from "../../src/lib/vendors.js";
+import { assertCodeUsable } from "./codeEntriesHandler.js";
 import { activeUserIdsWithPermission, notifyUsers } from "./departmentNotify.js";
 
 /**
@@ -43,7 +44,62 @@ function toPublicVendor(doc: WithId<VendorFields>) {
     approvedByUserId: doc.approvedByUserId ?? "",
     approvedByName: doc.approvedByName ?? "",
     rejectionComment: doc.rejectionComment ?? "",
+    // ช่องใหม่ 2026-10-02 — ผู้ขายเก่าไม่มี ส่งค่าว่างออกไปให้ฟอร์มไม่ต้องเดา
+    nameEn: doc.nameEn ?? "",
+    postalCode: doc.postalCode ?? "",
+    branch: doc.branch ?? -1,
+    paymentTerms: doc.paymentTerms ?? "",
+    whtIncomeType: doc.whtIncomeType ?? "",
+    whtRate: doc.whtRate ?? null,
+    whtCategory: doc.whtCategory ?? "",
+    whtCondition: doc.whtCondition ?? "",
+    vendorType: doc.vendorType ?? "",
+    accountCode: doc.accountCode ?? "",
+    priceType: doc.priceType ?? "",
+    vatRate: doc.vatRate ?? null,
+    shippingMethod: doc.shippingMethod ?? "",
+    creditDays: doc.creditDays ?? null,
+    currency: doc.currency ?? "",
+    discount: doc.discount ?? "",
+    creditLimit: doc.creditLimit ?? null,
+    openingBalance: doc.openingBalance ?? null,
+    advanceCheque: doc.advanceCheque ?? null,
+    inactiveAt: doc.inactiveAt ?? "",
   };
+}
+
+/**
+ * ยอดคงเหลือ + วันที่บิลล่าสุด (2026-10-02) — **คำนวณ ไม่ใช่ช่องกรอก** (เจ้าของ: ช่องที่ควรคำนวณเอง)
+ *
+ * ทะเบียนเจ้าหนี้ผูกผู้ขายด้วย**ชื่อ** (`ap_entries.vendorName` ไม่มี vendorId — หนี้ตั้งจากชื่อบนใบรับสินค้า)
+ * จึงจับคู่ด้วยชื่อตรงตัว · ยอดคงเหลือ = ยอดยกมา + หนี้ที่ยังไม่จ่าย · ส่งให้เฉพาะคนที่มี `ap:view` — ยอดหนี้
+ * ไม่ใช่ข้อมูลที่ทุกคนที่เลือกผู้ขายบนใบสั่งซื้อควรเห็น
+ */
+async function payablesByVendorName(): Promise<Map<string, { unpaid: number; lastBillDate: string }>> {
+  const ap = await apEntriesCollection();
+  const rows = await ap.aggregate<{ _id: string; unpaid: number; lastBillDate: string }>([
+    { $group: {
+      _id: "$vendorName",
+      unpaid: { $sum: { $cond: [{ $eq: ["$status", "Paid"] }, 0, "$total"] } },
+      lastBillDate: { $max: "$invoiceDate" },
+    } },
+  ]).toArray();
+  return new Map(rows.map((r) => [r._id, { unpaid: r.unpaid, lastBillDate: r.lastBillDate ?? "" }]));
+}
+
+function withPayables(
+  v: ReturnType<typeof toPublicVendor>,
+  payables: Map<string, { unpaid: number; lastBillDate: string }> | null,
+) {
+  if (!payables) return { ...v, balance: null, lastBillDate: "" };
+  const p = payables.get(v.name);
+  const balance = Math.round(((v.openingBalance ?? 0) + (p?.unpaid ?? 0)) * 100) / 100;
+  return { ...v, balance, lastBillDate: p?.lastBillDate ?? "" };
+}
+
+/** ค่าที่ถือว่า "ยังไม่ได้กรอก" ของช่องบัญชี — ใช้ตัดสินว่าจัดซื้อส่งช่องบัญชีมาแก้จริงหรือแค่ส่งค่าว่างตามฟอร์ม */
+function isBlank(v: unknown): boolean {
+  return v === undefined || v === null || v === "";
 }
 
 let vendorIndexesEnsured = false;
@@ -117,7 +173,8 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
 
     const filter = canManage ? {} : { isActive: true, isDeleted: false };
     const docs = await vendors.find(filter).sort({ name: 1 }).toArray();
-    res.status(200).json({ vendors: docs.map(toPublicVendor) });
+    const payables = canManage && roleHasPermission(ctx.role, "ap:view") ? await payablesByVendorName() : null;
+    res.status(200).json({ vendors: docs.map((d) => withPayables(toPublicVendor(d), payables)) });
     return;
   }
 
@@ -126,6 +183,12 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
     const draft = validateVendorDraft(req.body, false);
     const code = draft.code ?? "";
     await assertCodeAvailable(vendors, code);
+    // ช่องบัญชีกรอกได้เฉพาะ `vendor:approve` (2026-10-02) — จัดซื้อส่งค่าว่างมาตามฟอร์มได้ แต่ส่งค่าจริงมา = 403
+    const accountingFields = VENDOR_ACCOUNTING_FIELDS.filter((f) => !isBlank(draft[f]));
+    if (accountingFields.length > 0 && !roleHasPermission(ctx.role, "vendor:approve")) {
+      throw new HttpError(403, "ข้อมูลบัญชีของผู้ขายกรอกได้เฉพาะฝ่ายบัญชี");
+    }
+    if (draft.accountCode) await assertCodeUsable("account", draft.accountCode);
 
     const now = nowIso();
     const doc: VendorFields = {
@@ -137,6 +200,10 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
       address: draft.address ?? "",
       note: draft.note ?? "",
       isActive: draft.isActive ?? true,
+      ...Object.fromEntries([...VENDOR_PURCHASING_FIELDS, ...VENDOR_ACCOUNTING_FIELDS]
+        .filter((f) => draft[f] !== undefined && !["name", "code", "contactName", "phone", "taxId", "address", "note"].includes(f))
+        .map((f) => [f, draft[f]])),
+      ...(draft.isActive === false ? { inactiveAt: now } : {}),
       // ผู้ขายใหม่เริ่มที่ "ร่าง" ชัดเจน (2026-09-21) — ต่างจากผู้ขายเก่าที่ไม่มีฟิลด์นี้เลยและถูก
       // อ่านเป็น "approved" · ตั้งค่าตรงนี้เสมอ ไม่ปล่อยให้ undefined ไปชนกฎของใบเก่า
       approvalStatus: "draft",
@@ -151,7 +218,7 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
     if (!created) throw new HttpError(500, "Failed to create vendor");
     const publicVendor = toPublicVendor(created);
     await writeVendorAuditEntry(ctx, "Vendor Created", `เพิ่มผู้ขาย: ${publicVendor.name}${publicVendor.code ? ` (${publicVendor.code})` : ""}`);
-    res.status(201).json({ vendor: publicVendor });
+    res.status(201).json({ vendor: withPayables(publicVendor, roleHasPermission(ctx.role, "ap:view") ? await payablesByVendorName() : null) });
     return;
   }
 
@@ -167,16 +234,35 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
     if (!roleHasPermission(ctx.role, "vendor:view")) throw new HttpError(403, "Forbidden");
     const doc = await vendors.findOne({ _id: objectId });
     if (!doc) throw new HttpError(404, "ไม่พบข้อมูลผู้ขาย");
-    res.status(200).json({ vendor: toPublicVendor(doc) });
+    res.status(200).json({ vendor: withPayables(toPublicVendor(doc), roleHasPermission(ctx.role, "ap:view") ? await payablesByVendorName() : null) });
     return;
   }
 
   if (req.method === "PATCH") {
-    const ctx = await requirePermission(req, "vendor:edit");
+    /**
+     * แบ่งช่องตามฝ่าย (2026-10-02) — เจ้าของ: *"แผนกจัดซื้อกรอกได้แค่นี้ ... ส่วนที่เหลือให้บัญชีกรอกเอง"*
+     * ช่องจัดซื้อ (+ เปิด/ปิดใช้งาน) = `vendor:edit` · ช่องบัญชี = `vendor:approve` · **ตัดสินจากช่องที่ค่าเปลี่ยนจริง**
+     * ฟอร์มจึงส่งทั้งชุดมาได้โดยไม่ต้องรู้ว่าใครแก้อะไรได้ · คนที่ไม่มีทั้งสองสิทธิ์ = 403 ตั้งแต่ประตู
+     */
+    const ctx = await requireUser(req);
+    const canEditPurchasing = roleHasPermission(ctx.role, "vendor:edit");
+    const canEditAccounting = roleHasPermission(ctx.role, "vendor:approve");
+    if (!canEditPurchasing && !canEditAccounting) throw new HttpError(403, "Forbidden");
     const target = await vendors.findOne({ _id: objectId });
     if (!target) throw new HttpError(404, "ไม่พบข้อมูลผู้ขาย");
 
     const update = validateVendorDraft(req.body, true);
+    const current = toPublicVendor(target) as Record<string, unknown>;
+    const changed = (f: string) => (update as Record<string, unknown>)[f] !== undefined
+      && !(isBlank((update as Record<string, unknown>)[f]) && isBlank(current[f]))
+      && (update as Record<string, unknown>)[f] !== current[f];
+    if (!canEditPurchasing && ([...VENDOR_PURCHASING_FIELDS, "isActive"] as string[]).some(changed)) {
+      throw new HttpError(403, "ข้อมูลผู้ขายส่วนนี้แก้ได้เฉพาะฝ่ายจัดซื้อ");
+    }
+    if (!canEditAccounting && (VENDOR_ACCOUNTING_FIELDS as readonly string[]).some(changed)) {
+      throw new HttpError(403, "ข้อมูลบัญชีของผู้ขายแก้ได้เฉพาะฝ่ายบัญชี");
+    }
+    if (update.accountCode !== undefined && changed("accountCode")) await assertCodeUsable("account", update.accountCode);
     if (update.code !== undefined) await assertCodeAvailable(vendors, update.code, id);
     /**
      * แก้ข้อมูลที่ระบุตัวผู้ขาย = ต้องให้บัญชีอนุมัติใหม่ (2026-09-21)
@@ -185,16 +271,20 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
      * อนุมัติใหม่ — การอนุมัติหมายถึง "ตรวจข้อมูลชุดนี้แล้ว" ไม่ใช่ "ไว้ใจผู้ขายรายนี้ตลอดไป"
      * ช่องอื่น (ผู้ติดต่อ/โทร/หมายเหตุ/เปิด-ปิดใช้งาน) แก้ได้โดยไม่ตกสถานะ
      */
-    const IDENTITY_FIELDS = ["name", "code", "taxId", "address"] as const;
-    const identityChanged = IDENTITY_FIELDS.some(
-      (f) => update[f] !== undefined && update[f] !== (target[f] ?? ""),
-    );
+    // สาขาอยู่ในชุดนี้ด้วย (2026-10-02) — ใบกำกับภาษีต้องระบุสาขา เปลี่ยนสาขาคือเปลี่ยนตัวตนทางภาษี
+    const IDENTITY_FIELDS = ["name", "code", "taxId", "address", "branch"] as const;
+    const identityChanged = IDENTITY_FIELDS.some((f) => changed(f));
     const resetApproval = identityChanged && vendorApprovalStatusOf(target) !== "draft"
       ? { approvalStatus: "draft" as const, submittedAt: "", submittedBy: "", approvedAt: "", approvedByUserId: "", approvedByName: "", rejectionComment: "" }
       : {};
     if (Object.keys(update).length > 0) {
       await vendors
-        .updateOne({ _id: objectId }, { $set: { ...update, ...resetApproval, updatedAt: nowIso(), updatedBy: ctx.user.id } })
+        .updateOne({ _id: objectId }, { $set: {
+          ...update, ...resetApproval,
+          // วันที่เลิกใช้ (2026-10-02) — ตั้งตอนปิดใช้งาน ล้างตอนเปิด · ไม่ใช่ช่องกรอก
+          ...(update.isActive !== undefined && update.isActive !== target.isActive ? { inactiveAt: update.isActive ? "" : nowIso() } : {}),
+          updatedAt: nowIso(), updatedBy: ctx.user.id,
+        } })
         .catch(rethrowDuplicate);
     }
     const updated = await vendors.findOne({ _id: objectId });
@@ -203,7 +293,7 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
     if (Object.keys(update).length > 0) {
       await writeVendorAuditEntry(ctx, "Vendor Updated", `แก้ไขข้อมูลผู้ขาย: ${publicVendor.name}`);
     }
-    res.status(200).json({ vendor: publicVendor });
+    res.status(200).json({ vendor: withPayables(publicVendor, roleHasPermission(ctx.role, "ap:view") ? await payablesByVendorName() : null) });
     return;
   }
 
@@ -307,7 +397,7 @@ async function handleVendorApprovalStage(
     console.error("[vendors] approval-stage notification failed", err);
   }
 
-  res.status(200).json({ vendor: publicVendor });
+  res.status(200).json({ vendor: withPayables(publicVendor, roleHasPermission(ctx.role, "ap:view") ? await payablesByVendorName() : null) });
 }
 
 /** เก็บถาวร/กู้คืน — soft-delete เสมอ ไม่เคยลบแถวจริง เพราะใบสั่งซื้อเก่าอ้างชื่อผู้ขายไว้ */
@@ -330,7 +420,7 @@ async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
     isDeleted ? "Vendor Archived" : "Vendor Restored",
     `${isDeleted ? "เก็บถาวร" : "กู้คืน"}ผู้ขาย: ${publicVendor.name}`,
   );
-  res.status(200).json({ vendor: publicVendor });
+  res.status(200).json({ vendor: withPayables(publicVendor, roleHasPermission(ctx.role, "ap:view") ? await payablesByVendorName() : null) });
 }
 
 export async function handleVendors(req: ApiRequest, res: ApiResponse): Promise<void> {

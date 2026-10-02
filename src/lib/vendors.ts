@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiClient.js";
+import type { ReceivingPriceType } from "./receivingReport.js";
 
 /**
  * ทะเบียนผู้ขาย (2026-08-31) — เจ้าของขอไว้ 2026-08-28 พร้อมรหัสผู้ขาย
@@ -44,6 +45,52 @@ export interface Vendor {
   approvedByName?: string;
   /** เหตุผลที่บัญชีไม่อนุมัติ — ล้างทุกครั้งที่ส่งใหม่ */
   rejectionComment?: string;
+
+  // ── ช่องที่ฝ่ายจัดซื้อกรอก (เพิ่ม 2026-10-02 ตามหน้าจอโปรแกรมบัญชีเดิม) — ดู `VENDOR_PURCHASING_FIELDS` ──
+  nameEn?: string;
+  postalCode?: string;
+  /** สาขาตามโปรแกรมเดิม: `0` = สำนักงานใหญ่ · `-1` = ไม่ระบุ · อื่น ๆ = เลขสาขา — ผู้ขายเก่าไม่มี = -1 */
+  branch?: number;
+  /** เงื่อนไขการชำระเงิน — เลือกจาก `VENDOR_PAYMENT_TERM_OPTIONS` หรือพิมพ์เอง · ใบสั่งซื้อดึงไปเติมให้ */
+  paymentTerms?: string;
+
+  // ── ช่องที่ฝ่ายบัญชีกรอก (2026-10-02) — จัดซื้อเห็นแต่แก้ไม่ได้ เซิร์ฟเวอร์กัน · ดู `VENDOR_ACCOUNTING_FIELDS` ──
+  /** ประเภทเงินได้ที่จ่าย */
+  whtIncomeType?: string;
+  /** อัตราภาษีที่หัก (%) */
+  whtRate?: number | null;
+  /** หมวดภาษีหัก ณ ที่จ่าย (ภ.ง.ด.3 / ภ.ง.ด.53) */
+  whtCategory?: string;
+  /** เงื่อนไขการหักภาษี (หัก ณ ที่จ่าย / ออกให้ตลอดไป / ออกให้ครั้งเดียว) */
+  whtCondition?: string;
+  /** ประเภทผู้จำหน่าย เช่น "00 ซื้อในประเทศ/เพื่อผลิต" */
+  vendorType?: string;
+  /** เลขที่บัญชี (เจ้าหนี้) — เลือกจากทะเบียนรหัสบัญชี */
+  accountCode?: string;
+  /** ประเภทราคา ชุดเดียวกับใบรับสินค้า · "" = ไม่ระบุ */
+  priceType?: ReceivingPriceType | "";
+  vatRate?: number | null;
+  /** ขนส่งโดย */
+  shippingMethod?: string;
+  creditDays?: number | null;
+  currency?: string;
+  /** ส่วนลด — ข้อความตามโปรแกรมเดิม (เช่น "5%") ไม่ได้คิดเลขที่ไหน */
+  discount?: string;
+  /** วงเงินอนุมัติ */
+  creditLimit?: number | null;
+  /** ยอดยกมา */
+  openingBalance?: number | null;
+  /** เช็คจ่ายล่วงหน้า */
+  advanceCheque?: number | null;
+
+  // ── เซิร์ฟเวอร์เขียน/คำนวณ อ่านอย่างเดียว ──
+  /** วันที่เลิกใช้ — ตั้งตอนปิดใช้งาน ล้างตอนเปิดใช้งาน */
+  inactiveAt?: string;
+  /** ยอดคงเหลือ = ยอดยกมา + หนี้ที่ยังไม่จ่ายในทะเบียนเจ้าหนี้ · `null` = ผู้เรียกไม่มีสิทธิ์ `ap:view` */
+  balance?: number | null;
+  /** วันที่ใบกำกับล่าสุดในทะเบียนเจ้าหนี้ ("" = ยังไม่มี) */
+  lastBillDate?: string;
+
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
@@ -51,10 +98,44 @@ export interface Vendor {
   updatedBy: string;
 }
 
-export type VendorDraft = Pick<Vendor, "name" | "code" | "contactName" | "phone" | "taxId" | "address" | "note" | "isActive">;
+/** ช่องที่ฝ่ายจัดซื้อกรอก (`vendor:create`/`vendor:edit`) — เจ้าของ 2026-10-02: *"ที่อยู่ โทรศัพท์ ชื่อผู้ติดต่อ หมายเหตุ
+ *  เลขประจำตัวผู้เสียภาษี สาขา รหัสไปรษณีย์"* + เงื่อนไขการชำระเงิน + ชื่อ/รหัส/ชื่ออังกฤษของหัวฟอร์ม */
+export const VENDOR_PURCHASING_FIELDS = [
+  "name", "code", "nameEn", "contactName", "phone", "taxId", "branch", "address", "postalCode", "note", "paymentTerms",
+] as const;
+/** ช่องที่ฝ่ายบัญชีกรอก (`vendor:approve`) — *"ส่วนที่เหลือในรูปที่ส่งไปให้บัญชีกรอกเอง"* */
+export const VENDOR_ACCOUNTING_FIELDS = [
+  "whtIncomeType", "whtRate", "whtCategory", "whtCondition", "vendorType", "accountCode",
+  "priceType", "vatRate", "shippingMethod", "creditDays", "currency", "discount",
+  "creditLimit", "openingBalance", "advanceCheque",
+] as const;
+export type VendorPurchasingField = (typeof VENDOR_PURCHASING_FIELDS)[number];
+export type VendorAccountingField = (typeof VENDOR_ACCOUNTING_FIELDS)[number];
+
+/** ตัวเลือกเงื่อนไขการชำระเงิน — ข้อความตามที่เจ้าของพิมพ์มา 2026-10-02 · พิมพ์ค่าอื่นเองได้ */
+export const VENDOR_PAYMENT_TERM_OPTIONS = [
+  "1.เครดิต 30วัน",
+  "2.เครดิต 60วัน",
+  "3.เงินสด/โอนชำระ",
+  "4.โอนชำระรอบจ่ายตามเงื่อนไขTCS",
+] as const;
+/** หมวดภาษีหัก ณ ที่จ่าย — ตัวเลือกช่วยพิมพ์ ไม่บังคับ */
+export const VENDOR_WHT_CATEGORY_OPTIONS = ["ภ.ง.ด.3", "ภ.ง.ด.53"] as const;
+/** เงื่อนไขการหักภาษี — ตัวเลือกช่วยพิมพ์ ไม่บังคับ */
+export const VENDOR_WHT_CONDITION_OPTIONS = ["1.หัก ณ ที่จ่าย", "2.ออกให้ตลอดไป", "3.ออกให้ครั้งเดียว"] as const;
+
+/** สาขาเป็นข้อความ: 0 = สำนักงานใหญ่ · -1/ไม่มี = "" · อื่น ๆ = "สาขาที่ 00001" (รูปแบบใบกำกับภาษี) */
+export function vendorBranchText(branch: number | undefined | null): string {
+  if (branch === undefined || branch === null || branch < 0) return "";
+  if (branch === 0) return "สำนักงานใหญ่";
+  return `สาขาที่ ${String(branch).padStart(5, "0")}`;
+}
+
+export type VendorDraft = Pick<Vendor, "name" | "code" | "contactName" | "phone" | "taxId" | "address" | "note" | "isActive">
+  & Partial<Pick<Vendor, Exclude<VendorPurchasingField | VendorAccountingField, "name" | "code" | "contactName" | "phone" | "taxId" | "address" | "note">>>;
 
 export function emptyVendorDraft(): VendorDraft {
-  return { name: "", code: "", contactName: "", phone: "", taxId: "", address: "", note: "", isActive: true };
+  return { name: "", code: "", contactName: "", phone: "", taxId: "", address: "", note: "", isActive: true, branch: -1 };
 }
 
 export async function fetchVendors(): Promise<Vendor[]> {

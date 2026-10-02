@@ -1028,6 +1028,11 @@ administrator:   ["vendor:approve"]
 accounting_user: ["vendor:view", "vendor:approve"]
 ```
 
+**2026-10-02: `vendor:approve` also owns the vendor's accounting fields** (withholding tax, account number, price type, VAT,
+credit, limits, opening balance …) — the owner's split *"ส่วนที่เหลือให้บัญชีกรอกเอง"*. No new permission and no migration:
+`PATCH /api/vendors/:id` now admits `vendor:edit` **or** `vendor:approve` and then checks per changed field. Label updated to
+"อนุมัติผู้ขาย + กรอกข้อมูลบัญชีของผู้ขาย (บัญชี)".
+
 **Accounting needs `vendor:view` as well, not just `vendor:approve`.** `GET /api/vendors` passes
 through exactly three doors (`vendor:view` / `purchaseOrder:view` / `purchaseRequest:view`) and
 `accounting_user` held none of them — it would have got a 403 on the page it was just given a button on.

@@ -473,7 +473,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "vendor:create": "เพิ่มผู้ขาย",
   "vendor:edit": "แก้ไขผู้ขาย",
   "vendor:archive": "เก็บถาวร/กู้คืนผู้ขาย",
-  "vendor:approve": "อนุมัติผู้ขายในทะเบียน (บัญชี)",
+  "vendor:approve": "อนุมัติผู้ขาย + กรอกข้อมูลบัญชีของผู้ขาย (บัญชี)",
   "codeRegister:view": "ดูทะเบียนรหัส",
   "codeRegister:create": "เพิ่มรหัส",
   "codeRegister:edit": "แก้ไขรหัส",
