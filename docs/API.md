@@ -778,6 +778,10 @@ legitimately exist in both.
 | `POST /api/code-entries/import` | `codeRegister:create` | Body `{ kind, entries[] }`, max 2000 rows. **Existing codes are skipped, never overwritten** — re-importing a longer chart of accounts is expected, and overwriting would eat names an admin edited. Returns `{ created, skipped }`. |
 | `PATCH /api/code-entries/:id` | `codeRegister:edit` | Partial. `kind` in the body is ignored — moving a code between registers is a create, not an edit. The uniqueness check excludes the row itself. |
 | `POST /api/code-entries/:id/archive` | `codeRegister:archive` | Body `{ isDeleted }`. Soft-delete both ways; documents keep the string they stored. |
+| `POST /api/code-entries/:id/approve` (2026-10-02) | `codeRegister:approve` | Department/account codes only (workType → 400). From `pending` or `rejected` → `approved`, stamps `approvedAt`/`approvedByName`, notifies the creator. Already approved → 400. |
+| `POST /api/code-entries/:id/reject` (2026-10-02) | `codeRegister:approve` | Body `{ comment }` (required, ≤500). Only from `pending`. Notifies the creator. |
+
+**Approval (2026-10-02).** Every code row now carries `approvalStatus` (missing = `approved`). `POST`/`import` by a holder of `codeRegister:approve` → approved immediately; otherwise `pending` (approvers notified). `PATCH` by a non-approver that changes `code`/`name` of an approved code, or any content of a rejected one → back to `pending`. The `GET` for pickers (no `codeRegister:view`) excludes pending/rejected. `PATCH /api/purchase-requests/:id` and `PATCH /api/purchase-orders/:id` return 400 when a line's `departmentCode`/`costCode` **changes** to a pending/rejected code.
 
 `isControl: true` marks a grouping account that cannot be posted to. Such rows are listed on the
 register page but filtered out of the PR/PO dropdowns by `codeComboboxOptions()`.

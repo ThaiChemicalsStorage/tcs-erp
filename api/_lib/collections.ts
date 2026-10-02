@@ -477,6 +477,13 @@ export interface CodeEntryFields {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  /** ขั้นอนุมัติของบัญชี (2026-10-02) — ไม่มี = อนุมัติแล้ว · อ่านผ่าน `codeApprovalStatusOf()` */
+  approvalStatus?: "pending" | "approved" | "rejected";
+  createdByName?: string;
+  approvedAt?: string;
+  approvedByUserId?: string;
+  approvedByName?: string;
+  rejectionComment?: string;
 }
 export async function codeEntriesCollection() {
   const db = await getDb();

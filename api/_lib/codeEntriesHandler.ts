@@ -7,6 +7,8 @@ import { codeEntriesCollection, auditLogCollection, toObjectId, withStringId, ty
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText } from "./quoteValidation.js";
+import { codeApprovalStatusOf, codeNeedsApproval } from "../../src/lib/codeRegister.js";
+import { activeUserIdsWithPermission, notifyUsers } from "./departmentNotify.js";
 
 /**
  * ทะเบียนรหัสสำหรับใบ PR/PO (2026-08-31) — เจ้าของขอไว้ 2026-08-28:
@@ -31,7 +33,77 @@ function toPublicCode(doc: WithId<CodeEntryFields>) {
     level: doc.level ?? null,
     isControl: doc.isControl ?? false,
     parentCode: doc.parentCode ?? "",
+    // รหัสก่อน 2026-10-02 ไม่มีฟิลด์นี้ = อนุมัติแล้ว (เจ้าของตอบ) — อ่านผ่าน helper ตัวเดียวกับหน้าจอ
+    approvalStatus: codeApprovalStatusOf(doc),
+    createdByName: doc.createdByName ?? "",
+    approvedAt: doc.approvedAt ?? "",
+    approvedByName: doc.approvedByName ?? "",
+    rejectionComment: doc.rejectionComment ?? "",
   };
+}
+
+/**
+ * สถานะตั้งต้นของรหัสใหม่ (2026-10-02) — บัญชี (`codeRegister:approve`) สร้างเอง = อนุมัติทันที
+ * (เจ้าของ: *"แผนกบัญชีสามารถสร้างได้เองและก็อนุมัติได้เอง"*) · คนอื่นสร้าง = รอบัญชีอนุมัติ ·
+ * ประเภทงานของใบเบิกไม่ผ่านบัญชี
+ */
+function initialApproval(ctx: AuthContext, kind: CodeEntryFields["kind"], now: string): Partial<CodeEntryFields> {
+  if (!codeNeedsApproval(kind)) return { approvalStatus: "approved" };
+  if (roleHasPermission(ctx.role, "codeRegister:approve")) {
+    return { approvalStatus: "approved", approvedAt: now, approvedByUserId: ctx.user.id, approvedByName: ctx.user.fullName };
+  }
+  return { approvalStatus: "pending" };
+}
+
+const KIND_TH: Record<CodeEntryFields["kind"], string> = { department: "รหัสแผนก", account: "รหัสบัญชี", workType: "ประเภทงาน" };
+
+/** แจ้งบัญชีว่ามีรหัสรออนุมัติ — best-effort เหมือนทุกที่ ส่งไม่ถึงต้องไม่ทำให้การบันทึกล้ม */
+async function notifyApprovers(ctx: AuthContext, description: string): Promise<void> {
+  try {
+    const sent = await notifyUsers(await activeUserIdsWithPermission("codeRegister:approve"), ctx.user.id, {
+      type: "code_entry_submitted",
+      title: "รหัสรออนุมัติ",
+      description,
+      module: "ทะเบียนรหัส",
+      related: {},
+    });
+    if (sent === 0) console.warn("[code-entries] pending code but nobody was notified — no active user holds codeRegister:approve");
+  } catch (err) {
+    console.error("[code-entries] submit notification failed", err);
+  }
+}
+
+/**
+ * **รหัสที่ยังไม่อนุมัติใช้บนใบขอซื้อ/ใบสั่งซื้อไม่ได้** (เจ้าของสั่ง 2026-10-02) — ตรวจเฉพาะรหัสที่**เปลี่ยน**จากค่าเดิมของบรรทัด
+ * (จับคู่ด้วย line id) ใบเก่าที่ใส่รหัสไว้ก่อนแล้วจึงยังบันทึกต่อได้ ·
+ * ⚠️ รหัสที่พิมพ์เองและ**ไม่มีในทะเบียนเลย**ยังรับเหมือนเดิม (ช่องเป็น "พิมพ์เองได้" มาตั้งแต่แรก) — กันเฉพาะรหัสที่อยู่ในทะเบียน
+ * แต่บัญชียังไม่อนุมัติหรือไม่อนุมัติ
+ */
+export async function assertLineCodesApproved(
+  lines: { id: string; departmentCode?: string; costCode?: string }[],
+  existing: { id: string; departmentCode?: string; costCode?: string }[],
+): Promise<void> {
+  const before = new Map(existing.map((l) => [l.id, l]));
+  const changed = { department: new Set<string>(), account: new Set<string>() };
+  for (const l of lines) {
+    const prev = before.get(l.id);
+    const dept = (l.departmentCode ?? "").trim().toUpperCase();
+    const acct = (l.costCode ?? "").trim().toUpperCase();
+    if (dept && dept !== (prev?.departmentCode ?? "").trim().toUpperCase()) changed.department.add(dept);
+    if (acct && acct !== (prev?.costCode ?? "").trim().toUpperCase()) changed.account.add(acct);
+  }
+  if (changed.department.size === 0 && changed.account.size === 0) return;
+  const codes = await codeEntriesCollection();
+  const blocked = await codes.findOne({
+    approvalStatus: { $in: ["pending", "rejected"] },
+    $or: [
+      ...(changed.department.size > 0 ? [{ kind: "department" as const, code: { $in: [...changed.department] } }] : []),
+      ...(changed.account.size > 0 ? [{ kind: "account" as const, code: { $in: [...changed.account] } }] : []),
+    ],
+  });
+  if (blocked) {
+    throw new HttpError(400, `${KIND_TH[blocked.kind]} ${blocked.code} ยังไม่ได้รับอนุมัติจากฝ่ายบัญชี — ใช้ไม่ได้จนกว่าบัญชีจะอนุมัติ`);
+  }
 }
 
 let codeIndexesEnsured = false;
@@ -121,7 +193,8 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
     const canPick = roleHasPermission(ctx.role, "purchaseRequest:view") || roleHasPermission(ctx.role, "purchaseOrder:view");
     if (!canManage && !canPick) throw new HttpError(403, "Forbidden");
 
-    const filter = canManage ? {} : { isActive: true, isDeleted: false };
+    // คนที่แค่เลือกรหัสเห็นเฉพาะที่บัญชีอนุมัติแล้ว (2026-10-02) — ไม่มีฟิลด์ = อนุมัติแล้ว จึงกรองแบบ $nin
+    const filter = canManage ? {} : { isActive: true, isDeleted: false, approvalStatus: { $nin: ["pending", "rejected"] as ("pending" | "rejected")[] } };
     const docs = await codes.find(filter).sort({ kind: 1, code: 1 }).toArray();
     res.status(200).json({ codes: docs.map(toPublicCode) });
     return;
@@ -146,12 +219,17 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
       updatedAt: now,
       createdBy: ctx.user.id,
       updatedBy: ctx.user.id,
+      createdByName: ctx.user.fullName,
+      ...initialApproval(ctx, draft.kind!, now),
     };
     const inserted = await codes.insertOne(doc).catch(rethrowDuplicate);
     const created = await codes.findOne({ _id: inserted.insertedId });
     if (!created) throw new HttpError(500, "Failed to create code entry");
     const publicCode = toPublicCode(created);
     await writeCodeAudit(ctx, "Code Entry Created", `เพิ่มรหัส ${publicCode.code} (${publicCode.name})`);
+    if (publicCode.approvalStatus === "pending") {
+      await notifyApprovers(ctx, `${ctx.user.fullName} เพิ่ม${KIND_TH[publicCode.kind]} ${publicCode.code} ${publicCode.name} รอบัญชีอนุมัติ`);
+    }
     res.status(201).json({ code: publicCode });
     return;
   }
@@ -180,6 +258,7 @@ async function handleImport(req: ApiRequest, res: ApiResponse) {
 
   let created = 0;
   let skipped = 0;
+  const approval = initialApproval(ctx, kind, now);
   for (const raw of rawEntries as Record<string, unknown>[]) {
     const draft = readDraft({ ...raw, kind }, false);
     const existing = await codes.findOne({ kind, code: { $regex: `^${escapeRegExp(draft.code!)}$`, $options: "i" } });
@@ -191,6 +270,7 @@ async function handleImport(req: ApiRequest, res: ApiResponse) {
         isControl: draft.isControl ?? false, parentCode: draft.parentCode ?? "",
         isActive: true, isDeleted: false,
         createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+        createdByName: ctx.user.fullName, ...approval,
       });
       created += 1;
     } catch (err) {
@@ -201,6 +281,9 @@ async function handleImport(req: ApiRequest, res: ApiResponse) {
   }
 
   await writeCodeAudit(ctx, "Code Entries Imported", `นำเข้าทะเบียนรหัส (${kind}) สร้างใหม่ ${created} ข้าม ${skipped}`);
+  if (created > 0 && approval.approvalStatus === "pending") {
+    await notifyApprovers(ctx, `${ctx.user.fullName} นำเข้า${KIND_TH[kind]} ${created} รายการ รอบัญชีอนุมัติ`);
+  }
   res.status(200).json({ created, skipped });
 }
 
@@ -217,15 +300,28 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
     // ชนิดเปลี่ยนไม่ได้ — ย้ายรหัสข้ามชุดคือการสร้างใหม่ ไม่ใช่การแก้
     delete update.kind;
     if (update.code !== undefined) await assertCodeAvailable(codes, target.kind, update.code, id);
+
+    // คนที่ไม่ใช่บัญชีแก้รหัส/ชื่อของรหัสที่อนุมัติแล้ว หรือแก้รหัสที่ถูกตีกลับ = ส่งให้บัญชีอนุมัติใหม่ (2026-10-02)
+    // แนวเดียวกับผู้ขาย — ไม่งั้นแก้ "G143 ฝ่ายผลิต" เป็นรหัสอื่นทั้งดุ้นได้โดยบัญชีไม่เห็น · ปิด/เปิดใช้งานไม่นับ
+    const status = codeApprovalStatusOf(target);
+    const contentChanged = (Object.keys(update) as (keyof CodeEntryFields)[])
+      .some((k) => k !== "isActive" && update[k] !== target[k]);
+    const identityChanged = (update.code !== undefined && update.code !== target.code) || (update.name !== undefined && update.name !== target.name);
+    const resubmit = codeNeedsApproval(target.kind) && !roleHasPermission(ctx.role, "codeRegister:approve")
+      && ((status === "approved" && identityChanged) || (status === "rejected" && contentChanged));
+    const approvalReset: Partial<CodeEntryFields> = resubmit
+      ? { approvalStatus: "pending", approvedAt: "", approvedByUserId: "", approvedByName: "", rejectionComment: "" }
+      : {};
     if (Object.keys(update).length > 0) {
       await codes
-        .updateOne({ _id: objectId }, { $set: { ...update, updatedAt: nowIso(), updatedBy: ctx.user.id } })
+        .updateOne({ _id: objectId }, { $set: { ...update, ...approvalReset, updatedAt: nowIso(), updatedBy: ctx.user.id } })
         .catch(rethrowDuplicate);
     }
     const updated = await codes.findOne({ _id: objectId });
     if (!updated) throw new HttpError(404, "ไม่พบรหัสนี้ในทะเบียน");
     const publicCode = toPublicCode(updated);
     if (Object.keys(update).length > 0) await writeCodeAudit(ctx, "Code Entry Updated", `แก้ไขรหัส ${publicCode.code}`);
+    if (resubmit) await notifyApprovers(ctx, `${ctx.user.fullName} แก้${KIND_TH[publicCode.kind]} ${publicCode.code} ${publicCode.name} รอบัญชีอนุมัติใหม่`);
     res.status(200).json({ code: publicCode });
     return;
   }
@@ -250,6 +346,56 @@ async function handleArchive(req: ApiRequest, res: ApiResponse, id: string) {
   res.status(200).json({ code: publicCode });
 }
 
+/**
+ * บัญชีอนุมัติ / ไม่อนุมัติรหัส (2026-10-02) — อนุมัติได้จาก "รออนุมัติ" หรือ "ไม่อนุมัติ" (บัญชีเปลี่ยนใจได้) ·
+ * ไม่อนุมัติได้เฉพาะ "รออนุมัติ" และต้องมีเหตุผลเสมอ เหมือนการตีกลับเอกสารทุกใบในระบบ · แจ้งคนสร้างรหัส
+ */
+async function handleApprovalStage(req: ApiRequest, res: ApiResponse, id: string, stage: "approve" | "reject") {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "codeRegister:approve");
+  const objectId = toObjectId(id);
+  const codes = await codeEntriesCollection();
+  const target = await codes.findOne({ _id: objectId });
+  if (!target) throw new HttpError(404, "ไม่พบรหัสนี้ในทะเบียน");
+  if (!codeNeedsApproval(target.kind)) throw new HttpError(400, "รหัสชนิดนี้ไม่ต้องผ่านการอนุมัติ");
+
+  const current = codeApprovalStatusOf(target);
+  const now = nowIso();
+  let update: Partial<CodeEntryFields>;
+  if (stage === "approve") {
+    if (current === "approved") throw new HttpError(400, "รหัสนี้บัญชีอนุมัติแล้ว");
+    update = { approvalStatus: "approved", approvedAt: now, approvedByUserId: ctx.user.id, approvedByName: ctx.user.fullName, rejectionComment: "" };
+  } else {
+    if (current !== "pending") throw new HttpError(400, "รหัสนี้ไม่ได้อยู่ระหว่างรออนุมัติ");
+    const comment = typeof req.body?.comment === "string" ? req.body.comment.trim() : "";
+    if (!comment) throw new HttpError(400, "กรุณาระบุเหตุผลที่ไม่อนุมัติ");
+    update = { approvalStatus: "rejected", rejectionComment: comment.slice(0, 500), approvedAt: "", approvedByUserId: "", approvedByName: "" };
+  }
+  await codes.updateOne({ _id: objectId }, { $set: { ...update, updatedAt: now, updatedBy: ctx.user.id } });
+  const updated = await codes.findOne({ _id: objectId });
+  if (!updated) throw new HttpError(404, "ไม่พบรหัสนี้ในทะเบียน");
+  const publicCode = toPublicCode(updated);
+  await writeCodeAudit(ctx, stage === "approve" ? "Code Entry Approved" : "Code Entry Rejected",
+    `${stage === "approve" ? "บัญชีอนุมัติ" : "บัญชีไม่อนุมัติ"}${KIND_TH[publicCode.kind]} ${publicCode.code}`);
+
+  try {
+    if (target.createdBy && target.createdBy !== ctx.user.id) {
+      await notifyUsers([target.createdBy], ctx.user.id, {
+        type: stage === "approve" ? "code_entry_approved" : "code_entry_rejected",
+        title: stage === "approve" ? "บัญชีอนุมัติรหัสแล้ว" : "บัญชีไม่อนุมัติรหัส",
+        description: stage === "approve"
+          ? `${ctx.user.fullName} อนุมัติ${KIND_TH[publicCode.kind]} ${publicCode.code} — ใช้บนใบขอซื้อ/ใบสั่งซื้อได้แล้ว`
+          : `${ctx.user.fullName} ไม่อนุมัติ${KIND_TH[publicCode.kind]} ${publicCode.code}: ${publicCode.rejectionComment}`,
+        module: "ทะเบียนรหัส",
+        related: {},
+      });
+    }
+  } catch (err) {
+    console.error("[code-entries] approval notification failed", err);
+  }
+  res.status(200).json({ code: publicCode });
+}
+
 export async function handleCodeEntries(req: ApiRequest, res: ApiResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/code-entries");
 
@@ -257,5 +403,7 @@ export async function handleCodeEntries(req: ApiRequest, res: ApiResponse): Prom
   if (parts.length === 1 && parts[0] === "import") return handleImport(req, res);
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "archive") return handleArchive(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "approve") return handleApprovalStage(req, res, parts[0], "approve");
+  if (parts.length === 2 && parts[1] === "reject") return handleApprovalStage(req, res, parts[0], "reject");
   throw new HttpError(404, "Not found");
 }

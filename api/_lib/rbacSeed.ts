@@ -60,6 +60,16 @@ interface RbacMigration {
  */
 const RBAC_MIGRATIONS: RbacMigration[] = [
   {
+    // ทะเบียนรหัสต้องผ่านบัญชี (2026-10-02) — เจ้าของสั่ง *"สร้างได้แค่จัดซื้อกับบัญชี อนุมัติได้แค่บัญชี"*
+    // บัญชีต้องได้ `codeRegister:view` ด้วย ไม่งั้นเปิดหน้าทะเบียนรหัสมาอนุมัติไม่ได้ · บทบาทจัดซื้อของลูกค้าสร้างเอง
+    // ไม่มี roleKey คงที่ — สิทธิ์สร้างของจัดซื้อติ๊กในหน้าจัดการบทบาท (บอกเจ้าของแล้ว)
+    id: "code-register-approval-2026-10-02",
+    grants: {
+      administrator: ["codeRegister:approve"],
+      accounting_user: ["codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:approve"],
+    },
+  },
+  {
     // บัญชีอนุมัติผู้ขายในทะเบียน (2026-09-21) — เจ้าของสั่งว่าจัดซื้อกรอกข้อมูลแล้ว "นำส่งข้อมูลไปที่
     // บัญชีให้บัญชีอนุมัติก่อนเปิด PO สั่งซื้อ"
     //

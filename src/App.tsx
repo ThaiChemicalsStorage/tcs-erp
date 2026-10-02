@@ -992,6 +992,7 @@ export default function App() {
   const canCreateCodes = hasPermission(currentUser, roles, "codeRegister:create");
   const canEditCodes = hasPermission(currentUser, roles, "codeRegister:edit");
   const canArchiveCodes = hasPermission(currentUser, roles, "codeRegister:archive");
+  const canApproveCodes = hasPermission(currentUser, roles, "codeRegister:approve");
   const canCreateScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:create");
   const canViewScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:view");
   const canEditScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:edit");
@@ -1323,7 +1324,7 @@ export default function App() {
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "codeRegister"
-              ? <CodeRegisterPage currentUserId={currentUser.id} codes={codeEntries} onCodesChange={setCodeEntries} canCreate={canCreateCodes} canEdit={canEditCodes} canArchive={canArchiveCodes} />
+              ? <CodeRegisterPage currentUserId={currentUser.id} codes={codeEntries} onCodesChange={setCodeEntries} canCreate={canCreateCodes} canEdit={canEditCodes} canArchive={canArchiveCodes} canApprove={canApproveCodes} />
               : effectiveNav === "materialRequisitionTemplates"
               ? <MaterialRequisitionTemplatePage currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} />
               : effectiveNav === "vendors"

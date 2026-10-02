@@ -19,6 +19,7 @@ import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import type { PurchaseOrderLine, PurchaseOrderSummary } from "../../src/lib/purchaseOrder.js";
 import { orderedPrLineIdOf } from "../../src/lib/purchaseOrder.js";
 import { linePurchasingDecision, purchaseRequestLinesToBuy, type PurchaseRequestLine } from "../../src/lib/purchaseRequest.js";
+import { assertLineCodesApproved } from "./codeEntriesHandler.js";
 
 /**
  * ใบสั่งซื้อ (Purchase Order) API — added 2026-08-28 with the Purchasing module. Mounted from
@@ -533,7 +534,11 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<PurchaseOrderFields> = {};
   // บันทึกอัตโนมัติไม่ตกเรื่องเหตุผลการยกเลิก — ดู cancellationOf() สำหรับเหตุผลเต็ม
-  if ("lines" in body) update.lines = await sanitizeLines(body.lines, doc.lines ?? [], autoSave);
+  if ("lines" in body) {
+    update.lines = await sanitizeLines(body.lines, doc.lines ?? [], autoSave);
+    // รหัสแผนก/รหัสบัญชีที่บัญชียังไม่อนุมัติใช้ไม่ได้ (2026-10-02) — ตรวจเฉพาะค่าที่เปลี่ยน
+    await assertLineCodesApproved(update.lines, doc.lines ?? []);
+  }
   // ผู้ขายในทะเบียน — จัดการแยกจาก SHORT_TEXT_FIELDS เสมอ ไม่งั้นกลายเป็นช่อง id อิสระที่ใครพิมพ์อะไรก็ได้
   Object.assign(update, await resolveVendorLink(body, doc));
   Object.assign(update, await resolveIntendedApprover(body));

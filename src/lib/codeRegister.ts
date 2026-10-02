@@ -20,6 +20,25 @@ import { apiFetch } from "./apiClient.js";
 export type CodeKind = "department" | "account" | "workType";
 export const CODE_KINDS: readonly CodeKind[] = ["department", "account", "workType"];
 
+/**
+ * ขั้นอนุมัติรหัส (2026-10-02) — เจ้าของสั่ง *"สร้างได้แค่จัดซื้อกับบัญชี อนุมัติได้แค่บัญชี · รหัสต้องรออนุมัติก่อนถึงจะใช้ได้"*
+ *
+ * - ใช้กับ**รหัสแผนกและรหัสบัญชี**เท่านั้น — ประเภทงานของใบเบิกไม่ผ่านบัญชี (`codeNeedsApproval()`)
+ * - **รหัสที่ไม่มีฟิลด์นี้ = อนุมัติแล้ว** (เจ้าของตอบ: รหัสเดิมรวมผังบัญชี 479 รายการถือว่าอนุมัติแล้ว) ไม่ทำ migration
+ *   — อ่านผ่าน `codeApprovalStatusOf()` ตัวเดียวทุกที่ ห้ามอ่านฟิลด์ดิบ (แนวเดียวกับ `vendorApprovalStatusOf()`)
+ * - ผู้มีสิทธิ์ `codeRegister:approve` (บัญชี) สร้างเอง = อนุมัติทันที · คนอื่นสร้าง = รออนุมัติ
+ */
+export type CodeApprovalStatus = "pending" | "approved" | "rejected";
+
+export function codeNeedsApproval(kind: CodeKind): boolean {
+  return kind === "department" || kind === "account";
+}
+
+export function codeApprovalStatusOf(c: { kind: CodeKind; approvalStatus?: CodeApprovalStatus }): CodeApprovalStatus {
+  if (!codeNeedsApproval(c.kind)) return "approved";
+  return c.approvalStatus ?? "approved";
+}
+
 export interface CodeEntry {
   id: string;
   kind: CodeKind;
@@ -39,6 +58,12 @@ export interface CodeEntry {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  /** ขั้นอนุมัติของบัญชี (2026-10-02) — อ่านผ่าน `codeApprovalStatusOf()` เสมอ */
+  approvalStatus?: CodeApprovalStatus;
+  createdByName?: string;
+  approvedAt?: string;
+  approvedByName?: string;
+  rejectionComment?: string;
 }
 
 export type CodeEntryDraft = Pick<CodeEntry, "kind" | "code" | "name" | "isActive"> &
@@ -141,6 +166,19 @@ export async function setCodeEntryArchived(id: string, isDeleted: boolean): Prom
   return code;
 }
 
+export async function approveCodeEntry(id: string): Promise<CodeEntry> {
+  const { code } = await apiFetch<{ code: CodeEntry }>(`/code-entries/${encodeURIComponent(id)}/approve`, { method: "POST" });
+  return code;
+}
+
+export async function rejectCodeEntry(id: string, comment: string): Promise<CodeEntry> {
+  const { code } = await apiFetch<{ code: CodeEntry }>(`/code-entries/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+  return code;
+}
+
 /** นำเข้าหลายรหัสพร้อมกัน — รหัสที่มีอยู่แล้วถูกข้าม ไม่ทับของเดิม */
 export async function importCodeEntries(kind: CodeKind, entries: CodeEntryDraft[]): Promise<{ created: number; skipped: number }> {
   return apiFetch<{ created: number; skipped: number }>("/code-entries/import", {
@@ -149,10 +187,11 @@ export async function importCodeEntries(kind: CodeKind, entries: CodeEntryDraft[
   });
 }
 
-/** ตัวเลือกสำหรับ `<Combobox>` บนใบ PR/PO — กรองตามชนิดและเอาเฉพาะที่ใช้งานอยู่ */
+/** ตัวเลือกสำหรับ `<Combobox>` บนใบ PR/PO — กรองตามชนิด เอาเฉพาะที่ใช้งานอยู่ **และบัญชีอนุมัติแล้ว** (2026-10-02)
+ *  **หน้าทะเบียนรหัสต้องไม่ใช้ตัวนี้** เพราะที่นั่นต้องเห็นรหัสทุกสถานะเพื่ออนุมัติ */
 export function codeComboboxOptions(codes: CodeEntry[], kind: CodeKind): { value: string; label: string; hint?: string }[] {
   return codes
-    .filter((c) => c.kind === kind && c.isActive && !c.isDeleted)
+    .filter((c) => c.kind === kind && c.isActive && !c.isDeleted && codeApprovalStatusOf(c) === "approved")
     // บัญชีคุมลงรายการไม่ได้ มีไว้จัดกลุ่ม — ไม่ควรขึ้นให้เลือกบนใบเอกสาร
     .filter((c) => !(kind === "account" && c.isControl))
     .map((c) => ({ value: c.code, label: `${c.code} — ${c.name}`, hint: c.category || undefined }));

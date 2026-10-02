@@ -164,7 +164,12 @@ export type Permission =
   | "codeRegister:view"
   | "codeRegister:create"
   | "codeRegister:edit"
-  | "codeRegister:archive";
+  | "codeRegister:archive"
+  /**
+   * อนุมัติรหัสแผนก/รหัสบัญชี (2026-10-02) — เจ้าของสั่ง *"อนุมัติได้แค่บัญชี"* · รหัสที่ยังไม่อนุมัติใช้บนใบ PR/PO ไม่ได้
+   * แยกจาก `codeRegister:edit` เพราะคนสร้าง (จัดซื้อ) กับคนอนุมัติ (บัญชี) เป็นคนละฝ่าย
+   */
+  | "codeRegister:approve";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -318,6 +323,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "codeRegister:create",
   "codeRegister:edit",
   "codeRegister:archive",
+  "codeRegister:approve",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -472,6 +478,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "codeRegister:create": "เพิ่มรหัส",
   "codeRegister:edit": "แก้ไขรหัส",
   "codeRegister:archive": "เก็บถาวร/กู้คืนรหัส",
+  "codeRegister:approve": "อนุมัติรหัสแผนก/รหัสบัญชี (บัญชี)",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -626,6 +633,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "codeRegister:create": "permission.codeRegisterCreate",
   "codeRegister:edit": "permission.codeRegisterEdit",
   "codeRegister:archive": "permission.codeRegisterArchive",
+  "codeRegister:approve": "permission.codeRegisterApprove",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -761,7 +769,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
       "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
       "vendor:view", "vendor:create", "vendor:edit", "vendor:archive", "vendor:approve",
-      "codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:archive",
+      "codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:archive", "codeRegister:approve",
     ],
   },
   {

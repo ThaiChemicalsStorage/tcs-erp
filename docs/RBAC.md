@@ -1047,6 +1047,21 @@ Per the owner's 2026-09-14 instruction these are **not** tracked as TODO items �
 the owner directly. They are recorded here because this is the document that explains why code
 cannot do it.
 
+## `codeRegister:approve` (2026-10-02)
+
+Owner: *"อนุมัติได้แค่บัญชี สร้างได้แค่จัดซื้อกับบัญชี"*. One new permission — **`codeRegister:approve`**, *อนุมัติรหัส
+แผนก/รหัสบัญชี (บัญชี)* — separate from `codeRegister:edit` because the person who creates a code (Purchasing) and the one who
+approves it (Accounting) are different departments. Migration `code-register-approval-2026-10-02`:
+
+```
+administrator:   ["codeRegister:approve"]
+accounting_user: ["codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:approve"]
+```
+
+Accounting needs `codeRegister:view` too, or the page it approves on is hidden. *"Create = Purchasing + Accounting only"*
+is a matter of which roles hold `codeRegister:create`; the customer's Purchasing role has no fixed `roleKey`, so a Super
+Admin ticks it (and removes `codeRegister:create` from any other role) in Role Management — told to the owner, not a TODO.
+
 ## Cost Control permissions (added 2026-08-28)
 
 **7 permissions** — `costControl:` `view` / `viewAll` / `create` / `edit` / `finalize` / `print` /

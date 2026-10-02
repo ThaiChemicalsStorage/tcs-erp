@@ -36,6 +36,10 @@ export type NotificationType =
   | "vendor_submitted"
   | "vendor_approved"
   | "vendor_rejected"
+  // ── ทะเบียนรหัสต้องผ่านบัญชี (2026-10-02) ──
+  | "code_entry_submitted"
+  | "code_entry_approved"
+  | "code_entry_rejected"
   // ── รออนุมัติ (2026-08-31) — เจ้าของขอไว้ 2026-08-28: "ทำแจ้งเตือนให้ด้วยถ้ามีคนกดขอส่งอนุมัติ
   //    ให้แจ้งเตือนคนที่มีสิทธิ์อนุมัติ" · เอกสาร 6 ใบบนเครื่องอนุมัติร่วมเคยเขียนแค่ audit log
   | "material_requisition_submitted"

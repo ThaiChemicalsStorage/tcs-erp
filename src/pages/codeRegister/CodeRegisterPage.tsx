@@ -3,21 +3,22 @@ import { Plus, Upload, Loader2, ChevronRight } from "lucide-react";
 import {
   type CodeEntry, type CodeEntryDraft, type CodeKind,
   createCodeEntry, updateCodeEntry, setCodeEntryArchived, importCodeEntries,
-  parseGlChartRows,
+  parseGlChartRows, approveCodeEntry, rejectCodeEntry, codeApprovalStatusOf, codeNeedsApproval,
 } from "../../lib/codeRegister";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
-import { btn, table } from "../../components/ui/styles";
+import { Field } from "../../components/ui/Field";
+import { btn, field, table } from "../../components/ui/styles";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { DialogSummary } from "../purchaseOrder/purchasingUi";
+import { DialogSummary, ReasonDialog, TonePill } from "../purchaseOrder/purchasingUi";
 import { CodeRegisterDrawer } from "./CodeRegisterDrawer";
-import { codeKindCounts, codeKindLabelKey, filterCodeEntries } from "./codeRegisterDisplay";
+import { codeApprovalLabelKey, codeKindCounts, codeKindLabelKey, codePendingCounts, filterCodeEntries } from "./codeRegisterDisplay";
 
 /**
  * ทะเบียนรหัสแผนก/บัญชี (2026-08-31) — เจ้าของขอไว้ 2026-08-28
@@ -41,6 +42,7 @@ export function CodeRegisterPage({
   canCreate,
   canEdit,
   canArchive,
+  canApprove,
   currentUserId,
 }: {
   codes: CodeEntry[];
@@ -48,6 +50,8 @@ export function CodeRegisterPage({
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
+  /** `codeRegister:approve` — ฝ่ายบัญชีอนุมัติรหัสแผนก/รหัสบัญชี (2026-10-02) */
+  canApprove: boolean;
   currentUserId: string;
 }) {
   const { t } = useI18n();
@@ -71,10 +75,18 @@ export function CodeRegisterPage({
   const [archiving, setArchiving] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<CodeEntry | null>(null);
   const [importing, setImporting] = useState(false);
+  /** ขั้นอนุมัติของบัญชี (2026-10-02) — ตัวกรอง "เฉพาะรออนุมัติ" + ปุ่มในแผง + กล่องเหตุผลตอนไม่อนุมัติ */
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<CodeEntry | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
 
   const ofKindCount = useMemo(() => codes.filter((c) => c.kind === kind).length, [codes, kind]);
   const counts = useMemo(() => codeKindCounts(codes), [codes]);
-  const filtered = useMemo(() => filterCodeEntries(codes, { kind, search, showArchived }), [codes, kind, search, showArchived]);
+  const pendingCounts = useMemo(() => codePendingCounts(codes), [codes]);
+  // ตัวกรองค้างไว้ตอนสลับไปแท็บประเภทงาน (ไม่มีขั้นอนุมัติ) จะทำให้ตารางว่างเปล่า — ใช้เฉพาะชุดที่ต้องอนุมัติ
+  const pendingFilter = pendingOnly && codeNeedsApproval(kind);
+  const filtered = useMemo(() => filterCodeEntries(codes, { kind, search, showArchived, pendingOnly: pendingFilter }), [codes, kind, search, showArchived, pendingFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // หน้าปัจจุบันบีบตอนเรนเดอร์ ไม่ใช่ใน effect — พิมพ์ค้นจนรายการสั้นลงแล้วหน้าต้องไม่ค้างเกินขอบ
@@ -109,6 +121,20 @@ export function CodeRegisterPage({
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("common.errorGeneric"));
     }
+  };
+
+  /** บัญชีอนุมัติ / ไม่อนุมัติ — คืนรหัสที่อัปเดตแล้วเหมือนกัน จึงเขียนกลับที่เดียว (แนวเดียวกับทะเบียนผู้ขาย) */
+  const runApproval = async (c: CodeEntry, stage: "approve" | "reject") => {
+    setApprovalBusyId(c.id);
+    try {
+      const next = stage === "approve" ? await approveCodeEntry(c.id) : await rejectCodeEntry(c.id, rejectComment.trim());
+      replace(next);
+      setRejectTarget(null);
+      setRejectComment("");
+      toast.show(t(stage === "approve" ? "codeRegister.toast.approved" : "codeRegister.toast.rejected"));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("common.errorGeneric"));
+    } finally { setApprovalBusyId(null); }
   };
 
   const handleArchiveToggle = async () => {
@@ -161,6 +187,7 @@ export function CodeRegisterPage({
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFormTarget(id); }
   };
   const tabs = KINDS.map((k) => ({ key: k, label: t(codeKindLabelKey[k]), count: counts[k] }));
+  const showPendingToggle = codeNeedsApproval(kind) && (pendingCounts[kind] > 0 || pendingOnly);
   const columns = [
     t("codeRegister.col.code"), t("codeRegister.col.name"),
     ...(isAccount ? [t("codeRegister.col.category"), t("codeRegister.col.parent")] : []),
@@ -222,6 +249,17 @@ export function CodeRegisterPage({
               />
               {t("codeRegister.showArchived")}
             </label>
+            {showPendingToggle && (
+              <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-[#3d5173] ml-1">
+                <input
+                  type="checkbox"
+                  checked={pendingOnly}
+                  onChange={(e) => { setPendingOnly(e.target.checked); setPage(1); }}
+                  className="w-4 h-4 rounded border-[#c3ccda] accent-[#0b1d3a]"
+                />
+                {t("codeRegister.pendingOnly").replace("{n}", String(pendingCounts[kind]))}
+              </label>
+            )}
           </ListToolbar>
         </div>
 
@@ -264,10 +302,16 @@ export function CodeRegisterPage({
                       {isAccount && <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{c.category || dash}</td>}
                       {isAccount && <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{c.parentCode || dash}</td>}
                       <td className={table.td}>
-                        <StatusBadge
-                          status={c.isDeleted ? "archived" : c.isActive ? "active" : "inactive"}
-                          label={t(c.isDeleted ? "vendors.status.archived" : c.isActive ? "vendors.status.active" : "vendors.status.inactive")}
-                        />
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          <StatusBadge
+                            status={c.isDeleted ? "archived" : c.isActive ? "active" : "inactive"}
+                            label={t(c.isDeleted ? "vendors.status.archived" : c.isActive ? "vendors.status.active" : "vendors.status.inactive")}
+                          />
+                          {/* อนุมัติแล้วไม่ต้องมีป้าย — ผังบัญชี 479 แถวจะเต็มไปด้วยป้ายเขียวที่ไม่บอกอะไร */}
+                          {codeApprovalStatusOf(c) !== "approved" && (
+                            <TonePill tone={codeApprovalStatusOf(c) === "pending" ? "warning" : "danger"} label={t(codeApprovalLabelKey[codeApprovalStatusOf(c)])} />
+                          )}
+                        </span>
                       </td>
                       <td className={`${table.td} w-10`}>
                         <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
@@ -298,13 +342,43 @@ export function CodeRegisterPage({
           kind={kind}
           canEdit={canEdit}
           canArchive={canArchive}
-          locked={archiveTarget !== null || deactivateTarget !== null}
+          canApprove={canApprove}
+          approvalBusy={drawerEntry !== null && approvalBusyId === drawerEntry.id}
+          locked={archiveTarget !== null || deactivateTarget !== null || rejectTarget !== null}
           onSave={handleSave}
           onClose={() => setFormTarget(null)}
           onToggleActive={(c) => (c.isActive ? setDeactivateTarget(c) : void handleToggleActive(c))}
           onArchiveToggle={(c) => setArchiveTarget(c)}
+          onApprove={(c) => void runApproval(c, "approve")}
+          onReject={(c) => { setRejectTarget(c); setRejectComment(""); }}
         />
       )}
+
+      {/* กล่องเหตุผลตอนไม่อนุมัติ — เซิร์ฟเวอร์บังคับว่าต้องมีเหตุผลเสมอ ปุ่มจึงปิดไว้จนกว่าจะพิมพ์ */}
+      <ReasonDialog
+        open={rejectTarget !== null}
+        tone="danger"
+        danger
+        title={t("codeRegister.approval.rejectTitle")}
+        message={t("codeRegister.approval.rejectMessage")}
+        summary={rejectTarget ? entrySummary(rejectTarget) : undefined}
+        confirmLabel={t("codeRegister.approval.reject")}
+        confirmDisabled={!rejectComment.trim()}
+        busy={rejectTarget !== null && approvalBusyId === rejectTarget.id}
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={() => { if (rejectTarget) void runApproval(rejectTarget, "reject"); }}
+      >
+        <Field label={t("codeRegister.approval.rejectLabel")} htmlFor="code-reject-comment" required help={!rejectComment.trim() ? t("codeRegister.approval.rejectRequiredHint") : undefined}>
+          <textarea
+            id="code-reject-comment"
+            autoFocus
+            value={rejectComment}
+            onChange={(e) => setRejectComment(e.target.value)}
+            rows={3}
+            className={`${field.textarea} w-full resize-y`}
+          />
+        </Field>
+      </ReasonDialog>
 
       <ConfirmDialog
         open={deactivateTarget !== null}

@@ -142,6 +142,7 @@ export const defaultRoles: Role[] = withDashboardTicks([
       "codeRegister:create",
       "codeRegister:edit",
       "codeRegister:archive",
+      "codeRegister:approve",
       // Cost Control (แผนก BD, 2026-08-28)
       // ⚠️ ตั้งแต่ 2026-08-31 โมดูลใหม่**มี RBAC migration ให้ด้วย** (เจ้าของเปลี่ยนการตัดสินใจ)
       // — `defaultRoles` มีผลกับการติดตั้งใหม่เท่านั้น ฐานข้อมูลที่ provision ไปแล้วต้องพึ่ง migration
@@ -242,6 +243,9 @@ export const defaultRoles: Role[] = withDashboardTicks([
       // ต้องมี `vendor:view` ด้วย ไม่ใช่แค่ `vendor:approve` — ไม่งั้นยิง GET /api/vendors ได้ 403
       // เพราะด่านของ handleList ผ่านได้สามทางเท่านั้น: vendor:view / purchaseOrder:view / purchaseRequest:view
       "vendor:view", "vendor:approve",
+      // ทะเบียนรหัส (2026-10-02) — บัญชีสร้างและอนุมัติรหัสแผนก/รหัสบัญชีเองได้ (คำสั่งเจ้าของ) · มี RBAC migration
+      // "code-register-approval-2026-10-02" คู่กัน
+      "codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:approve",
     ],
     isSuperAdmin: false,
     isSystem: false,

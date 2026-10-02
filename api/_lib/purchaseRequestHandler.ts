@@ -27,6 +27,7 @@ import type {
   PurchaseRequestPurchasingStage, PurchaseRequestCode,
 } from "../../src/lib/purchaseRequest.js";
 import { storeIssueBatchesOf, storeIssuedQtyOf, defaultPurchaseRequestCode, isPurchaseRequestCode, purchaseRequestCodeOf, purchasingReceivedAtOf, purchaseRequestLinesToBuy } from "../../src/lib/purchaseRequest.js";
+import { assertLineCodesApproved } from "./codeEntriesHandler.js";
 
 /**
  * Purchase Request API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts` alongside
@@ -526,6 +527,8 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const update: Partial<PurchaseRequestFields> = {};
   if ("lines" in body) {
     update.lines = await sanitizeLines(body.lines, doc.lines ?? []);
+    // รหัสแผนก/รหัสบัญชีที่บัญชียังไม่อนุมัติใช้ไม่ได้ (2026-10-02) — ตรวจเฉพาะค่าที่เปลี่ยน
+    await assertLineCodesApproved(update.lines, doc.lines ?? []);
     if (purchasingEdit) {
       assertStoreIssuesStillCovered(doc, update.lines);
       assertDecidedLinesUnchanged(doc, update.lines);

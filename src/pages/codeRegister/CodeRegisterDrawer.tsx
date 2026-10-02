@@ -1,13 +1,16 @@
-import { useId, useState, type FormEvent } from "react";
-import { Archive, ArchiveRestore, Loader2, Power } from "lucide-react";
-import { type CodeEntry, type CodeEntryDraft, type CodeKind, emptyCodeEntryDraft } from "../../lib/codeRegister";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { Archive, ArchiveRestore, Ban, Check, CheckCircle2, Clock, Info, Loader2, Power, XCircle } from "lucide-react";
+import {
+  type CodeEntry, type CodeEntryDraft, type CodeKind, emptyCodeEntryDraft, codeApprovalStatusOf, codeNeedsApproval,
+} from "../../lib/codeRegister";
+import { formatQuoteDateThai } from "../../lib/quotes";
 import { Drawer } from "../../components/ui/Overlays";
 import { Field, ReadonlyField } from "../../components/ui/Field";
 import { MoreMenu } from "../../components/ui/MoreMenu";
 import { btn, field } from "../../components/ui/styles";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
-import { codeKindLabelKey } from "./codeRegisterDisplay";
+import { codeApprovalLabelKey, codeKindLabelKey } from "./codeRegisterDisplay";
 
 function toDraft(c: CodeEntry | null, kind: CodeKind): CodeEntryDraft {
   if (!c) return emptyCodeEntryDraft(kind);
@@ -22,12 +25,20 @@ function toDraft(c: CodeEntry | null, kind: CodeKind): CodeEntryDraft {
  * ส่วน "ผังบัญชี" (หมวด / บัญชีคุม / เป็นบัญชีคุม) มีเฉพาะรหัสบัญชี · ช่องติ๊ก "ใช้งานอยู่" เดิม → "ปิดใช้งาน /
  * เปิดใช้งาน" ในเมนูเพิ่มเติมท้ายแผง · เก็บถาวร/กู้คืนอยู่ในเมนูเดียวกัน
  */
-export function CodeRegisterDrawer({ entry, kind, canEdit, canArchive, locked, onSave, onClose, onToggleActive, onArchiveToggle }: {
+export function CodeRegisterDrawer({
+  entry, kind, canEdit, canArchive, canApprove, approvalBusy, locked,
+  onSave, onClose, onToggleActive, onArchiveToggle, onApprove, onReject,
+}: {
   /** null = รหัสใหม่ในชุด `kind` */
   entry: CodeEntry | null;
   kind: CodeKind;
   canEdit: boolean;
   canArchive: boolean;
+  /** `codeRegister:approve` — ฝ่ายบัญชี (2026-10-02) */
+  canApprove: boolean;
+  approvalBusy: boolean;
+  onApprove: (c: CodeEntry) => void;
+  onReject: (c: CodeEntry) => void;
   /** มีกล่องยืนยันซ้อนอยู่ด้านบน — กัน Escape/คลิกพื้นหลังปิดแผงไปพร้อมกัน */
   locked: boolean;
   onSave: (draft: CodeEntryDraft) => Promise<string | null>;
@@ -121,6 +132,18 @@ export function CodeRegisterDrawer({ entry, kind, canEdit, canArchive, locked, o
       footerLeft={footerLeft}
       footerRight={footerRight}
     >
+      {/* ขั้นอนุมัติของบัญชี (2026-10-02) — เฉพาะรหัสแผนก/รหัสบัญชี */}
+      {entry && codeNeedsApproval(entry.kind) && (
+        <div className="mb-6">
+          <ApprovalBanner entry={entry} canApprove={canApprove} busy={approvalBusy} onApprove={() => onApprove(entry)} onReject={() => onReject(entry)} />
+        </div>
+      )}
+      {editable && codeNeedsApproval(draft.kind) && (!entry || (!canApprove && codeApprovalStatusOf(entry) === "approved")) && (
+        <p className="mb-6 flex items-start gap-2 rounded-lg bg-[#f4f6fa] text-[#3d5173] text-[13px] leading-relaxed px-3.5 py-2.5">
+          <Info size={15} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          {t(!entry ? (canApprove ? "codeRegister.approval.newHintApprover" : "codeRegister.approval.newHint") : "codeRegister.approval.editHint")}
+        </p>
+      )}
       {editable ? (
         <form id={formId} onSubmit={(e) => void handleSubmit(e)} noValidate className="flex flex-col gap-6">
           {error && <p role="alert" className="rounded-lg bg-[#fcebeb] text-[#b93636] text-[13px] px-3.5 py-2.5">{error}</p>}
@@ -190,5 +213,72 @@ export function CodeRegisterDrawer({ entry, kind, canEdit, canArchive, locked, o
         </div>
       ) : null}
     </Drawer>
+  );
+}
+
+const BANNER_TONE = {
+  pending: { box: "bg-[#fdf3e0] border-[#efd3a0] text-[#8a5a00]", icon: Clock },
+  approved: { box: "bg-[#e6f4ec] border-[#bfe0cc] text-[#1b7f4f]", icon: CheckCircle2 },
+  rejected: { box: "bg-[#fcebeb] border-[#f1c9c9] text-[#b93636]", icon: XCircle },
+} as const;
+
+/**
+ * แถบ "การอนุมัติของบัญชี" บนสุดของแผง — หน้าตาเดียวกับแถบของทะเบียนผู้ขาย (`VendorDrawer.tsx`)
+ * รออนุมัติ: บัญชีกด อนุมัติ / ไม่อนุมัติ · ไม่อนุมัติ: บัญชีกลับมาอนุมัติได้ · ไม่มีปุ่ม "ส่ง" — รหัสใหม่รออนุมัติเองตั้งแต่บันทึก
+ */
+function ApprovalBanner({ entry, canApprove, busy, onApprove, onReject }: {
+  entry: CodeEntry;
+  canApprove: boolean;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const { t } = useI18n();
+  const stage = codeApprovalStatusOf(entry);
+  const tone = BANNER_TONE[stage];
+  const Icon = tone.icon;
+  const smallBtn = "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-[#c3ccda] bg-white text-[13px] transition-colors disabled:opacity-60 whitespace-nowrap";
+  const approveBtn = (
+    <button type="button" onClick={onApprove} className={`${smallBtn} font-semibold text-[#1b7f4f] hover:bg-[#e6f4ec]`}>
+      <Check size={14} /> {t("codeRegister.approval.approve")}
+    </button>
+  );
+  let actions: ReactNode = null;
+  if (busy) {
+    actions = <Loader2 size={16} className="animate-spin" aria-label={t("common.loading")} />;
+  } else if (canApprove && stage === "pending") {
+    actions = (
+      <>
+        <button type="button" onClick={onReject} className={`${smallBtn} font-medium text-[#b93636] hover:bg-[#fcebeb]`}>
+          <Ban size={14} /> {t("codeRegister.approval.reject")}
+        </button>
+        {approveBtn}
+      </>
+    );
+  } else if (canApprove && stage === "rejected") {
+    actions = approveBtn;
+  }
+  const by = stage === "approved" && entry.approvedByName
+    ? t("codeRegister.approval.approvedBy").replace("{name}", entry.approvedByName).replace("{date}", entry.approvedAt ? formatQuoteDateThai(entry.approvedAt) : "—")
+    : stage !== "approved" && entry.createdByName
+      ? t("codeRegister.approval.createdBy").replace("{name}", entry.createdByName)
+      : "";
+  return (
+    <section aria-labelledby="code-approval-title" className={`px-4 py-3.5 border rounded-xl flex flex-col gap-1.5 ${tone.box}`}>
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <Icon size={16} className="flex-shrink-0" aria-hidden="true" />
+        <h3 id="code-approval-title" className="flex-1 min-w-0 text-sm font-semibold">
+          {t("codeRegister.approval.title")}: {t(codeApprovalLabelKey[stage])}
+        </h3>
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
+      </div>
+      {stage === "rejected" && (entry.rejectionComment ?? "").trim() && (
+        <p className="pl-[26px] text-[13px] leading-relaxed font-medium">{entry.rejectionComment}</p>
+      )}
+      {stage !== "approved" && (
+        <p className="pl-[26px] text-[13px] leading-relaxed">{t(stage === "pending" ? "codeRegister.approval.pendingHint" : "codeRegister.approval.rejectedHint")}</p>
+      )}
+      {by && <p className="pl-[26px] text-xs opacity-90">{by}</p>}
+    </section>
   );
 }

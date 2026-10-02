@@ -458,7 +458,16 @@ and *"เพิ่มช่องใส่รหัสแผนกในหน�
 | Client lib | `src/lib/codeRegister.ts` — incl. `parseGlChartRows()` and `codeComboboxOptions()` |
 | Handler | `api/_lib/codeEntriesHandler.ts` (`handleCodeEntries`), mounted in `api/handlers/customers.ts` |
 | Collection | `code_entries` — `CodeEntryFields` in `api/_lib/collections.ts` |
-| Permissions | `codeRegister:view` / `:create` / `:edit` / `:archive` — four, like `vendor:*` |
+| Permissions | `codeRegister:view` / `:create` / `:edit` / `:archive` — four, like `vendor:*` · **`:approve` added 2026-10-02** (Accounting) |
+
+**Accounting approval (2026-10-02).** Owner: *"อนุมัติได้แค่บัญชี สร้างได้แค่จัดซื้อกับบัญชี · รหัสต้องรออนุมัติก่อนถึงจะใช้ได้"*.
+Department and account codes carry `approvalStatus` (`pending`/`approved`/`rejected`); a missing field reads as
+approved via `codeApprovalStatusOf()` so every pre-existing code (incl. the 479 imported accounts) keeps working. A code
+created by someone holding `codeRegister:approve` is approved on the spot; anyone else's waits for Accounting, who
+approve/reject from the code's drawer (reason required on reject). A non-approver renaming an approved code, or editing a
+rejected one, sends it back to pending. Pending/rejected codes are hidden from the PR/PO comboboxes and a PATCH that
+**changes** a line to one is refused (`assertLineCodesApproved()`); lines that already held the code still save. Free-typed
+codes that aren't in the register at all are still accepted, as before. `workType` is not gated.
 
 **Two registers, one module.** `kind: "department"` holds the `G143`-style code the real filled-in
 purchase request (`ED6908038.pdf`) puts in its แผนก box; `kind: "account"` holds the 479-row chart
