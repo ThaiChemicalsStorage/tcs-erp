@@ -1,4 +1,4 @@
-import type { PurchaseRequest } from "../../lib/purchaseRequest";
+import { purchaseRequestLinesToBuy, type PurchaseRequest } from "../../lib/purchaseRequest";
 
 /**
  * แถบขั้นตอนของใบขอซื้อ (ดีไซน์ใหม่ 2026-09-30): 3 ขั้นของเอกสารอนุมัติทั่วไป + 3 ขั้นหลังอนุมัติ
@@ -32,13 +32,14 @@ export function purchaseRequestProgress(
   purchasedLines: Record<string, string[]>,
 ): PurchaseRequestProgress {
   const lines = doc.lines ?? [];
-  const buyable = lines.filter((l) => l.storeDecision !== "stock");
+  // ไม่นับบรรทัดที่สโตร์จ่ายจากสต๊อก และบรรทัดที่จัดซื้อไม่อนุมัติ (2026-10-02)
+  const buyable = purchaseRequestLinesToBuy(doc);
   const ordered = buyable.filter((l) => (purchasedLines[l.id] ?? []).length > 0).length;
   const purchaseOrders: string[] = [];
   for (const l of lines) {
     for (const po of purchasedLines[l.id] ?? []) if (!purchaseOrders.includes(po)) purchaseOrders.push(po);
   }
-  const base = { toBuy: buyable.length, ordered, fromStock: lines.length - buyable.length, purchaseOrders };
+  const base = { toBuy: buyable.length, ordered, fromStock: lines.filter((l) => l.storeDecision === "stock").length, purchaseOrders };
 
   if (doc.status === "Final" && doc.storeStage === "closed") {
     const steps: PurchaseRequestStepKey[] = ["draft", "pending", "approved", "store"];

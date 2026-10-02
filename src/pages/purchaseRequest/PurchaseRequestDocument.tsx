@@ -14,7 +14,9 @@ import {
   storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
   purchaseRequestCodeOf, PURCHASE_REQUEST_CODE_LABEL_KEY,
   fetchPurchaseRequestJobCodes, type JobCodeOption, type PurchaseRequestPoRef,
+  linePurchasingDecision, purchaseRequestLinesToBuy, purchasingRejectPurchaseRequestLines,
 } from "../../lib/purchaseRequest";
+import { PromptDialog } from "../../components/PromptDialog";
 import { UrgentBadge, UrgentCard, PurchasingAgeCard, PurchaseRequestTimeline } from "./purchasingAging";
 import { createPurchaseOrder } from "../../lib/purchaseOrder";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
@@ -171,6 +173,8 @@ export function PurchaseRequestDocument({
   const [buyChoice, setBuyChoice] = useState<"remaining" | "selected">("remaining");
   const [creatingPo, setCreatingPo] = useState(false);
   const [purchasingBusy, setPurchasingBusy] = useState(false);
+  /** กล่องใส่เหตุผลตอนจัดซื้อไม่อนุมัติรายการที่ติ๊กไว้ (2026-10-02) */
+  const [rejectLinesOpen, setRejectLinesOpen] = useState(false);
   /** หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว — ส่งไปกับการกดบันทึก ไม่ใช่ฟิลด์ที่เก็บบนใบ */
   const [purchasingEditNote, setPurchasingEditNote] = useState("");
 
@@ -383,10 +387,19 @@ export function PurchaseRequestDocument({
   const editable = (canEdit && isDraftStatus) || purchasingEditMode;
   /** การ์ด "ออกใบสั่งซื้อ" (2026-09-21) — บรรทัดที่สโตร์จ่ายจากสต๊อกแล้วไม่ต้องซื้อ จึงไม่นับ
       ชุดเดียวกับที่ `handleCreate()` ของใบสั่งซื้อจะลอกไป ตัวเลขบนการ์ดจึงตรงกับของจริงเสมอ */
-  const buyableLines = (doc.lines ?? []).filter((l) => l.storeDecision !== "stock");
+  const buyableLines = purchaseRequestLinesToBuy(doc);
   const orderedCount = buyableLines.filter((l) => (purchasedLines[l.id] ?? []).length > 0).length;
-  const remainingLines = buyableLines.filter((l) => (purchasedLines[l.id] ?? []).length === 0);
+  /**
+   * จัดซื้ออนุมัติรายบรรทัด (2026-10-02) — เจ้าของ: *"ติ๊กแค่ 3 อันก็เอา 3 อันนั้นไปเปิด PO ก่อนได้"*
+   * เปิดใบสั่งซื้อได้เฉพาะบรรทัดที่อนุมัติแล้ว · บรรทัดที่ยังไม่ตัดสินรออนุมัติต่อในใบเดิม
+   */
+  const decisionOf = (line: PurchaseRequestLine) => linePurchasingDecision(doc, line);
+  const remainingLines = buyableLines.filter((l) => (purchasedLines[l.id] ?? []).length === 0 && decisionOf(l) === "approved");
+  const undecidedLines = buyableLines.filter((l) => decisionOf(l) === "");
   const selectedRemaining = buySelection.filter((id) => remainingLines.some((l) => l.id === id));
+  const selectedUndecided = buySelection.filter((id) => undecidedLines.some((l) => l.id === id));
+  /** คอลัมน์ "จัดซื้ออนุมัติ" — เฉพาะใบที่มีขั้นของจัดซื้อแล้ว (ใบก่อน 2026-09-21 ไม่มีขั้นนี้) */
+  const showDecisionColumn = !!doc.purchasingStage;
   const isRevision = getRevisionNumber(doc.id) > 0;
   const buyCardVisible = canCreatePurchaseOrder && isFinal
     && doc.storeStage !== "pending" && doc.storeStage !== "closed" && buyableLines.length > 0;
@@ -543,18 +556,28 @@ export function PurchaseRequestDocument({
    * บันทึกที่ค้างอยู่ต้องถูกกดบันทึกเองก่อน — ปุ่มนี้ไม่บันทึกร่างให้ เพราะการอนุมัติกับการบันทึก
    * เป็นคนละเจตนา และใบจะถูกล็อกทันทีหลังอนุมัติ การเซฟให้เงียบ ๆ จะกลายเป็นการยัดค่าที่ยังไม่ตั้งใจ
    */
-  const runPurchasingStage = async (action: "approve" | "reopen" | "pull") => {
+  const runPurchasingStage = async (action: "approve" | "approveSelected" | "reject" | "reopen" | "pull", reason?: string) => {
     setPurchasingBusy(true);
     try {
       const updated = action === "approve" ? await purchasingApprovePurchaseRequest(doc.id)
+        : action === "approveSelected" ? await purchasingApprovePurchaseRequest(doc.id, selectedUndecided)
+        : action === "reject" ? await purchasingRejectPurchaseRequestLines(doc.id, selectedUndecided, reason ?? "")
         : action === "reopen" ? await purchasingReopenPurchaseRequest(doc.id)
         : (await pullPurchaseRequestToPurchasing(doc.id)).purchaseRequest;
       setDoc(updated);
       setDraft(updated);
       dirty.markSaved(toUpdateFields(updated));
-      showToast(t(action === "approve" ? "purchaseRequestDoc.purchasing.approvedToast"
-        : action === "reopen" ? "purchaseRequestDoc.purchasing.reopenedToast"
-        : "purchaseRequestDoc.purchasing.pulledToast"));
+      // รายการที่อนุมัติแล้วยังติ๊กค้างไว้ให้กด "ออกใบสั่งซื้อ" ต่อได้ทันที · ที่ปัดตกเอาออกจากที่ติ๊ก
+      if (action === "reject") setBuySelection((prev) => prev.filter((id) => !selectedUndecided.includes(id)));
+      if (action === "reopen") setBuySelection([]);
+      setRejectLinesOpen(false);
+      showToast(action === "approveSelected"
+        ? t("purchaseRequestDoc.purchasing.approvedLinesToast").replace("{n}", String(selectedUndecided.length))
+        : action === "reject"
+        ? t("purchaseRequestDoc.purchasing.rejectedLinesToast").replace("{n}", String(selectedUndecided.length))
+        : t(action === "approve" ? "purchaseRequestDoc.purchasing.approvedToast"
+          : action === "reopen" ? "purchaseRequestDoc.purchasing.reopenedToast"
+          : "purchaseRequestDoc.purchasing.pulledToast"));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.errorSave"));
     } finally {
@@ -635,8 +658,10 @@ export function PurchaseRequestDocument({
    * ออกใบสั่งซื้อ: ซ่อนระหว่างจัดซื้อยังไม่อนุมัติ (`review`) และเมื่อออกครบทุกบรรทัดแล้ว — เดิมเป็นปุ่มจาง
    * ตอนนี้กล่อง "ขั้นต่อไป" บอกเหตุผลแทน
    */
-  const buyActionVisible = buyCardVisible && doc.purchasingStage !== "review" && remainingLines.length > 0;
-  const purchasingApproveVisible = purchasingCardVisible && doc.purchasingStage !== "approved" && doc.storeStage !== "pending";
+  const buyActionVisible = buyCardVisible && remainingLines.length > 0;
+  const purchasingApproveVisible = purchasingCardVisible && doc.purchasingStage !== "approved" && doc.storeStage !== "pending" && undecidedLines.length > 0;
+  /** ติ๊กรายการที่ยังไม่ตัดสินไว้ = ปุ่ม "อนุมัติที่เลือก (N)" ขึ้นเป็นปุ่มหลัก */
+  const approveSelectedVisible = purchasingApproveVisible && selectedUndecided.length > 0;
   const pullVisible = purchasingCardVisible && doc.purchasingStage !== "approved" && doc.storeStage === "pending";
   const openBuyDialog = () => {
     setBuyChoice(selectedRemaining.length > 0 ? "selected" : "remaining");
@@ -646,8 +671,9 @@ export function PurchaseRequestDocument({
   const headerActions = ([
     approvalFlow.canSubmit && { key: "submit", label: t("approval.submit"), icon: Send, onClick: approvalFlow.submit, busy: approvalFlow.busy === "submit" },
     approvalFlow.canDecide && { key: "approve", label: t("approval.approve"), icon: CheckCircle2, onClick: approvalFlow.approve, busy: approvalFlow.busy === "approve" },
+    approveSelectedVisible && { key: "approveSelected", label: t("purchaseRequestDoc.purchasing.approveSelected").replace("{n}", String(selectedUndecided.length)), icon: CheckCircle2, onClick: () => void runPurchasingStage("approveSelected"), busy: purchasingBusy },
     buyActionVisible && { key: "buy", label: t("purchaseRequestDoc.buy.create"), icon: ShoppingBag, onClick: openBuyDialog, busy: creatingPo },
-    purchasingApproveVisible && { key: "purchasingApprove", label: t("purchaseRequestDoc.purchasing.approve"), icon: CheckCircle2, onClick: () => setConfirmPurchasingApprove(true), busy: purchasingBusy },
+    purchasingApproveVisible && { key: "purchasingApprove", label: undecidedLines.length < buyableLines.length ? t("purchaseRequestDoc.purchasing.approveRest").replace("{n}", String(undecidedLines.length)) : t("purchaseRequestDoc.purchasing.approve"), icon: CheckCircle2, onClick: () => setConfirmPurchasingApprove(true), busy: purchasingBusy },
     pullVisible && { key: "pull", label: t("purchaseRequestDoc.purchasing.pull"), icon: PackageMinus, onClick: () => setConfirmPurchasingPull(true), busy: purchasingBusy },
   ] as (HeaderAction | false)[]).filter((a): a is HeaderAction => !!a);
   const [primaryAction, ...otherActions] = headerActions;
@@ -680,7 +706,7 @@ export function PurchaseRequestDocument({
           : doc.storeStage === "closed"
             ? { tone: "info", text: t("purchaseRequestDoc.store.hintClosed") }
             : doc.purchasingStage === "review"
-              ? { tone: purchasingCardVisible ? "info" : "waiting", text: purchasingCardVisible ? t("purchaseRequestDoc.purchasing.help") : t("purchaseRequestDoc.buy.needApproval") }
+              ? { tone: purchasingCardVisible ? "info" : "waiting", text: purchasingCardVisible ? t("purchaseRequestDoc.purchasing.helpLines") : t("purchaseRequestDoc.buy.needApproval") }
               : progress.current >= progress.steps.length
                 ? { tone: "info", text: t("purchaseRequestDoc.buy.summaryAll").replace("{total}", String(progress.toBuy)) }
                 : buyCardVisible
@@ -731,10 +757,15 @@ export function PurchaseRequestDocument({
                   {t("approval.reject")}
                 </button>
               )}
+              {approveSelectedVisible && (
+                <button type="button" onClick={() => setRejectLinesOpen(true)} disabled={purchasingBusy} className={rejectButtonClass}>
+                  {t("purchaseRequestDoc.purchasing.rejectSelected")}
+                </button>
+              )}
               <MoreMenu
                 items={[
                   canEdit && isFinal && { key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch, hint: t("purchaseRequestDoc.rewriteHint"), disabled: rewriting, onSelect: () => setConfirmRewrite(true) },
-                  purchasingCardVisible && doc.purchasingStage === "approved" && { key: "reopen", label: t("purchaseRequestDoc.purchasing.reopen"), icon: Undo2, hint: t("purchaseRequestDoc.reopenHint"), disabled: purchasingBusy, onSelect: () => setConfirmPurchasingReopen(true) },
+                  purchasingCardVisible && (doc.purchasingStage === "approved" || (doc.lines ?? []).some((l) => !!l.purchasingApproval)) && { key: "reopen", label: t("purchaseRequestDoc.purchasing.reopen"), icon: Undo2, hint: t("purchaseRequestDoc.reopenHint"), disabled: purchasingBusy, onSelect: () => setConfirmPurchasingReopen(true) },
                   approvalFlow.canWithdraw && { key: "withdraw", label: t("approval.withdraw"), icon: Undo2, hint: t("purchaseRequest.shared.withdrawHint"), disabled: approvalFlow.busy !== null, onSelect: approvalFlow.withdraw },
                   canDelete && { key: "delete", label: t("purchaseRequestDoc.deleteConfirmTitle"), icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
                 ]}
@@ -1015,23 +1046,29 @@ export function PurchaseRequestDocument({
                       <th className={table.th}>{t("purchaseRequestDoc.col.neededByDate")}</th>
                       <th className={table.th}>{t("purchaseRequestDoc.col.department")}</th>
                       <th className={table.th}>{t("purchaseRequestDoc.col.costCode")}</th>
+                      {buyMode && showDecisionColumn && <th className={table.th}>{t("purchaseRequestDoc.purchasing.columnLabel")}</th>}
                       {buyMode && <th className={table.th}>{t("purchaseRequestDoc.buy.columnLabel")}</th>}
                       {editable && <th className={`${table.th} w-10`}><span className="sr-only">{t("purchaseRequestDoc.removeLine")}</span></th>}
                     </tr>
                   </thead>
                   <tbody>
                     {draft.lines.map((line, idx) => {
+                      /** บรรทัดที่จัดซื้ออนุมัติ/ไม่อนุมัติแล้วแก้ไม่ได้ (2026-10-02) — เซิร์ฟเวอร์ตรวจซ้ำ */
+                      const rowLocked = !!line.purchasingApproval;
+                      const rowEditable = editable && !rowLocked;
                       const isCatalogLine = !!line.productId;
                       const fromStock = line.storeDecision === "stock";
                       const orderedIn = purchasedLines[line.id] ?? [];
                       const ordered = orderedIn.length > 0;
-                      const ticked = !ordered && !fromStock && buySelection.includes(line.id);
+                      const decision = decisionOf(line);
+                      const rejected = decision === "rejected";
+                      const ticked = !ordered && !fromStock && !rejected && buySelection.includes(line.id);
                       const subDetails = line.subDetails ?? [];
                       return (
-                        <tr key={line.id} className={`border-b border-[#eef1f6] align-top ${ticked ? "bg-[#f4f7fc]" : "bg-white"}`}>
+                        <tr key={line.id} className={`border-b border-[#eef1f6] align-top ${ticked ? "bg-[#f4f7fc]" : rejected ? "bg-[#fdf8f8]" : "bg-white"}`}>
                           {buyMode && (
                             <td className={`${table.td} py-3.5`}>
-                              {!fromStock && (
+                              {!fromStock && !rejected && (
                                 <input
                                   type="checkbox"
                                   checked={ticked || ordered}
@@ -1045,9 +1082,9 @@ export function PurchaseRequestDocument({
                           )}
                           <td className={`${table.td} py-3.5 text-[13px] text-muted-foreground tabular-nums`}>{idx + 1}</td>
                           <td className={`${table.td} py-3.5 font-mono text-[13px] whitespace-nowrap ${line.productCode ? "text-foreground" : "text-[#8a97ad]"}`}>{line.productCode || "—"}</td>
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} min-w-[240px]`}>
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} min-w-[240px]`}>
                             <div className="flex flex-col gap-1.5 min-w-0">
-                              {isCatalogLine || !editable ? (
+                              {isCatalogLine || !rowEditable ? (
                                 <span className="text-sm font-medium text-foreground">
                                   {line.description || <span className="text-[#8a97ad]">—</span>}
                                   <KitBreakdown productId={line.productId} qty={line.qtyRequested} kits={kits} />
@@ -1059,7 +1096,7 @@ export function PurchaseRequestDocument({
                                   className={`${field.cell} w-full`} />
                               )}
                               {/* บรรทัดรายละเอียดย่อย — พิมพ์เยื้องใต้รายการหลัก · ใบที่ล็อกแล้วแสดงเป็นหัวข้อย่อย */}
-                              {editable ? subDetails.map((sd, i) => (
+                              {rowEditable ? subDetails.map((sd, i) => (
                                 <div key={i} className="flex items-center gap-1.5">
                                   <CornerDownRight size={14} className="text-[#a3aec2] flex-shrink-0" />
                                   <input
@@ -1078,7 +1115,7 @@ export function PurchaseRequestDocument({
                               )) : subDetails.map((sd, i) => (
                                 <span key={i} className="text-[12.5px] text-muted-foreground flex gap-1.5"><span aria-hidden="true">•</span>{sd}</span>
                               ))}
-                              {editable && (
+                              {rowEditable && (
                                 <button type="button" onClick={() => updateLine(line.id, { subDetails: [...subDetails, ""] })} className={`${btn.text} self-start h-8 text-[13px]`}>
                                   <Plus size={14} /> {t("purchaseRequestDoc.addSubDetail")}
                                 </button>
@@ -1094,29 +1131,29 @@ export function PurchaseRequestDocument({
                               )}
                             </div>
                           </td>
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-sm text-[#3d5173]`}>
-                            {isCatalogLine || !editable ? line.unit : (
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-sm text-[#3d5173]`}>
+                            {isCatalogLine || !rowEditable ? line.unit : (
                               <input value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })} aria-label={t("purchaseRequestDoc.col.unit")} className={`${field.cell} w-20`} />
                             )}
                           </td>
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm text-[#3d5173]`}>
-                            {editable ? (
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm text-[#3d5173]`}>
+                            {rowEditable ? (
                               <input value={line.warehouseRemainingQty} onChange={(e) => updateLine(line.id, { warehouseRemainingQty: e.target.value })} aria-label={t("purchaseRequestDoc.col.warehouseRemaining")} className={`${field.cell} w-20 text-right tabular-nums`} />
                             ) : (line.warehouseRemainingQty || <span className="text-[#8a97ad]">—</span>)}
                           </td>
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm font-semibold`}>
-                            {editable ? (
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm font-semibold`}>
+                            {rowEditable ? (
                               <input type="number" value={line.qtyRequested ?? ""} onChange={(e) => updateLine(line.id, { qtyRequested: e.target.value === "" ? null : Number(e.target.value) })} aria-label={t("purchaseRequestDoc.col.qtyRequested")} className={`${field.cell} w-24 text-right tabular-nums`} />
                             ) : (line.qtyRequested ?? 0).toLocaleString()}
                           </td>
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} text-sm text-[#3d5173] whitespace-nowrap`}>
-                            {editable ? (
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-sm text-[#3d5173] whitespace-nowrap`}>
+                            {rowEditable ? (
                               <input type="date" value={line.neededByDate} onChange={(e) => updateLine(line.id, { neededByDate: e.target.value })} aria-label={t("purchaseRequestDoc.col.neededByDate")} className={`${field.cell} w-[150px]`} />
                             ) : (dateText(line.neededByDate) || <span className="text-[#8a97ad]">—</span>)}
                           </td>
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
                             {/* พิมพ์รหัสเองได้เหมือนเดิม แต่พิมพ์ไม่กี่ตัวก็ขึ้นรายการจากทะเบียนให้เลือก */}
-                            {editable ? (
+                            {rowEditable ? (
                               <Combobox
                                 value={line.departmentCode}
                                 onChange={(next) => updateLine(line.id, { departmentCode: next })}
@@ -1128,8 +1165,8 @@ export function PurchaseRequestDocument({
                           </td>
                           {/* รหัสบัญชี — เก็บและ sanitize มาตั้งแต่ 2026-08-27 แต่ไม่เคยมีช่องกรอก
                               จนกระทั่งมีทะเบียนรหัสให้เลือก (ฟิลด์ตายที่เพิ่งได้ใช้จริง) */}
-                          <td className={`${table.td} ${editable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
-                            {editable ? (
+                          <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
+                            {rowEditable ? (
                               <Combobox
                                 value={line.costCode}
                                 onChange={(next) => updateLine(line.id, { costCode: next })}
@@ -1139,12 +1176,35 @@ export function PurchaseRequestDocument({
                               />
                             ) : (line.costCode || <span className="text-[#8a97ad]">—</span>)}
                           </td>
+                          {buyMode && showDecisionColumn && (
+                            <td className={`${table.td} py-3.5`}>
+                              {fromStock ? (
+                                <span className="text-[13px] text-[#8a97ad]">—</span>
+                              ) : decision === "approved" ? (
+                                <span className="flex flex-col gap-0.5">
+                                  <StageTag tone="green">{t("purchaseRequestDoc.purchasing.lineApproved")}</StageTag>
+                                  {line.purchasingDecidedAt && (
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatQuoteDateThai(line.purchasingDecidedAt)}{line.purchasingDecidedByName ? ` · ${line.purchasingDecidedByName}` : ""}</span>
+                                  )}
+                                </span>
+                              ) : rejected ? (
+                                <span className="flex flex-col gap-0.5 max-w-[200px]">
+                                  <StageTag tone="red">{t("purchaseRequestDoc.purchasing.lineRejected")}</StageTag>
+                                  <span className="text-xs text-muted-foreground">{line.purchasingRejectReason}</span>
+                                </span>
+                              ) : (
+                                <StageTag tone="amber">{t("purchaseRequestDoc.purchasing.linePending")}</StageTag>
+                              )}
+                            </td>
+                          )}
                           {buyMode && (
                             <td className={`${table.td} py-3.5`}>
                               {fromStock ? (
                                 <StageTag tone="green">{t("purchaseRequest.stage.closed")}</StageTag>
                               ) : ordered ? (
                                 <span className="font-mono text-[13px] font-medium text-[#1a5fb4]" title={t("purchaseRequestDoc.buy.alreadyOrdered")}>{orderedIn.join(", ")}</span>
+                              ) : rejected ? (
+                                <span className="text-[13px] text-[#8a97ad]">{t("purchaseRequestDoc.purchasing.notBuying")}</span>
                               ) : (
                                 <span className="text-[13px] text-[#8a97ad]">{t("purchaseRequestDoc.buy.notYet")}</span>
                               )}
@@ -1152,10 +1212,10 @@ export function PurchaseRequestDocument({
                           )}
                           {editable && (
                             <td className={`${table.td} py-2`}>
-                              <button type="button" onClick={() => removeLine(line.id)} title={t("purchaseRequestDoc.removeLine")} aria-label={t("purchaseRequestDoc.removeLine")}
+                              {!rowLocked && <button type="button" onClick={() => removeLine(line.id)} title={t("purchaseRequestDoc.removeLine")} aria-label={t("purchaseRequestDoc.removeLine")}
                                 className="w-9 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] transition-colors">
                                 <Trash2 size={16} />
-                              </button>
+                              </button>}
                             </td>
                           )}
                         </tr>
@@ -1171,9 +1231,9 @@ export function PurchaseRequestDocument({
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Info size={14} className="flex-shrink-0" /> {t("purchaseRequestDoc.lines.footer")}
               </p>
-              {doc.purchasingStage === "review" && (
+              {doc.purchasingStage === "review" && remainingLines.length === 0 && orderedCount === 0 && (
                 <p className="text-xs text-[#8a5a00] flex items-center gap-1.5">
-                  <AlertTriangle size={14} className="flex-shrink-0" /> {t("purchaseRequestDoc.buy.needApproval")}
+                  <AlertTriangle size={14} className="flex-shrink-0" /> {t("purchaseRequestDoc.buy.needApprovalLines")}
                 </p>
               )}
               {/* ฉบับแก้ไขเริ่มนับรายการที่ซื้อแล้วใหม่ (บรรทัดคง id เดิม แต่ใบสั่งซื้อยังชี้ฉบับก่อน) —
@@ -1392,6 +1452,17 @@ export function PurchaseRequestDocument({
         busy={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <PromptDialog
+        open={rejectLinesOpen}
+        title={t("purchaseRequestDoc.purchasing.rejectSelectedTitle").replace("{n}", String(selectedUndecided.length))}
+        message={t("purchaseRequestDoc.purchasing.rejectSelectedBody")}
+        label={t("purchaseRequestDoc.purchasing.rejectReason")}
+        requiredMessage={t("purchaseRequestDoc.purchasing.rejectReasonRequired")}
+        confirmLabel={t("purchaseRequestDoc.purchasing.rejectSelected")}
+        busy={purchasingBusy}
+        onConfirm={(reason) => void runPurchasingStage("reject", reason)}
+        onCancel={() => setRejectLinesOpen(false)}
       />
       <ConfirmDialog
         open={confirmPurchasingApprove}

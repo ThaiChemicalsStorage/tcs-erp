@@ -97,6 +97,38 @@ export interface PurchaseRequestLine {
   /** ยอดคงเหลือที่สโตร์เห็น ณ ตอนเช็ค — เก็บเป็นหลักฐานว่าตัดสินใจจากตัวเลขอะไร ต่างจาก
    *  `warehouseRemainingQty` ซึ่งเป็นช่องบนฟอร์มที่ผู้ขอพิมพ์เองตอนเขียนใบ */
   storeAvailableQty?: number | null;
+  /**
+   * ฝ่ายจัดซื้ออนุมัติ**รายบรรทัด** (เจ้าของสั่ง 2026-10-02: *"อนุมัติได้แค่จัดซื้อ"* · ติ๊ก 3 รายการแล้วอนุมัติ
+   * = เปิดใบสั่งซื้อให้ 3 รายการนั้นได้เลย) — `"approved"` / `"rejected"` / ว่าง = ยังไม่ตัดสิน
+   * เซิร์ฟเวอร์เขียนเท่านั้น (route `purchasing-approve` / `purchasing-reject-lines`) ไม่รับจาก PATCH
+   * ใบเก่าไม่มีฟิลด์ — อ่านผ่าน `linePurchasingDecision()` ที่เดียว
+   */
+  purchasingApproval?: "" | "approved" | "rejected";
+  purchasingDecidedAt?: string;
+  purchasingDecidedByName?: string;
+  /** เหตุผลที่จัดซื้อไม่อนุมัติรายการนี้ — บังคับเมื่อ "rejected" */
+  purchasingRejectReason?: string;
+}
+
+/**
+ * ผลการตัดสินของจัดซื้อต่อบรรทัด (2026-10-02) — กติกาที่เดียวของทั้งหน้าจอ ด่านออกใบสั่งซื้อ และการนับ
+ * - บรรทัดที่มีค่าแล้วใช้ค่านั้น
+ * - ใบที่จัดซื้ออนุมัติทั้งใบไปก่อนมีรายบรรทัด (`purchasingStage: "approved"`) และใบก่อนมีขั้นจัดซื้อ
+ *   (ไม่มี `purchasingStage`) = ทุกบรรทัดอนุมัติแล้ว — ใบเหล่านี้ออกใบสั่งซื้อได้ทุกบรรทัดอยู่แล้วตามกติกาเดิม
+ */
+export function linePurchasingDecision(
+  doc: Pick<PurchaseRequest, "purchasingStage">, line: Pick<PurchaseRequestLine, "purchasingApproval">,
+): "approved" | "rejected" | "" {
+  if (line.purchasingApproval === "approved" || line.purchasingApproval === "rejected") return line.purchasingApproval;
+  if (doc.purchasingStage === "approved" || !doc.purchasingStage) return "approved";
+  return "";
+}
+
+/** บรรทัดที่ต้องซื้อจริง: สโตร์ไม่ได้จ่ายจากสต๊อก และจัดซื้อไม่ได้ปัดตก */
+export function purchaseRequestLinesToBuy<T extends Pick<PurchaseRequestLine, "storeDecision" | "purchasingApproval">>(
+  doc: Pick<PurchaseRequest, "purchasingStage"> & { lines?: T[] },
+): T[] {
+  return (doc.lines ?? []).filter((l) => l.storeDecision !== "stock" && linePurchasingDecision(doc, l) !== "rejected");
 }
 
 /**
@@ -541,9 +573,17 @@ export async function cancelPurchaseRequestIssue(id: string, batchId: string): P
  *
  * ใช้สิทธิ์เดิม `purchaseRequest:editApproved` ไม่มีสิทธิ์ใหม่ — สิทธิ์นั้นแปลว่า "บทบาทฝ่ายจัดซื้อ" อยู่แล้ว
  */
-export async function purchasingApprovePurchaseRequest(id: string): Promise<PurchaseRequest> {
+export async function purchasingApprovePurchaseRequest(id: string, lineIds?: string[]): Promise<PurchaseRequest> {
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(
-    `/purchase-requests/${encodeURIComponent(id)}/purchasing-approve`, { method: "POST" });
+    `/purchase-requests/${encodeURIComponent(id)}/purchasing-approve`,
+    { method: "POST", body: JSON.stringify(lineIds ? { lineIds } : {}) });
+  return purchaseRequest;
+}
+/** จัดซื้อไม่อนุมัติบางรายการ (2026-10-02) — ต้องมีเหตุผล · รายการนั้นจะไม่ถูกซื้อ */
+export async function purchasingRejectPurchaseRequestLines(id: string, lineIds: string[], reason: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(
+    `/purchase-requests/${encodeURIComponent(id)}/purchasing-reject-lines`,
+    { method: "POST", body: JSON.stringify({ lineIds, reason }) });
   return purchaseRequest;
 }
 /**

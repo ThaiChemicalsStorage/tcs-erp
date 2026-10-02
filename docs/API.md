@@ -850,6 +850,9 @@ base64 payload, and no body-size ceiling to design around.
 
 | Route | Permission | Notes |
 |---|---|---|
+| `POST /api/purchase-requests/:id/purchasing-approve` (2026-10-02) | `purchaseRequest:editApproved` | body `{ lineIds? }` — มี = อนุมัติเฉพาะบรรทัดนั้น (บรรทัดที่สโตร์จ่ายจากสต๊อก/ตัดสินแล้ว = 400) · ไม่มี = ทุกบรรทัดที่ยังไม่ตัดสิน · ใบเป็น `purchasingStage: "approved"` เมื่อตัดสินครบ |
+| `POST /api/purchase-requests/:id/purchasing-reject-lines` (2026-10-02) | `purchaseRequest:editApproved` | body `{ lineIds, reason }` (เหตุผลบังคับ) · บรรทัดที่ไม่อนุมัติไม่ถูกลอกไปใบสั่งซื้อ · แจ้งผู้ขอ |
+| `POST /api/purchase-orders` จากใบขอซื้อ (2026-10-02) | เดิม | ระหว่างจัดซื้อตรวจ (`review`) เปิดได้เฉพาะบรรทัดที่อนุมัติแล้ว (ไม่มีเลย = 400) · บรรทัดที่ไม่อนุมัติไม่ถูกลอก |
 | `GET /api/purchase-requests/job-codes` | `purchaseRequest:view` | **2026-10-02** — รหัสงานที่มีในระบบ `{ jobCodes: [{ code, label }] }` จาก `projects.scopeNumber` + `production_orders.jobCode` (ล่าสุดก่อน อย่างละไม่เกิน 500) · ส่งแค่รหัสกับชื่อลูกค้า/สินค้า · ตัวช่วยเติมช่องรหัสงานของใบที่ไม่มีเอกสารต้นทาง |
 | `PATCH /api/purchase-requests/:id` (2026-10-02) | เดิม | รับ `urgent` (boolean) + `urgentReason` เพิ่ม · รับ `jobCode` **เฉพาะใบ `ownerDepartment: "general"`** (ใบอื่นส่งมาก็ถูกเมิน) · `submit-approval` ตอบ 400 ถ้า `urgent` แต่ไม่มีเหตุผล และเขียน `submittedAt` · `GET /:id` คืน `purchaseOrders: [{ id, documentNumber, createdAt, vendorName, lineCount }]` + `purchasingCompletedAt` เพิ่ม · รายการ (`GET ?ownerDepartment=`) คืน `urgent`, `submittedAt`, `approvedAt`, `purchasingReceivedAt`, `purchasingCompletedAt` ต่อใบ |
 | `POST /api/purchase-requests/:id/store-review` | `stock:adjust` | `Final` เท่านั้น · body `{ lines: [{lineId, decision: "stock"\|"purchase", availableQty?}], remark? }` · บันทึกได้ซ้ำ · บรรทัดที่จ่ายของไปแล้วเปลี่ยนเป็น `"purchase"` ไม่ได้ (400) · มีบรรทัด `"purchase"` = `storeStage: "forwarded"` แล้วแจ้งฝ่ายจัดซื้อ |

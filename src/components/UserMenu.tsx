@@ -44,9 +44,13 @@ export function UserMenu({
         aria-label={`${fullName} — ${t("nav.settings")}, ${t("topbar.help")}, ${t("whatsNew.title")}, ${t("topbar.logout")}`}
         className="h-11 pl-1 pr-2 rounded-lg flex items-center gap-2.5 hover:bg-[#f4f6fa] transition-colors"
       >
-        <span className="relative w-[34px] h-[34px] rounded-full bg-[#e8edf7] text-[#1a3a6b] text-[13px] font-semibold flex items-center justify-center overflow-hidden flex-shrink-0">
-          {pictureUrl ? <img src={pictureUrl} alt="" className="w-full h-full object-cover" /> : initials}
-          {unseen && <span aria-hidden="true" className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-[#1a5fb4] ring-2 ring-white" />}
+        {/* จุดแจ้งเตือนอยู่นอกวงกลม (เจ้าของแจ้ง 2026-10-02 ว่าจุดไปอยู่ข้างใน) — วงกลมตัด overflow รูปโปรไฟล์
+            จุดจึงต้องอยู่ในกรอบชั้นนอกที่ไม่ตัด แล้วเลื่อนออกไปที่มุมขวาบน */}
+        <span className="relative flex-shrink-0">
+          <span className="w-[34px] h-[34px] rounded-full bg-[#e8edf7] text-[#1a3a6b] text-[13px] font-semibold flex items-center justify-center overflow-hidden">
+            {pictureUrl ? <img src={pictureUrl} alt="" className="w-full h-full object-cover" /> : initials}
+          </span>
+          {unseen && <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#1a5fb4] ring-2 ring-white" />}
         </span>
         <span className="hidden lg:flex flex-col items-start leading-tight max-w-[160px] min-w-0">
           <span className="text-sm font-semibold text-foreground truncate max-w-full">{fullName}</span>

@@ -26,7 +26,7 @@ import type {
   PurchaseRequestLine, PurchaseRequestSummary, PurchaseRequestIssueBatch, PurchaseRequestStoreStage,
   PurchaseRequestPurchasingStage, PurchaseRequestCode,
 } from "../../src/lib/purchaseRequest.js";
-import { storeIssueBatchesOf, storeIssuedQtyOf, defaultPurchaseRequestCode, isPurchaseRequestCode, purchaseRequestCodeOf, purchasingReceivedAtOf } from "../../src/lib/purchaseRequest.js";
+import { storeIssueBatchesOf, storeIssuedQtyOf, defaultPurchaseRequestCode, isPurchaseRequestCode, purchaseRequestCodeOf, purchasingReceivedAtOf, purchaseRequestLinesToBuy } from "../../src/lib/purchaseRequest.js";
 
 /**
  * Purchase Request API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts` alongside
@@ -113,8 +113,20 @@ async function sanitizeLines(raw: unknown, existing: PurchaseRequestLine[] = [])
       // ค่าเดิมของบรรทัดเดียวกัน (จับคู่ด้วย id) ถูกคงไว้ กฎเดียวกับยอดจ่าย/คืนของของใบเบิก
       storeDecision: existingById.get(typeof r.id === "string" ? r.id : "")?.storeDecision ?? "",
       storeAvailableQty: existingById.get(typeof r.id === "string" ? r.id : "")?.storeAvailableQty ?? null,
+      // ผลการตัดสินรายบรรทัดของจัดซื้อ (2026-10-02) — ไม่รับจาก PATCH เหมือน storeDecision
+      ...decisionFieldsOf(existingById.get(typeof r.id === "string" ? r.id : "")),
     };
   });
+}
+
+function decisionFieldsOf(line: PurchaseRequestLine | undefined): Partial<PurchaseRequestLine> {
+  if (!line?.purchasingApproval) return {};
+  return {
+    purchasingApproval: line.purchasingApproval,
+    purchasingDecidedAt: line.purchasingDecidedAt ?? "",
+    purchasingDecidedByName: line.purchasingDecidedByName ?? "",
+    purchasingRejectReason: line.purchasingRejectReason ?? "",
+  };
 }
 
 function toClient(doc: PurchaseRequestFields & { _id: string }) {
@@ -253,7 +265,7 @@ export async function purchaseStateOf(
   }
   for (const doc of docs) {
     if (doc.status !== "Final") continue;
-    const toBuy = (doc.lines ?? []).filter((l) => l.storeDecision !== "stock");
+    const toBuy = purchaseRequestLinesToBuy(doc);
     if (toBuy.length === 0) continue;
     const bought = boughtByPr.get(doc._id) ?? new Map<string, string>();
     const dates = toBuy.map((l) => bought.get(l.id)).filter((d): d is string => d !== undefined);
@@ -514,7 +526,10 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   const update: Partial<PurchaseRequestFields> = {};
   if ("lines" in body) {
     update.lines = await sanitizeLines(body.lines, doc.lines ?? []);
-    if (purchasingEdit) assertStoreIssuesStillCovered(doc, update.lines);
+    if (purchasingEdit) {
+      assertStoreIssuesStillCovered(doc, update.lines);
+      assertDecidedLinesUnchanged(doc, update.lines);
+    }
   }
   if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   /**
@@ -656,6 +671,24 @@ function assertStoreIssuesStillCovered(
 }
 
 /**
+ * บรรทัดที่จัดซื้ออนุมัติ/ไม่อนุมัติไปแล้ว ห้ามแก้หรือลบ (2026-10-02) — บรรทัดที่อนุมัติอาจถูกลอกไปเป็น
+ * ใบสั่งซื้อแล้ว การแก้ทีหลังทำให้ใบขอซื้อกับใบสั่งซื้อพูดคนละเรื่อง · ถ้าต้องแก้ ให้ถอนการอนุมัติของจัดซื้อก่อน
+ */
+function assertDecidedLinesUnchanged(doc: PurchaseRequestFields & { _id: string }, nextLines: PurchaseRequestLine[]): void {
+  const nextById = new Map(nextLines.map((l) => [l.id, l]));
+  for (const line of doc.lines ?? []) {
+    if (!line.purchasingApproval) continue;
+    const next = nextById.get(line.id);
+    const same = next
+      && next.description === line.description && next.unit === line.unit && next.productId === line.productId
+      && next.productCode === line.productCode && (next.qtyRequested ?? null) === (line.qtyRequested ?? null);
+    if (!same) {
+      throw new HttpError(400, `${line.description}: ฝ่ายจัดซื้อ${line.purchasingApproval === "approved" ? "อนุมัติ" : "ไม่อนุมัติ"}รายการนี้แล้ว แก้ไขหรือลบไม่ได้ — ถ้าต้องแก้ ให้ถอนการอนุมัติของจัดซื้อก่อน`);
+    }
+  }
+}
+
+/**
  * จำนวนใบสั่งซื้อที่ยังไม่ถูกลบซึ่งอ้างใบขอซื้อใบนี้ (2026-09-21)
  *
  * ใช้เป็นด่านของการถอนการอนุมัติฝั่งจัดซื้อ — เปิดใบสั่งซื้อไปแล้วแปลว่าใบขอซื้อฉบับนี้ถูกใช้จริง
@@ -735,31 +768,118 @@ async function handlePurchasingApprove(req: ApiRequest, res: ApiResponse, id: st
   }
   if (doc.purchasingStage === "approved") throw new HttpError(400, "ฝ่ายจัดซื้ออนุมัติใบนี้ไปแล้ว");
 
+  /**
+   * **อนุมัติรายบรรทัด (2026-10-02)** — ส่ง `lineIds` มา = อนุมัติเฉพาะรายการนั้น · ไม่ส่ง = ทุกรายการที่ยังไม่ตัดสิน
+   * (พฤติกรรมเดิมของปุ่ม "อนุมัติ (ฝ่ายจัดซื้อ)") · ใบจะเป็น "จัดซื้ออนุมัติแล้ว" และล็อกเมื่อ**ทุก**รายการที่ต้องซื้อถูกตัดสินแล้ว
+   */
+  const body = (req.body ?? {}) as Record<string, unknown>;
   const now = nowIso();
+  const lines = decideLines(doc, body.lineIds, { purchasingApproval: "approved", purchasingRejectReason: "" }, ctx, now);
+  const decidedCount = lines.filter((l, i) => l.purchasingApproval !== (doc.lines ?? [])[i]?.purchasingApproval).length;
   const purchaseRequests = await purchaseRequestsCollection();
-  await purchaseRequests.updateOne({ _id: id }, {
-    $set: {
-      purchasingStage: "approved" as PurchaseRequestPurchasingStage,
-      purchasingDeptBy: (doc.purchasingDeptBy ?? "").trim() || ctx.user.fullName,
-      purchasingDeptAt: (doc.purchasingDeptAt ?? "").trim() || now.slice(0, 10),
-      purchasingApprovedByUserId: ctx.user.id,
-      updatedAt: now, updatedBy: ctx.user.id,
-    },
-  });
+  await purchaseRequests.updateOne({ _id: id }, { $set: { lines, ...stageAfterDecision(doc, lines, ctx, now) } });
   const updated = await loadOrThrow(id);
   await writeAuditEntry(ctx, "Purchase Request Purchasing Approved",
-    `ฝ่ายจัดซื้ออนุมัติใบขอซื้อ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+    updated.purchasingStage === "approved"
+      ? `ฝ่ายจัดซื้ออนุมัติใบขอซื้อ ${id} (ครบทุกรายการ)`
+      : `ฝ่ายจัดซื้ออนุมัติ ${decidedCount} รายการในใบขอซื้อ ${id}`,
+    { scopeOfWorkId: doc.scopeOfWorkId });
   // แจ้งผู้สร้างใบว่าเรื่องเดินต่อแล้ว — best-effort เหมือนการแจ้งเตือนอื่นทั้งระบบ
   try {
     await notifyUser(doc.createdBy, ctx.user.id, {
       type: "purchase_request_purchasing_approved",
       title: "ฝ่ายจัดซื้ออนุมัติใบขอซื้อของคุณแล้ว",
-      description: `${ctx.user.fullName} อนุมัติใบขอซื้อ ${id} ฝั่งจัดซื้อ พร้อมออกใบสั่งซื้อ`,
+      description: updated.purchasingStage === "approved"
+        ? `${ctx.user.fullName} อนุมัติใบขอซื้อ ${id} ฝั่งจัดซื้อ พร้อมออกใบสั่งซื้อ`
+        : `${ctx.user.fullName} อนุมัติ ${decidedCount} รายการในใบขอซื้อ ${id} — รายการที่เหลือยังรอจัดซื้อ`,
       module: "ใบขอซื้อ",
       related: { relatedPurchaseRequestId: id },
     });
   } catch (err) {
     console.error("[purchase-requests] failed to notify the author after a purchasing approval", err);
+  }
+  res.status(200).json({ purchaseRequest: toClient(updated) });
+}
+
+/**
+ * เขียนผลการตัดสินของจัดซื้อลงบรรทัดที่เลือก (2026-10-02) — `rawIds` ไม่ใช่อาร์เรย์ = ทุกบรรทัดที่ยังไม่ตัดสิน
+ * บรรทัดที่สโตร์จ่ายจากสต๊อกหรือที่ตัดสินไปแล้วเลือกไม่ได้ (400 บอกชื่อรายการ)
+ */
+function decideLines(
+  doc: PurchaseRequestFields & { _id: string }, rawIds: unknown,
+  decision: Pick<PurchaseRequestLine, "purchasingApproval" | "purchasingRejectReason">, ctx: AuthContext, now: string,
+): PurchaseRequestLine[] {
+  const lines = doc.lines ?? [];
+  const open = (l: PurchaseRequestLine) => l.storeDecision !== "stock" && !l.purchasingApproval;
+  let ids: Set<string>;
+  if (Array.isArray(rawIds)) {
+    ids = new Set(rawIds.filter((v): v is string => typeof v === "string" && v.trim() !== ""));
+    if (ids.size === 0) throw new HttpError(400, "กรุณาเลือกอย่างน้อยหนึ่งรายการ");
+    for (const lineId of ids) {
+      const line = lines.find((l) => l.id === lineId);
+      if (!line) throw new HttpError(400, "ไม่พบรายการที่เลือกในใบขอซื้อ");
+      if (line.storeDecision === "stock") throw new HttpError(400, `${line.description}: สโตร์จ่ายของจากสต๊อกให้แล้ว ไม่ต้องซื้อ`);
+      if (line.purchasingApproval) throw new HttpError(400, `${line.description}: ฝ่ายจัดซื้อตัดสินรายการนี้ไปแล้ว`);
+    }
+  } else {
+    ids = new Set(lines.filter(open).map((l) => l.id));
+    if (ids.size === 0) throw new HttpError(400, "ไม่มีรายการที่รอฝ่ายจัดซื้ออนุมัติ");
+  }
+  return lines.map((l) => (ids.has(l.id) ? {
+    ...l, ...decision,
+    purchasingDecidedAt: now.slice(0, 10),
+    purchasingDecidedByName: ctx.user.fullName,
+  } : l));
+}
+
+/**
+ * ขั้นของใบหลังตัดสินรายบรรทัด — ครบทุกบรรทัดที่ต้องซื้อ (ไม่นับที่สโตร์จ่ายจากสต๊อก) = จัดซื้ออนุมัติแล้ว
+ * พร้อมลงชื่อช่อง "ฝ่ายจัดซื้อ" (กติกาเดิม: ไม่ทับชื่อที่เจ้าหน้าที่พิมพ์เอง) · ยังไม่ครบ = ยังอยู่ขั้นตรวจ
+ */
+function stageAfterDecision(
+  doc: PurchaseRequestFields & { _id: string }, lines: PurchaseRequestLine[], ctx: AuthContext, now: string,
+): Partial<PurchaseRequestFields> {
+  const allDecided = lines.filter((l) => l.storeDecision !== "stock").every((l) => !!l.purchasingApproval);
+  if (!allDecided) return { purchasingStage: "review" as PurchaseRequestPurchasingStage, updatedAt: now, updatedBy: ctx.user.id };
+  return {
+    purchasingStage: "approved" as PurchaseRequestPurchasingStage,
+    purchasingDeptBy: (doc.purchasingDeptBy ?? "").trim() || ctx.user.fullName,
+    purchasingDeptAt: (doc.purchasingDeptAt ?? "").trim() || now.slice(0, 10),
+    purchasingApprovedByUserId: ctx.user.id,
+    updatedAt: now, updatedBy: ctx.user.id,
+  };
+}
+
+/** ฝ่ายจัดซื้อไม่อนุมัติบางรายการ (2026-10-02) — ต้องมีเหตุผล · รายการนั้นจะไม่ถูกลอกไปใบสั่งซื้อ */
+async function handlePurchasingRejectLines(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:editApproved");
+  const doc = await loadOrThrow(id);
+  if (doc.status !== "Final") throw new HttpError(400, "ไม่อนุมัติรายการได้เฉพาะใบขอซื้อที่หัวหน้าอนุมัติแล้วเท่านั้น");
+  if (doc.storeStage === "pending") throw new HttpError(400, 'ใบนี้ยังรอสโตร์เช็คของอยู่ — กด "ดึงมาที่จัดซื้อ" ก่อน ถ้าต้องการทำเองเลย');
+  if (doc.purchasingStage === "approved") throw new HttpError(400, "ฝ่ายจัดซื้ออนุมัติใบนี้ไปแล้ว");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const reason = sanitizeShortText(body.reason, "เหตุผลที่ไม่อนุมัติ");
+  if (!reason) throw new HttpError(400, "กรุณาระบุเหตุผลที่ไม่อนุมัติรายการ");
+  if (!Array.isArray(body.lineIds)) throw new HttpError(400, "กรุณาเลือกอย่างน้อยหนึ่งรายการ");
+  const now = nowIso();
+  const lines = decideLines(doc, body.lineIds, { purchasingApproval: "rejected", purchasingRejectReason: reason }, ctx, now);
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, { $set: { lines, ...stageAfterDecision(doc, lines, ctx, now) } });
+  const updated = await loadOrThrow(id);
+  const n = lines.filter((l, i) => l.purchasingApproval !== (doc.lines ?? [])[i]?.purchasingApproval).length;
+  await writeAuditEntry(ctx, "Purchase Request Lines Rejected By Purchasing",
+    `ฝ่ายจัดซื้อไม่อนุมัติ ${n} รายการในใบขอซื้อ ${id} — ${reason}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  try {
+    await notifyUser(doc.createdBy, ctx.user.id, {
+      type: "purchase_request_edited",
+      title: "ฝ่ายจัดซื้อไม่อนุมัติบางรายการในใบขอซื้อของคุณ",
+      description: `${ctx.user.fullName} ไม่อนุมัติ ${n} รายการในใบขอซื้อ ${id} — ${reason}`,
+      module: "ใบขอซื้อ",
+      related: { relatedPurchaseRequestId: id },
+    });
+  } catch (err) {
+    console.error("[purchase-requests] failed to notify the author after a line rejection", err);
   }
   res.status(200).json({ purchaseRequest: toClient(updated) });
 }
@@ -776,7 +896,8 @@ async function handlePurchasingReopen(req: ApiRequest, res: ApiResponse, id: str
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:editApproved");
   const doc = await loadOrThrow(id);
-  if (doc.purchasingStage !== "approved") throw new HttpError(400, "ใบนี้ยังไม่ได้ถูกอนุมัติโดยฝ่ายจัดซื้อ");
+  const anyDecided = (doc.lines ?? []).some((l) => !!l.purchasingApproval);
+  if (doc.purchasingStage !== "approved" && !anyDecided) throw new HttpError(400, "ใบนี้ยังไม่ได้ถูกอนุมัติโดยฝ่ายจัดซื้อ");
   const openPos = await openPurchaseOrderCountOf(id);
   if (openPos > 0) {
     throw new HttpError(400, `ใบนี้ออกใบสั่งซื้อไปแล้ว ${openPos} ใบ ถอนการอนุมัติไม่ได้ — ต้องลบใบสั่งซื้อก่อน`);
@@ -788,6 +909,8 @@ async function handlePurchasingReopen(req: ApiRequest, res: ApiResponse, id: str
     $set: {
       purchasingStage: "review" as PurchaseRequestPurchasingStage,
       purchasingApprovedByUserId: "",
+      // ผลการตัดสินรายบรรทัดกลับเป็น "ยังไม่ตัดสิน" ทั้งหมด (2026-10-02) — ด่านข้างบนรับประกันว่ายังไม่มีใบสั่งซื้อ
+      lines: (doc.lines ?? []).map((l) => ({ ...l, purchasingApproval: "" as const, purchasingDecidedAt: "", purchasingDecidedByName: "", purchasingRejectReason: "" })),
       updatedAt: now, updatedBy: ctx.user.id,
     },
   });
@@ -1099,7 +1222,11 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
       storeIssues: [],
       purchasingEdits: [],
       // ผลการเช็คของรายบรรทัดก็เป็นของฉบับเดิม — สโตร์ต้องเช็คฉบับใหม่เอง
-      lines: (rest.lines ?? []).map((l) => ({ ...l, storeDecision: "" as const, storeAvailableQty: null })),
+      lines: (rest.lines ?? []).map((l) => ({
+        ...l, storeDecision: "" as const, storeAvailableQty: null,
+        // ผลการตัดสินของจัดซื้อเป็นของฉบับเดิม (2026-10-02)
+        purchasingApproval: "" as const, purchasingDecidedAt: "", purchasingDecidedByName: "", purchasingRejectReason: "",
+      })),
       // ไฟล์แนบไม่สืบทอด — สำเนาจะชี้ไฟล์ก้อนเดียวกันแล้วลบทีเดียวพังทั้งสองฉบับ (เหมือนใบสั่งงาน)
       attachments: [],
       createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
@@ -1181,6 +1308,7 @@ export async function handlePurchaseRequest(req: ApiRequest, res: ApiResponse): 
   // ขั้นของจัดซื้อ (2026-09-21) — อนุมัติ / ถอนการอนุมัติ
   if (parts.length === 2 && parts[1] === "purchasing-approve") return handlePurchasingApprove(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "purchasing-reopen") return handlePurchasingReopen(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "purchasing-reject-lines") return handlePurchasingRejectLines(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "pull-to-purchasing") return handlePullToPurchasing(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "store-issues") return handleStoreIssue(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "store-issues") return handleCancelStoreIssue(req, res, parts[0], parts[2]);

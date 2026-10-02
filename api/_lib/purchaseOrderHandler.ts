@@ -18,6 +18,7 @@ import { sanitizeNullableNumber } from "./projectValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import type { PurchaseOrderLine, PurchaseOrderSummary } from "../../src/lib/purchaseOrder.js";
 import { orderedPrLineIdOf } from "../../src/lib/purchaseOrder.js";
+import { linePurchasingDecision, purchaseRequestLinesToBuy, type PurchaseRequestLine } from "../../src/lib/purchaseRequest.js";
 
 /**
  * ใบสั่งซื้อ (Purchase Order) API — added 2026-08-28 with the Purchasing module. Mounted from
@@ -280,8 +281,15 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
      * รูปแบบลบจะทำให้ใบเก่าทั้งหมดเปิดใบสั่งซื้อไม่ได้ทันทีที่ deploy — ตรงข้ามกับด่านล็อกการแก้ไข
      * ใน `purchaseRequestHandler.ts` ที่ต้องเขียนเป็น `=== "approved"` ด้วยเหตุผลกลับกันพอดี
      */
-    if (pr.purchasingStage === "review") {
-      throw new HttpError(400, "ฝ่ายจัดซื้อยังไม่ได้อนุมัติใบขอซื้อนี้ — กดอนุมัติ (ฝ่ายจัดซื้อ) บนใบก่อนจึงจะออกใบสั่งซื้อได้");
+    /**
+     * **2026-10-02 — จัดซื้ออนุมัติรายบรรทัด** (เจ้าของ: *"ติ๊กแค่ 3 อันก็เอา 3 อันนั้นไปเปิด PO ก่อนได้"*)
+     * ระหว่างจัดซื้อยังตรวจไม่ครบ (`review`) เปิดใบสั่งซื้อได้เฉพาะบรรทัดที่อนุมัติแล้ว · ไม่มีบรรทัดไหนอนุมัติเลย = 400
+     * บรรทัดที่จัดซื้อไม่อนุมัติไม่ถูกลอกไปเลย · ใบเก่า/ใบที่อนุมัติทั้งใบ อ่านผ่าน `linePurchasingDecision()` = อนุมัติทุกบรรทัด
+     */
+    const inReview = pr.purchasingStage === "review";
+    const approvedLine = (l: PurchaseRequestLine) => linePurchasingDecision(pr, l) === "approved";
+    if (inReview && !(pr.lines ?? []).some((l) => l.storeDecision !== "stock" && approvedLine(l))) {
+      throw new HttpError(400, "ฝ่ายจัดซื้อยังไม่ได้อนุมัติรายการใดในใบขอซื้อนี้ — ติ๊กรายการแล้วกดอนุมัติก่อนจึงจะออกใบสั่งซื้อได้");
     }
 
     jobCode = pr.jobCode ?? "";
@@ -295,9 +303,9 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
     //
     // **ข้ามบรรทัดที่สโตร์บอกว่ามีของ (2026-09-09)** — ของนั้นออกจากคลังไปแล้ว ลอกมาก็จะซื้อซ้ำ
     // บรรทัดที่สโตร์ยังไม่ได้เช็ค (ใบเก่าก่อนวันนั้น) ลอกมาทั้งหมดตามเดิม
-    const linesToBuy = (pr.lines ?? []).filter((l) => l.storeDecision !== "stock");
+    const linesToBuy = purchaseRequestLinesToBuy(pr);
     if (linesToBuy.length === 0 && (pr.lines ?? []).length > 0) {
-      throw new HttpError(400, "ทุกรายการในใบขอซื้อนี้สโตร์จ่ายจากสต๊อกแล้ว ไม่มีรายการที่ต้องสั่งซื้อ");
+      throw new HttpError(400, "ใบขอซื้อนี้ไม่มีรายการที่ต้องสั่งซื้อ (สโตร์จ่ายจากสต๊อก หรือจัดซื้อไม่อนุมัติทุกรายการ)");
     }
 
     /**
@@ -314,11 +322,12 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       chosen = selectedLineIds.map((lineId) => {
         const line = byId.get(lineId);
         if (!line) {
-          const issued = (pr.lines ?? []).find((l) => l.id === lineId);
-          throw new HttpError(400, issued
-            ? `${issued.description}: สโตร์จ่ายของจากสต๊อกให้แล้ว ไม่ต้องสั่งซื้อ`
-            : "ไม่พบรายการที่เลือกในใบขอซื้อ");
+          const other = (pr.lines ?? []).find((l) => l.id === lineId);
+          throw new HttpError(400, !other ? "ไม่พบรายการที่เลือกในใบขอซื้อ"
+            : other.storeDecision === "stock" ? `${other.description}: สโตร์จ่ายของจากสต๊อกให้แล้ว ไม่ต้องสั่งซื้อ`
+            : `${other.description}: ฝ่ายจัดซื้อไม่อนุมัติรายการนี้`);
         }
+        if (!approvedLine(line)) throw new HttpError(400, `${line.description}: ฝ่ายจัดซื้อยังไม่ได้อนุมัติรายการนี้`);
         const already = purchased.get(lineId);
         if (already && already.length > 0) {
           throw new HttpError(400, `${line.description}: ออกใบสั่งซื้อไปแล้วในใบ ${already.join(", ")}`);
@@ -327,9 +336,11 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
       });
       if (chosen.length === 0) throw new HttpError(400, "กรุณาเลือกอย่างน้อยหนึ่งรายการ");
     } else {
-      chosen = linesToBuy.filter((l) => !(purchased.get(l.id)?.length));
+      chosen = linesToBuy.filter((l) => approvedLine(l) && !(purchased.get(l.id)?.length));
       if (chosen.length === 0) {
-        throw new HttpError(400, "ทุกรายการในใบขอซื้อนี้ออกใบสั่งซื้อไปแล้ว");
+        throw new HttpError(400, inReview
+          ? "รายการที่จัดซื้ออนุมัติแล้วออกใบสั่งซื้อครบแล้ว — รายการที่เหลือยังรอจัดซื้ออนุมัติ"
+          : "ทุกรายการในใบขอซื้อนี้ออกใบสั่งซื้อไปแล้ว");
       }
     }
     lines = chosen.map((l) => ({
