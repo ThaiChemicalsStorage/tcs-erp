@@ -23,6 +23,15 @@ export default defineConfig({
   // died, and Vite proxied /api straight back into itself. ~13k self-connections and ENOBUFS on
   // every request until the processes were killed. Failing loudly on a busy port is the only safe
   // behaviour here.
-  server: { port: 3000, strictPort: true, proxy: { "/api": "http://localhost:3001" } },
+  //
+  // `allowedHosts` ให้แชร์เครื่อง dev ผ่าน Cloudflare quick tunnel ได้ (`cloudflared tunnel --url
+  // http://localhost:3000` → https://xxxx.trycloudflare.com) — Vite 6 ปฏิเสธ Host ที่ไม่ใช่
+  // localhost ด้วย "Blocked request" เปิดเฉพาะโดเมน trycloudflare เท่านั้น ไม่ใช่ทุกโดเมน
+  server: {
+    port: 3000,
+    strictPort: true,
+    allowedHosts: [".trycloudflare.com"],
+    proxy: { "/api": "http://localhost:3001" },
+  },
 
 })

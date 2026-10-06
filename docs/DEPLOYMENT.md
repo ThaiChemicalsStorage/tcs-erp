@@ -18,6 +18,16 @@ npm run build   # type-checks src/ + api/ + server/, then builds the frontend in
 npm start       # production: one Express process serving API + dist/ (default port 3001)
 ```
 
+**Sharing the dev machine with someone (added 2026-10-06).** A Cloudflare *quick tunnel* gives a
+temporary public HTTPS link to `localhost:3000` — no account, domain, or production involved. Install
+once with `winget install --id Cloudflare.cloudflared` (lands in `C:Program Files (x86)cloudflared`;
+terminals opened before the install will not see it on `PATH` — fully restart the terminal app, or
+call the exe by full path), then, while `npm run dev` is running, `cloudflared tunnel --url
+http://localhost:3000` and share the printed `https://xxxx.trycloudflare.com` URL. It lives only as
+long as that window, and the link changes every run. Visitors see the local dev DB. Vite only
+answers this hostname because of `allowedHosts: [".trycloudflare.com"]` in `vite.config.ts` — other
+hosts still get "Blocked request".
+
 ## Requirements
 
 - **Node.js 20+** (22/24 LTS fine)

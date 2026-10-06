@@ -4,7 +4,19 @@
 
 ---
 
-## 2026-10-02f (absolute latest) — ใบสั่งซื้อดึงเงื่อนไขจากผู้ขาย + ช่องเงื่อนไขการชำระเงิน/ประเภทราคา (เฟส E2)
+## 2026-10-06 (absolute latest) — แชร์เครื่อง dev ผ่าน Cloudflare quick tunnel (`allowedHosts`)
+
+เจ้าของต้องการส่งลิงก์เว็บทดลอง (localhost:3000) ให้คนอื่นดู โดยไม่ใช้เว็บจริง
+
+- `vite.config.ts`: เพิ่ม `server.allowedHosts: [".trycloudflare.com"]` — Vite 6 (6.3.5) ปฏิเสธ Host ที่ไม่ใช่ localhost
+  ด้วย "Blocked request" · เปิดเฉพาะโดเมน trycloudflare ไม่ใช่ทุกโดเมน · มีผลเฉพาะ dev server (production ไม่ใช้ Vite)
+- วิธีใช้: `cloudflared tunnel --url http://localhost:3000` ระหว่างที่ `npm run dev` ทำงาน → ได้ลิงก์ `https://xxxx.trycloudflare.com`
+  (เปลี่ยนทุกครั้งที่เปิดใหม่) · ข้อมูลที่เห็นคือ dev DB ของเครื่องนี้ · วิธีติดตั้งอยู่ใน `docs/DEPLOYMENT.md`
+- ตรวจแล้ว: Host `abc-def.trycloudflare.com` → หน้าเว็บ 200 + `/api/auth/session` ตอบปกติ · Host อื่น (`evil.example.com`) → 403 เหมือนเดิม
+
+---
+
+## 2026-10-02f — ใบสั่งซื้อดึงเงื่อนไขจากผู้ขาย + ช่องเงื่อนไขการชำระเงิน/ประเภทราคา (เฟส E2)
 
 เจ้าของตอบ 2026-10-02: *"ใบสั่งซื้อดึงเงื่อนไขชำระ/เครดิต/VAT จากผู้ขาย"* (ประเภทราคาด้วย) — ยังแก้ในใบได้
 
