@@ -40,6 +40,7 @@ Personal account settings (self-service) plus single-company configuration (Supe
 
 ## Current Features
 
+- **ประเภทงาน (Job Types) tab — added 2026-10-06 (Tuhmo #41).** Visible with `company:manage` (same permission as the company tab and the `POST`/`PATCH /api/jobtypes` routes). Add a type (code + name, code auto-uppercased, duplicate code refused client- and server-side), rename, and toggle active. **The code is not editable after creation** — quotations, Scope of Work and templates reference a job type by code, so changing it would orphan them; the API still accepts a code change, the UI never sends one. No delete: inactive types disappear from new-document pickers, existing documents keep showing theirs. Component: `src/pages/settings/JobTypesSection.tsx`; writes update App's `jobTypes` state so every picker sees the change without a reload.
 - Self-service profile edit (name/phone/picture/signature), with employee/role fields shown but locked
 - Company info edit (Super Admin only) incl. logo/stamp/bank info/VAT rate/Terms & Conditions, verified to flow live into the Quotation document
 - Real password change (current password actually checked against the stored hash)

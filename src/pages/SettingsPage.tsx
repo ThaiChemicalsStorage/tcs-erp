@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   User as UserIcon, Building2, ShieldCheck, Bell, CheckCircle2, Lock, Info, AlertTriangle, Loader2, type LucideIcon,
-  Image as ImageIcon, Stamp,
+  Image as ImageIcon, Stamp, Tags,
 } from "lucide-react";
 import { useModuleTour, type TourStep } from "../components/GuidedTour";
 import { TourReplayButton } from "../components/TourReplayButton";
@@ -19,6 +19,8 @@ import { useI18n, type Lang } from "../lib/i18n";
 import { ImageUploadField } from "../components/ImageUploadField";
 import { SignaturePad } from "../components/SignaturePad";
 import { Toggle } from "../components/Toggle";
+import type { JobType } from "../lib/jobTypes";
+import { JobTypesSection } from "./settings/JobTypesSection";
 
 // ช่องเลือกภาษาของระบบ (ไทย/อังกฤษ) — เปลี่ยนทันที ไม่ต้องกดบันทึก
 // Field for switching the system language (Thai/English) — applies immediately, not part of the save.
@@ -69,7 +71,7 @@ function LanguageSection() {
   );
 }
 
-type Tab = "profile" | "company" | "security" | "notifications";
+type Tab = "profile" | "company" | "jobTypes" | "security" | "notifications";
 type PwErrorField = "next" | "confirm" | null;
 
 // แสดงข้อความ "บันทึกแล้ว" ชั่วคราว
@@ -121,6 +123,8 @@ export function SettingsPage({
   roles,
   canManageCompany,
   onAudit,
+  jobTypes,
+  onJobTypesChange,
 }: {
   company: Company;
   onCompanyChange: (c: Company) => void;
@@ -129,6 +133,9 @@ export function SettingsPage({
   roles: Role[];
   canManageCompany: boolean;
   onAudit: (action: string, details: string) => void;
+  /** ประเภทงาน (2026-10-06) — แท็บ "ประเภทงาน" ใช้สิทธิ์เดียวกับข้อมูลบริษัท (company:manage) */
+  jobTypes: JobType[];
+  onJobTypesChange: (next: JobType[]) => void;
 }) {
   const { t } = useI18n();
 
@@ -144,6 +151,7 @@ export function SettingsPage({
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: "profile", label: t("settings.tab.profile"), icon: UserIcon },
     ...(canManageCompany ? [{ key: "company" as const, label: t("settings.tab.company"), icon: Building2 }] : []),
+    ...(canManageCompany ? [{ key: "jobTypes" as const, label: t("settings.tab.jobTypes"), icon: Tags }] : []),
     { key: "security", label: t("settings.tab.security"), icon: ShieldCheck },
     { key: "notifications", label: t("settings.tab.notifications"), icon: Bell },
   ];
@@ -389,6 +397,8 @@ export function SettingsPage({
                 </div>
               </>
             )}
+
+            {tab === "jobTypes" && canManageCompany && <JobTypesSection jobTypes={jobTypes} onChange={onJobTypesChange} />}
 
             {tab === "company" && canManageCompany && (
               <>

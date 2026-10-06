@@ -55,6 +55,7 @@ const Divider = () => <div className="h-px bg-[#eef1f6] flex-shrink-0" />;
  */
 export function ProductDrawer({
   product, categories, existingCodes, allProducts, locked, onSave, onClose, onDuplicate, onArchiveToggle, onDelete,
+  canCreate, canEdit, canDelete,
 }: {
   /** null = สินค้าใหม่ */
   product: Product | null;
@@ -69,6 +70,10 @@ export function ProductDrawer({
   onDuplicate: (p: Product) => void;
   onArchiveToggle: (p: Product) => void;
   onDelete: (p: Product) => void;
+  /** สิทธิ์ (2026-10-06) — ไม่มีสิทธิ์แก้ = แผงอ่านอย่างเดียว · เมนูเหลือเฉพาะคำสั่งที่มีสิทธิ์ */
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const { t } = useI18n();
   const formId = useId();
@@ -152,24 +157,24 @@ export function ProductDrawer({
     </span>
   ) : undefined;
 
-  const footerLeft = product ? (
-    <MoreMenu
-      align="left"
-      items={[
-        { key: "duplicate", label: t("products.action.duplicate"), icon: Copy, onSelect: () => onDuplicate(product) },
-        {
-          key: "archive",
-          label: product.archived ? t("common.unarchive") : t("common.archive"),
-          hint: product.archived ? undefined : t("products.menu.archiveHint"),
-          icon: product.archived ? ArchiveRestore : Archive,
-          onSelect: () => onArchiveToggle(product),
-        },
-        { key: "delete", label: t("products.deletePermanently"), icon: Trash2, danger: true, onSelect: () => onDelete(product) },
-      ]}
-    />
-  ) : undefined;
+  // อ่านอย่างเดียวเมื่อไม่มีสิทธิ์บันทึกสิ่งที่เปิดอยู่ — เซิร์ฟเวอร์กันอยู่แล้ว ที่นี่แค่ไม่ให้กดแล้วเจอ 403
+  const readOnly = product ? !canEdit : !canCreate;
+  const menuItems = product ? [
+    ...(canCreate ? [{ key: "duplicate", label: t("products.action.duplicate"), icon: Copy, onSelect: () => onDuplicate(product) }] : []),
+    ...(canEdit ? [{
+      key: "archive",
+      label: product.archived ? t("common.unarchive") : t("common.archive"),
+      hint: product.archived ? undefined : t("products.menu.archiveHint"),
+      icon: product.archived ? ArchiveRestore : Archive,
+      onSelect: () => onArchiveToggle(product),
+    }] : []),
+    ...(canDelete ? [{ key: "delete", label: t("products.deletePermanently"), icon: Trash2, danger: true, onSelect: () => onDelete(product) }] : []),
+  ] : [];
+  const footerLeft = menuItems.length > 0 ? <MoreMenu align="left" items={menuItems} /> : undefined;
 
-  const footerRight = (
+  const footerRight = readOnly ? (
+    <button type="button" onClick={onClose} className={btn.secondary}>{t("common.close")}</button>
+  ) : (
     <>
       <button type="button" onClick={onClose} disabled={saving} className={btn.secondary}>{t("common.cancel")}</button>
       <button type="submit" form={formId} disabled={saving} className={`${btn.primary} min-w-[88px]`}>
@@ -191,8 +196,10 @@ export function ProductDrawer({
       footerLeft={footerLeft}
       footerRight={footerRight}
     >
-      <form id={formId} onSubmit={(e) => void handleSubmit(e)} noValidate className="flex flex-col gap-6">
-        <Group title={t("products.drawer.eyebrow")} hint={t("products.form.editHint")}>
+      <form id={formId} onSubmit={(e) => { if (readOnly) e.preventDefault(); else void handleSubmit(e); }} noValidate>
+       {/* fieldset disabled ปิดทุกช่อง/ปุ่มในฟอร์มทีเดียวเมื่ออ่านอย่างเดียว */}
+       <fieldset disabled={readOnly} className="flex flex-col gap-6 min-w-0">
+        <Group title={t("products.drawer.eyebrow")} hint={readOnly ? t("products.form.readOnlyHint") : t("products.form.editHint")}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label={t("products.form.codeLabel")} htmlFor="product-code" required error={errors.code}>
               <input id="product-code" autoFocus={!product} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("products.form.codePlaceholder")}
@@ -307,6 +314,7 @@ export function ProductDrawer({
           </p>
           {errors.kit && <p className={field.error} role="alert">{errors.kit}</p>}
         </Group>
+       </fieldset>
       </form>
     </Drawer>
   );

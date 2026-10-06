@@ -28,6 +28,7 @@ export function ProductList({
   onCreateNew,
   onManageCategories,
   onImport,
+  canCreate,
 }: {
   products: Product[];
   categories: ProductCategory[];
@@ -37,6 +38,8 @@ export function ProductList({
   onManageCategories: () => void;
   /** เปิดกล่องนำเข้าสินค้าจากไฟล์ Excel (2026-09-04) */
   onImport: () => void;
+  /** ไม่มีสิทธิ์ products:create → ไม่มีปุ่มเพิ่ม/นำเข้า (2026-10-06) */
+  canCreate: boolean;
 }) {
   const { t } = useI18n();
 
@@ -126,12 +129,16 @@ export function ProductList({
             <button data-tour="products-categories" onClick={onManageCategories} className={btn.secondary}>
               <Tags size={16} /> {t("products.manageCategories")}
             </button>
-            <button data-tour="products-import" onClick={onImport} className={btn.secondary}>
-              <Upload size={16} /> {t("products.importFromFile")}
-            </button>
-            <button data-tour="products-create" onClick={onCreateNew} className={btn.primary}>
-              <Plus size={16} /> {t("products.addNew")}
-            </button>
+            {canCreate && (
+              <>
+                <button data-tour="products-import" onClick={onImport} className={btn.secondary}>
+                  <Upload size={16} /> {t("products.importFromFile")}
+                </button>
+                <button data-tour="products-create" onClick={onCreateNew} className={btn.primary}>
+                  <Plus size={16} /> {t("products.addNew")}
+                </button>
+              </>
+            )}
           </>
         )}
       />
@@ -139,7 +146,7 @@ export function ProductList({
       <ListCard>
         {products.length === 0 ? (
           <div data-tour="products-table">
-            <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={t("empty.products.action")} onAction={onCreateNew} compact />
+            <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={canCreate ? t("empty.products.action") : undefined} onAction={canCreate ? onCreateNew : undefined} compact />
           </div>
         ) : (
           <>

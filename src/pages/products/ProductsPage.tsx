@@ -23,6 +23,9 @@ export function ProductsPage({
   autoView,
   autoViewSeq,
   onAutoActionConsumed,
+  canCreate,
+  canEdit,
+  canDelete,
 }: {
   products: Product[];
   onProductsChange: (products: Product[]) => void;
@@ -34,6 +37,10 @@ export function ProductsPage({
   autoView?: "create" | "categories" | null;
   autoViewSeq?: number | null;
   onAutoActionConsumed?: () => void;
+  /** สิทธิ์ products:create/edit/delete (2026-10-06) — ซ่อนปุ่มที่กดแล้วเซิร์ฟเวอร์ตอบ 403 แน่ ๆ */
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<View>("list");
@@ -57,14 +64,14 @@ export function ProductsPage({
   const [appliedAutoViewSeq, setAppliedAutoViewSeq] = useState<number | null>(null);
   if (autoViewSeq != null && autoViewSeq !== appliedAutoViewSeq && autoView) {
     setAppliedAutoViewSeq(autoViewSeq);
-    if (autoView === "create") { setView("list"); setFormTarget("new"); } else setView(autoView);
+    if (autoView === "create") { setView("list"); if (canCreate) setFormTarget("new"); } else setView(autoView);
   }
   useEffect(() => {
     if (autoViewSeq != null) onAutoActionConsumed?.();
   }, [autoViewSeq, onAutoActionConsumed]);
 
   const drawerProduct = formTarget && formTarget !== "new" ? products.find((p) => p.id === formTarget) ?? null : null;
-  const drawerOpen = formTarget === "new" || drawerProduct !== null;
+  const drawerOpen = (formTarget === "new" && canCreate) || drawerProduct !== null;
 
   // บันทึกจากแผง — สร้างสินค้าใหม่หรืออัปเดตตัวที่เปิดอยู่ แล้วปิดแผงเมื่อสำเร็จ
   // Saves from the drawer — creates a new product or updates the open one, closing the drawer on success.
@@ -118,7 +125,7 @@ export function ProductsPage({
   };
 
   if (view === "categories") {
-    return <CategoriesManager currentUserId={currentUserId} categories={categories} products={products} onChange={onCategoriesChange} onBack={() => setView("list")} />;
+    return <CategoriesManager currentUserId={currentUserId} categories={categories} products={products} onChange={onCategoriesChange} onBack={() => setView("list")} canManage={canCreate || canEdit} />;
   }
 
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified");
@@ -133,6 +140,7 @@ export function ProductsPage({
         onCreateNew={() => setFormTarget("new")}
         onManageCategories={() => setView("categories")}
         onImport={() => setImportOpen(true)}
+        canCreate={canCreate}
       />
       {drawerOpen && (
         <ProductDrawer
@@ -142,6 +150,9 @@ export function ProductsPage({
           existingCodes={products.filter((p) => p.id !== drawerProduct?.id).map((p) => p.code)}
           allProducts={products}
           locked={deleteTarget !== null}
+          canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
           onSave={handleSave}
           onClose={() => setFormTarget(null)}
           onDuplicate={(p) => { setFormTarget(null); void handleDuplicate(p.id); }}
