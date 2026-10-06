@@ -198,6 +198,17 @@ describe("ใบรับคืน / รับเข้าคลัง", () => {
     }
   });
 
+  it("ใบสรุปจ่าย-คืน (2026-10-06): จ่ายและคืนในแผ่นเดียว ต้นทุนจาก movement จริง · อ้างใบรับคืนที่รับเข้าคลังแล้ว", async () => {
+    const res = await api("POST", `/api/material-requisitions/${issueId}/issue-return-summary`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const s = res.body.summary;
+    expect(s.requisitionId).toBe(issueId);
+    expect(s.receiptNumbers).toHaveLength(1);
+    const row = s.rows.find((r: { productId: string }) => r.productId === resinId);
+    expect(row.issuedQty).toBeGreaterThan(0);
+    expect(row).toMatchObject({ returnedQty: 2, issueUnitCost: 100, returnUnitCost: 100 });
+  });
+
   it("รับสินค้าสำเร็จรูป (FG) พร้อมต้นทุน — ถัวต้นทุนเฉลี่ยใหม่", async () => {
     const created = await api("POST", "/api/store-receipts", { receiptCode: "FG" });
     const id = created.body.storeReceipt.id;
@@ -325,6 +336,16 @@ describe("ใบจ่าย/ใบคืนของสโตร์ อ้า�
     expect((await api("POST", `/api/store-receipts/${rid}/post`)).status).toBe(200);
     const dept = (await api("GET", `/api/material-requisitions/${deptId}`)).body.materialRequisition;
     expect(dept.lines[0].returnQty).toBe(1);
+  });
+
+  it("ใบสรุปจ่าย-คืนจากใบจ่ายที่อ้างใบเบิกแผนก — สรุปที่ใบแผนก ต้นทุนจ่ายตามไปเอาที่ใบจ่าย", async () => {
+    const res = await api("POST", `/api/material-requisitions/${slipId}/issue-return-summary`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const s = res.body.summary;
+    expect(s.requisitionId).toBe(deptId);
+    expect(s.storeSlipNumbers.length).toBeGreaterThan(0);
+    expect(s.rows[0].returnedQty).toBe(1);
+    expect(s.rows[0].issueUnitCost).toBeGreaterThan(0);
   });
 
   it("รายการใบของสโตร์บอกใบเบิกแผนกที่ใบจ่ายอ้าง (แท็บใบเบิกจากแผนกใช้จับคู่ — 2026-09-24)", async () => {

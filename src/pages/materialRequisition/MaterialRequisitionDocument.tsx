@@ -9,7 +9,7 @@ import {
   blankMaterialRequisitionLine, blankFreeTypedMaterialRequisitionLine, isFreeTypedLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
   rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf, storeSlipSkipsApproval,
-  fetchStoreIssueSources, type StoreIssueSourceCandidate,
+  fetchStoreIssueSources, type StoreIssueSourceCandidate, fetchIssueReturnSummary, type IssueReturnSummary,
 } from "../../lib/materialRequisition";
 import { fetchDepartments, type Department } from "../../lib/departments";
 import { fetchTeams, type Team } from "../../lib/teams";
@@ -42,6 +42,7 @@ import {
 } from "../../lib/materialRequisitionTemplate";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
 import { StoreIssuePrintDocument } from "../storeDocuments/StoreIssuePrintDocument";
+import { IssueReturnSummaryPrint } from "../storeDocuments/IssueReturnSummaryPrint";
 import { RequisitionSourcePicker } from "../storeDocuments/RequisitionSourcePicker";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
@@ -172,6 +173,8 @@ export function MaterialRequisitionDocument({
   /** null = ยังไม่เคยโหลด — โหลดครั้งเดียวตอนกดปุ่มครั้งแรก ไม่ดึงทุกครั้งที่เปิดใบเบิก */
   const [templates, setTemplates] = useState<MaterialRequisitionTemplate[] | null>(null);
   const [showPrint, setShowPrint] = useState(false);
+  /** ใบสรุปจ่าย-คืน (2026-10-06) — มีค่า = กำลังพิมพ์ใบสรุปแทนใบพิมพ์ปกติ · ล้างหลังพิมพ์ */
+  const [summaryPrint, setSummaryPrint] = useState<IssueReturnSummary | null>(null);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
@@ -383,7 +386,7 @@ export function MaterialRequisitionDocument({
 
   useEffect(() => {
     if (!showPrint) return;
-    const reset = () => setShowPrint(false);
+    const reset = () => { setShowPrint(false); setSummaryPrint(null); };
     window.addEventListener("afterprint", reset);
     window.print();
     return () => window.removeEventListener("afterprint", reset);
@@ -576,6 +579,18 @@ export function MaterialRequisitionDocument({
     }
   };
 
+  const handlePrintSummary = async () => {
+    setPrinting(true);
+    try {
+      setSummaryPrint(await fetchIssueReturnSummary(doc.id));
+      setShowPrint(true);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorPrint"));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -738,6 +753,13 @@ export function MaterialRequisitionDocument({
               )}
               <MoreMenu
                 items={[
+                  // ใบสรุปจ่าย-คืนในแผ่นเดียว (2026-10-06) — มีความหมายเมื่อจ่ายของไปแล้วอย่างน้อยหนึ่งรายการ
+                  canPrint && {
+                    key: "issueReturnSummary", label: t("materialRequisitionDoc.printIssueReturnSummary"), icon: Printer,
+                    disabled: printing || !doc.lines.some((l) => issuedQtyOf(l) > 0),
+                    hint: doc.lines.some((l) => issuedQtyOf(l) > 0) ? undefined : t("materialRequisitionDoc.printIssueReturnSummaryHint"),
+                    onSelect: () => void handlePrintSummary(),
+                  },
                   canEdit && {
                     key: "rewrite", label: t("docRevision.rewrite"), icon: GitBranch,
                     disabled: !isFinal || rewriting, hint: isFinal ? undefined : t("materialRequisitionDoc.rewriteAfterFinal"),
@@ -1262,9 +1284,12 @@ export function MaterialRequisitionDocument({
       </div>
 
       {/* ใบเบิกของสโตร์พิมพ์เป็นฟอร์ม "ใบจ่ายวัสดุ" ของโปรแกรมบัญชีเดิม (2026-09-23) — ฝ่ายอื่นยังเป็น FM-ST-04 */}
-      {isStoreDoc
-        ? <StoreIssuePrintDocument materialRequisition={doc} unitCostByProduct={printCosts} companyHeader={companyHeader} />
-        : <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />}
+      {/* ใบสรุปจ่าย-คืน (2026-10-06) แทนที่ใบพิมพ์ปกติเฉพาะตอนกดพิมพ์ใบสรุป — มีใบพิมพ์ในหน้าได้ทีละใบ */}
+      {summaryPrint
+        ? <IssueReturnSummaryPrint summary={summaryPrint} companyName={companyHeader.name} printedAt={new Date().toISOString().slice(0, 10)} />
+        : isStoreDoc
+          ? <StoreIssuePrintDocument materialRequisition={doc} unitCostByProduct={printCosts} companyHeader={companyHeader} />
+          : <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />}
 
       <ProductPickerModal
         open={pickerOpen}

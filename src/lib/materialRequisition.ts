@@ -361,6 +361,51 @@ export function blankMaterialRequisitionLine(product: Product, categoryName: str
   };
 }
 
+/**
+ * ใบสรุปจ่าย-คืนวัสดุ (2026-10-06 เจ้าของ: *"ใบสรุป เบิก-คืนอยู่ในใบเดียว … โชว์ราคามาว่ายอดออกเท่าไหร่ยอดคืนเท่าไหร่ …
+ * จะได้ไม่ต้องปริ้นใบรับใบจ่าย 2 ใบมันเปลืองกระดาษ"*) — คำนวณสดตอนกดพิมพ์ ไม่ได้เก็บเป็นเอกสาร
+ * ใบที่สรุปคือ "ใบที่ของคืนอ้างถึง": ใบจ่ายสโตร์ที่อ้างใบเบิกแผนก → สรุปที่ใบเบิกแผนกนั้น (ใบรับคืนอ้างใบแผนก) · ใบอื่น → ตัวเอง
+ */
+export interface IssueReturnSummaryRow {
+  lineId: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  unit: string;
+  issuedQty: number;
+  /** ต้นทุนที่ลงสต๊อกจริงตอนจ่าย (เฉลี่ยทุกรอบ) — รายการพิมพ์เอง 0 */
+  issueUnitCost: number;
+  returnedQty: number;
+  /** ราคาที่ของกลับเข้าคลังจริง (ราคาซื้อล่าสุด ณ วันที่รับคืน) — ต่างจากต้นทุนตอนจ่ายได้ */
+  returnUnitCost: number;
+}
+
+export interface IssueReturnSummary {
+  requisitionId: string;
+  documentNumber: string;
+  issueCode: string;
+  jobCode: string;
+  customerName: string;
+  productName: string;
+  storeReference: string;
+  chargeDepartmentName: string;
+  chargeTeamName: string;
+  /** วันที่จ่ายรอบล่าสุด */
+  lastIssuedDate: string;
+  /** ใบจ่ายของสโตร์ที่จ่ายให้ใบนี้ (เฉพาะใบเบิกแผนก) */
+  storeSlipNumbers: string[];
+  /** ใบรับคืนที่รับเข้าคลังแล้ว */
+  receiptNumbers: string[];
+  rows: IssueReturnSummaryRow[];
+}
+
+export async function fetchIssueReturnSummary(id: string): Promise<IssueReturnSummary> {
+  const { summary } = await apiFetch<{ summary: IssueReturnSummary }>(
+    `/material-requisitions/${encodeURIComponent(id)}/issue-return-summary`, { method: "POST" },
+  );
+  return summary;
+}
+
 /** รายการพิมพ์เอง (ไม่ผูกสินค้าในคลัง) — ไม่ตัดสต๊อก ไม่มีต้นทุน คืนเข้าคลังไม่ได้ (2026-10-06) */
 export function isFreeTypedLine(line: Pick<MaterialRequisitionLine, "productId">): boolean {
   return !line.productId;

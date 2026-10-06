@@ -6,7 +6,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   materialRequisitionsCollection, productionOrdersCollection, jobOrdersCollection, productsCollection, countersCollection, auditLogCollection,
-  departmentsCollection, teamsCollection, codeEntriesCollection,
+  departmentsCollection, teamsCollection, codeEntriesCollection, storeReceiptsCollection,
   toObjectId, withStringId, type MaterialRequisitionFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -23,7 +23,7 @@ import {
   type StockMovementOrgTags, type ProductCostBasis, stockQtyByProduct,
 } from "./stockHandler.js";
 import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches, storeSlipSkipsApproval } from "../../src/lib/materialRequisition.js";
-import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch, StoreIssueSourceCandidate } from "../../src/lib/materialRequisition.js";
+import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch, StoreIssueSourceCandidate, IssueReturnSummary } from "../../src/lib/materialRequisition.js";
 import { isStoreIssueCode, storeIssueCounterKey, type StoreIssueCode } from "../../src/lib/storeCodes.js";
 
 /**
@@ -1284,6 +1284,61 @@ async function printUnitCostsFor(doc: MaterialRequisitionFields): Promise<Record
   return out;
 }
 
+/**
+ * ใบสรุปจ่าย-คืนวัสดุ (2026-10-06) — ดู `IssueReturnSummary` · POST เพราะเป็นการกดพิมพ์ (ลง audit แบบเดียวกับ /print)
+ *
+ * ใบที่สรุป = ใบที่ใบรับคืนอ้างถึง (`sourceRequisitionId` ของ store_receipts): ใบจ่ายสโตร์ที่อ้างใบเบิกแผนก → ใบแผนก
+ * จำนวนอ่านจากบรรทัดของใบนั้น (จ่าย = ผลรวมรอบ, คืน = `returnQty` ที่ใบรับคืนบวกให้ตอนรับเข้าคลัง) — ตรงกับตัวเลขบนหน้าจอเสมอ
+ * ต้นทุนอ่านจาก movement จริง: ฝั่งจ่าย = รอบจ่ายของใบนั้น (รอบที่ mirror มาจากใบจ่ายสโตร์ไม่มี movement — ตามไปเอาที่ใบจ่าย
+ * รอบ id เดียวกัน) · ฝั่งคืน = ใบรับคืนที่รับเข้าคลังแล้ว
+ */
+async function handleIssueReturnSummary(req: ApiRequest, res: ApiResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:print");
+  const doc = await loadOrThrow(id);
+  const target = doc.ownerDepartment === "store" && doc.sourceRequisitionId ? await loadOrThrow(doc.sourceRequisitionId) : doc;
+  const batches = issueBatchesOf(target);
+
+  const materialRequisitions = await materialRequisitionsCollection();
+  const slipIds = [...new Set(batches.map((b) => b.storeSlipId ?? "").filter(Boolean))];
+  const slips = slipIds.length > 0 ? await materialRequisitions.find({ _id: { $in: slipIds } }).toArray() : [];
+  const slipBatchById = new Map(slips.flatMap((s) => issueBatchesOf(s)).map((b) => [b.id, b]));
+  const issueMovementIds = batches.flatMap((b) => (b.stockMovementIds?.length ? b.stockMovementIds : slipBatchById.get(b.id)?.stockMovementIds ?? []));
+
+  const storeReceipts = await storeReceiptsCollection();
+  const receipts = await storeReceipts
+    .find({ sourceRequisitionId: target._id, isDeleted: false, postedAt: { $gt: "" } })
+    .sort({ postedAt: 1 })
+    .toArray();
+  const [issueCost, returnCost] = await Promise.all([
+    postedUnitCostsByProduct(issueMovementIds),
+    postedUnitCostsByProduct(receipts.flatMap((r) => r.stockMovementIds ?? [])),
+  ]);
+
+  const summary: IssueReturnSummary = {
+    requisitionId: target._id,
+    documentNumber: target.documentNumber || target._id,
+    issueCode: target.issueCode ?? "",
+    jobCode: target.jobCode ?? "", customerName: target.customerName ?? "", productName: target.productName ?? "",
+    storeReference: target.storeReference ?? "",
+    chargeDepartmentName: target.chargeDepartmentName ?? "", chargeTeamName: target.chargeTeamName ?? "",
+    lastIssuedDate: batches.length > 0 ? batches[batches.length - 1].issuedDate : "",
+    storeSlipNumbers: slips.map((s) => s.documentNumber || s._id),
+    receiptNumbers: receipts.map((r) => r.documentNumber || r._id),
+    rows: (target.lines ?? [])
+      .map((l) => ({
+        lineId: l.id, productId: l.productId, productCode: l.productCode, productName: l.productName, unit: l.unit,
+        issuedQty: issuedQtyOf(l),
+        issueUnitCost: l.productId ? issueCost[l.productId] ?? 0 : 0,
+        returnedQty: l.returnQty ?? 0,
+        returnUnitCost: l.productId ? returnCost[l.productId] ?? 0 : 0,
+      }))
+      .filter((r) => r.issuedQty > 0 || r.returnedQty > 0),
+  };
+  await writeAuditEntry(ctx, "Material Requisition Printed", `พิมพ์ใบสรุปจ่าย-คืนวัสดุ ${summary.documentNumber}`, { scopeOfWorkId: target.scopeOfWorkId });
+  res.status(200).json({ summary });
+}
+
 /** ตัวนับเลขฉบับแก้ไขต่อสายเอกสาร — idiom เดียวกับ Scope of Work และใบสั่งผลิต */
 async function nextMaterialRequisitionRevision(counters: Collection<CounterFields>, root: string): Promise<number> {
   const result = await counters.findOneAndUpdate(
@@ -1425,6 +1480,7 @@ export async function handleMaterialRequisition(req: ApiRequest, res: ApiRespons
   if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "issue-return-summary") return handleIssueReturnSummary(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }
