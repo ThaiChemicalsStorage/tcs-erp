@@ -51,7 +51,7 @@ export function PurchasingLeadTimeSection({ data, onOpenInbox }: { data: LeadTim
         <span className="h-6 px-2.5 rounded-full bg-white border border-border text-[12.5px] inline-flex items-center whitespace-nowrap">
           {t("dashboard.leadTime.targetNormal").replace("{n}", String(data.targets.normal))}
         </span>
-        <span className="h-6 px-2.5 rounded-full bg-[#fff1e8] text-[#a8431a] text-[12.5px] inline-flex items-center gap-1 whitespace-nowrap">
+        <span className="h-6 px-2.5 rounded-full bg-[#fcebeb] text-[#b93636] text-[12.5px] inline-flex items-center gap-1 whitespace-nowrap">
           <Zap size={12} strokeWidth={2.5} aria-hidden="true" />{t("dashboard.leadTime.targetUrgent").replace("{n}", String(data.targets.urgent))}
         </span>
       </div>
@@ -104,7 +104,7 @@ export function PurchasingLeadTimeSection({ data, onOpenInbox }: { data: LeadTim
             {data.queue.map((q) => {
               const tone = agingTone(q.days, q.target);
               return (
-                <tr key={q.id} className={`border-b border-[#eef1f6] h-[56px] ${q.urgent ? "bg-[#fffaf6]" : ""}`}>
+                <tr key={q.id} className={`border-b border-[#eef1f6] h-[56px] ${q.urgent ? "bg-[#fef7f7]" : ""}`}>
                   <td className={`${TH} font-normal`}>
                     <span className="flex items-center gap-2">
                       <span className="font-mono text-[13px] font-medium text-foreground">{q.id}</span>

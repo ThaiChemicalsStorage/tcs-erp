@@ -25,6 +25,10 @@ colors:
   warning-bg: "#fdf3e0"
   danger: "#b93636"
   danger-bg: "#fcebeb"
+  urgent: "#b93636"
+  urgent-bg: "#fcebeb"
+  urgent-row: "#fef7f7"
+  urgent-border: "#f0c8c8"
   neutral-bg: "#eef1f6"
   pale-surface: "#e8edf7"
   surface-blue-ink: "#1a3a6b"
@@ -227,7 +231,7 @@ When a chart or donut legend needs more than 2-3 categories (job type distributi
 - **Chrome / Label** (weight 500, 12px floor, `text-xs`): buttons, form labels, status pills, secondary/fine-print text. **Never below 12px for a real form label** — `text-[10px]` is reserved only for uppercase-tracking-wide "section eyebrows" (table header cells, sidebar group labels), a distinct, deliberately-tiny reading mode.
 - **Numbers / Codes** (JetBrains Mono, weight 400/500): quotation numbers, document numbers, currency amounts, dates, product codes — anything that must be scanned character-by-character.
 
-**What the ramp actually computes to.** `html` is set to `--font-size: 15px`, and the Tailwind steps are rem-based, so the rendered sizes are **`text-xs` 11.25px**, `text-sm` 13.125px, `text-base` 15px — not the 12/14/16 the class names suggest. The "12px floor" above is the *token* floor (`text-xs`), not a literal pixel measurement. Never hard-code a raw `text-[Npx]` to chase a number: it pins one element while every other size moves with the root, which is exactly how 68 stray `text-[11px]` values accumulated before the 2026-08-25 sweep.
+**What the ramp actually computes to.** `html` is set to `--font-size: 15px`, and the Tailwind steps are rem-based, so `text-sm` renders 13.125px and `text-base` 15px. **`text-xs` is overridden to `0.8rem` = a real 12px** (owner decision 2026-10-06 — before that it rendered 11.25px and the "12px floor" was only a token name); line-height keeps Tailwind's ratio (16px). Measured in the browser after the change: `getComputedStyle` → `12px`. Never hard-code a raw `text-[Npx]` to chase a number: it pins one element while every other size moves with the root, which is exactly how 68 stray `text-[11px]` values accumulated before the 2026-08-25 sweep.
 
 ### Named Rules
 **The Two-Tier Density Rule.** On dense working pages (e.g. the Quotation editor), chrome — labels, buttons, badges, pills — sits at `text-xs` (12px) while actual content — input values, table data, totals — sits at `text-sm` (14px). Bumping everything to the same size erases the hierarchy and reads as heavier, not more readable; when a page genuinely needs bigger text, apply this two-tier split deliberately per element rather than a single mechanical size bump.
@@ -262,6 +266,7 @@ Flat by default. Cards, panels, and tables are separated from the page and each 
 - **"เพิ่มเติม ▾" menu:** rare actions (copy, cancel, delete) live here instead of as extra buttons; destructive items sit at the bottom in red after a divider.
 - **Text button:** `#1a5fb4`, no border — add a row, add a contact.
 - **Danger:** solid `#b93636` / white — only inside a confirm dialog.
+- **Urgent ("ด่วน") — red, owner decision 2026-10-06** (was burnt orange `#a8431a`): badge `urgent-bg` `#fcebeb` / `urgent` `#b93636` with the ⚡ icon (the icon is what tells it apart from the red "เกินเป้า" aging tag), urgent card/row tint `#fef7f7` with border `#f0c8c8`. Used by `UrgentBadge`/`UrgentCard` (`purchasingAging.tsx`), the ใบขอซื้อ list filter and the purchasing lead-time dashboard.
 - **Icon-only row actions:** muted `#5f7293`, hover to ink. Always visible — never `opacity-0` shown only on hover.
 
 ### Status Pills (signature component)

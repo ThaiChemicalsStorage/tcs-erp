@@ -43,7 +43,7 @@ const TAG: Record<"grey" | "amber" | "blue" | "green" | "red" | "urgent", string
   // เกินเป้า (2026-10-02)
   red: "bg-[#fcebeb] text-[#b93636]",
   // งานด่วน — สีส้มที่เจ้าของอนุมัติ 2026-10-02 แยกจากแดงของ "เกินเป้า"
-  urgent: "bg-[#fff1e8] text-[#a8431a]",
+  urgent: "bg-[#fcebeb] text-[#b93636]",
 };
 
 /** ป้ายเหลี่ยมเล็ก 22px — ขั้นหลังอนุมัติ แผนก ผลของบรรทัด */

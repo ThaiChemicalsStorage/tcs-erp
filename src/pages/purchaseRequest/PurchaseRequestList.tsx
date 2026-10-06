@@ -236,10 +236,10 @@ export function PurchaseRequestList({
                 type="button"
                 aria-pressed={urgentOnly}
                 onClick={() => { setUrgentOnly((v) => !v); setPage(1); }}
-                className={`h-10 px-3 rounded-lg border text-sm font-medium inline-flex items-center gap-2 transition-colors ${urgentOnly ? "border-[#a8431a] bg-[#fff1e8] text-[#a8431a]" : "border-[#c3ccda] bg-white text-foreground hover:bg-[#f4f6fa]"}`}
+                className={`h-10 px-3 rounded-lg border text-sm font-medium inline-flex items-center gap-2 transition-colors ${urgentOnly ? "border-[#b93636] bg-[#fcebeb] text-[#b93636]" : "border-[#c3ccda] bg-white text-foreground hover:bg-[#f4f6fa]"}`}
               >
                 <Zap size={16} aria-hidden="true" /> {t("purchaseRequest.urgent.filter")}
-                <span className={`min-w-[22px] h-5 px-1.5 rounded-full text-xs font-semibold inline-flex items-center justify-center ${urgentOnly ? "bg-[#a8431a] text-white" : "bg-[#fff1e8] text-[#a8431a]"}`}>{urgentCount}</span>
+                <span className={`min-w-[22px] h-5 px-1.5 rounded-full text-xs font-semibold inline-flex items-center justify-center ${urgentOnly ? "bg-[#b93636] text-white" : "bg-[#fcebeb] text-[#b93636]"}`}>{urgentCount}</span>
               </button>
             </ListToolbar>
           </div>

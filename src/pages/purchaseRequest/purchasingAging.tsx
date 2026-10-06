@@ -15,12 +15,12 @@ import { formatDisplayDate } from "../../lib/displayDate";
  * ใบขอซื้อใช้ร่วมกัน · กติกาการนับอยู่ที่ `src/lib/businessDays.ts` ที่เดียว (จ.–ศ. เท่านั้น)
  */
 
-/** ป้าย "ด่วน" สีส้ม */
+/** ป้าย "ด่วน" สีแดง (เจ้าของตัดสิน 2026-10-06 — เดิมสีส้ม) */
 export function UrgentBadge({ size = "sm" }: { size?: "sm" | "md" }) {
   const { t } = useI18n();
   if (size === "md") {
     return (
-      <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[12.5px] font-semibold whitespace-nowrap bg-[#fff1e8] text-[#a8431a]">
+      <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[12.5px] font-semibold whitespace-nowrap bg-[#fcebeb] text-[#b93636]">
         <Zap size={13} strokeWidth={2.5} aria-hidden="true" /> {t("purchaseRequest.urgent.badge")}
       </span>
     );
@@ -67,10 +67,10 @@ export function UrgentCard({ urgent, reason, editable, onChange, reasonError }: 
   if (!editable) {
     if (!urgent) return null;
     return (
-      <section className="rounded-xl border border-[#f3cdb6] bg-[#fffaf6] px-6 py-[18px] flex items-start gap-3.5">
-        <span className="w-9 h-9 rounded-lg bg-[#fff1e8] text-[#a8431a] flex items-center justify-center flex-shrink-0"><Zap size={18} aria-hidden="true" /></span>
+      <section className="rounded-xl border border-[#f0c8c8] bg-[#fef7f7] px-6 py-[18px] flex items-start gap-3.5">
+        <span className="w-9 h-9 rounded-lg bg-[#fcebeb] text-[#b93636] flex items-center justify-center flex-shrink-0"><Zap size={18} aria-hidden="true" /></span>
         <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <h2 className="m-0 text-base font-semibold text-[#a8431a]">{t("purchaseRequest.urgent.readonlyTitle")}</h2>
+          <h2 className="m-0 text-base font-semibold text-[#b93636]">{t("purchaseRequest.urgent.readonlyTitle")}</h2>
           <span className="text-xs text-muted-foreground">{t("purchaseRequest.urgent.reason")}</span>
           <span className="text-sm font-medium text-foreground whitespace-pre-line">{reason || "—"}</span>
           <span className="text-xs text-muted-foreground">{t("purchaseRequest.urgent.target").replace("{n}", String(PURCHASING_TARGET_DAYS.urgent))}</span>
@@ -82,15 +82,15 @@ export function UrgentCard({ urgent, reason, editable, onChange, reasonError }: 
     <section className={surface.card}>
       <div className={surface.cardHead}><h2 className={surface.cardTitle}>{t("purchaseRequest.urgent.cardTitle")}</h2></div>
       <div className="px-6 pt-5 pb-6 flex flex-col gap-4">
-        <label className={`w-full p-4 rounded-lg border-[1.5px] flex items-start gap-3.5 cursor-pointer transition-colors ${urgent ? "border-[#a8431a] bg-[#fffaf6]" : "border-[#c3ccda] bg-white hover:border-[#a8431a]"}`}>
+        <label className={`w-full p-4 rounded-lg border-[1.5px] flex items-start gap-3.5 cursor-pointer transition-colors ${urgent ? "border-[#b93636] bg-[#fef7f7]" : "border-[#c3ccda] bg-white hover:border-[#b93636]"}`}>
           <input
             type="checkbox"
             checked={urgent}
             onChange={(e) => onChange?.({ urgent: e.target.checked, urgentReason: reason })}
-            className="w-5 h-5 mt-0.5 accent-[#a8431a] cursor-pointer flex-shrink-0"
+            className="w-5 h-5 mt-0.5 accent-[#b93636] cursor-pointer flex-shrink-0"
           />
           <span className="flex-1 min-w-0 flex flex-col gap-1">
-            <span className={`text-[15px] font-semibold inline-flex items-center gap-1.5 ${urgent ? "text-[#a8431a]" : "text-foreground"}`}>
+            <span className={`text-[15px] font-semibold inline-flex items-center gap-1.5 ${urgent ? "text-[#b93636]" : "text-foreground"}`}>
               <Zap size={16} aria-hidden="true" /> {t("purchaseRequest.urgent.checkbox")}
             </span>
             <span className="text-[13px] text-[#3d5173] leading-relaxed">{help}</span>

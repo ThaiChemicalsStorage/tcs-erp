@@ -4,7 +4,21 @@
 
 ---
 
-## 2026-10-06m (absolute latest) — ผู้รับเอกสารไม่เห็นปุ่มแก้/ลบ/ส่งอนุมัติ: Cost Control + ใบส่งมอบสินค้า (Tuhmo #34)
+## 2026-10-06n (absolute latest) — ระบบดีไซน์: text-xs = 12px จริง · ป้าย "ด่วน" สีแดง · ลบ CSS variable ตาย (Tuhmo #26)
+
+เจ้าของตัดสิน 2026-10-06: ตัวอักษรเล็กสุด (text-xs) = 12px ทั้งแอป · ป้าย "ด่วน" = สีแดง · dark mode ไม่ต้องทำ
+- `src/styles/theme.css` `@theme inline`: `--text-xs: 0.8rem` (root 15px → 12px พอดี เดิม 0.75rem = 11.25px) · line-height คงอัตราส่วน Tailwind
+  — ตรวจแล้ว: CSS ที่ build ออกมาเป็น `.text-xs{font-size:.8rem}` และ `getComputedStyle` บนเบราว์เซอร์ได้ `12px`
+- ป้าย/การ์ด/แถว "ด่วน" จากส้ม `#a8431a` → แดงตระกูล danger: `#b93636` / พื้น `#fcebeb` / แถว `#fef7f7` / ขอบ `#f0c8c8`
+  (`purchasingAging.tsx` UrgentBadge+UrgentCard · `docShared.tsx` tone urgent · ตัวกรองด่วนในรายการใบขอซื้อ · แดชบอร์ด lead time จัดซื้อ) — ดูเป็นภาพแล้ว
+- ลบ `--switch-background` / `--sidebar-accent-foreground` (+ `--color-*` คู่ของมัน) ที่ไม่มีใครใช้ — ยืนยันด้วย grep และใน CSS ที่ build ไม่มีแล้ว
+- `DESIGN.md`: token `urgent*` ใหม่ + ข้อความ "ramp computes to" แก้ให้ตรง (เดิมบอกว่า text-xs = 11.25px) · `.impeccable/design.json`: `urgent-red` + label 12px
+- ⚠️ ทุกจุดที่ใช้ `text-xs` (ป้าย ข้อความช่วย ชิป ฯลฯ) ใหญ่ขึ้น 0.75px ทั้งแอป — ตรวจเป็นภาพเฉพาะชุดคอมโพเนนต์ตัวอย่าง ยังไม่ได้ไล่ดูทุกหน้าจริง
+  (MongoDB ของเครื่อง dev อยู่ใน Docker ที่ไม่ได้เปิด) · ตารางแน่น ๆ ควรเปิดดูว่ามีอะไรตกบรรทัดไหม
+
+---
+
+## 2026-10-06m — ผู้รับเอกสารไม่เห็นปุ่มแก้/ลบ/ส่งอนุมัติ: Cost Control + ใบส่งมอบสินค้า (Tuhmo #34)
 
 เดิมเซิร์ฟเวอร์กันผู้รับ (ผ่าน Scope of Work / ส่งถึงแผนก) ครบแล้ว แต่จอตัดสินจากสิทธิ์ของบทบาท ปุ่มจึงขึ้นให้กดแล้วเจอ 403
 - `GET /api/cost-controls/:id` และ `GET /api/delivery-orders/:id` ตอบ `recipientOnly: boolean` เพิ่ม — คำนวณด้วยฟังก์ชันเดียวกับด่านจริง

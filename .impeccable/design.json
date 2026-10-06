@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-25T07:54:47.000Z",
+  "generatedAt": "2026-10-06T16:10:00.000Z",
   "title": "Design System: TCS ERP",
   "extensions": {
     "colorMeta": {
@@ -116,6 +116,21 @@
           "#fbe6e6"
         ]
       },
+      "urgent-red": {
+        "role": "semantic",
+        "displayName": "Urgent Red (ด่วน)",
+        "canonical": "#b93636",
+        "tonalRamp": [
+          "#4f1515",
+          "#7a2121",
+          "#9e2c2c",
+          "#b93636",
+          "#cf6a6a",
+          "#f0c8c8",
+          "#fcebeb",
+          "#fef7f7"
+        ]
+      },
       "sidebar-foreground": {
         "role": "neutral",
         "displayName": "Sidebar Foreground",
@@ -203,7 +218,7 @@
       },
       "label": {
         "displayName": "Chrome / Label",
-        "purpose": "Buttons, form labels, status pills, secondary/fine-print text — 12px floor, never smaller for a real form label."
+        "purpose": "Buttons, form labels, status pills, secondary/fine-print text — text-xs renders a real 12px (0.8rem on the 15px root, since 2026-10-06), never smaller for a real form label."
       },
       "mono": {
         "displayName": "Numbers / Codes",

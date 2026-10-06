@@ -37,7 +37,6 @@
   --border: #e3e8f0;
   --input: #eef1f8;
   --input-background: #eef1f8;
-  --switch-background: #c5d0e4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: #1a5fb4;
@@ -52,12 +51,15 @@
   --sidebar-primary: #c9a84c;
   --sidebar-primary-foreground: #0b1d3a;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #e8edf5;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #c9a84c;
 }
 
 @theme inline {
+  /* text-xs = 12px จริงทั้งแอป (เจ้าของตัดสิน 2026-10-06, Tuhmo #26) — html เป็น 15px ค่าเดิม 0.75rem จึงออกมา 11.25px
+     0.8rem × 15px = 12px · line-height คงอัตราส่วนเดิมของ Tailwind (16px ที่ 12px) */
+  --text-xs: 0.8rem;
+  --text-xs--line-height: calc(1 / 0.75);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --color-background: var(--background);
@@ -79,7 +81,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);
-  --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -95,7 +96,6 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
