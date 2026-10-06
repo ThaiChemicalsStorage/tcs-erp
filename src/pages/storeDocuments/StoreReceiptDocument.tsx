@@ -33,6 +33,8 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { StoreReceiptPrintDocument } from "./StoreReceiptPrintDocument";
+import { IssueReturnSummaryPrint } from "./IssueReturnSummaryPrint";
+import { fetchIssueReturnSummary, type IssueReturnSummary } from "../../lib/materialRequisition";
 import { RequisitionSourcePicker } from "./RequisitionSourcePicker";
 import { KitBreakdown } from "../../components/KitBreakdown";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
@@ -109,6 +111,8 @@ export function StoreReceiptDocument({
   const [printing, setPrinting] = useState(false);
   // ต้นทุนต่อหน่วยสำหรับช่อง หน่วยละ/รวม ของใบพิมพ์ — มากับการกดพิมพ์ทุกครั้งจึงสดเสมอ
   const [printCosts, setPrintCosts] = useState<Record<string, number>>({});
+  /** ใบสรุปจ่าย-คืนของใบเบิกต้นทาง (2026-10-06 เจ้าของ: "แล้วใบที่รับเสร็จแล้วละ") — มีค่า = พิมพ์ใบสรุปแทนใบรับคืน · ล้างหลังพิมพ์ */
+  const [summaryPrint, setSummaryPrint] = useState<IssueReturnSummary | null>(null);
 
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
 
@@ -192,7 +196,7 @@ export function StoreReceiptDocument({
 
   useEffect(() => {
     if (!showPrint) return;
-    const reset = () => setShowPrint(false);
+    const reset = () => { setShowPrint(false); setSummaryPrint(null); };
     window.addEventListener("afterprint", reset);
     window.print();
     return () => window.removeEventListener("afterprint", reset);
@@ -301,6 +305,20 @@ export function StoreReceiptDocument({
     setPrinting(true);
     try {
       setPrintCosts(await logStoreReceiptPrinted(draft.id));
+      setShowPrint(true);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("storeReceipt.errorPrint"));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  // ใบสรุปของใบเบิกที่ใบรับคืนนี้อ้าง — ตัวเลขคืนนับเฉพาะใบรับคืนที่รับเข้าคลังแล้ว (รวมใบนี้ถ้ารับเข้าคลังแล้ว)
+  const handlePrintSummary = async () => {
+    if (!draft.sourceRequisitionId) return;
+    setPrinting(true);
+    try {
+      setSummaryPrint(await fetchIssueReturnSummary(draft.sourceRequisitionId));
       setShowPrint(true);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("storeReceipt.errorPrint"));
@@ -437,6 +455,10 @@ export function StoreReceiptDocument({
                 )}
                 <MoreMenu
                   items={[
+                    canPrint && kind === "return" && !!draft.sourceRequisitionId && {
+                      key: "issueReturnSummary", label: t("materialRequisitionDoc.printIssueReturnSummary"), icon: Printer,
+                      disabled: printing, onSelect: () => void handlePrintSummary(),
+                    },
                     approval.canWithdraw && approval.canDecide && {
                       key: "withdraw", label: t("approval.withdraw"), icon: Undo2, disabled: approval.busy !== null, onSelect: approval.withdraw,
                     },
@@ -762,7 +784,9 @@ export function StoreReceiptDocument({
         </div>
       </div>
 
-      <StoreReceiptPrintDocument doc={draft} unitCostByProduct={printCosts} companyHeader={companyHeader} />
+      {summaryPrint
+        ? <IssueReturnSummaryPrint summary={summaryPrint} companyName={companyHeader.name} printedAt={new Date().toISOString().slice(0, 10)} />
+        : <StoreReceiptPrintDocument doc={draft} unitCostByProduct={printCosts} companyHeader={companyHeader} />}
 
       <ProductPickerModal
         open={pickerOpen}
