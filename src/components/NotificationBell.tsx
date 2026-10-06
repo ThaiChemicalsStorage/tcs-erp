@@ -142,7 +142,7 @@ export function NotificationBell({
                     tabIndex={0}
                     aria-label={`${n.title} — ${n.description}`}
                     className={`group flex items-start gap-3 px-4 py-3 border-b border-border/60 last:border-0 cursor-pointer transition-colors ${
-                      n.read ? "hover:bg-secondary/40" : "bg-[#c9a84c]/[0.06] hover:bg-[#c9a84c]/10"
+                      n.read ? "hover:bg-secondary/40" : "bg-[#f4f7fc] hover:bg-[#e8f0fb]"
                     }`}
                     onClick={() => openNotification(n)}
                     onKeyDown={(e) => {
