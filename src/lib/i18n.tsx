@@ -16,6 +16,7 @@ const translations = {
     "dashboard.subtitle": "ภาพรวมทุกแผนก และรายละเอียดของแต่ละแผนกแยกเป็นแท็บ",
     "dashboard.refreshing": "กำลังอัปเดตข้อมูล...",
     "dashboard.export.csv": "ส่งออก CSV",
+    "dashboard.export.pdf": "PDF (พิมพ์ / บันทึกเป็น PDF)",
     "dashboard.export.xlsx": "ส่งออก Excel",
     "dashboard.export.xlsx.loading": "กำลังสร้างไฟล์...",
 
@@ -5456,6 +5457,7 @@ const translations = {
 
     "dashboard.title": "Executive Overview",
     "dashboard.export.csv": "Export CSV",
+    "dashboard.export.pdf": "PDF (print / save as PDF)",
     "dashboard.export.xlsx": "Export Excel",
     "dashboard.export.xlsx.loading": "Generating...",
 

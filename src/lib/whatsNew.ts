@@ -7,6 +7,16 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
   {
+    id: "2026-10-06-dashboard-export-all-tabs",
+    date: "2026-10-06",
+    title: "แดชบอร์ด: ส่งออก Excel และ PDF ได้ทุกแท็บ",
+    bullets: [
+      "แท็บภาพรวม บริการ จัดซื้อ คลังสินค้า และผลิต/โครงการ มีปุ่ม **ส่งออก ▾** มุมขวาบน เลือก Excel หรือ PDF",
+      "แท็บขายเพิ่ม **PDF** ต่อจาก Excel/CSV เดิม",
+      "ตัวเลขในไฟล์ตรงกับที่เห็นบนจอและช่วงวันที่ที่เลือก · PDF เลือก \"บันทึกเป็น PDF\" ในหน้าต่างพิมพ์",
+    ],
+  },
+  {
     id: "2026-10-06-job-types-tab",
     date: "2026-10-06",
     title: "ตั้งค่า: เพิ่มและแก้ประเภทงาน (Job Type) ได้เอง",

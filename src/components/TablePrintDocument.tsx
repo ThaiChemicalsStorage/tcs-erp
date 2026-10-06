@@ -10,9 +10,13 @@ import { PrintPageFrame } from "./PrintPageFrame";
  *
  * แนวนอน A4 · หัวตารางพิมพ์ซ้ำทุกหน้า (`<thead>`) · ภาษาไทยตามนโยบายใบพิมพ์ใน docs/CLAUDE.md
  * อยู่ใน DOM เฉพาะตอนกำลังพิมพ์ (ผู้เรียกเรนเดอร์แล้วสั่ง `window.print()`) ซ่อนบนจอด้วย `hidden print:block`
+ *
+ * `sheets` (2026-10-06, ส่งออกแดชบอร์ด) — หลายตารางต่อกันใต้หัวจดหมายเดียว ไม่ขึ้นหน้าใหม่ทุกตาราง (ประหยัดกระดาษ)
+ * ตารางถัดไปมีหัวข้อเล็กของตัวเอง · บรรทัดคำอธิบายพิมพ์เฉพาะเมื่อไม่ซ้ำกับตารางก่อนหน้า
  */
-export function TablePrintDocument({ sheet, companyHeader, docLabel, printedAt }: {
-  sheet: ExportSheet;
+export function TablePrintDocument({ sheet, sheets, companyHeader, docLabel, printedAt }: {
+  sheet?: ExportSheet;
+  sheets?: ExportSheet[];
   companyHeader: CompanyHeaderInfo;
   docLabel: string;
   printedAt: string;
@@ -24,14 +28,22 @@ export function TablePrintDocument({ sheet, companyHeader, docLabel, printedAt }
     return v.toLocaleString("en-US", kind === "money" ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 });
   };
   const align = (v: string | number | null): React.CSSProperties["textAlign"] => (typeof v === "number" ? "right" : "left");
+  const list = sheets ?? (sheet ? [sheet] : []);
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontSize: "10px", color: "#000" }}>
       <PrintPageFrame size="A4 landscape">
         <PrintLetterhead companyHeader={companyHeader} docLabel={docLabel} rightMeta={[{ label: "วันที่พิมพ์", value: printedAt }]} />
-        <h1 style={{ textAlign: "center", fontSize: "15px", fontWeight: 700, margin: "0 0 4px" }}>{sheet.title}</h1>
-        {(sheet.meta ?? []).map((m) => (
-          <p key={m} style={{ textAlign: "center", margin: "0 0 2px", fontSize: "10px" }}>{m}</p>
+        {list.map((sheet, si) => {
+          const prevMeta = si > 0 ? (list[si - 1].meta ?? []).join("|") : null;
+          const showMeta = (sheet.meta ?? []).join("|") !== prevMeta;
+          return (
+        <section key={si} style={si > 0 ? { marginTop: "14px" } : undefined}>
+        {si === 0
+          ? <h1 style={{ textAlign: "center", fontSize: "15px", fontWeight: 700, margin: "0 0 4px" }}>{sheet.title}</h1>
+          : <h2 style={{ fontSize: "12px", fontWeight: 700, margin: "0 0 2px", breakAfter: "avoid" }}>{sheet.title}</h2>}
+        {showMeta && (sheet.meta ?? []).map((m) => (
+          <p key={m} style={{ textAlign: si === 0 ? "center" : "left", margin: "0 0 2px", fontSize: "10px" }}>{m}</p>
         ))}
         <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "6px" }}>
           <thead>
@@ -61,6 +73,9 @@ export function TablePrintDocument({ sheet, companyHeader, docLabel, printedAt }
             )}
           </tbody>
         </table>
+        </section>
+          );
+        })}
       </PrintPageFrame>
     </div>
   );

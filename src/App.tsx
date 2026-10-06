@@ -1267,7 +1267,7 @@ export default function App() {
             {!navDecided
               ? <SectionLoading error={false} onRetry={loadDomainData} />
               : effectiveNav === "dashboard"
-              ? <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} />
+              ? <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} company={company} />
               : effectiveNav === "pendingApprovals"
               ? <PendingApprovalsPage currentUserId={currentUser.id} onOpen={openPendingApproval} />
               : effectiveNav === "auditLog"
@@ -1366,7 +1366,7 @@ export default function App() {
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
               : effectiveNav === "departments" && isSuperAdmin
               ? <DepartmentManagementPage currentUserId={currentUser.id} departments={departments} onDepartmentsChange={updateDepartments} teams={teams} onTeamsChange={updateTeams} />
-              : <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} />
+              : <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} company={company} />
             }
           </Suspense>
           </ErrorBoundary>

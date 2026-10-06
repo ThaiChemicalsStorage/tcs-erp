@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, Download, FileSpreadsheet, FileText, LayoutDashboard } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FileText, LayoutDashboard, Printer } from "lucide-react";
 import type { QuotationListFilter } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardFilters, type DashboardStats } from "../../lib/dashboard";
 import type { DepartmentDashboardResponse, DepartmentDashboardView } from "../../lib/departmentDashboard";
@@ -24,6 +24,13 @@ import { DashboardPeriodFilter, DashboardSalesFilters, type DashboardFilterState
 import { todayIsoBangkok } from "../../lib/dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
 import { exportDashboardXlsx } from "./xlsxExport";
+import { buildWorkbookSheets, vatLabelOf } from "./reportRows";
+import { reportSheetsToPrintSheets } from "./reportPrintSheets";
+import { buildDepartmentDashboardSheets } from "../../lib/departmentDashboardExport";
+import { downloadXlsx, exportFileName, type ExportSheet } from "../../lib/tableExport";
+import { TablePrintDocument } from "../../components/TablePrintDocument";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
+import { printDate } from "../../lib/printFormat";
 import { DashboardContentSkeleton, ErrorState } from "./DashboardStates";
 import { DashboardDataCache, useDashboardData } from "./useDashboardData";
 import { DASHBOARD_TAB_META, DEPARTMENT_META } from "./tabs/tabMeta";
@@ -74,8 +81,10 @@ function departmentViewOf(tab: DashboardTabKey | null): DepartmentDashboardView 
  * - ดีไซน์ใหม่ (2026-10-01, บอร์ด Dashboard*): หัวหน้าแบบหน้ารายการ (กลุ่มเมนู · ชื่อ · คำทักทาย + วันที่) ช่วงเวลาและ
  *   ปุ่ม "ส่งออก ▾" (Excel/CSV, แท็บขาย) ชิดขวาบนหัว · แถบแท็บไม่มีไอคอน · แท็บขายมีแถวตัวกรองแผนก/พนักงานขาย/VAT ใต้แท็บ
  */
-export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOpenQuote, onNavigatePage }: {
+export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOpenQuote, onNavigatePage, company }: {
   currentUserId: string;
+  /** หัวจดหมายของใบพิมพ์ PDF (2026-10-06) */
+  company: Company;
   can: (permission: Permission) => boolean;
   onNavigateToQuotations: (filter: QuotationListFilter) => void;
   onOpenQuote: (quoteId: string) => void;
@@ -189,10 +198,60 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
       .finally(() => setExportingXlsx(false));
   };
 
+  // ── ส่งออกแท็บภาพรวม/แท็บแผนก (Excel) และ PDF ทุกแท็บยกเว้นบัญชี (2026-10-06, Tuhmo #40) ──
+  // ตัวเลขชุดเดียวกับที่จอแสดง (ช่วงวันที่ที่เลือก) · ไฟล์เป็นเอกสาร จึงเป็นภาษาไทยเสมอ (src/lib/departmentDashboardExport.ts)
+  const [printSheets, setPrintSheets] = useState<ExportSheet[] | null>(null);
+  const [exportingTab, setExportingTab] = useState(false);
+  useEffect(() => {
+    if (!printSheets) return;
+    const reset = () => setPrintSheets(null);
+    window.addEventListener("afterprint", reset);
+    window.print();
+    return () => window.removeEventListener("afterprint", reset);
+  }, [printSheets]);
+
+  const departmentSheets = (): ExportSheet[] | null => {
+    if (!tab || !departments.data) return null;
+    const label = tabLabel(tab);
+    return buildDepartmentDashboardSheets(departments.data, label, tab !== "overview" ? {} : {
+      sales: sales.data ? {
+        closedSales: sales.data.kpis.closedSales, wonDeals: sales.data.kpis.wonDeals,
+        activeQuotations: sales.data.kpis.activeQuotations, activeQuotationsValue: sales.data.kpis.activeQuotationsValue,
+        vatLabel: vatLabelOf(sales.data.filters.vatMode),
+      } : null,
+      arOutstanding: ar.data ? { net: ar.data.kpis.outstandingNet, count: ar.data.kpis.outstandingCount } : null,
+    });
+  };
+  const exportTabXlsx = () => {
+    const sheets = departmentSheets();
+    if (!sheets || !tab || exportingTab) return;
+    setExportingTab(true);
+    downloadXlsx(exportFileName(`dashboard-${tab}`), sheets)
+      .catch((err) => console.error("[dashboard] export xlsx failed", err))
+      .finally(() => setExportingTab(false));
+  };
+  const exportPdf = () => {
+    if (tab === "sales") {
+      if (!sales.data) return;
+      setPrintSheets(reportSheetsToPrintSheets(buildWorkbookSheets(sales.data, sales.data.filters)));
+      return;
+    }
+    const sheets = departmentSheets();
+    if (sheets) setPrintSheets(sheets);
+  };
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
+  const canExportTab = tab !== null && tab !== "sales" && tab !== "accounting" && !!departments.data;
+
   const departmentTabProps = { result: departments, onRetry: reload, onNavigatePage };
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5">
+    <>
+    <div className={`flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col gap-5 ${printSheets ? "print:hidden" : ""}`}>
       <div data-tour="dashboard-title">
         <ListPageHeader
           module={t("nav.group.main")}
@@ -224,6 +283,23 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
                     items={[
                       { key: "xlsx", label: exportingXlsx ? t("dashboard.export.xlsx.loading") : t("dashboard.export.xlsx"), icon: FileSpreadsheet, onSelect: exportXlsx, disabled: exportingXlsx },
                       { key: "csv", label: t("dashboard.export.csv"), icon: FileText, onSelect: exportCsv },
+                      { key: "pdf", label: t("dashboard.export.pdf"), icon: Printer, onSelect: exportPdf },
+                    ]}
+                  />
+                </div>
+              )}
+              {canExportTab && (
+                <div data-tour="dashboard-export">
+                  <MoreMenu
+                    trigger={({ open, toggle }) => (
+                      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={toggle} className={open ? btn.secondary.replace("bg-white", "bg-[#f4f6fa]") : btn.secondary}>
+                        <Download size={16} className="text-[#3d5173]" /> {t("dashboard.export.menu")}
+                        <ChevronDown size={16} className="text-muted-foreground" />
+                      </button>
+                    )}
+                    items={[
+                      { key: "xlsx", label: exportingTab ? t("dashboard.export.xlsx.loading") : t("dashboard.export.xlsx"), icon: FileSpreadsheet, onSelect: exportTabXlsx, disabled: exportingTab },
+                      { key: "pdf", label: t("dashboard.export.pdf"), icon: Printer, onSelect: exportPdf },
                     ]}
                   />
                 </div>
@@ -283,5 +359,8 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
       </div>
       </>)}
     </div>
+    {/* ใบพิมพ์ PDF ของแท็บที่เปิดอยู่ — อยู่นอกเนื้อหาจอ (ซึ่งถูกซ่อนตอนพิมพ์ระหว่างนี้) · ทุกตารางต่อกันใต้หัวจดหมายเดียว */}
+    {printSheets && <TablePrintDocument sheets={printSheets} companyHeader={companyHeader} docLabel="DASHBOARD" printedAt={printDate(todayIsoBangkok())} />}
+    </>
   );
 }

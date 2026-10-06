@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { DashboardStats } from "../src/lib/dashboard";
 import { buildWorkbookSheets, buildCsvSections, type ReportCell, type ReportRow } from "../src/pages/dashboard/reportRows";
 import { buildDashboardCsv } from "../src/pages/dashboard/csvExport";
+import { reportSheetsToPrintSheets } from "../src/pages/dashboard/reportPrintSheets";
 
 /**
  * ตัวสร้างแถวของไฟล์ Excel/CSV แดชบอร์ด (2026-09-07) — ตรึงกติกาที่พลาดแล้วไฟล์ยังเปิดได้แต่ผิด:
@@ -160,5 +161,26 @@ describe("CSV เป็นชุดย่อยของ Excel", () => {
     expect(csv).toContain("## รายเซลล์");
     // เปอร์เซ็นต์ใน CSV คงเป็น 0–100 ไม่ใช่เศษส่วน
     expect(csv).toContain("อัตราชนะ (ชนะ ÷ ชนะ+แพ้),75");
+  });
+});
+
+// PDF ของแท็บขาย (2026-10-06, Tuhmo #40) — แตกทุกตารางในชีตเป็นตารางพิมพ์ของตัวเอง ไม่ทิ้งแถวไหน
+describe("reportSheetsToPrintSheets", () => {
+  const workbook = buildWorkbookSheets(fixture(), fixture().filters);
+  const printed = reportSheetsToPrintSheets(workbook);
+
+  it("keeps every data row of every sheet", () => {
+    const dataRows = workbook.flatMap((sh) => sh.rows).filter((r) => r.role === "data").length;
+    expect(printed.reduce((n, sh) => n + sh.rows.length, 0)).toBe(dataRows);
+  });
+
+  it("columns never repeat a header within one table (React keys in the print document)", () => {
+    for (const sh of printed) expect(new Set(sh.columns.map((c) => c.header)).size, sh.title).toBe(sh.columns.length);
+  });
+
+  it("percent cells print as 0–100 with a % sign, not ×100 again", () => {
+    const cells = printed.flatMap((sh) => sh.rows.flat()).filter((v): v is string => typeof v === "string" && v.endsWith("%"));
+    expect(cells).toContain("75.0%");
+    expect(cells.some((c) => Number(c.slice(0, -1)) > 100)).toBe(false);
   });
 });

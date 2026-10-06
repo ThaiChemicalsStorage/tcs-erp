@@ -486,6 +486,18 @@ Tests: `tests/api/departmentDashboard.test.ts` (routing, every block's numbers, 
 permission gating, visibility, BD money, pending counts = inbox) and `tests/dashboardTabs.test.ts`
 (tabs per default role, initial tab, hash parsing).
 
+## Export every tab — Excel + PDF (2026-10-06, Tuhmo #40)
+
+Owner decision 2026-10-06: *แดชบอร์ดต้องส่งออกได้ทุกแผนก*. Before this only the Sales tab had a ส่งออก ▾ menu (Excel/CSV), and no tab had PDF.
+
+- **Overview + department tabs (service, purchasing, inventory, operations)** get their own ส่งออก ▾ menu: **Excel** and **PDF**. Sheets come from `buildDepartmentDashboardSheets()` (`src/lib/departmentDashboardExport.ts`, React-free, tested) fed the **same** `GET /api/dashboard/departments` response the tab is showing — so the file always matches the screen and the selected date range. A `null` number (no permission for that document type) is left out, never written as 0 — same rule as the screen.
+  - Overview: one summary sheet (every visible block's headline numbers + the Sales and AR headline cards when the user sees those tabs) + รออนุมัติ + ต้องจัดการก่อน.
+  - Department tabs: the summary sheet + one sheet per detail table/chart (12-month series, top vendors, overdue POs, PO lead-time KPIs + queue, low-stock items, stock value by category, recent movements, production/project status + due lists, BD recent, service follow-ups/PM/approval results).
+- **Sales tab** keeps its Excel/CSV and gains **PDF**: `reportSheetsToPrintSheets()` (`src/pages/dashboard/reportPrintSheets.ts`) splits the existing 10-sheet workbook rows (`buildWorkbookSheets`) into one print table per header block, so PDF and Excel come from one row source. Percentages print as `75.0%` (`pct()` already holds 0–100).
+- **PDF = the browser's print / บันทึกเป็น PDF**, like every other document in the app — `TablePrintDocument` now accepts `sheets` and prints them one after another under a **single letterhead** (A4 landscape) instead of a page per table; while it prints, the dashboard screen itself is `print:hidden`. Verified as a rendered PDF image: a 4-table purchasing export fits one page.
+- Files are documents → **always Thai**, like print documents.
+- **Not done: the Accounting tab** (its view loads its own data inside `AccountingDashboardView`) — deferred with the other accounting work at the owner's request on 2026-10-06.
+
 ## Pages / Components
 
 **2026-09-14:** `DashboardPage.tsx` is now the shell (header, `Tabs`, filter bar, per-tab data via
