@@ -634,4 +634,27 @@ describe("ใบรับสินค้า: ส่วนลดรายบร�
     const again = await api("PATCH", `/api/receiving-reports/${id}`, { lines: [line] });
     expect(again.body.receivingReport.lines[0]).toMatchObject({ discount: 20, discountMode: "amount" });
   });
+
+  /** รายละเอียดย่อยต่อบรรทัด (2026-10-06 — Lot / วันหมดอายุของน้ำยา) */
+  it("รายละเอียดย่อย: แก้ได้แม้ใบจากใบสั่งซื้อ · ตัดบรรทัดว่าง · เกิน 10 บรรทัด → 400", async () => {
+    const res = await api("PATCH", `/api/receiving-reports/${rrId2}`, {
+      lineSubDetails: [{ lineId, subDetails: ["Lot A12", "  ", "หมดอายุ 03/2027"] }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.receivingReport.lines[0].subDetails).toEqual(["Lot A12", "หมดอายุ 03/2027"]);
+    const tooMany = await api("PATCH", `/api/receiving-reports/${rrId2}`, {
+      lineSubDetails: [{ lineId, subDetails: Array.from({ length: 11 }, (_, i) => `x${i}`) }],
+    });
+    expect(tooMany.status).toBe(400);
+  });
+
+  it("ใบเปล่า: บันทึกรายการซ้ำไม่ล้างรายละเอียดย่อย", async () => {
+    const id = (await api("POST", "/api/receiving-reports", { receiveCode: "RR" })).body.receivingReport.id;
+    const line = { id: "rrline_sub_0001", productId: null, productCode: "Y", description: "น้ำยาพิมพ์เอง", unit: "ลิตร", qtyOrdered: 5, unitPriceOrdered: 80 };
+    const res = await api("PATCH", `/api/receiving-reports/${id}`, { lines: [line], lineSubDetails: [{ lineId: line.id, subDetails: ["หมดอายุ 12/2026"] }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.receivingReport.lines[0].subDetails).toEqual(["หมดอายุ 12/2026"]);
+    const again = await api("PATCH", `/api/receiving-reports/${id}`, { lines: [line] });
+    expect(again.body.receivingReport.lines[0].subDetails).toEqual(["หมดอายุ 12/2026"]);
+  });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Info, Loader2, LockOpen, PackageCheck, PackagePlus, Plus, Printer, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { CheckCircle2, CornerDownRight, Info, Loader2, LockOpen, PackageCheck, PackagePlus, Plus, Printer, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { Combobox } from "../../components/Combobox";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
@@ -55,6 +55,8 @@ function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
     billerCustom: !!d.billerCustom, billerName: d.billerName ?? "", billerTaxId: d.billerTaxId ?? "", billerAddress: d.billerAddress ?? "",
     // ส่วนลดรายบรรทัด (2026-09-29) แก้ได้ทุกใบ — ใบเปล่าเซิร์ฟเวอร์ใช้กับรายการหลังประกอบ `lines` แล้ว
     lineDiscounts: d.lines.map((l) => ({ lineId: l.id, discount: l.discount ?? null, discountMode: l.discountMode ?? "percent" })),
+    // รายละเอียดย่อย (2026-10-06) แก้ได้ทุกใบเหมือนส่วนลดรายบรรทัด
+    lineSubDetails: d.lines.map((l) => ({ lineId: l.id, subDetails: l.subDetails ?? [] })),
   };
   if (!isBlankReceivingReport(d)) return terms;
   return {
@@ -415,7 +417,31 @@ export function ReceivingReportDocument({
               </span>
             )}
           </span>
-          {line.subDetails.length > 0 && <span className="text-xs text-muted-foreground">{line.subDetails.join(" · ")}</span>}
+          {/* รายละเอียดย่อย (2026-10-06) — เช่น Lot / วันหมดอายุ · แก้ได้ทุกใบ บันทึกอัตโนมัติไปกับส่วนลดรายบรรทัด · พิมพ์ใต้ชื่อในใบ FM-ST-01 */}
+          {canEdit ? (line.subDetails ?? []).map((sd, i) => (
+            <span key={i} className="flex items-center gap-1.5 mt-1">
+              <CornerDownRight size={14} className="text-[#a3aec2] flex-shrink-0" aria-hidden="true" />
+              <input
+                value={sd}
+                onChange={(e) => setLine(line.id, { subDetails: line.subDetails.map((x, j) => (j === i ? e.target.value : x)) })}
+                placeholder={t("receivingReportDoc.subDetailPlaceholder")}
+                aria-label={`${t("receivingReportDoc.subDetailPlaceholder")} ${line.description}`}
+                className={`${field.cell} flex-1 min-w-0 h-8 text-[13px]`}
+              />
+              <button type="button" onClick={() => setLine(line.id, { subDetails: line.subDetails.filter((_, j) => j !== i) })}
+                title={t("receivingReportDoc.removeSubDetail")} aria-label={t("receivingReportDoc.removeSubDetail")}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#fcebeb] hover:text-[#b93636] flex-shrink-0">
+                <X size={14} />
+              </button>
+            </span>
+          )) : (line.subDetails ?? []).map((sd, i) => (
+            <span key={i} className="text-xs text-muted-foreground flex gap-1.5"><span aria-hidden="true">•</span>{sd}</span>
+          ))}
+          {canEdit && (line.subDetails ?? []).length < 10 && (
+            <button type="button" onClick={() => setLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })} className={`${btn.text} self-start h-7 text-[12.5px]`}>
+              <Plus size={13} /> {t("receivingReportDoc.addSubDetail")}
+            </button>
+          )}
           {kits.has(line.productId ?? "") && <span className="text-xs text-[#b93636]">{t("kit.receiveBlocked")}</span>}
         </span>
         <span className="text-sm text-[#3d5173]">{line.unit || "—"}</span>

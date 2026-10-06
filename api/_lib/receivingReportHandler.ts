@@ -463,6 +463,25 @@ function applyLineDiscounts(raw: unknown, lines: ReceivingReportLine[]): Receivi
   return lines.map((l) => (byId.has(l.id) ? { ...l, ...byId.get(l.id)! } : l));
 }
 
+const MAX_SUB_DETAILS = 10;
+
+/**
+ * รายละเอียดย่อยต่อบรรทัด (2026-10-06 เจ้าของ: *"ใบรับสินค้าสามารถเพิ่มรายละเอียดย่อยได้ เผื่อมีของที่รับน้ำยาเข้ามาแล้วมันมีวันหมดอายุ"*)
+ * — `[{ lineId, subDetails }]` แก้ได้ทุกใบรวมใบที่มาจากใบสั่งซื้อ แนวเดียวกับ `lineDiscounts` · ตัดบรรทัดว่างทิ้งเหมือนใบขอซื้อ
+ * ใบที่มาจากใบสั่งซื้อตั้งต้นด้วยรายละเอียดย่อยของใบสั่งซื้อ (snapshot) — แก้ตรงนี้ไม่ย้อนไปเปลี่ยนใบสั่งซื้อ
+ */
+function applyLineSubDetails(raw: unknown, lines: ReceivingReportLine[]): ReceivingReportLine[] {
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายละเอียดย่อยไม่ถูกต้อง");
+  const byId = new Map<string, string[]>();
+  for (const [idx, r] of (raw as Record<string, unknown>[]).entries()) {
+    const lineId = typeof r?.lineId === "string" ? r.lineId : "";
+    const list = Array.isArray(r?.subDetails) ? (r.subDetails as unknown[]) : [];
+    if (list.length > MAX_SUB_DETAILS) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: รายละเอียดย่อยต้องไม่เกิน ${MAX_SUB_DETAILS} บรรทัด`);
+    byId.set(lineId, list.map((sd, i) => sanitizeShortText(sd, `รายละเอียดย่อยลำดับที่ ${idx + 1}.${i + 1}`)).filter(Boolean));
+  }
+  return lines.map((l) => (byId.has(l.id) ? { ...l, subDetails: byId.get(l.id)! } : l));
+}
+
 async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "receivingReport:view");
@@ -516,7 +535,8 @@ async function sanitizeBlankLines(raw: unknown, current: ReceivingReportFields &
     return {
       id, poLineId: "", productId,
       productCode: product ? product.code : sanitizeShortText(r.productCode, `รหัสลำดับที่ ${n}`),
-      description, subDetails: [],
+      // รายละเอียดย่อยมาทาง `lineSubDetails` (2026-10-06) — ประกอบรายการใหม่ต้องไม่ล้างของเดิมทิ้ง
+      description, subDetails: prior?.subDetails ?? [],
       unit: product ? product.unit : sanitizeShortText(r.unit, `หน่วยลำดับที่ ${n}`),
       qtyOrdered, unitPriceOrdered,
       // ส่วนลดรายบรรทัดมาทาง `lineDiscounts` (2026-09-29) — ประกอบรายการใหม่ต้องไม่ล้างค่าเดิมทิ้ง
@@ -595,6 +615,7 @@ async function handleUpdate(req: ApiRequest, res: ApiResponse, id: string) {
   }
 
   if ("lineDiscounts" in body) update.lines = applyLineDiscounts(body.lineDiscounts, update.lines ?? doc.lines ?? []);
+  if ("lineSubDetails" in body) update.lines = applyLineSubDetails(body.lineSubDetails, update.lines ?? doc.lines ?? []);
 
   if ("status" in body) {
     const next = body.status === "Closed" ? "Closed" : "Open";

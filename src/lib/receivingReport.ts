@@ -452,6 +452,8 @@ export type ReceivingReportUpdateFields = Partial<Pick<ReceivingReport,
   lines?: ReceivingReportLineInput[];
   /** ส่วนลดรายบรรทัด (2026-09-29) — แก้ได้ทุกใบ รวมใบที่มาจากใบสั่งซื้อ · ใช้กับบรรทัดหลังประกอบ `lines` แล้ว (บรรทัดใหม่ของใบเปล่าได้ด้วย) */
   lineDiscounts?: { lineId: string; discount: number | null; discountMode: DiscountMode }[];
+  /** รายละเอียดย่อยต่อบรรทัด (2026-10-06) — เช่น Lot / วันหมดอายุ · แก้ได้ทุกใบ แนวเดียวกับ `lineDiscounts` */
+  lineSubDetails?: { lineId: string; subDetails: string[] }[];
 };
 
 export async function updateReceivingReport(id: string, fields: ReceivingReportUpdateFields, options?: WriteOptions): Promise<ReceivingReport> {
