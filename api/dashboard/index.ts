@@ -843,7 +843,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       ({ created: 0, edited: 0, statusChanged: 0, approvalRequested: 0, approvalCompleted: 0 });
     type BySalespersonRow = { period: string; salesperson: string; created: number; edited: number };
     const activityMatch: Record<string, unknown> = { action: { $in: [...ACTIVITY_ACTIONS] } };
-    if (from || to) activityMatch.createdAt = bangkokDayBoundsUtc(from, to);
+    // ไม่ได้เลือกวันเริ่ม = เดิมดึง audit log ทั้งประวัติมานับ (โตไม่หยุด) · กราฟแสดงย้อนหลังไกลสุดแค่ 5 ปี (yearly) จึงตัดที่ 1 ม.ค.
+    // ของปีแรกในกราฟ ผลลัพธ์เท่าเดิมทุกตัวเลข (2026-10-06, Tuhmo #38)
+    const activityFrom = from || `${trendAnchor.getUTCFullYear() - 4}-01-01`;
+    activityMatch.createdAt = bangkokDayBoundsUtc(activityFrom, to);
     // Tiered-visibility callers see only the sales activity of people within their tier — audit
     // entries are keyed by `userName` (fullName), not user id, so this joins on the same name
     // convention the salesperson filter itself uses, resolved from `allUsers` (already loaded
