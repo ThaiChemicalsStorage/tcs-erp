@@ -44,7 +44,7 @@ export function startsWithRegex(query: string): { $regex: string; $options: stri
  * like a document number tells us which collection to check first. Sources, all server-side
  * minters: `nextQuoteId()` (api/handlers/quotes.ts, `Q#YYMMDD-NNNN`), `{AR|BI|RE|IV}{YY}{MM}{SEQ}`
  * (documentNumbering.ts), and — since 2026-09-03 — one shared `{PREFIX}-{YYYYMM}-{NNNN}` shape
- * (`nextMonthlyDocumentNumber()`, same file) for `SR-`/`MR-`/`JO-`/`PR-`/`PO-`/`CC-`/`SC-`/`RR-`.
+ * (`nextMonthlyDocumentNumber()`, same file) for `SR-`/`MR-`/`JO-`/`PR-`/`PO-`/`CC-`/`FAC-` (`SC-` before 2026-10-06)/`RR-`.
  * Documents minted before that date carry the older `{PREFIX}-{พ.ศ.}-{NNNN}` (or
  * `SC-{ค.ศ.}-{MM}-{NNN}`) and are still found the same way — only the prefix matters here,
  * never the year digits.
@@ -75,6 +75,8 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   ...STORE_RECEIPT_CODES.map((c) => ({ prefix: `${c.code}-`, type: "storeReceipt" as const })),
   // ใบรับวางบิลของสโตร์ (2026-09-23)
   { prefix: "BR-", type: "vendorBill" },
+  // ใบสั่งผลิตขึ้นต้น FAC- ตั้งแต่ 2026-10-06 · ใบเก่ายังเป็น SC- (เลขคือ _id เปลี่ยนไม่ได้) จึงต้องรู้จักทั้งคู่
+  { prefix: "FAC-", type: "productionOrder" },
   { prefix: "SC-", type: "productionOrder" },
   { prefix: "AR", type: "arDocument" },
   { prefix: "BI", type: "arDocument" },

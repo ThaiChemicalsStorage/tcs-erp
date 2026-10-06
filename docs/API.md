@@ -545,7 +545,7 @@ flat 5 became unreadable at 16 categories (~80 rows), so the unfiltered response
 UI's filter chips are the explicit way to ask for a browsable page of one kind.
 
 **`exact: ExactMatch | null`** is the document-number fast path. `detectDocNumberFamily()`
-(`searchShared.ts`) recognises `Q#` / `SR-` / `MR-` / `JO-` / `PR-` / `SC-` / `AR|BI|RE|IV`; a match
+(`searchShared.ts`) recognises `Q#` / `SR-` / `MR-` / `JO-` / `PR-` / `FAC-` / `SC-` (old production orders) / `AR|BI|RE|IV`; a match
 runs one **anchored** `^` prefix query against just that family's collection — the only index-usable
 query shape this system has, since there is no text index anywhere (see DATABASE.md). Every branch
 re-applies its own module's ownership scoping, so a caller who may not see the document gets `null`,
@@ -673,7 +673,7 @@ Same 12/12 function-slot sharing convention as the other Project-family document
 | Method & Path | Auth | Notes |
 |---|---|---|
 | `GET /api/production-orders?scopeOfWorkId=` | `productionOrder:view` | With `scopeOfWorkId`: existence check for one job, unfiltered by owner. Without: company-wide list scoped by `productionOrder:viewAll`. |
-| `POST /api/production-orders` | `productionOrder:create` + `scopeOfWork:view` | Body `{ scopeOfWorkId }`. **No status gate** — the Scope-of-Work-must-be-Final requirement was removed 2026-08-27 at the Production department's request (Project's own create still has it). Mints `SC-{YYYY}-{MM}-{NNN}` from an atomic per-month counter — **Gregorian year, deliberately unlike every other document here** (matches the real FM-PD-02 form; pinned by a test). Returns `201`. |
+| `POST /api/production-orders` | `productionOrder:create` + `scopeOfWork:view` | Body `{ scopeOfWorkId }`. **No status gate** — the Scope-of-Work-must-be-Final requirement was removed 2026-08-27 at the Production department's request (Project's own create still has it). Mints `FAC-{YYYYMM}-{NNNN}` (prefix `SC-` before 2026-10-06; `SC-{YYYY}-{MM}-{NNN}` before 2026-09-03) from an atomic per-month counter — **Gregorian year, deliberately unlike every other document here** (matches the real FM-PD-02 form; pinned by a test). Returns `201`. |
 | `GET /api/production-orders/:id` | `productionOrder:view` | Full document. |
 | `PATCH /api/production-orders/:id` | `productionOrder:edit` + (owner **or** `:finalize`) | `400` once `Final`. Accepts `documentNumber` (the number printed on the form, separate from the immutable `_id`) — **`409` if another order already uses it**, `400` if blank; unique index + friendly pre-check, the same recipe Scope of Work uses. Section-header rows have their `qty`/`unit` forced empty server-side. The `approver` signatory is **not** accepted here — only the approve route writes it. |
 | `DELETE /api/production-orders/:id` | `productionOrder:delete` + (owner **or** `:finalize`) | Soft delete. |

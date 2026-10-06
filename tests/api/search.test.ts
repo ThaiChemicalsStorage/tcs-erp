@@ -93,7 +93,8 @@ describe("detectDocNumberFamily", () => {
     expect(shared.detectDocNumberFamily("MR-2569")).toBe("materialRequisition");
     expect(shared.detectDocNumberFamily("JO-2569-0001")).toBe("jobOrder");
     expect(shared.detectDocNumberFamily("PR-2569")).toBe("purchaseRequest");
-    expect(shared.detectDocNumberFamily("SC-2026-08")).toBe("productionOrder");
+    expect(shared.detectDocNumberFamily("FAC-202610-0001")).toBe("productionOrder");
+    expect(shared.detectDocNumberFamily("SC-2026-08"), "ใบสั่งผลิตเก่าก่อน 2026-10-06 ยังค้นเจอ").toBe("productionOrder");
     expect(shared.detectDocNumberFamily("SR-2569")).toBe("serviceReport");
     expect(shared.detectDocNumberFamily("Q#260814")).toBe("quotation");
     expect(shared.detectDocNumberFamily("IV6908001")).toBe("arDocument");

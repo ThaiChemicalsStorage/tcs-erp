@@ -441,7 +441,7 @@ describe("shared document approval workflow (Draft -> PendingApproval -> Final)"
  * ใบสั่งผลิต (Production Order, FM-PD-02) — เพิ่ม 2026-08-20 สำหรับฝ่ายผลิต
  *
  * Differs from the other three Project-family documents: created straight from an approved Scope of
- * Work (no Project item), and numbered SC-{Gregorian year}-{month}-{seq} per the real form rather
+ * Work (no Project item), and numbered FAC-{Gregorian YYYYMM}-{seq} (SC- before 2026-10-06) rather
  * than the Buddhist-year scheme everything else uses. Both pinned here so a future "consistency"
  * refactor can't quietly change them.
  */
@@ -452,11 +452,12 @@ describe("Production Order", () => {
     return (res.body as { productionOrder: { id: string; documentNumber: string; jobCode: string } }).productionOrder;
   };
 
-  it("is created from an approved Scope of Work and numbered SC-YYYYMM-NNNN", async () => {
+  it("is created from an approved Scope of Work and numbered FAC-YYYYMM-NNNN", async () => {
     const po = await createPo();
-    expect(po.id).toMatch(/^SC-\d{6}-\d{4}$/);
+    // FAC แทน SC ตั้งแต่ 2026-10-06 (เจ้าของสั่ง)
+    expect(po.id).toMatch(/^FAC-\d{6}-\d{4}$/);
     // Gregorian year, deliberately NOT the Buddhist year the other documents use
-    expect(po.id.slice(3, 7)).toBe(String(new Date().getFullYear()));
+    expect(po.id.slice(4, 8)).toBe(String(new Date().getFullYear()));
     expect(po.jobCode).toBe("TEST-SOW-01");
   });
 

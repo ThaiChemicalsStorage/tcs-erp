@@ -32,11 +32,13 @@ import type { ProductionOrderLine, ProductionOrderSignatory, ProductionOrderSumm
 const MAX_LINES = 200;
 
 /**
- * เลขที่ใบสั่งผลิต `SC-{YYYYMM}-{NNNN}` — รูปแบบกลางของทุกใบภายในตั้งแต่ 2026-09-03 (เดิม
- * `SC-{ค.ศ.}-{เดือน}-{ลำดับ 3 หลัก}` ตามฟอร์ม FM-PD-02 — ถ้าต้องพิมพ์ตามฟอร์มเดิมให้แก้ที่ `documentNumber`)
+ * เลขที่ใบสั่งผลิต `FAC-{YYYYMM}-{NNNN}` — เจ้าของสั่งเปลี่ยนตัวอักษรจาก `SC` เป็น `FAC` (2026-10-06)
+ * ใบที่ออกไปแล้วยังเป็น `SC-…` เพราะเลขคือ `_id` · ตัวนับใช้กุญแจเดิม (`production_order`) ลำดับจึงรันต่อในเดือนเดิม
+ * ก่อนหน้านั้น: `SC-{YYYYMM}-{NNNN}` ตั้งแต่ 2026-09-03 และ `SC-{ค.ศ.}-{เดือน}-{ลำดับ 3 หลัก}` ตามฟอร์ม FM-PD-02
+ * — ถ้าต้องพิมพ์ตามฟอร์มเดิมให้แก้ที่ `documentNumber`
  */
 async function nextProductionOrderId(counters: Collection<CounterFields>): Promise<string> {
-  return nextMonthlyDocumentNumber(counters, "SC", "production_order");
+  return nextMonthlyDocumentNumber(counters, "FAC", "production_order");
 }
 
 /**

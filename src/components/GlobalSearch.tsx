@@ -93,7 +93,7 @@ const NUMBER_LEGEND: { prefix: string; key: TranslationKey }[] = [
   { prefix: "MR-", key: "search.group.materialRequisitions" },
   { prefix: "JO-", key: "search.group.jobOrders" },
   { prefix: "PR- FD- ED- SD-", key: "search.group.purchaseRequests" },
-  { prefix: "SC-", key: "search.group.productionOrders" },
+  { prefix: "FAC- SC-", key: "search.group.productionOrders" },
   { prefix: "SR-", key: "search.group.serviceReports" },
   { prefix: "PO-", key: "search.group.purchaseOrders" },
   { prefix: "RR- RX- RI-", key: "search.group.receivingReports" },

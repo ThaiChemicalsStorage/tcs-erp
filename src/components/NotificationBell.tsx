@@ -119,8 +119,10 @@ export function NotificationBell({
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 w-[26rem] max-w-[90vw] bg-card border border-border rounded-xl shadow-[0_12px_28px_-8px_rgba(11,29,58,0.22)] z-20 overflow-hidden flex flex-col max-h-[32rem]">
+          {/* แถบหัวเอกสารทุกหน้าเป็น sticky z-20 และมาทีหลังแถบบนใน DOM — แผงนี้กับฉากรับคลิกจึงต้องสูงกว่า
+              ไม่งั้นแถบหัวเอกสารทับแผง และคลิกนอกแผงทะลุไปกดปุ่มบนแถบนั้นแทนการปิดแผง (2026-10-06) · ต่ำกว่า dialog z-50 */}
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-[26rem] max-w-[90vw] bg-card border border-border rounded-xl shadow-[0_12px_28px_-8px_rgba(11,29,58,0.22)] z-40 overflow-hidden flex flex-col max-h-[32rem]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <p className="text-[15px] font-semibold text-foreground">{t("notif.title")}</p>
               {unread > 0 && (

@@ -47,6 +47,10 @@ before building:
    where every other document in this app uses a Buddhist year. `tests/api/projectAtomicity.test.ts`
    pins the format so a future "make it consistent" refactor cannot quietly change it.
 
+   **ตั้งแต่ 2026-10-06 ตัวอักษรหน้าเลขเป็น `FAC`** (เจ้าของสั่ง) → `FAC-{YYYYMM}-{NNNN}` (ค.ศ. เหมือนเดิม · รูปแบบ
+   `YYYYMM-NNNN` ใช้มาตั้งแต่ 2026-09-03) · ตัวนับเดิม `production_order_{YYYYMM}` ลำดับจึงรันต่อในเดือนเดียวกัน ·
+   ใบที่ออกก่อนหน้ายังเป็น `SC-…` (เลขคือ `_id`) และ Global Search รู้จักทั้งสองตัว
+
    **The printed number became editable 2026-08-27** (Production department request: *"ใบสั่งผลิต
    สามารถแก้ไขเลขที่ใบสั่งผลิตได้ แต่ยังรันปกติ"*). The generated `SC-…` value **is the Mongo `_id`**, and
    Material Requisition / Purchase Request reference it via `productionOrderId` — so it cannot be
