@@ -20,6 +20,14 @@ export type DiscountMode = "percent" | "amount";
 
 export const VAT_RATE = 7;
 
+/**
+ * อัตรา VAT ของใบเสนอราคาใบหนึ่ง (2026-10-06, Tuhmo #39) — ใบที่สร้างตั้งแต่วันนี้เก็บ `vatRate` จากหน้าตั้งค่าบริษัทไว้ตอนสร้าง
+ * ใบเก่าไม่มีฟิลด์นี้ = 7% ตามที่ใช้มาตลอด · ค่าที่ผิดรูป (ติดลบ/ไม่ใช่ตัวเลข/เกิน 100) ถือเป็น 7% เช่นกัน
+ */
+export function effectiveVatRate(rate: number | null | undefined): number {
+  return typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : VAT_RATE;
+}
+
 export interface QuoteAmountLine {
   qty: number;
   unitPrice: number;
@@ -54,11 +62,12 @@ export function computeTotals(
   lines: readonly QuoteAmountLine[],
   discount: number,
   discountMode?: DiscountMode,
+  vatRate: number = VAT_RATE,
 ) {
   const subtotal = lines.reduce((s, l) => s + lineSubtotal(l), 0);
   const discountAmt = resolveDiscountAmount(subtotal, discount, discountMode);
   const afterDiscount = subtotal - discountAmt;
-  const vatAmt = afterDiscount * (VAT_RATE / 100);
+  const vatAmt = afterDiscount * (effectiveVatRate(vatRate) / 100);
   const total = afterDiscount + vatAmt;
   return { subtotal, discountAmt, afterDiscount, vatAmt, total };
 }
@@ -77,6 +86,7 @@ export function computeQuoteAmountWithVat(
   lines: readonly QuoteAmountLine[],
   discount: number,
   discountMode?: DiscountMode,
+  vatRate: number = VAT_RATE,
 ): number {
-  return computeTotals(lines, discount, discountMode).total;
+  return computeTotals(lines, discount, discountMode, vatRate).total;
 }

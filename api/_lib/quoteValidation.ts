@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "./http.js";
 import type { QuoteFields } from "./collections.js";
-import { computeQuoteAmountWithVat, type DiscountMode } from "./quoteAmounts.js";
+import { computeQuoteAmountWithVat, effectiveVatRate, type DiscountMode } from "./quoteAmounts.js";
 import { MAX_QUOTE_CONTACTS, isBlankContact, type QuoteContact } from "../../src/lib/quoteContacts.js";
 
 /**
@@ -146,8 +146,8 @@ export function validateLines(raw: unknown): QuoteFields["lines"] {
 }
 
 /** The VAT-included grand total actually persisted as `Quote.amount` — see `./quoteAmounts.ts`. */
-export function computeQuoteAmount(lines: QuoteFields["lines"], discount: number, discountMode?: DiscountMode): number {
-  return computeQuoteAmountWithVat(lines, discount, discountMode);
+export function computeQuoteAmount(lines: QuoteFields["lines"], discount: number, discountMode?: DiscountMode, vatRate?: number): number {
+  return computeQuoteAmountWithVat(lines, discount, discountMode, effectiveVatRate(vatRate));
 }
 
 /**

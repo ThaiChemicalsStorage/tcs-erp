@@ -131,3 +131,25 @@ describe("server-side amount math stays in lockstep with the client", () => {
     }
   });
 });
+
+// อัตรา VAT ต่อใบ (Tuhmo #39, 2026-10-06)
+describe("effectiveVatRate + computeTotals with a per-quote rate", () => {
+  it("falls back to 7 for missing or nonsense rates", async () => {
+    const { effectiveVatRate } = await import("../src/lib/quoteMath");
+    expect(effectiveVatRate(undefined)).toBe(7);
+    expect(effectiveVatRate(null)).toBe(7);
+    expect(effectiveVatRate(-1)).toBe(7);
+    expect(effectiveVatRate(Number.NaN)).toBe(7);
+    expect(effectiveVatRate(150)).toBe(7);
+    expect(effectiveVatRate(0)).toBe(0);
+    expect(effectiveVatRate(10)).toBe(10);
+  });
+
+  it("computeTotals uses the given rate", async () => {
+    const { computeTotals } = await import("../src/lib/quoteMath");
+    const t = computeTotals([{ qty: 2, unitPrice: 500, discount: 0 }], 0, "percent", 10);
+    expect(t.vatAmt).toBeCloseTo(100);
+    expect(t.total).toBeCloseTo(1100);
+    expect(computeTotals([{ qty: 2, unitPrice: 500, discount: 0 }], 0).total).toBeCloseTo(1070);
+  });
+});

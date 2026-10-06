@@ -2,7 +2,7 @@ import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments, isAutoSaveRequest } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
 import { buildOwnershipClause } from "../_lib/visibility.js";
-import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, companyCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { handleScopeOfWork } from "../_lib/scopeOfWorkHandler.js";
 import { handleDeliveryOrder } from "../_lib/deliveryOrderHandler.js";
 import { handleAr } from "../_lib/arHandler.js";
@@ -27,6 +27,7 @@ import {
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
 import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
+import { effectiveVatRate } from "../_lib/quoteAmounts.js";
 import {
   validateLines, validateContacts, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
   sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeDiscountMode, sanitizeBoolean,
@@ -35,6 +36,13 @@ import { primaryContactFields, isBlankContact, type QuoteContact } from "../../s
 import { randomUUID } from "node:crypto";
 import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
 import { getRevisionRoot } from "../_lib/quoteRevisions.js";
+
+/** อัตรา VAT ปัจจุบันจากหน้าตั้งค่าบริษัท (2026-10-06) — ยังไม่เคยตั้ง/ค่าผิดรูป = 7 */
+async function currentCompanyVatRate(): Promise<number> {
+  const company = await companyCollection();
+  const doc = await company.findOne({ _id: "singleton" }, { projection: { vatRate: 1 } });
+  return effectiveVatRate((doc as { vatRate?: number } | null)?.vatRate);
+}
 
 /**
  * Writes an authoritative, server-side audit-log entry for a quotation mutation — identity
@@ -359,11 +367,16 @@ async function handleList(req: ApiRequest, res: ApiResponse) {
       project: sanitizeShortText(body.project, "โครงการ"),
       deliveryAddress: sanitizeShortText(body.deliveryAddress, "ที่อยู่จัดส่ง"),
     };
+    // อัตรา VAT จากหน้าตั้งค่าบริษัท ณ ตอนสร้าง เก็บติดใบไว้ — แก้อัตราในตั้งค่าทีหลังไม่ย้อนเปลี่ยนใบเก่า (2026-10-06)
+    const vatRate = await currentCompanyVatRate();
     const doc: QuoteFields & { _id: string } = {
       _id: id,
       date: thaiDate(today),
       valid: thaiDate(new Date(today.getTime() + 30 * 86400000)),
-      amount: computeQuoteAmount(lines, discount, discountMode),
+      amount: computeQuoteAmount(lines, discount, discountMode, vatRate),
+      vatRate,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
       status: "ร่าง",
       salesperson: sanitizeShortText(body.salesperson, "พนักงานขาย"),
       interest: null,
@@ -498,9 +511,10 @@ async function handleOne(req: ApiRequest, res: ApiResponse, id: string) {
   const effectiveLines = update.lines ?? target.lines;
   const effectiveDiscount = update.discount ?? target.discount;
   const effectiveDiscountMode = update.discountMode ?? target.discountMode;
-  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount, effectiveDiscountMode);
+  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount, effectiveDiscountMode, target.vatRate);
 
   update.updatedBy = ctx.user.id;
+  update.updatedAt = nowIso();
   await quotes.updateOne({ _id: id }, { $set: update });
   const updated = await quotes.findOne({ _id: id });
   if (!updated) throw new HttpError(404, "ไม่พบใบเสนอราคา");
@@ -555,6 +569,7 @@ async function handleDuplicate(req: ApiRequest, res: ApiResponse, id: string) {
   const { _id: _sourceId, ...rest } = source;
   const newId = await nextQuoteId(counters);
   const lines = cloneLines(source.lines);
+  const duplicateVatRate = await currentCompanyVatRate();
   const doc = {
     _id: newId,
     ...rest,
@@ -564,7 +579,11 @@ async function handleDuplicate(req: ApiRequest, res: ApiResponse, id: string) {
     ...(source.contacts ? { contacts: cloneContacts(source.contacts) } : {}),
     // Recomputed rather than copied from `source.amount` — cheap, and guarantees the invariant
     // holds even if a past write (pre-dating this validation pass) ever left it inconsistent.
-    amount: computeQuoteAmount(lines, source.discount, source.discountMode),
+    // ใบใหม่ (ไม่ใช่ฉบับแก้ไขของใบเดิม) จึงใช้อัตรา VAT ปัจจุบันของบริษัท ไม่ใช่ของใบต้นทาง
+    vatRate: duplicateVatRate,
+    amount: computeQuoteAmount(lines, source.discount, source.discountMode, duplicateVatRate),
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
     createdByUserId: ctx.user.id,
     updatedBy: ctx.user.id,
     approvalHistory: [],
@@ -611,7 +630,10 @@ async function handleRewrite(req: ApiRequest, res: ApiResponse, id: string) {
       lines,
       ...(source.contacts ? { contacts: cloneContacts(source.contacts) } : {}),
       // Recomputed rather than copied from `source.amount` — same defensive invariant as Duplicate.
-      amount: computeQuoteAmount(lines, source.discount, source.discountMode),
+      // ฉบับแก้ไขของดีลเดิม — คงอัตรา VAT ของใบต้นทาง (`...rest` คัดลอก vatRate มาแล้ว)
+      amount: computeQuoteAmount(lines, source.discount, source.discountMode, source.vatRate),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
@@ -778,7 +800,8 @@ async function handleWorkflow(req: ApiRequest, res: ApiResponse, id: string) {
   const effectiveLines = update.lines ?? target.lines;
   const effectiveDiscount = update.discount ?? target.discount;
   const effectiveDiscountMode = update.discountMode ?? target.discountMode;
-  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount, effectiveDiscountMode);
+  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount, effectiveDiscountMode, target.vatRate);
+  update.updatedAt = nowIso();
 
   // Required-field/mandatory-selection gate (added 2026-07-16) — every transition except back-to-
   // Draft ("rejected") and abandoning the quote ("cancelled") must leave the document complete.

@@ -27,6 +27,7 @@
  */
 export {
   VAT_RATE,
+  effectiveVatRate,
   lineDiscountAmount,
   lineSubtotal,
   resolveDiscountAmount,

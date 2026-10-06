@@ -230,3 +230,54 @@ describe("POST /api/quotes/:id/workflow กับเนื้อหาที่�
     expect((await call("PATCH", path(q.id), { client: "ลูกค้าในใบแก้ไข" })).statusCode).toBe(409);
   });
 });
+
+// อัตรา VAT ติดใบ + เวลาสร้าง/แก้จริง (Tuhmo #39, 2026-10-06) — แก้อัตราในตั้งค่าแล้วต้องไม่ย้อนเปลี่ยนใบเก่า
+describe("vatRate ติดใบ และ createdAt/updatedAt", () => {
+  type Stamped = { vatRate?: number; createdAt?: string; updatedAt?: string; amount: number };
+
+  it("ใบใหม่ใช้อัตราจากหน้าตั้งค่า · ใบเดิมคงอัตราเดิมเมื่อแก้ · ทำสำเนาใช้อัตราปัจจุบัน · Rewrite คงอัตราใบต้นทาง", async () => {
+    await db.collection("company").deleteMany({});
+    const old = await createDraft();
+    const oldStored = (await stored(old.id)) as unknown as Stamped;
+    expect(oldStored.vatRate).toBe(7);
+    expect(oldStored.amount).toBeCloseTo(1070);
+    expect(oldStored.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    await db.collection("company").updateOne({ _id: "singleton" as never }, { $set: { vatRate: 10 } }, { upsert: true });
+    const fresh = await createDraft();
+    const freshStored = (await stored(fresh.id)) as unknown as Stamped;
+    expect(freshStored.vatRate).toBe(10);
+    expect(freshStored.amount).toBeCloseTo(1100);
+
+    const edited = await call("PATCH", path(old.id), { lines: [{ ...LINE, unitPrice: 2000 }] });
+    expect(edited.statusCode, JSON.stringify(edited.body)).toBe(200);
+    const oldAfter = (await stored(old.id)) as unknown as Stamped;
+    expect(oldAfter.vatRate).toBe(7);
+    expect(oldAfter.amount).toBeCloseTo(2140);
+    expect(oldAfter.createdAt).toBe(oldStored.createdAt);
+    expect(oldAfter.updatedAt && oldAfter.updatedAt >= (oldStored.updatedAt ?? "")).toBe(true);
+
+    const dup = await call("POST", path(old.id, "/duplicate"));
+    expect(dup.statusCode, JSON.stringify(dup.body)).toBe(201);
+    const dupStored = (await stored(quoteOf(dup.body).id)) as unknown as Stamped;
+    expect(dupStored.vatRate).toBe(10);
+    expect(dupStored.amount).toBeCloseTo(2200);
+
+    expect((await workflow(old.id, "submitted")).statusCode).toBe(200);
+    expect((await workflow(old.id, "approved")).statusCode).toBe(200);
+    const rewrite = await call("POST", path(old.id, "/rewrite"));
+    expect(rewrite.statusCode, JSON.stringify(rewrite.body)).toBe(201);
+    const revStored = (await stored(quoteOf(rewrite.body).id)) as unknown as Stamped;
+    expect(revStored.vatRate).toBe(7);
+    expect(revStored.amount).toBeCloseTo(2140);
+    await db.collection("company").deleteMany({});
+  });
+
+  it("ใบเก่าที่ไม่มี vatRate ยังคิด 7% (ไม่ย้อนเติม)", async () => {
+    const q = await createDraft();
+    await db.collection("quotes").updateOne({ _id: q.id as never }, { $unset: { vatRate: "" } });
+    const edited = await call("PATCH", path(q.id), { lines: [{ ...LINE, unitPrice: 500 }] });
+    expect(edited.statusCode, JSON.stringify(edited.body)).toBe(200);
+    expect(((await stored(q.id)) as unknown as Stamped).amount).toBeCloseTo(535);
+  });
+});

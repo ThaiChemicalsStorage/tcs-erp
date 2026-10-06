@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { Plus, Trash2, PackageSearch, Layers, GripVertical, X, ChevronUp, ChevronDown, Tag } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import {
-  type QuoteLine, type SubDetail, type DiscountMode, blankLine, newSubDetailId, lineSubtotal, lineDiscountAmount, computeTotals, fmt, VAT_RATE,
+  type QuoteLine, type SubDetail, type DiscountMode, blankLine, newSubDetailId, lineSubtotal, lineDiscountAmount, computeTotals, fmt, effectiveVatRate,
 } from "../../lib/quotes";
 import { QuoteProductPicker } from "./QuoteProductPicker";
 import { SectionCard } from "../../components/ui/SectionCard";
@@ -177,14 +177,17 @@ function lineDiscountLabel(l: QuoteLine): string {
 }
 
 // ส่วนสรุปยอดท้ายตาราง — ใช้ทั้งหน้าแก้ไขและหน้าอ่านอย่างเดียว
-function TotalsBlock({ lines, discount, discountMode, discountControl }: {
+function TotalsBlock({ lines, discount, discountMode, discountControl, vatRate }: {
+  /** อัตรา VAT ของใบ (2026-10-06) — ไม่ส่ง = 7 */
+  vatRate?: number;
   lines: QuoteLine[];
   discount: number;
   discountMode: DiscountMode;
   discountControl?: ReactNode;
 }) {
   const { t } = useI18n();
-  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
+  const rate = effectiveVatRate(vatRate);
+  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode, rate);
   const row = "flex justify-between gap-3 text-sm text-[#3d5173]";
   return (
     <div className="w-full sm:w-[440px] flex flex-col gap-2.5">
@@ -197,7 +200,7 @@ function TotalsBlock({ lines, discount, discountMode, discountControl }: {
         </div>
       )}
       <div className={row}><span>{t("quotation.totals.afterDiscount")}</span><span className="tabular-nums text-foreground">{fmt(afterDiscount)}</span></div>
-      <div className={row}><span>{t("quotation.totals.vat").replace("{rate}", String(VAT_RATE))}</span><span className="tabular-nums text-foreground">{fmt(vatAmt)}</span></div>
+      <div className={row}><span>{t("quotation.totals.vat").replace("{rate}", String(rate))}</span><span className="tabular-nums text-foreground">{fmt(vatAmt)}</span></div>
       <div className="h-px bg-border my-1" />
       <div className="flex justify-between items-baseline gap-3">
         <span className="text-sm font-semibold text-foreground">{t("quotation.totals.grandTotal")}</span>
@@ -225,6 +228,7 @@ export function LineItemsEditor({
   products,
   categories,
   documentLabel,
+  vatRate,
 }: {
   lines: QuoteLine[];
   onChange: (lines: QuoteLine[]) => void;
@@ -236,6 +240,8 @@ export function LineItemsEditor({
   defaultLineDiscountMode: DiscountMode;
   products: Product[];
   categories: ProductCategory[];
+  /** อัตรา VAT ของใบ (2026-10-06) — ไม่ส่ง = 7 */
+  vatRate?: number;
   /** เลขที่ใบ (หรือ "ใบใหม่") สำหรับคำอธิบายในหน้าต่างเลือกสินค้า */
   documentLabel: string;
 }) {
@@ -480,6 +486,7 @@ export function LineItemsEditor({
 
       <div className="flex justify-end px-6 pt-5 pb-6">
         <TotalsBlock
+          vatRate={vatRate}
           lines={lines}
           discount={discount}
           discountMode={discountMode}
@@ -509,7 +516,8 @@ export function LineItemsEditor({
 
 // ตารางรายการแบบอ่านอย่างเดียว (ใบที่ส่งขออนุมัติแล้ว — ดีไซน์ใหม่ QuoteDocument-Approved) + หมายเหตุซ้าย ยอดรวมขวา
 // Read-only line items for a submitted quotation, with the remarks on the left and totals on the right
-export function ReadonlyLineItems({ lines, discount, discountMode, remarks }: {
+export function ReadonlyLineItems({ lines, discount, discountMode, remarks, vatRate }: {
+  vatRate?: number;
   lines: QuoteLine[];
   discount: number;
   discountMode: DiscountMode;
@@ -579,7 +587,7 @@ export function ReadonlyLineItems({ lines, discount, discountMode, remarks }: {
           <span className="text-xs text-muted-foreground">{t("quotation.section.remarks")}</span>
           <p className={`text-sm leading-relaxed whitespace-pre-line break-words ${remarks.trim() ? "text-foreground" : "text-[#8a97ad]"}`}>{remarks.trim() || "—"}</p>
         </div>
-        <TotalsBlock lines={lines} discount={discount} discountMode={discountMode} />
+        <TotalsBlock lines={lines} discount={discount} discountMode={discountMode} vatRate={vatRate} />
       </div>
     </SectionCard>
   );

@@ -35,7 +35,7 @@ import {
   printQuote,
   isRevisionQuote,
   fmt,
-  VAT_RATE,
+  effectiveVatRate,
   quoteContactsOf,
   normalizeContacts,
   primaryContactFields,
@@ -381,7 +381,9 @@ export function QuoteDocument({
   ];
   const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps, { autoStart: isDetail });
 
-  const totals = computeTotals(lines, discount, discountMode);
+  // อัตรา VAT ของใบนี้ (2026-10-06) — ใบที่บันทึกแล้วใช้อัตราที่ติดใบมา (ใบเก่า = 7) ใบใหม่ใช้อัตราในหน้าตั้งค่า (เซิร์ฟเวอร์เก็บค่าเดียวกันตอนสร้าง)
+  const vatRate = effectiveVatRate(isDetail ? quote!.vatRate : company.vatRate);
+  const totals = computeTotals(lines, discount, discountMode, vatRate);
   const { total } = totals;
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
   const itemCount = lines.filter((l) => !l.isSectionHeader).length;
@@ -939,7 +941,7 @@ export function QuoteDocument({
 
   const printProps = {
     isDetail, quote, nextId, companyHeader, client, contacts: normalizedContacts, address, taxId, deliveryMethod, deliveryAddress,
-    project, poRef, paymentTerms, issueDate, expiryDate, jobTypeName: jobTypeDisplay, lines, discount, discountMode, remarks,
+    project, poRef, paymentTerms, issueDate, expiryDate, jobTypeName: jobTypeDisplay, lines, discount, discountMode, remarks, vatRate,
     preparerUser, approverUser, preparerName, preparerDate, approverName: approverUser?.fullName ?? "", approverDate,
   };
 
@@ -1089,7 +1091,7 @@ export function QuoteDocument({
         rows={[
           ...(totals.discountAmt > 0 ? [{ label: t("quotation.totals.discount"), value: `−฿${fmt(totals.discountAmt)}` }] : []),
           { label: t("quotation.totals.afterDiscount"), value: `฿${fmt(totals.afterDiscount)}` },
-          { label: t("quotation.totals.vat").replace("{rate}", String(VAT_RATE)), value: `฿${fmt(totals.vatAmt)}` },
+          { label: t("quotation.totals.vat").replace("{rate}", String(vatRate)), value: `฿${fmt(totals.vatAmt)}` },
           { label: t("quotation.rail.items"), value: t("ui.itemCount").replace("{n}", String(itemCount)) },
         ]}
       />
@@ -1165,6 +1167,7 @@ export function QuoteDocument({
             <div data-tour="qdoc-items" className="print:hidden">
               {contentEditable ? (
                 <LineItemsEditor
+                  vatRate={vatRate}
                   lines={lines}
                   onChange={setLines}
                   discount={discount}
@@ -1177,7 +1180,7 @@ export function QuoteDocument({
                   documentLabel={isDetail ? quote!.id : t("quotation.newDoc")}
                 />
               ) : (
-                <ReadonlyLineItems lines={lines} discount={discount} discountMode={discountMode} remarks={remarks} />
+                <ReadonlyLineItems lines={lines} discount={discount} discountMode={discountMode} remarks={remarks} vatRate={vatRate} />
               )}
             </div>
             {contentEditable && (

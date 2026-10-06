@@ -93,6 +93,11 @@ export interface Quote {
   status: QuoteStatus;
   salesperson: string;
   interest: QuoteInterest;
+  /** อัตรา VAT (%) ของใบนี้ เก็บจากหน้าตั้งค่าบริษัทตอนสร้าง (2026-10-06) — ใบเก่าไม่มี = 7 · ดู `effectiveVatRate()` */
+  vatRate?: number;
+  /** เวลาสร้าง/แก้ล่าสุดจริง (ISO, 2026-10-06) — `date` เป็นวันที่ทางธุรกิจแบบข้อความไทย · ใบที่สร้างก่อนวันนั้นไม่มีสองค่านี้ */
+  createdAt?: string;
+  updatedAt?: string;
   lines: QuoteLine[];
   /** ส่วนลดพิเศษท้ายเอกสาร — ตีความเป็น % หรือบาท ตาม `discountMode` */
   discount: number;
@@ -166,6 +171,7 @@ export {
 } from "./quoteContacts";
 
 export const VAT_RATE = SHARED_VAT_RATE;
+export { effectiveVatRate } from "./quoteMath";
 
 export const statusStyle: Record<QuoteStatus, string> = {
   "ร่าง": "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
@@ -371,8 +377,8 @@ export function formatQuoteDateNumeric(iso: string): string {
 
 // คำนวณยอดรวมทั้งหมดของใบเสนอราคา (ยอดก่อนลด ส่วนลด ภาษี และยอดสุทธิ)
 // Computes the quote's aggregate totals (subtotal, discount, VAT, and grand total)
-export function computeTotals(lines: QuoteLine[], discount: number, discountMode?: DiscountMode) {
-  return sharedComputeTotals(lines, discount, discountMode);
+export function computeTotals(lines: QuoteLine[], discount: number, discountMode?: DiscountMode, vatRate?: number) {
+  return sharedComputeTotals(lines, discount, discountMode, vatRate);
 }
 
 // ตรวจสอบว่ารหัสนี้เป็นใบเสนอราคาที่เป็นรีวิชัน (มีส่วนต่อท้าย -R) หรือไม่

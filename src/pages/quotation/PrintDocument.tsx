@@ -2,7 +2,7 @@ import { Pin } from "lucide-react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
-  type Quote, type QuoteLine, type DiscountMode, type QuoteContact, fmt, lineSubtotal, lineDiscountAmount, computeTotals, bahtText, VAT_RATE,
+  type Quote, type QuoteLine, type DiscountMode, type QuoteContact, fmt, lineSubtotal, lineDiscountAmount, computeTotals, bahtText, effectiveVatRate,
   lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate, contactLine,
 } from "../../lib/quotes";
 import { BrandMark } from "../../components/BrandMark";
@@ -40,7 +40,7 @@ export function PrintDocument({
   client, contacts, address, taxId,
   deliveryMethod, deliveryAddress, project,
   poRef, paymentTerms, issueDate, expiryDate, jobTypeName,
-  lines, discount, discountMode, remarks,
+  lines, discount, discountMode, remarks, vatRate,
   preparerUser, approverUser, preparerName, preparerDate, approverName, approverDate,
 }: {
   isDetail: boolean;
@@ -64,6 +64,8 @@ export function PrintDocument({
   discount: number;
   discountMode?: DiscountMode;
   remarks: string;
+  /** อัตรา VAT ของใบ (2026-10-06) — ไม่ส่ง = 7 */
+  vatRate?: number;
   preparerUser?: User;
   approverUser?: User;
   preparerName: string;
@@ -71,7 +73,8 @@ export function PrintDocument({
   approverName: string;
   approverDate: string;
 }) {
-  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
+  const rate = effectiveVatRate(vatRate);
+  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode, rate);
   const quoteId = isDetail ? quote!.id : nextId;
 
   let runningItemNumber = 0;
@@ -257,7 +260,7 @@ export function PrintDocument({
               <span className="font-mono">{fmt(discountAmt)}</span>
             </div>
             <div className="flex justify-between text-[11px] border-t border-[#0b1d3a]/15 pt-1"><span>ยอดหลังหักส่วนลด</span><span className="font-mono">{fmt(afterDiscount)}</span></div>
-            <div className="flex justify-between text-[11px]"><span>VAT {VAT_RATE}%</span><span className="font-mono">{fmt(vatAmt)}</span></div>
+            <div className="flex justify-between text-[11px]"><span>VAT {rate}%</span><span className="font-mono">{fmt(vatAmt)}</span></div>
             <div className="flex justify-between text-[13px] font-bold border-t-2 border-[#0b1d3a]/30 pt-1.5 mt-1">
               <span>จำนวนเงินรวมทั้งหมด THB</span><span className="font-mono">{fmt(total)}</span>
             </div>

@@ -16,7 +16,7 @@ import { canSeeDashboardTab } from "../../src/lib/dashboardTabs.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
-import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat, type DiscountMode } from "../_lib/quoteAmounts.js";
+import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat, effectiveVatRate, type DiscountMode } from "../_lib/quoteAmounts.js";
 import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
 import {
   computeStageProbabilities, computeWeightedPipeline, computeStatusBySalesperson, appliedProbabilityFor,
@@ -137,7 +137,7 @@ type QuoteCalcDoc = Pick<
   QuoteFields,
   "status" | "client" | "salesperson" | "jobTypeCode" | "jobTypeName" |
   "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory" | "interest" |
-  "lines" | "discount" | "discountMode" | "project"
+  "lines" | "discount" | "discountMode" | "vatRate" | "project"
 > & { _id: string; amount: number };
 
 // `bangkokNow()`/`todayIsoDate()`/`bangkokDayBoundsUtc()` (the fixed UTC+7 date math and its
@@ -275,9 +275,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // `discountMode` (added 2026-08-25) says whether `discount` is a percentage or a baht amount.
     // Absent — which is every quotation issued before then — means percent, so historical figures
     // are unchanged.
-    const quoteAmount = (lines: QuoteFields["lines"] | undefined, discount: number, discountMode?: DiscountMode): number =>
+    // vatRate (2026-10-06): ใบที่สร้างตั้งแต่วันนั้นเก็บอัตรา VAT ของตัวเอง ใบเก่าไม่มี = 7 — โหมดรวม VAT ใช้อัตราของแต่ละใบ
+    const quoteAmount = (lines: QuoteFields["lines"] | undefined, discount: number, discountMode?: DiscountMode, vatRate?: number): number =>
       vatMode === "post"
-        ? computeQuoteAmountWithVat(lines ?? [], discount, discountMode)
+        ? computeQuoteAmountWithVat(lines ?? [], discount, discountMode, effectiveVatRate(vatRate))
         : computeQuoteAmountBeforeVat(lines ?? [], discount, discountMode);
     const today = todayIsoDate();
 
@@ -377,7 +378,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const projection = {
       status: 1, client: 1, salesperson: 1, jobTypeCode: 1, jobTypeName: 1,
       isPotentialOpportunity: 1, followUpDate: 1, issueDate: 1, expiryDate: 1, approvalHistory: 1, interest: 1,
-      lines: 1, discount: 1, discountMode: 1, project: 1,
+      lines: 1, discount: 1, discountMode: 1, vatRate: 1, project: 1,
     } as const;
 
     const [
@@ -414,7 +415,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       // WON_STATUS filter is applied in JS below, after dedup.
       quotes.find(
         { ...salespersonOnlyMatch, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
-        { projection: { status: 1, issueDate: 1, lines: 1, discount: 1, discountMode: 1 } },
+        { projection: { status: 1, issueDate: 1, lines: 1, discount: 1, discountMode: 1, vatRate: 1 } },
       ).toArray(),
       computeCategoryBreakdown(),
       quotes.find(fullMatch, { projection }).toArray() as unknown as Promise<QuoteCalcDoc[]>,
@@ -429,7 +430,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       // consistent with "the date filter must affect every widget" (see MODULES/Dashboard.md).
       quotes.find(
         fullMatch,
-        { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, lines: 1, discount: 1, discountMode: 1 } },
+        { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, lines: 1, discount: 1, discountMode: 1, vatRate: 1 } },
       ).toArray(),
       // Deliberately company-wide only (no salesperson filter) — the forecast's weighting baseline is a
       // trailing-12-month win rate meant to be a stable, low-noise reference; narrowing it to one
@@ -471,7 +472,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // consistently, using each chain's LATEST revision (never the superseded original, never a sum
     // across revisions), per explicit 2026-07-22 business decision.
     const docs = dedupeQuotesByRevisionChain(
-      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: quoteAmount(q.lines, q.discount ?? 0, q.discountMode) })),
+      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: quoteAmount(q.lines, q.discount ?? 0, q.discountMode, q.vatRate) })),
     );
 
     // Data-quality telemetry (2026-07-14, Codex review Medium finding): a doc with `lines` entirely
@@ -759,10 +760,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) — otherwise a rewritten
     // quotation with a follow-up date could surface as two separate reminders (one per revision)
     // instead of one, using whichever revision is actually current.
-    const followUpDocs = dedupeQuotesByRevisionChain(followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount" | "discountMode"> & { _id: string }>)
+    const followUpDocs = dedupeQuotesByRevisionChain(followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount" | "discountMode" | "vatRate"> & { _id: string }>)
       .filter((q) => q.followUpDate && !TERMINAL_STATUSES.has(q.status));
     const toFollowUpSummary = (q: (typeof followUpDocs)[number]) => ({
-      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: quoteAmount(q.lines, q.discount ?? 0, q.discountMode),
+      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: quoteAmount(q.lines, q.discount ?? 0, q.discountMode, q.vatRate),
     });
     const followUps = {
       today: followUpDocs.filter((q) => q.followUpDate === today).map(toFollowUpSummary),
@@ -1119,7 +1120,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // chain only contributes revenue here if its LATEST revision is Won; a Won original superseded
     // by a still-open (or since-lost) rewrite must not count, and a chain that only became Won via
     // a later revision must count using that revision's own amount, not the original's.
-    const revenueTrendDocs = dedupeQuotesByRevisionChain(revenueTrendDocsRaw as Array<{ _id: string; status: string; issueDate: string; lines: QuoteFields["lines"]; discount: number; discountMode?: DiscountMode }>)
+    const revenueTrendDocs = dedupeQuotesByRevisionChain(revenueTrendDocsRaw as Array<{ _id: string; status: string; issueDate: string; lines: QuoteFields["lines"]; discount: number; discountMode?: DiscountMode; vatRate?: number }>)
       .filter((q) => q.status === WON_STATUS);
     const revenueByWeekMap = new Map<string, number>();
     const revenueByMonthMap = new Map<string, number>();
@@ -1131,7 +1132,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const wk = isoWeekKey(date);
       const monthKey = r.issueDate.slice(0, 7);
       const qk = quarterKey(y, m - 1);
-      const amt = quoteAmount(r.lines, r.discount ?? 0, r.discountMode);
+      const amt = quoteAmount(r.lines, r.discount ?? 0, r.discountMode, r.vatRate);
       revenueByWeekMap.set(wk, (revenueByWeekMap.get(wk) ?? 0) + amt);
       revenueByMonthMap.set(monthKey, (revenueByMonthMap.get(monthKey) ?? 0) + amt);
       revenueByQuarterMap.set(qk, (revenueByQuarterMap.get(qk) ?? 0) + amt);

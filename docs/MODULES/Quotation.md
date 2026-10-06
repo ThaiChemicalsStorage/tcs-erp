@@ -304,6 +304,20 @@ see [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25 for the cross-module descripti
 
 The preparer's signature is looked up via `quote.createdByUserId`; the approver's via the most recent `"approved"` entry in `approvalHistory`. Both render as an `<img>` (the user's `signatureDataUrl`, uploaded in Settings → Profile) on the document's signature block, falling back to the original blank signature line if the user hasn't uploaded one — never an error.
 
+## VAT rate per quotation + real timestamps (2026-10-06, Tuhmo #39)
+
+- **`vatRate`** — the server stamps `company.vatRate` (Settings → ข้อมูลบริษัท) onto a quotation **when it is created** and every later
+  amount for that quotation uses it (`computeQuoteAmount(…, vatRate)`). Changing the rate in Settings therefore only affects new
+  quotations — an issued quote never silently changes total. Quotes created before this have no `vatRate` → `effectiveVatRate()` = 7,
+  exactly what they were computed with. **Duplicate** = a new quotation → current company rate. **Rewrite** = a revision of the same
+  deal → keeps the source's rate. Screen, line-items totals, read-only view and the printed quotation all show/compute with the
+  quotation's own rate (a new unsaved quote previews with the Settings rate the server will stamp). The Dashboard's "incl. VAT" mode
+  uses each quote's own rate; the default "before VAT" mode is rate-independent.
+- **`createdAt` / `updatedAt`** — real ISO timestamps on create/duplicate/rewrite and on every PATCH (incl. auto-save) and workflow
+  write. `date`/`valid` remain the Thai-formatted business dates they always were. Older quotes have neither field.
+- Not done: soft-delete (there is no delete route — the `ยกเลิก` status is the delete; asked the owner whether a real delete is
+  wanted). Accounting documents keep their own fixed 7% (`api/_lib/arCalculations.ts`) — deferred with the accounting work.
+
 ## Pages
 
 - `src/pages/quotation/QuotationPage.tsx` — top-level container: view-switching (`list`/`new`/`detail`), owns the toast, computes per-quote permissions (`computeQuotePermissions`), wires Save/Duplicate/Rewrite/interest-change/workflow-action callbacks, triggers notification refresh after a workflow action. **As of 2026-07-10 (fifth pass) it no longer builds/dispatches audit-log entries itself** — those are now written authoritatively server-side by `api/handlers/quotes.ts` for every mutation (create/update/duplicate/rewrite/workflow), since the client-side version was forgeable (any authenticated caller could POST the generic audit endpoint directly with fabricated text). See [AuditLog.md](./AuditLog.md).
@@ -375,7 +389,7 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 
 ## Future Improvements
 
-- Wire `Company.vatRate` into the VAT calculation (currently `computeTotals()` still uses the fixed `VAT_RATE` constant)
+- ~~Wire `Company.vatRate` into the VAT calculation~~ — done 2026-10-06, see "VAT rate per quotation" above
 - ~~Replace the client free-text field with a real Customer reference once Customer.md exists~~ — **done 2026-07-14**: `client`/`contactName`/etc. can now be autofilled from (and linked to, via `customerId`) a saved [Customer](./Customer.md) record, though the fields themselves remain free text/editable afterward rather than becoming fully derived — see "Customer Selection" above
 - "บันทึกเป็นลูกค้าใหม่" (save the manually-typed Customer Information as a new Customer record, inline from the Quotation form) — explicitly flagged as a future nice-to-have in the 2026-07-14 requirement, not built (kept simple/safe) — a Sales user creates customers via the [Customers admin page](./Customer.md) today
 - Sequential two-level approval (Approver Level 1 must approve before Level 2) — currently both approver roles have independent rights; see [RBAC.md](../RBAC.md) Known Simplifications
