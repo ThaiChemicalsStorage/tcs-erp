@@ -1,5 +1,20 @@
 const STORAGE_KEY = "tcs_erp_tour_completed_user_ids";
 
+/**
+ * สวิตช์ปิดทัวร์ทั้งหมดในเบราว์เซอร์นี้ (2026-10-06, Tuhmo #43) — ใช้ตอนถ่ายภาพหน้าจอทำคู่มือ ทัวร์ประจำหน้าจะได้ไม่เด้งบัง
+ * เปิด: `localStorage.setItem("tcs_erp_tours_disabled", "1")` · ปิด: `removeItem` · ปุ่มเล่นทัวร์ซ้ำยังกดได้ตามปกติ
+ * ดูวิธีใช้กับ Playwright ใน docs/manual/README.md
+ */
+export const TOURS_DISABLED_KEY = "tcs_erp_tours_disabled";
+
+function toursDisabled(): boolean {
+  try {
+    return localStorage.getItem(TOURS_DISABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 // อ่านรายชื่อ user id ที่ทำทัวร์แนะนำจบแล้วจาก localStorage
 // Reads the list of user IDs who have completed the guided tour from localStorage.
 function readCompletedIds(): string[] {
@@ -14,7 +29,7 @@ function readCompletedIds(): string[] {
 // ตรวจว่าผู้ใช้คนนี้ทำทัวร์แนะนำจบแล้วหรือยัง
 // Checks whether this user has already completed the guided tour.
 export function hasTourCompleted(userId: string): boolean {
-  return readCompletedIds().includes(userId);
+  return toursDisabled() || readCompletedIds().includes(userId);
 }
 
 // บันทึกว่าผู้ใช้คนนี้ทำทัวร์แนะนำจบแล้ว
@@ -46,7 +61,7 @@ function readPageTourIds(tourKey: string): string[] {
 // ตรวจว่าผู้ใช้คนนี้ทำทัวร์ของหน้านี้จบแล้วหรือยัง
 // Checks whether this user has already completed this page's tour.
 export function hasPageTourCompleted(tourKey: string, userId: string): boolean {
-  return readPageTourIds(tourKey).includes(userId);
+  return toursDisabled() || readPageTourIds(tourKey).includes(userId);
 }
 
 // บันทึกว่าผู้ใช้คนนี้ทำทัวร์ของหน้านี้จบแล้ว

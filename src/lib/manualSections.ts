@@ -199,3 +199,36 @@ export function manualLabel(id: string): string | null {
   const title = MANUAL_SECTIONS[id] ?? MANUAL_CHAPTERS[`ch${m[1]}`];
   return title ? `บทที่ ${m[1]} · ${title}` : null;
 }
+
+/**
+ * หน้าในแอป (NavKey ของ App.tsx) → บทในคู่มือ — ปุ่ม "คู่มือการใช้งาน" บนแถบบนเปิดบทของหน้าที่ผู้ใช้อยู่ (2026-10-06, Tuhmo #43)
+ * หน้าไหนไม่อยู่ในตารางเปิดหน้าแรกของคู่มือ · บทอ้างอิงจาก manual ของ tour step ในหน้านั้น ๆ
+ */
+export const NAV_MANUAL_CHAPTER: Record<string, string> = {
+  dashboard: "ch4", pendingApprovals: "ch5",
+  quotations: "ch6", quotationTemplates: "ch11", scopeOfWork: "ch7", deliveryOrder: "ch9", customers: "ch10",
+  service: "ch12", serviceTemplates: "ch12",
+  accounting: "ch13", accountingDashboard: "ch13", arDeposit: "ch13", arBilling: "ch13", arReceipt: "ch13", arTaxInvoice: "ch13", arMonthly: "ch13",
+  purchaseTaxRegister: "ch14", apRegister: "ch14", vendorBills: "ch14",
+  project: "ch15",
+  materialRequisition: "ch16", materialRequisitionTemplates: "ch16", jobOrder: "ch16", purchaseRequest: "ch16",
+  productionRequisition: "ch16", productionPurchase: "ch16", storePurchaseRequest: "ch16",
+  productionOrder: "ch17",
+  purchaseOrder: "ch18", purchasingRequestInbox: "ch18",
+  vendors: "ch19", codeRegister: "ch19",
+  costControl: "ch20",
+  products: "ch21", productCategories: "ch21",
+  stock: "ch22", stockHistory: "ch22",
+  receivingReport: "ch23",
+  storeDocuments: "ch24", storeRequestInbox: "ch24", storeIssueInbox: "ch24",
+  toolControl: "ch25",
+  productRequest: "ch26",
+  users: "ch27", passwordResets: "ch27", roles: "ch27", departments: "ch27", auditLog: "ch27",
+  settings: "ch28",
+};
+
+/** ลิงก์คู่มือของหน้าที่อยู่ — ไม่รู้จักหน้า → หน้าแรกของคู่มือ */
+export function manualHrefForNav(nav: string): string {
+  const chapter = NAV_MANUAL_CHAPTER[nav];
+  return chapter ? manualHref(chapter) : "/manual.html";
+}

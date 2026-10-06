@@ -4,7 +4,20 @@
 
 ---
 
-## 2026-10-06n (absolute latest) — ระบบดีไซน์: text-xs = 12px จริง · ป้าย "ด่วน" สีแดง · ลบ CSS variable ตาย (Tuhmo #26)
+## 2026-10-06o (absolute latest) — คู่มือ: ปุ่มเปิดบทของหน้าที่อยู่ · รันสร้าง PDF จริง · สวิตช์ปิดทัวร์ตอนถ่ายภาพ (Tuhmo #43)
+
+- ปุ่ม "คู่มือการใช้งาน" บนแถบบน → `manualHrefForNav(activeNav)` เปิด `/manual.html#chN` ของหน้าที่อยู่ (ตาราง `NAV_MANUAL_CHAPTER` ใน
+  `src/lib/manualSections.ts` อิงบทจาก `manual:` ของ tour step ในหน้านั้น ๆ) · `tests/manualNavChapters.test.ts` อ่าน `NavKey` จาก App.tsx แล้วบังคับ
+  ว่าทุกหน้ามีบท และทุกบทมี `id="chN"` จริงใน `public/manual.html`
+- **รัน `docs/manual/generate-pdf.mjs` จริงครั้งแรก** (puppeteer-core ติดตั้งแบบ `--no-save` ตามที่สคริปต์เขียนไว้ + Vite เสิร์ฟ public/) — ได้ PDF 206 หน้า
+  ภาพ 94 ภาพ ~32MB ใน `dist-manual/` (gitignored) · เรนเดอร์หน้าปกและหน้าที่มีภาพผ่าน pdf.js ดูเป็นภาพแล้วถูกต้อง · สคริปต์ไม่ต้องแก้
+- `src/lib/tour.ts`: `localStorage["tcs_erp_tours_disabled"] = "1"` → ทุกทัวร์นับว่าดูแล้ว (ทัวร์หน้าไม่เด้ง กล่องชวนทัวร์หลักไม่โผล่) ไม่บันทึกอะไรเพิ่ม
+  ลบออกแล้วกลับเป็นปกติ — สำหรับถ่ายภาพคู่มือ · วิธีใช้ (รวม Playwright `addInitScript`) จดใน `docs/manual/README.md` (ไฟล์ใหม่)
+- ยังไม่ทำ รอเจ้าของตัดสิน: ทัวร์หลักควรนับว่า "ดูแล้ว" ตั้งแต่กล่องชวนโผล่ (แบบทัวร์หน้า) ไหม · ทางเล่นทัวร์หลักซ้ำที่เห็นง่ายกว่าเมนูผู้ใช้ → วิธีใช้งาน
+
+---
+
+## 2026-10-06n — ระบบดีไซน์: text-xs = 12px จริง · ป้าย "ด่วน" สีแดง · ลบ CSS variable ตาย (Tuhmo #26)
 
 เจ้าของตัดสิน 2026-10-06: ตัวอักษรเล็กสุด (text-xs) = 12px ทั้งแอป · ป้าย "ด่วน" = สีแดง · dark mode ไม่ต้องทำ
 - `src/styles/theme.css` `@theme inline`: `--text-xs: 0.8rem` (root 15px → 12px พอดี เดิม 0.75rem = 11.25px) · line-height คงอัตราส่วน Tailwind

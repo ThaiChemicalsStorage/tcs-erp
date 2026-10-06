@@ -8,6 +8,7 @@ import {
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
 import { type JobType, fetchJobTypes } from "./lib/jobTypes";
+import { manualHrefForNav } from "./lib/manualSections";
 import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Vendor, fetchVendors } from "./lib/vendors";
 import { type CodeEntry, fetchCodeEntries } from "./lib/codeRegister";
@@ -1203,7 +1204,7 @@ export default function App() {
           <span className="flex-1" />
           {/* 2026-08-07: opens the web manual page (public/manual.html) — the ONLY live manual. */}
           <a
-            href="/manual.html"
+            href={manualHrefForNav(activeNav)}
             target="_blank"
             rel="noreferrer"
             aria-label={t("topbar.manual")}
