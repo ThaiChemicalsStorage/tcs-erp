@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { receivingReportCodeOf, RECEIVING_REPORT_CODE_LABEL_KEY, type ReceivingReportSummary, type ReceivingReportStatus } from "../../lib/receivingReport";
-import { formatQuoteDateThai, fmt } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
@@ -10,6 +10,7 @@ import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEm
 import { table } from "../../components/ui/styles";
 import { PAGE_CLASS, Pill, ListDateRangeSelect, rowOpenClass } from "./receivingUi";
 import { paginate, rowOpenProps } from "./receivingFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 type Tab = "all" | ReceivingReportStatus;
 
@@ -131,7 +132,7 @@ export function ReceivingReportList({
                       <td className={`${table.td} text-right tabular-nums text-sm text-foreground whitespace-nowrap`}>{fmt(r.receivedValue)}</td>
                       <td className={`${table.td} text-right tabular-nums text-sm whitespace-nowrap ${r.outstandingValue > 0 ? "font-semibold text-[#8a5a00]" : "text-[#8a97ad]"}`}>{fmt(r.outstandingValue)}</td>
                       <td className={table.td}><ReceivingReportStatusPill status={r.status} /></td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.updatedAt)}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(r.updatedAt)}</td>
                       <td className={`${table.td} w-10`}>
                         <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
                       </td>

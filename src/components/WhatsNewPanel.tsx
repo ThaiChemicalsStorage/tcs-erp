@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { WHATS_NEW_ENTRIES, hasUnseenWhatsNew, markWhatsNewSeen } from "../lib/whatsNew";
 import { useI18n } from "../lib/i18n";
+import { formatDisplayDateLong } from "../lib/displayDate";
 
 // แปลงวันที่แบบ ISO ให้เป็นรูปแบบวันที่ภาษาไทย
 // Formats an ISO date string as a Thai-locale date
 function formatThaiDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+  return formatDisplayDateLong(iso);
 }
 
 /**

@@ -5,10 +5,10 @@ import {
   PURCHASING_TARGET_DAYS, type AgingTone,
 } from "../../lib/businessDays";
 import type { PurchaseRequest, PurchaseRequestPoRef } from "../../lib/purchaseRequest";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { surface } from "../../components/ui/styles";
 import { StageTag } from "./docShared";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * งานด่วน + ตัวนับวันทำการของงานจัดซื้อ (เจ้าของสั่ง 2026-10-02) — ชิ้นส่วนที่หน้ารายการและหน้าเอกสาร
@@ -166,10 +166,10 @@ export function PurchasingAgeCard({ receivedAt, completedAt, urgent, neededByDat
         <span>{t("purchaseRequest.age.used").replace("{n}", String(days))}</span>
       </div>
       <div className="h-px bg-[#eef1f6]" />
-      <Row label={t("purchaseRequest.age.receivedAt")} value={formatQuoteDateThai(receivedAt)} />
-      {!done && <Row label={t("purchaseRequest.age.dueAt")} value={formatQuoteDateThai(addBusinessDays(receivedAt, target))} />}
-      {done && <Row label={t("purchaseRequest.age.completedAt")} value={formatQuoteDateThai(completedAt)} />}
-      {neededByDate && <Row label={t("purchaseRequestDoc.field.neededByDate")} value={formatQuoteDateThai(neededByDate)} />}
+      <Row label={t("purchaseRequest.age.receivedAt")} value={formatDisplayDate(receivedAt)} />
+      {!done && <Row label={t("purchaseRequest.age.dueAt")} value={formatDisplayDate(addBusinessDays(receivedAt, target))} />}
+      {done && <Row label={t("purchaseRequest.age.completedAt")} value={formatDisplayDate(completedAt)} />}
+      {neededByDate && <Row label={t("purchaseRequestDoc.field.neededByDate")} value={formatDisplayDate(neededByDate)} />}
       <p className="m-0 text-xs text-muted-foreground leading-relaxed">{t("purchaseRequest.age.rule")}</p>
     </section>
   );
@@ -281,7 +281,7 @@ export function PurchaseRequestTimeline({ doc, purchaseOrders, completedAt }: {
       <ol className="m-0 px-6 pt-3 pb-4 list-none flex flex-col">
         {events.map((e, i) => (
           <li key={e.key} className="grid grid-cols-[112px_20px_minmax(0,1fr)_120px] gap-3 min-h-[56px]">
-            <span className={`pt-2 text-[13px] font-medium ${e.kind === "future" ? "text-[#8a97ad]" : "text-foreground"}`}>{e.date ? formatQuoteDateThai(e.date) : "—"}</span>
+            <span className={`pt-2 text-[13px] font-medium ${e.kind === "future" ? "text-[#8a97ad]" : "text-foreground"}`}>{e.date ? formatDisplayDate(e.date) : "—"}</span>
             <span className="flex flex-col items-center" aria-hidden="true">
               <span className={`w-0.5 h-2.5 ${i === 0 ? "bg-transparent" : "bg-[#c3ccda]"}`} />
               <span className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 ${dot[e.kind]}`} />

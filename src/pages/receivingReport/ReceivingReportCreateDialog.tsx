@@ -6,10 +6,11 @@ import { fetchAllPurchaseOrders, type PurchaseOrderSummary } from "../../lib/pur
 import {
   fetchAllReceivingReports, RECEIVING_REPORT_CODES, RECEIVING_REPORT_CODE_LABEL_KEY, type ReceivingReportCode,
 } from "../../lib/receivingReport";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { btn } from "../../components/ui/styles";
 import { RadioDot } from "./receivingUi";
 import { pickRowClass } from "./receivingFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * แถวเลือกรหัสรับเข้า — ใช้ทั้งหน้าต่างสร้างใบและหน้าต่างเลือกรหัสจากปุ่ม "รับสินค้า" บนใบสั่งซื้อ
@@ -213,7 +214,7 @@ export function ReceivingReportCreateDialog({
                   <button key={r.id} type="button" role="radio" aria-checked={on} onClick={() => setSource(r.id)} className={`${pickRowClass(on)} ${grid} h-[52px]`}>
                     <RadioDot on={on} />
                     <span className="font-mono text-[13px] font-medium text-foreground truncate">{r.documentNumber || r.id}</span>
-                    <span className="text-sm text-[#3d5173]">{formatQuoteDateThai(r.updatedAt)}</span>
+                    <span className="text-sm text-[#3d5173]">{formatDisplayDate(r.updatedAt)}</span>
                     <span className="text-sm font-medium text-foreground truncate" title={r.vendorName}>{r.vendorName || "—"}</span>
                     <span className={`font-mono text-[13px] truncate ${r.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{r.jobCode || "—"}</span>
                   </button>

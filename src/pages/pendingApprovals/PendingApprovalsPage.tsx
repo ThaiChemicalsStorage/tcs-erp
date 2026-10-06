@@ -5,7 +5,6 @@ import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListEmpty } from "../.
 import { table } from "../../components/ui/styles";
 import { PENDING_KIND_LABEL_KEY } from "./kindLabels";
 import { ApiError } from "../../lib/apiClient";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
@@ -13,6 +12,7 @@ import {
   type PendingApprovalItem, type PendingApprovalKind,
   fetchPendingApprovals, daysWaiting,
 } from "../../lib/pendingApprovals";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * กล่องงานเข้า "เอกสารรออนุมัติ" ข้ามแผนก — เจ้าของขอไว้ 2026-08-28:
@@ -176,7 +176,7 @@ export function PendingApprovalsPage({ currentUserId, onOpen }: {
                                   <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${stale ? "bg-[#d89614]" : "bg-[#8a97ad]"}`} />
                                   {days === 0 ? t("pendingApprovals.waitingToday") : t("pendingApprovals.waitingDays").replace("{n}", String(days))}
                                 </span>
-                                <span className="text-xs text-muted-foreground">{it.waitingSince ? formatQuoteDateThai(it.waitingSince.slice(0, 10)) : t("common.dash")}</span>
+                                <span className="text-xs text-muted-foreground">{it.waitingSince ? formatDisplayDate(it.waitingSince.slice(0, 10)) : t("common.dash")}</span>
                               </span>
                             </td>
                             <td className={`${table.td} text-right`}>

@@ -11,6 +11,7 @@ import { AGING_RAMP } from "./accountingFormat";
 import { DOC_TYPE_LABEL_KEY, BILLING_STATUS_LABEL_KEY } from "../../lib/accounting";
 import { fmtShort } from "../dashboard/format";
 import { useI18n } from "../../lib/i18n";
+import { displayYear2 } from "../../lib/displayDate";
 
 // กราฟสำหรับแดชบอร์ดบัญชี (เพิ่ม 2026-08-18) — ดีไซน์ใหม่ 2026-09-30: แท่งโทนน้ำเงินชุดเดียวทั้งหน้า
 // ตัวเลขทุกตัวเหมือนเดิม (ความหมาย/ตัวกรอง/สูตรไม่เปลี่ยน — เจ้าของสั่งให้เปลี่ยนแค่หน้าตา)
@@ -78,7 +79,7 @@ function toQuarterly(monthly: ArDashboardTrendPoint[]): { label: string; netTota
     if (!y || !m) continue;
     const quarter = Math.floor((m - 1) / 3) + 1;
     const key = `${y}-Q${quarter}`;
-    const bucket = byQuarter.get(key) ?? { label: `Q${quarter}/${String((y + 543) % 100).padStart(2, "0")}`, netTotal: 0, count: 0 };
+    const bucket = byQuarter.get(key) ?? { label: `Q${quarter}/${displayYear2(y)}`, netTotal: 0, count: 0 };
     bucket.netTotal += p.netTotal;
     bucket.count += p.count;
     byQuarter.set(key, bucket);

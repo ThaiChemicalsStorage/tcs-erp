@@ -5,10 +5,10 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import type { ProjectListItem, ProjectStatus } from "../../lib/project";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ListDateRangeSelect, ProjectStatusPill, paginate, rowOpenProps, useProjectStatusLabel } from "./projectUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 type TabKey = "all" | ProjectStatus;
 
@@ -120,7 +120,7 @@ export function ProjectList({
                       </td>
                       <td className={`${table.td} text-right tabular-nums text-[#3d5173]`}>{p.itemCount}</td>
                       <td className={table.td}><ProjectStatusPill status={p.status} /></td>
-                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatDisplayDate(p.updatedAt)}</td>
                       <td className={table.td}>
                         <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                       </td>

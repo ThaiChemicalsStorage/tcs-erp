@@ -4,7 +4,7 @@ import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
   type VendorBill, type VendorBillRow, type VendorBillCandidate, type VendorBillUpdateFields, type VendorBillBundle,
@@ -27,6 +27,7 @@ import { CheckDot, CodeChip, RailSummaryCard, SuffixInput, SummaryLine } from ".
 import { pickRowClass } from "../receivingReport/receivingFormat";
 import { WidePickerShell } from "../receivingReport/ReceivingReportCreateDialog";
 
+import { formatDisplayDate } from "../../lib/displayDate";
 
 function toUpdateFields(d: VendorBill): VendorBillUpdateFields {
   return { billDate: d.billDate, creditDays: d.creditDays, paymentDate: d.paymentDate, remarks: d.remarks, apEntryIds: d.apEntryIds };
@@ -303,9 +304,9 @@ export function VendorBillDocument({ vendorBillId, currentUserId, canEdit, canPr
                       </>
                     ) : (
                       <>
-                        <ReadonlyField label={t("vendorBill.field.billDate")} value={draft.billDate ? formatQuoteDateThai(draft.billDate) : ""} />
+                        <ReadonlyField label={t("vendorBill.field.billDate")} value={draft.billDate ? formatDisplayDate(draft.billDate) : ""} />
                         <ReadonlyField label={t("vendorBill.field.creditDays")} value={draft.creditDays ?? ""} />
-                        <ReadonlyField label={t("vendorBill.field.paymentDate")} value={draft.paymentDate ? formatQuoteDateThai(draft.paymentDate) : ""} />
+                        <ReadonlyField label={t("vendorBill.field.paymentDate")} value={draft.paymentDate ? formatDisplayDate(draft.paymentDate) : ""} />
                         <ReadonlyField label={t("vendorBill.field.remarks")} value={draft.remarks} className="sm:col-span-3" />
                       </>
                     )}
@@ -368,8 +369,8 @@ export function VendorBillDocument({ vendorBillId, currentUserId, canEdit, canPr
                         {r.missing ? <span className="text-[#b93636] font-sans">{t("vendorBill.rowMissing")}</span> : r.receivingReportNumber}
                       </span>
                       <span className="font-mono text-[13px] text-[#3d5173] truncate">{r.invoiceNumber || "—"}</span>
-                      <span className="text-sm text-[#3d5173]">{r.invoiceDate ? formatQuoteDateThai(r.invoiceDate) : "—"}</span>
-                      <span className="text-sm text-[#3d5173]">{r.dueDate ? formatQuoteDateThai(r.dueDate) : "—"}</span>
+                      <span className="text-sm text-[#3d5173]">{r.invoiceDate ? formatDisplayDate(r.invoiceDate) : "—"}</span>
+                      <span className="text-sm text-[#3d5173]">{r.dueDate ? formatDisplayDate(r.dueDate) : "—"}</span>
                       <span className="text-sm text-right tabular-nums text-foreground">{fmt(r.amount)}</span>
                       <span className={`text-sm text-right tabular-nums ${r.paid > 0 ? "text-[#1b7f4f]" : "text-[#8a97ad]"}`}>{r.paid > 0 ? fmt(r.paid) : "—"}</span>
                       <span className={`text-sm text-right tabular-nums ${r.outstanding > 0 ? "font-semibold text-[#8a5a00]" : "text-[#8a97ad]"}`}>{fmt(r.outstanding)}</span>
@@ -431,7 +432,7 @@ export function VendorBillDocument({ vendorBillId, currentUserId, canEdit, canPr
                       <CheckDot on={on} />
                       <span className="font-mono text-[13px] font-medium text-foreground truncate">{c.receivingReportNumber}</span>
                       <span className="font-mono text-[13px] text-[#3d5173] truncate">{c.invoiceNumber || "—"}</span>
-                      <span className="text-sm text-[#3d5173]">{c.invoiceDate ? formatQuoteDateThai(c.invoiceDate) : "—"}</span>
+                      <span className="text-sm text-[#3d5173]">{c.invoiceDate ? formatDisplayDate(c.invoiceDate) : "—"}</span>
                       <span className="text-sm text-right font-semibold tabular-nums text-foreground">{fmt(c.amount)}</span>
                     </button>
                   );

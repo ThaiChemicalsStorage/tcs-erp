@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { setDisplayLang } from "./displayDate";
 
 export type Lang = "th" | "en";
 
@@ -10879,6 +10880,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
+
+  // วันที่บนหน้าจอตามภาษา (src/lib/displayDate.ts) — ตั้งระหว่าง render ให้ลูกที่ render ตามมาเห็นภาษาใหม่ทันที
+  setDisplayLang(lang);
 
   const value = useMemo<I18nContextValue>(
     () => ({

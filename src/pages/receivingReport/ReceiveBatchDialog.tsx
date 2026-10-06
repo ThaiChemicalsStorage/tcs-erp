@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Info, Loader2, PackagePlus } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { fmt } from "../../lib/quotes";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import type { DiscountMode } from "../../lib/quoteMath";
 import {
   type ReceivingReport, type ReceiveBatchInput, type ReceivingPriceType,
@@ -14,6 +13,7 @@ import { Drawer } from "../../components/ui/Overlays";
 import { Field, ReadonlyField, SelectBox } from "../../components/ui/Field";
 import { btn, field } from "../../components/ui/styles";
 import { DiscountInput, SuffixInput } from "./receivingUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * แผง "บันทึกรับของ" — หนึ่งรอบการรับ ตามที่เจ้าของสั่ง: *"มีช่องให้กรอกแบบราคาต่อหน่วยเท่าไหร่
@@ -192,7 +192,7 @@ export function ReceiveBatchDialog({
             <Field
               label={t("receivingReportDoc.creditDays")}
               htmlFor="rb-credit"
-              help={<>{t("receivingReportDoc.dueDate")} <span className="font-mono">{dueDate ? formatQuoteDateThai(dueDate) : "—"}</span></>}
+              help={<>{t("receivingReportDoc.dueDate")} <span className="font-mono">{dueDate ? formatDisplayDate(dueDate) : "—"}</span></>}
             >
               <SuffixInput id="rb-credit" min={0} integer value={creditDays} onChange={setCreditDays} suffix={t("receivingReportDoc.daysUnit")} />
             </Field>

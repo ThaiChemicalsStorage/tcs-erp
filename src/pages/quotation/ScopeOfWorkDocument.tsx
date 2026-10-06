@@ -20,7 +20,6 @@ import { type CostControlSummary, fetchCostControlsByScope, createCostControlFro
 import { type ProjectSummary, type ProjectStatus, fetchProjectsByScope, createProjectFromScope } from "../../lib/project";
 import { getRevisionPredecessorId, getRevisionNumber, generateScopeOfWorkRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import { compressImageFile, isCompressibleImage } from "../../lib/imageCompression";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
@@ -52,6 +51,7 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS, ADDITIONAL_RECIPIENT_KEY } from "../../lib/documentRequirements";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 // แปลงข้อมูล Scope of Work เต็มรูปแบบให้เหลือเฉพาะฟิลด์ที่ใช้บันทึกอัปเดตได้ (สำหรับฉบับร่าง)
 // Converts a full Scope of Work record into just the fields allowed for a Draft update
@@ -1116,7 +1116,7 @@ export function ScopeOfWorkDocument({
                   rows={[
                     { label: t("scopeOfWorkItems.title"), value: t("scopeOfWorkItems.count").replace("{items}", String(itemCount)).replace("{sections}", String(sectionCount)) },
                     { label: t("scopeOfWorkDoc.installmentsLabel"), value: t("scopeOfWorkDoc.railInstallmentsValue").replace("{n}", String(scope.paymentConditions.installments.length)).replace("{pct}", String(installmentPctTotal)) },
-                    { label: t("scopeOfWorkDoc.field.deliveryDate"), value: scope.deliveryDate ? formatQuoteDateThai(scope.deliveryDate) : "—" },
+                    { label: t("scopeOfWorkDoc.field.deliveryDate"), value: scope.deliveryDate ? formatDisplayDate(scope.deliveryDate) : "—" },
                   ]}
                 />
 

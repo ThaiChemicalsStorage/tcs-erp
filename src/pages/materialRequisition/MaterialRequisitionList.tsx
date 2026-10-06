@@ -5,10 +5,10 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import type { MaterialRequisitionSummary, MaterialRequisitionStatus } from "../../lib/materialRequisition";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalPill, ListDateRangeSelect, Tag, paginate, rowOpenProps, useApprovalStatusLabel } from "../project/projectUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 type TabKey = "all" | MaterialRequisitionStatus;
 
@@ -139,7 +139,7 @@ export function MaterialRequisitionList({
                           {m.hasOutstanding && <Tag tone="amber">{t("materialRequisition.outstandingBadge")}</Tag>}
                         </span>
                       </td>
-                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(m.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatDisplayDate(m.updatedAt)}</td>
                       <td className={table.td}>
                         <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                       </td>

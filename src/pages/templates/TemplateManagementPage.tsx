@@ -24,6 +24,7 @@ import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { TemplateEditorView } from "./TemplateEditorView";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 type StatusTab = "all" | "active" | "inactive" | "archived";
 type SourceFilter = "all" | "excel_import" | "manual";
@@ -31,7 +32,7 @@ const PAGE_SIZE = 20;
 // MoreMenu เปิดลงล่างเสมอ — แถวท้ายตารางให้เปิดขึ้นบนแทน ไม่งั้นเมนูล้นขอบล่าง
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+  return formatDisplayDate(iso);
 }
 
 function JobTypeChip({ code }: { code: string }) {

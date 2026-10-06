@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchPurchaseOrderCandidates, type ReceivingPurchaseOrderCandidate } from "../../lib/receivingReport";
 import { btn } from "../../components/ui/styles";
 import { RadioDot } from "./receivingUi";
 import { pickRowClass } from "./receivingFormat";
 import { PickerSearch, WidePickerShell } from "./ReceivingReportCreateDialog";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * เลือกใบสั่งซื้อเพิ่มเข้าใบรับสินค้า (2026-09-29 — ใบเดียวรับหลาย PO) · รายการมาจากเซิร์ฟเวอร์: อนุมัติแล้ว ผู้ขายเดียวกับใบหลัก
@@ -86,7 +86,7 @@ export function AddPurchaseOrderDialog({ receivingReportId, vendorName, busy, on
                   <button key={r.id} type="button" role="radio" aria-checked={on} disabled={busy} onClick={() => setPicked(r.id)} className={`${pickRowClass(on)} ${grid} h-[52px]`}>
                     <RadioDot on={on} />
                     <span className="font-mono text-[13px] font-medium text-foreground truncate">{r.documentNumber}</span>
-                    <span className="text-sm text-[#3d5173]">{r.orderDate ? formatQuoteDateThai(r.orderDate) : "—"}</span>
+                    <span className="text-sm text-[#3d5173]">{r.orderDate ? formatDisplayDate(r.orderDate) : "—"}</span>
                     <span className={`font-mono text-[13px] truncate ${r.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{r.jobCode || "—"}</span>
                     <span className="text-sm text-[#3d5173] text-right">{t("receivingReportDoc.addPo.lineCount").replace("{n}", String(r.lineCount))}</span>
                   </button>

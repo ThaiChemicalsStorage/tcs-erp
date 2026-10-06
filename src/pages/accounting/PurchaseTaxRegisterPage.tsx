@@ -3,14 +3,14 @@ import { Printer } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchApEntries, type ApEntry } from "../../lib/apEntries";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
 import { btn, surface } from "../../components/ui/styles";
 import { MonthField, TotalsStrip } from "./accountingUi";
-import { currentMonthLocal, money, thaiMonthLabel } from "./accountingFormat";
+import { currentMonthLocal, money } from "./accountingFormat";
 import { REPORT } from "./reportTable";
 import { PurchaseTaxRegisterPrint } from "./legacyReportPrint";
+import { formatDisplayDate, formatDisplayMonth } from "../../lib/displayDate";
 
 /**
  * ทะเบียนภาษีซื้อ (2026-09-03) — เจ้าของสั่งไว้ท้ายรายการงานสโตร์ว่าการรับของต้อง *"ได้ทะเบียน
@@ -94,13 +94,13 @@ export function PurchaseTaxRegisterPage({ currentUserId }: { currentUserId: stri
         </div>
       ) : entries.length === 0 ? (
         <div className={surface.card}>
-          <ListEmpty title={t("purchaseTaxRegister.empty.title")} hint={`${t("purchaseTaxRegister.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+          <ListEmpty title={t("purchaseTaxRegister.empty.title")} hint={`${t("purchaseTaxRegister.empty.descriptionPrefix")} ${formatDisplayMonth(month)}`} />
         </div>
       ) : (
         <>
           <div data-tour="ptax-totals">
           <TotalsStrip
-            title={`${t("purchaseTaxRegister.summaryHeading")} ${thaiMonthLabel(month)}`}
+            title={`${t("purchaseTaxRegister.summaryHeading")} ${formatDisplayMonth(month)}`}
             items={[
               { label: t("accounting.monthly.kpi.count"), value: entries.length, unit: t("accounting.monthly.unit.copies") },
               { label: t("accounting.monthly.valueBeforeVat"), value: money(subtotal), alignEnd: true },
@@ -141,7 +141,7 @@ export function PurchaseTaxRegisterPage({ currentUserId }: { currentUserId: stri
                   {entries.map((e, i) => (
                     <tr key={e.id} className={REPORT.row}>
                       <td className={`${REPORT.td} ${REPORT.num} text-muted-foreground print:text-left`}>{i + 1}</td>
-                      <td className={`${REPORT.td} text-[#3d5173]`}>{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
+                      <td className={`${REPORT.td} text-[#3d5173]`}>{e.invoiceDate ? formatDisplayDate(e.invoiceDate) : "—"}</td>
                       <td className={`${REPORT.td} font-mono text-[13px] text-foreground`}>{e.invoiceNumber}</td>
                       <td className={`${REPORT.td} max-w-[280px] print:max-w-none`}>
                         <span className="flex flex-col leading-snug min-w-0">

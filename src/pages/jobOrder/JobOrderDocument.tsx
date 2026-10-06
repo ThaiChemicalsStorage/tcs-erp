@@ -16,7 +16,6 @@ import { btn, field } from "../../components/ui/styles";
 import {
   ApprovalPill, RailSummaryCard, rejectBtn, rowRemoveBtn, useApprovalFlow, useApprovalHint, useApprovalSteps,
 } from "../project/projectUi";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
@@ -34,6 +33,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 function toUpdateFields(j: JobOrder): JobOrderUpdateFields {
   return {
@@ -320,7 +320,7 @@ export function JobOrderDocument({
         <input id={id} type={opts.type ?? "text"} value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} />
       </Field>
     ) : (
-      <ReadonlyField label={label} value={opts.type === "date" && value ? formatQuoteDateThai(value) : value} className={opts.className} />
+      <ReadonlyField label={label} value={opts.type === "date" && value ? formatDisplayDate(value) : value} className={opts.className} />
     );
 
   const mainLineCount = draft.lines.filter((l) => !l.isContinuation).length;

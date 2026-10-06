@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
-import { formatQuoteDateThai, fmt } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
@@ -10,6 +10,7 @@ import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEm
 import { table } from "../../components/ui/styles";
 import { PAGE_CLASS, Pill, ListDateRangeSelect, rowOpenClass } from "../receivingReport/receivingUi";
 import { paginate, rowOpenProps } from "../receivingReport/receivingFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 type Tab = "all" | "owing" | "paid";
 
@@ -109,7 +110,7 @@ export function VendorBillList({ vendorBills, currentUserId, onOpen, headerActio
                     <td className={`${table.td} max-w-[320px]`}>
                       <span className="block text-sm font-medium text-foreground truncate" title={b.vendorName}>{b.vendorName}</span>
                     </td>
-                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.billDate ? formatQuoteDateThai(b.billDate) : "—"}</td>
+                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.billDate ? formatDisplayDate(b.billDate) : "—"}</td>
                     <td className={`${table.td} text-sm text-right tabular-nums text-[#3d5173]`}>{b.rowCount}</td>
                     <td className={`${table.td} ${table.money} text-sm whitespace-nowrap`}>{fmt(b.total)}</td>
                     <td className={`${table.td} text-right whitespace-nowrap`}>
@@ -117,7 +118,7 @@ export function VendorBillList({ vendorBills, currentUserId, onOpen, headerActio
                         ? <span className="text-sm font-semibold tabular-nums text-[#8a5a00]">{fmt(b.outstanding)}</span>
                         : <Pill tone="green" label={t("vendorBill.paidInFull")} />}
                     </td>
-                    <td className={`${table.td} text-sm whitespace-nowrap ${b.paymentDate ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{b.paymentDate ? formatQuoteDateThai(b.paymentDate) : "—"}</td>
+                    <td className={`${table.td} text-sm whitespace-nowrap ${b.paymentDate ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{b.paymentDate ? formatDisplayDate(b.paymentDate) : "—"}</td>
                     <td className={`${table.td} w-10`}>
                       <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
                     </td>

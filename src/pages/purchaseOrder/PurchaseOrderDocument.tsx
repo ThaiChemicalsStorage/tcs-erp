@@ -17,7 +17,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { getRevisionRoot } from "../../lib/revisionDiff";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
@@ -41,6 +41,7 @@ import { ReceiveCodeDialog } from "../receivingReport/ReceivingReportCreateDialo
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { DialogSummary, PurchaseOrderStatusPill, ReasonDialog } from "./purchasingUi";
 import { useApprovalCommands } from "./purchasingHooks";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /** payload เดียวที่ใช้ทั้งกดบันทึกเอง บันทึกอัตโนมัติ ตรวจงานค้าง และเก็บร่างในเครื่อง */
 function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
@@ -448,7 +449,7 @@ export function PurchaseOrderDocument({
         canEdit || canApprove ? t("purchaseOrderDoc.hint.finalRevise") : "",
       ].filter(Boolean).join(" · ") || t("approval.step.hint.final")
         .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
-        .replace("{at}", draft.approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(draft.approvedAt)) : ""),
+        .replace("{at}", draft.approvedAt ? t("approval.step.at").replace("{date}", formatDisplayDate(draft.approvedAt)) : ""),
     }
     : status === "PendingApproval"
     ? { title: t("quotation.hint.nextTitle"), body: t("approval.step.hint.pending").replace("{approver}", t("purchaseOrderDoc.approverLabel")) }
@@ -514,7 +515,7 @@ export function PurchaseOrderDocument({
             {status === "Final" && (
               <div className="grid grid-cols-2 gap-3">
                 <ReadonlyField label={t("purchaseOrderDoc.approvedBy")} value={approverName} />
-                <ReadonlyField label={t("purchaseOrderDoc.approvedAt")} value={draft.approvedAt ? formatQuoteDateThai(draft.approvedAt) : ""} />
+                <ReadonlyField label={t("purchaseOrderDoc.approvedAt")} value={draft.approvedAt ? formatDisplayDate(draft.approvedAt) : ""} />
               </div>
             )}
             <ReadonlyField label={t("purchaseOrderDoc.intendedApprover")} value={intendedName} />
@@ -522,7 +523,7 @@ export function PurchaseOrderDocument({
             <div className="h-px bg-[#eef1f6]" />
             <ReadonlyField
               label={t("purchaseOrderDoc.orderedBy")}
-              value={[draft.orderedBy, draft.orderDate ? formatQuoteDateThai(draft.orderDate) : ""].filter(Boolean).join(" · ")}
+              value={[draft.orderedBy, draft.orderDate ? formatDisplayDate(draft.orderDate) : ""].filter(Boolean).join(" · ")}
             />
           </>
         )}
@@ -675,8 +676,8 @@ export function PurchaseOrderDocument({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4 items-start">
           <ReadonlyField label={t("purchaseOrderDoc.documentNumber")} value={draft.documentNumber} mono />
-          <ReadonlyField label={t("purchaseOrderDoc.orderDate")} value={draft.orderDate ? formatQuoteDateThai(draft.orderDate) : ""} />
-          <ReadonlyField label={t("purchaseOrderDoc.neededByDate")} value={draft.neededByDate ? formatQuoteDateThai(draft.neededByDate) : ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.orderDate")} value={draft.orderDate ? formatDisplayDate(draft.orderDate) : ""} />
+          <ReadonlyField label={t("purchaseOrderDoc.neededByDate")} value={draft.neededByDate ? formatDisplayDate(draft.neededByDate) : ""} />
           <ReadonlyField label={t("purchaseOrderDoc.jobCode")} value={draft.jobCode} mono />
           <ReadonlyField label={t("purchaseOrderDoc.purchaseRequest")} value={draft.purchaseRequestId} mono />
           <ReadonlyField label={t("purchaseOrderDoc.creditDays")} value={draft.creditDays !== null ? t("purchaseOrderDoc.creditDaysValue").replace("{n}", String(draft.creditDays)) : ""} />

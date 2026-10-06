@@ -12,7 +12,7 @@ import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ApiError } from "../../lib/apiClient";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { lineSubtotal } from "../../lib/quoteMath";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
@@ -39,6 +39,7 @@ import { btn, field, surface, table } from "../../components/ui/styles";
 import { ReceivingReportStatusPill } from "./ReceivingReportList";
 import { DiscountInput, RailSummaryCard, SuffixInput, SummaryLine, Tag } from "./receivingUi";
 import { discountText } from "./receivingFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * payload เดียวที่ใช้ทั้งกดบันทึกเองและบันทึกอัตโนมัติ — รอบการรับไม่เคยอยู่ในนี้
@@ -679,8 +680,8 @@ export function ReceivingReportDocument({
                     )}
                     <div className="flex flex-col gap-0.5 min-w-0 pt-0.5">
                       <span className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDate")}</span>
-                      <span className={`text-sm font-medium ${dueDate ? "text-foreground" : "text-[#8a97ad]"}`}>{dueDate ? formatQuoteDateThai(dueDate) : "—"}</span>
-                      <span className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDateBase").replace("{date}", formatQuoteDateThai(dueBase))}</span>
+                      <span className={`text-sm font-medium ${dueDate ? "text-foreground" : "text-[#8a97ad]"}`}>{dueDate ? formatDisplayDate(dueDate) : "—"}</span>
+                      <span className="text-xs text-muted-foreground">{t("receivingReportDoc.dueDateBase").replace("{date}", formatDisplayDate(dueBase))}</span>
                     </div>
                     {/* ผู้ออกบิลเป็นช่องพิมพ์ช่องเดียว (เจ้าของ 2026-09-24: "ให้ทำเป็นแค่ textbox พอเอาไปกรอกเอง") — ว่าง = ใช้ผู้ขาย
                         `billerCustom` ตามว่ามีชื่อไหม (billerOf() ยังอ่านธงนี้) · พิมพ์ใหม่ล้างเลขภาษี/ที่อยู่ของผู้ออกบิลเดิมที่ช่องถูกถอดไปแล้ว
@@ -891,13 +892,13 @@ export function ReceivingReportDocument({
                             <span className="text-xs font-mono text-muted-foreground">{b.invoiceNumber}</span>
                           </div>
                         </td>
-                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.invoiceDate ? formatQuoteDateThai(b.invoiceDate) : "—"}</td>
+                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.invoiceDate ? formatDisplayDate(b.invoiceDate) : "—"}</td>
                         <td className={`${table.td} text-sm text-[#3d5173]`}>{b.receivedBy || b.postedByName || "—"}</td>
                         <td className={`${table.td} text-sm text-[#3d5173]`}>
                           {t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(b)])}
                           {b.discountAmt ? <span className="block text-xs text-muted-foreground">{t("receivingReportDoc.summary.discount")} {fmt(b.discountAmt)}</span> : null}
                         </td>
-                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.dueDate ? formatQuoteDateThai(b.dueDate) : "—"}</td>
+                        <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.dueDate ? formatDisplayDate(b.dueDate) : "—"}</td>
                         <td className={`${table.td} text-sm text-right font-semibold tabular-nums whitespace-nowrap`}>{fmt(b.total)}</td>
                         <td className={`${table.td} last:pr-6`}>
                           <div className="flex items-center justify-end gap-2">
@@ -993,7 +994,7 @@ export function ReceivingReportDocument({
           <SummaryLine
             title={`${t("receivingReportDoc.batchSeq").replace("{seq}", String(reverseTarget.seq))} · ${reverseTarget.invoiceNumber}`}
             sub={[
-              reverseTarget.invoiceDate ? formatQuoteDateThai(reverseTarget.invoiceDate) : "",
+              reverseTarget.invoiceDate ? formatDisplayDate(reverseTarget.invoiceDate) : "",
               (reverseTarget.receivedBy || reverseTarget.postedByName) ? `${t("receivingReportDoc.receive.receivedBy")} ${reverseTarget.receivedBy || reverseTarget.postedByName}` : "",
             ].filter(Boolean).join(" · ")}
             right={`฿${fmt(reverseTarget.total)}`}

@@ -16,11 +16,31 @@ import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
 import { type User, initials } from "../../lib/users";
 import {
-  type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type QuoteUpdateFields, type ApprovalAction,
-  type QuotePermissions, type DiscountMode, type QuoteContact,
-  statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
-  printQuote, isRevisionQuote, fmt, VAT_RATE,
-  quoteContactsOf, normalizeContacts, primaryContactFields, blankContact,
+  type Quote,
+  type QuoteStatus,
+  type QuoteInterest,
+  type QuoteLine,
+  type QuoteDraftFields,
+  type QuoteUpdateFields,
+  type ApprovalAction,
+  type QuotePermissions,
+  type DiscountMode,
+  type QuoteContact,
+  statusLabelKey,
+  computeTotals,
+  todayIso,
+  plusDaysIso,
+  paymentTermsOptions,
+  approvalActionLabelKey,
+  printQuote,
+  isRevisionQuote,
+  fmt,
+  VAT_RATE,
+  quoteContactsOf,
+  normalizeContacts,
+  primaryContactFields,
+  blankContact,
+  formatQuoteDateThai,
 } from "../../lib/quotes";
 import { getRevisionPredecessorId, getRevisionNumber, generateQuoteRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import type { Customer } from "../../lib/customers";
@@ -45,6 +65,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { validateQuotationForFinalization, quotationRequiredFields } from "../../lib/validation/quotationValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
+import { formatDisplayDate, formatDisplayDateTime } from "../../lib/displayDate";
 
 const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
 
@@ -658,9 +679,11 @@ export function QuoteDocument({
   const lastSubmitEntry = reversedApprovalHistory.find((e) => e.action === "submitted");
   const approverUser = lastApprovalEntry ? users.find((u) => u.id === lastApprovalEntry.userId) : undefined;
   const preparerName = preparerUser?.fullName ?? salesperson;
+  // preparerDate/approverDate ไปลงใบพิมพ์ (printProps) จึงเป็นไทยเสมอ · บนจอใช้ preparerDateDisplay ตามภาษาที่เลือก
   const preparerDate = isDetail ? quote!.date : formatQuoteDateThai(todayIso());
+  const preparerDateDisplay = isDetail ? quote!.date : formatDisplayDate(todayIso());
   const approverDate = lastApprovalEntry ? formatQuoteDateThai(lastApprovalEntry.createdAt) : "";
-  const dateTime = (iso: string) => new Date(iso).toLocaleString("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const dateTime = formatDisplayDateTime;
 
   // ── ปุ่มบนหัวเอกสาร ─────────────────────────────────────────────────────────────────────
   // ปุ่มหลักหนึ่งปุ่ม = ขั้นต่อไปของงาน · ปุ่มรองของขั้นเดียวกัน (ปฏิเสธ/ลูกค้าปฏิเสธ) อยู่ข้าง ๆ ·
@@ -787,7 +810,7 @@ export function QuoteDocument({
           <ReadonlyField label={t("quotation.tab.opportunity")} value={isPotentialOpportunity ? t("quotation.followUp.opportunityYes") : t("quotation.followUp.opportunityNo")} />
           <div className="grid grid-cols-2 gap-3">
             <ReadonlyField label={t("quotation.col.interest")} value={quote?.interest ? t(quote.interest === "น่าสนใจ" ? "quotation.interest.interested" : "quotation.interest.notInterested") : t("quotation.interest.notEvaluated")} />
-            <ReadonlyField label={t("quotation.field.followUpDate")} value={formatQuoteDateThai(followUpDate)} />
+            <ReadonlyField label={t("quotation.field.followUpDate")} value={formatDisplayDate(followUpDate)} />
           </div>
         </>
       )}
@@ -820,7 +843,7 @@ export function QuoteDocument({
           <div className="h-px bg-[#eef1f6]" />
         </>
       ) : null}
-      <ReadonlyField label={t("quotation.role.preparer")} value={`${preparerName} · ${preparerDate}`} />
+      <ReadonlyField label={t("quotation.role.preparer")} value={`${preparerName} · ${preparerDateDisplay}`} />
       {signatureImg(preparerUser, preparerName)}
       {isDetail && quote!.approvalHistory.length > 0 && (
         <button type="button" onClick={() => setTab("history")} className={`${btn.text} self-start`}>
@@ -1031,12 +1054,12 @@ export function QuoteDocument({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
           <ReadonlyField label={t("quotation.field.project")} value={project} className="sm:col-span-2" />
           <ReadonlyField label={t("quotation.field.jobType")} value={jobTypeDisplay} />
-          <ReadonlyField label={t("quotation.field.issueDate")} value={formatQuoteDateThai(issueDate)} />
+          <ReadonlyField label={t("quotation.field.issueDate")} value={formatDisplayDate(issueDate)} />
           <ReadonlyField
             label={t("quotation.field.expiryDate")}
             value={expiryDate ? (
               <>
-                {formatQuoteDateThai(expiryDate)}
+                {formatDisplayDate(expiryDate)}
                 {expiryRemaining !== null && (
                   <span className="block text-xs font-normal text-muted-foreground">
                     {expiryRemaining >= 0 ? t("quotation.expiry.remaining").replace("{n}", String(expiryRemaining)) : t("quotation.expiry.expired")}
@@ -1075,7 +1098,7 @@ export function QuoteDocument({
       {contentEditable && (
         <RailCard title={t("quotation.rail.otherInfo")}>
           {quotationTemplateId && <ReadonlyField label={t("quotation.field.appliedTemplate")} value={`${quotationTemplateName} (v${quotationTemplateVersion})`} />}
-          <ReadonlyField label={t("quotation.rail.createdBy")} value={`${preparerName} · ${preparerDate}`} />
+          <ReadonlyField label={t("quotation.rail.createdBy")} value={`${preparerName} · ${preparerDateDisplay}`} />
         </RailCard>
       )}
       {contentEditable && (

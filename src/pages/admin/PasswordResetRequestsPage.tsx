@@ -2,7 +2,6 @@ import { useEffect, useId, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, Copy, KeyRound, X } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { ApiError } from "../../lib/apiClient";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import {
   fetchPasswordResetRequests, issueTemporaryPassword, dismissPasswordResetRequest, type PasswordResetRequest,
 } from "../../lib/passwordResets";
@@ -16,12 +15,13 @@ import { useToast } from "../../hooks/useToast";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
+import { formatDisplayDate, formatDisplayTime } from "../../lib/displayDate";
 
 function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+  return formatDisplayTime(iso, { timeZone: "Asia/Bangkok" });
 }
 
-const stamp = (iso: string) => `${formatQuoteDateThai(iso)} ${timeOf(iso)}`;
+const stamp = (iso: string) => `${formatDisplayDate(iso)} ${timeOf(iso)}`;
 
 // บรรทัดรอง "username · รหัสพนักงาน · แผนก" ใต้ชื่อผู้ใช้
 // The "username · employee id · department" line under a user's name

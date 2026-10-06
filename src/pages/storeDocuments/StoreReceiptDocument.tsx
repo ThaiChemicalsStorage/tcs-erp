@@ -6,7 +6,7 @@ import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
@@ -43,6 +43,7 @@ import { rejectButtonClass } from "../purchaseRequest/docShared";
 import { useApprovalHint } from "../project/projectUi";
 import { Pill, RailSummaryCard, SummaryLine, Tag, type PillTone } from "../receivingReport/receivingUi";
 import { countReturningLines, storeReceiptStepIndex } from "./storeDocsFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /** payload เดียวของปุ่มบันทึกและบันทึกอัตโนมัติ — ช่องที่เซิร์ฟเวอร์เขียนเอง (สถานะ/รับเข้าคลัง) ไม่อยู่ในนี้ */
 function toUpdateFields(d: StoreReceipt): StoreReceiptUpdateFields {
@@ -372,7 +373,7 @@ export function StoreReceiptDocument({
     </Field>
   ) : (
     <div className={`flex flex-col gap-0.5 min-w-0 ${opts.className ?? ""}`}>
-      <ReadonlyField label={label} value={opts.type === "date" && value ? formatQuoteDateThai(value) : value} mono={opts.mono} />
+      <ReadonlyField label={label} value={opts.type === "date" && value ? formatDisplayDate(value) : value} mono={opts.mono} />
       {opts.readonlyHelp && <span className="text-xs text-muted-foreground">{opts.readonlyHelp}</span>}
     </div>
   ));
@@ -412,7 +413,7 @@ export function StoreReceiptDocument({
         {signers.map(([nameField, dateField, label]) => (
           <div key={nameField} className="flex flex-col gap-0.5 min-w-0">
             <ReadonlyField label={label} value={draft[nameField]} />
-            {draft[dateField] && <span className="text-xs text-muted-foreground">{formatQuoteDateThai(draft[dateField])}</span>}
+            {draft[dateField] && <span className="text-xs text-muted-foreground">{formatDisplayDate(draft[dateField])}</span>}
           </div>
         ))}
       </div>
@@ -643,7 +644,7 @@ export function StoreReceiptDocument({
                           <span aria-hidden="true" className="w-[34px] h-[34px] rounded-full bg-[#e8edf7] text-[#1a3a6b] flex items-center justify-center flex-shrink-0"><UserCheck size={16} /></span>
                           <ReadonlyField label={t("storeReceipt.approval.approver")} value={approverName} />
                         </div>
-                        <ReadonlyField label={t("storeReceipt.approval.approvedAt")} value={doc.approvedAt ? formatQuoteDateThai(doc.approvedAt) : ""} />
+                        <ReadonlyField label={t("storeReceipt.approval.approvedAt")} value={doc.approvedAt ? formatDisplayDate(doc.approvedAt) : ""} />
                       </>
                     )}
                   </RailCard>
@@ -657,7 +658,7 @@ export function StoreReceiptDocument({
                   </div>
                   <p className="text-[13px] text-[#3d5173] leading-relaxed">
                     {posted
-                      ? t("storeReceipt.postCard.done").replace("{name}", doc.postedByName || "—").replace("{date}", formatQuoteDateThai(doc.postedAt))
+                      ? t("storeReceipt.postCard.done").replace("{name}", doc.postedByName || "—").replace("{date}", formatDisplayDate(doc.postedAt))
                       : doc.status !== "Final" ? t("storeReceipt.postCard.locked")
                       : canPost ? t("storeReceipt.postCard.ready") : t("storeReceipt.postCard.noPermission")}
                   </p>

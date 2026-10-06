@@ -4,7 +4,7 @@ import { PickerDialog } from "../../components/ui/Overlays";
 import { btn } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
 import { fetchAllPurchaseRequests, type PurchaseRequestSummary } from "../../lib/purchaseRequest";
-import { formatQuoteDateThai } from "../../lib/quotes";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * เลือกใบขอซื้อต้นทางก่อนสร้างใบสั่งซื้อ
@@ -152,7 +152,7 @@ export function PurchaseRequestPickerDialog({
                       <span className="text-[#8a97ad]">—</span>
                     )}
                   </span>
-                  <span className="text-sm text-[#3d5173] col-start-2 sm:col-start-auto">{formatQuoteDateThai(r.updatedAt)}</span>
+                  <span className="text-sm text-[#3d5173] col-start-2 sm:col-start-auto">{formatDisplayDate(r.updatedAt)}</span>
                   {r.purchasingStage === "review" && (
                     <span className="col-start-2 sm:col-span-4 text-[12.5px] text-[#8a5a00] flex items-center gap-1.5">
                       <AlertTriangle size={14} className="flex-shrink-0" />

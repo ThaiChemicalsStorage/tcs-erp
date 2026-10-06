@@ -16,7 +16,6 @@ import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { getRevisionNumber, getRevisionRoot } from "../../lib/revisionDiff";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
@@ -32,6 +31,7 @@ import {
   ApprovalStatusPill, PersonRow, RailSummaryCard, StepHint, SummaryBox, rejectButtonClass,
 } from "../purchaseRequest/docShared";
 import { useApprovalFlow } from "../purchaseRequest/useApprovalFlow";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
@@ -301,7 +301,7 @@ export function ProductionOrderDocument({
     catch (err) { showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorDelete")); setDeleting(false); }
   };
 
-  const dateText = (iso: string) => (iso ? formatQuoteDateThai(iso) : "");
+  const dateText = (iso: string) => (iso ? formatDisplayDate(iso) : "");
   const itemCount = draft.lines.filter((l) => !l.isSectionHeader && !l.isContinuation).length;
   const continuationCount = draft.lines.filter((l) => l.isContinuation).length;
   const headerCount = draft.lines.filter((l) => l.isSectionHeader).length;
@@ -323,7 +323,7 @@ export function ProductionOrderDocument({
           tone: "info",
           text: t("approval.step.hint.final")
             .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
-            .replace("{at}", doc.approver.date ? t("approval.step.at").replace("{date}", formatQuoteDateThai(doc.approver.date)) : ""),
+            .replace("{at}", doc.approver.date ? t("approval.step.at").replace("{date}", formatDisplayDate(doc.approver.date)) : ""),
         };
 
   // ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน เซ็นกันหลังอนุมัติและทำงานเสร็จ จึงกรอกได้แม้เอกสาร Final แล้ว

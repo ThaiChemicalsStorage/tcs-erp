@@ -3,7 +3,6 @@ import { Archive, ArchiveRestore, Ban, Check, CheckCircle2, Clock, Info, Loader2
 import {
   type CodeEntry, type CodeEntryDraft, type CodeKind, emptyCodeEntryDraft, codeApprovalStatusOf, codeNeedsApproval,
 } from "../../lib/codeRegister";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { Drawer } from "../../components/ui/Overlays";
 import { Field, ReadonlyField } from "../../components/ui/Field";
 import { MoreMenu } from "../../components/ui/MoreMenu";
@@ -11,6 +10,7 @@ import { btn, field } from "../../components/ui/styles";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
 import { codeApprovalLabelKey, codeKindLabelKey } from "./codeRegisterDisplay";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 function toDraft(c: CodeEntry | null, kind: CodeKind): CodeEntryDraft {
   if (!c) return emptyCodeEntryDraft(kind);
@@ -259,7 +259,7 @@ function ApprovalBanner({ entry, canApprove, busy, onApprove, onReject }: {
     actions = approveBtn;
   }
   const by = stage === "approved" && entry.approvedByName
-    ? t("codeRegister.approval.approvedBy").replace("{name}", entry.approvedByName).replace("{date}", entry.approvedAt ? formatQuoteDateThai(entry.approvedAt) : "—")
+    ? t("codeRegister.approval.approvedBy").replace("{name}", entry.approvedByName).replace("{date}", entry.approvedAt ? formatDisplayDate(entry.approvedAt) : "—")
     : stage !== "approved" && entry.createdByName
       ? t("codeRegister.approval.createdBy").replace("{name}", entry.createdByName)
       : "";

@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { Printer } from "lucide-react";
 import { fetchArDocuments, DOC_TYPE_LABEL_KEY, type ArDocument, type ArDocumentType } from "../../lib/accounting";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
 import { btn, surface } from "../../components/ui/styles";
 import { MonthField, Pill, TotalsStrip } from "./accountingUi";
-import { currentMonthLocal, money, thaiMonthLabel } from "./accountingFormat";
+import { currentMonthLocal, money } from "./accountingFormat";
 import { REPORT } from "./reportTable";
 import { MonthlyReportPrint } from "./legacyReportPrint";
+import { formatDisplayDate, formatDisplayMonth } from "../../lib/displayDate";
 
 // หน้าสรุปเอกสารบัญชีประจำเดือน — ตอบโจทย์ที่บัญชีขอไว้ (2026-08-18) ว่าต้อง "ดึงข้อมูลได้ว่าเดือนนี้
 // เราออกเอกสารเลขที่อะไรไปแล้วบ้าง บริษัทอะไร วันที่เท่าไหร่ รวมทั้งหมดเท่าไหร่ ยอดรวมเท่าไหร่
@@ -97,13 +97,13 @@ export function ArMonthlyReportPage({ currentUserId }: { currentUserId: string }
         </div>
       ) : documents.length === 0 ? (
         <div className={surface.card}>
-          <ListEmpty title={t("accounting.monthly.empty.title")} hint={`${t("accounting.monthly.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+          <ListEmpty title={t("accounting.monthly.empty.title")} hint={`${t("accounting.monthly.empty.descriptionPrefix")} ${formatDisplayMonth(month)}`} />
         </div>
       ) : (
         <>
           <div data-tour="armonthly-totals">
           <TotalsStrip
-            title={`${t("accounting.monthly.taxSummary.headingPrefix")} ${thaiMonthLabel(month)}`}
+            title={`${t("accounting.monthly.taxSummary.headingPrefix")} ${formatDisplayMonth(month)}`}
             sub={t("accounting.monthly.taxSummary.headingSuffix")}
             items={[
               { label: t("accounting.monthly.kpi.count"), value: taxInvoices.length, unit: copies },
@@ -149,7 +149,7 @@ export function ArMonthlyReportPage({ currentUserId }: { currentUserId: string }
                         return (
                           <tr key={d.id} className={`${REPORT.row} ${cancelled ? "print:opacity-50" : ""}`}>
                             <td className={`${REPORT.td} font-mono text-[13px] font-medium ${strike}`}>{d.docNo}</td>
-                            <td className={`${REPORT.td} ${cancelled ? "text-[#8a97ad]" : "text-[#3d5173]"}`}>{formatQuoteDateThai(d.docDate)}</td>
+                            <td className={`${REPORT.td} ${cancelled ? "text-[#8a97ad]" : "text-[#3d5173]"}`}>{formatDisplayDate(d.docDate)}</td>
                             <td className={`${REPORT.td} font-medium max-w-[280px] truncate print:max-w-none print:overflow-visible print:text-clip ${cancelled ? "text-[#8a97ad]" : "text-foreground"}`} title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
                             <td className={`${REPORT.td} ${REPORT.num} ${strike}`}>{money(d.valueAmount)}</td>
                             <td className={`${REPORT.td} ${REPORT.num} ${strike}`}>{money(d.vatAmount)}</td>

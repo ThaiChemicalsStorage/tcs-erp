@@ -27,7 +27,6 @@ import {
   useApprovalFlow, useApprovalHint, useApprovalSteps,
 } from "../project/projectUi";
 import { summarizeRequisitionLines } from "./mrSummary";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -53,6 +52,7 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { storeIssueCodeInfo } from "../../lib/storeCodes";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * payload ที่ปุ่ม "บันทึกฉบับร่าง" ส่ง — เบิกครั้งที่ 1/2 และคืนของ**ไม่อยู่ในนี้** ตั้งแต่ 2026-09-03
@@ -686,7 +686,7 @@ export function MaterialRequisitionDocument({
         <input id={id} type={opts.type ?? "text"} value={value} onChange={(e) => onChange(e.target.value)} className={`${inputCls} ${opts.mono ? "font-mono" : ""}`} />
       </Field>
     ) : (
-      <ReadonlyField label={label} value={opts.type === "date" && value ? formatQuoteDateThai(value) : value} mono={opts.mono} className={opts.className} />
+      <ReadonlyField label={label} value={opts.type === "date" && value ? formatDisplayDate(value) : value} mono={opts.mono} className={opts.className} />
     );
 
   const showApproval = !(confirmsOnIssue && isDraftStatus);
@@ -918,7 +918,7 @@ export function MaterialRequisitionDocument({
                     label: t("materialRequisitionDoc.summary.batches"),
                     value: t("materialRequisitionDoc.summary.batchesValue")
                       .replace("{n}", String(issueBatches.length))
-                      .replace("{date}", lastBatch.issuedDate ? formatQuoteDateThai(lastBatch.issuedDate) : "—"),
+                      .replace("{date}", lastBatch.issuedDate ? formatDisplayDate(lastBatch.issuedDate) : "—"),
                   }] : []),
                 ]}
               />
@@ -1237,7 +1237,7 @@ export function MaterialRequisitionDocument({
                         {t("materialRequisitionDoc.batchLabel").replace("{n}", String(batch.seq))}
                       </span>
                       <span className="flex-1 min-w-0 text-[13px] text-[#3d5173]">
-                        {[batch.issuedDate ? formatQuoteDateThai(batch.issuedDate) : "—", batch.issuedBy, batch.chargeTeamName].filter(Boolean).join(" · ")}
+                        {[batch.issuedDate ? formatDisplayDate(batch.issuedDate) : "—", batch.issuedBy, batch.chargeTeamName].filter(Boolean).join(" · ")}
                       </span>
                       {canIssue && isLast && (
                         <button type="button" onClick={() => setConfirmCancelBatch(batch)} className={rejectBtnSm}>

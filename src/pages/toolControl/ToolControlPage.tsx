@@ -11,7 +11,6 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { printDate } from "../../lib/printFormat";
 import { useI18n } from "../../lib/i18n";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListEmpty } from "../../components/ui/ListPage";
@@ -19,6 +18,7 @@ import { SelectBox } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
 import { LoadErrorState } from "../receivingReport/receivingUi";
 import { Pill } from "../stock/inventoryUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /** "issue" (2026-09-03 รอบสอง) = หน้าตัดเบิกเครื่องมือที่เจ้าของสั่ง — จ่าย/รับคืนให้ทีมโดยตรง */
 type Tab = "issue" | "holdings" | "report";
@@ -246,7 +246,7 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
                             <td className={`${table.td} text-right font-bold tabular-nums`}>{h.held.toLocaleString("th-TH")}</td>
                             <td className={table.td}>
                               <span className="block font-mono text-[12.5px] font-medium truncate">{h.lastSourceLabel || "—"}</span>
-                              <span className="block text-xs text-muted-foreground">{formatQuoteDateThai(h.lastMovementAt)}</span>
+                              <span className="block text-xs text-muted-foreground">{formatDisplayDate(h.lastMovementAt)}</span>
                             </td>
                           </tr>
                         ))}
@@ -276,7 +276,7 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
                       <tbody>
                         {rows.map((r) => (
                           <tr key={r.id} className={ROW_CLS}>
-                            <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.createdAt)}</td>
+                            <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(r.createdAt)}</td>
                             <td className={`${table.td} font-mono text-[12.5px] font-medium truncate`}>{r.sourceLabel || "—"}</td>
                             <td className={`${table.td} text-[#3d5173] truncate`}>{r.departmentName || "—"}</td>
                             <td className={`${table.td} font-medium truncate`}>{r.teamName || "—"}</td>

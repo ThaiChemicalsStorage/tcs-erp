@@ -6,7 +6,6 @@ import {
   type ArDocument, type ArDocumentType,
 } from "../../lib/accounting";
 import { fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
@@ -22,7 +21,8 @@ import { ListPageHeader, ListCard, ListTabs, ListToolbar, FilterSelect, ListEmpt
 import { Field } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
 import { AccountingDialog, DocStatusPill, PAGE_CLASS, PickerRow, RowIconButton, RowMoreMenu, RowPickerDialog, SummaryBox } from "./accountingUi";
-import { money, monthsPresent, thaiMonthLabel } from "./accountingFormat";
+import { money, monthsPresent } from "./accountingFormat";
+import { formatDisplayDate, formatDisplayMonth } from "../../lib/displayDate";
 
 type StatusTab = "all" | "issued" | "cancelled";
 
@@ -309,7 +309,7 @@ export function ArDocumentListPage({
           <FilterSelect
             label={t("accounting.list.filter.month")}
             value={monthFilter}
-            options={[{ value: "", label: t("accounting.list.status.all") }, ...months.map((m) => ({ value: m, label: thaiMonthLabel(m) }))]}
+            options={[{ value: "", label: t("accounting.list.status.all") }, ...months.map((m) => ({ value: m, label: formatDisplayMonth(m) }))]}
             onChange={setMonthFilter}
           />
         </ListToolbar>
@@ -366,7 +366,7 @@ export function ArDocumentListPage({
                           )}
                         </span>
                       </td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(d.docDate)}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(d.docDate)}</td>
                       <td className={`${table.td} text-sm font-medium text-foreground max-w-[260px] truncate`} title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
                       <td className={`${table.td} font-mono text-[13px] whitespace-nowrap ${scopeNo ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{scopeNo ?? "—"}</td>
                       <td className={`${table.td} text-[13px] whitespace-nowrap`}>
@@ -530,7 +530,7 @@ function CancelDocumentDialog({ doc, busy, onConfirm, onCancel }: {
       onCancel={onCancel}
     >
       <SummaryBox
-        primary={<span className="font-normal text-[#3d5173]">{t(DOC_TYPE_LABEL_KEY[doc.docType])} · {formatQuoteDateThai(doc.docDate)}</span>}
+        primary={<span className="font-normal text-[#3d5173]">{t(DOC_TYPE_LABEL_KEY[doc.docType])} · {formatDisplayDate(doc.docDate)}</span>}
         secondary={doc.customerSnapshot.companyName}
         amount={`฿${money(doc.netTotal)}`}
       />

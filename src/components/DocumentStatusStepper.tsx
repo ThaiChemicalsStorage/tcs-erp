@@ -1,7 +1,7 @@
 import { Check, Clock, PenLine } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import { useUserDirectory } from "../lib/userDirectory";
-import { formatQuoteDateThai } from "../lib/quotes";
+import { formatDisplayDate } from "../lib/displayDate";
 
 /**
  * แถบบอกว่า "ใบนี้เดินมาถึงขั้นไหนแล้ว และกำลังรออะไรอยู่" — เจ้าของสั่ง 2026-09-02:
@@ -63,7 +63,7 @@ export function DocumentStatusStepper({
     status === "Final"
       ? finalHint || t("approval.step.hint.final")
           .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
-          .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(approvedAt)) : "")
+          .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatDisplayDate(approvedAt)) : "")
       : status === "PendingApproval"
       ? t("approval.step.hint.pending").replace("{approver}", approverLabel || t("approval.step.defaultApprover"))
       : rejectionComment.trim()

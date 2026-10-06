@@ -12,13 +12,13 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useToast } from "../../hooks/useToast";
 import { Toast } from "../../components/Toast";
 import { useI18n } from "../../lib/i18n";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ListPageHeader, ListCard, ListTabs, ListEmpty } from "../../components/ui/ListPage";
 import { DocumentColumns, RailTotalCard } from "../../components/ui/DocumentLayout";
 import { SectionCard } from "../../components/ui/SectionCard";
 import { Field } from "../../components/ui/Field";
 import { MoreMenu } from "../../components/ui/MoreMenu";
 import { btn, field, table } from "../../components/ui/styles";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 // ต่อท้ายชื่อตอนทำสำเนา — เป็นข้อมูลที่บันทึกลงชื่อ Template/หมวด (ไม่ใช่ข้อความบนจอ) จึงคงภาษาไทยเสมอเหมือนเดิม
 const COPY_SUFFIX = " (สำเนา)";
@@ -360,7 +360,7 @@ function ServiceTemplateEditor({
             {meta && (
               <span className="text-[13px] text-muted-foreground">
                 <span className="font-mono">{meta.templateCode}{meta.version ? ` · v${meta.version}` : ""}</span>
-                {meta.updatedAt && ` · ${t("serviceTemplates.updatedAt").replace("{date}", formatQuoteDateThai(meta.updatedAt))}`}
+                {meta.updatedAt && ` · ${t("serviceTemplates.updatedAt").replace("{date}", formatDisplayDate(meta.updatedAt))}`}
               </span>
             )}
           </div>

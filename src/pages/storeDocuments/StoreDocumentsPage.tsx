@@ -5,7 +5,6 @@ import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ApiError } from "../../lib/apiClient";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import {
   fetchAllMaterialRequisitions, createStoreMaterialRequisition, fetchStoreIssueSources, updateMaterialRequisition,
@@ -26,6 +25,7 @@ import { paginate, rowOpenProps } from "../receivingReport/receivingFormat";
 import { StoreReceiptDocument } from "./StoreReceiptDocument";
 import { StoreCodeDialog } from "./StoreCodeDialog";
 import { storeDocTabCounts, toStoreDocRows, type StoreDocRow, type StoreDocTab, type StoreDocumentKind } from "./storeDocsFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 export type { StoreDocumentKind } from "./storeDocsFormat";
 /** deep link ของหน้านี้ — "incoming" = ใบเบิกของแผนกที่เพิ่งอนุมัติ (มาจากแจ้งเตือน) เปิดแท็บ "ใบเบิกจากแผนก" แล้วเน้นแถวนั้น */
@@ -361,7 +361,7 @@ export function StoreDocumentsPage({
                                   </button>
                                 ))}
                               </td>
-                              <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.updatedAt)}</td>
+                              <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(r.updatedAt)}</td>
                               <td className={`${table.td} text-right`}>
                                 {canCreate && (
                                   <button type="button" onClick={() => { setIssueFor(r); setPicker("issue"); }} className={btn.secondarySm}>
@@ -437,7 +437,7 @@ export function StoreDocumentsPage({
                             {r.posted && <Tag tone="green">{t("storeDocs.posted")}</Tag>}
                           </span>
                         </td>
-                        <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.updatedAt)}</td>
+                        <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(r.updatedAt)}</td>
                         <td className={table.td}>
                           <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                         </td>

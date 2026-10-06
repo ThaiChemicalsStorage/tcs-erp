@@ -5,11 +5,11 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import { type CostControlSummary, type CostControlStatus } from "../../lib/costControl";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { CostControlDateRangeSelect, CostControlStatusPill } from "./costControlUi";
 import { useCostControlStatusLabel } from "./costControlHooks";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const PAGE_SIZE = 25;
 
@@ -125,7 +125,7 @@ export function CostControlList({ costControls, currentUserId, onOpen, headerAct
                         : <span className="text-[#8a97ad]">—</span>}
                     </td>
                     <td className={table.td}><CostControlStatusPill status={c.status} /></td>
-                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(c.updatedAt)}</td>
+                    <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(c.updatedAt)}</td>
                     <td className={table.td}>
                       <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                     </td>

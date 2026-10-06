@@ -1,5 +1,5 @@
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /** สถานะอนุมัติชุดเดียวกันของ Scope of Work และใบส่งมอบสินค้า — Draft → PendingApproval → Final */
 export type ApprovalStatus = "Draft" | "PendingApproval" | "Final";
@@ -33,7 +33,7 @@ export function useApprovalHint({ status, approverLabel, approvedByName = "", ap
   if (status === "Final") {
     return t("approval.step.hint.final")
       .replace("{by}", approvedByName.trim() ? t("approval.step.by").replace("{name}", approvedByName.trim()) : "")
-      .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(approvedAt)) : "");
+      .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatDisplayDate(approvedAt)) : "");
   }
   if (status === "PendingApproval") return t("approval.step.hint.pending").replace("{approver}", approverLabel);
   return t("approval.step.hint.draft");

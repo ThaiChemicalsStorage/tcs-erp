@@ -2,6 +2,7 @@ import type { AuditLogEntry } from "../../lib/auditLog";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { TD, TH, TR } from "./tabs/dashboardTokens";
+import { formatDisplayDateTime } from "../../lib/displayDate";
 
 // ตารางแสดงกิจกรรมล่าสุด พร้อมลิงก์ไปยังใบเสนอราคาที่เกี่ยวข้อง (ถ้ามี)
 // Recent activities table, with a link to the related quotation when available
@@ -29,7 +30,7 @@ export function ActivityTimeline({ entries, onOpenQuote, actorLabel, sub }: { en
             <tbody>
               {entries.map((e) => (
                 <tr key={e.id} className={TR}>
-                  <td className={`${TD} text-[13px] text-[#3d5173] tabular-nums whitespace-nowrap`}>{new Date(e.createdAt).toLocaleString("th-TH")}</td>
+                  <td className={`${TD} text-[13px] text-[#3d5173] tabular-nums whitespace-nowrap`}>{formatDisplayDateTime(e.createdAt)}</td>
                   <td className={`${TD} whitespace-nowrap`}>
                     {e.userName}
                     <span className="text-muted-foreground"> ({e.roleName})</span>

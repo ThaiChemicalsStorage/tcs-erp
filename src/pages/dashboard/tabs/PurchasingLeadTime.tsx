@@ -1,6 +1,5 @@
 import { CalendarClock, Zap } from "lucide-react";
 import type { PurchasingLeadTime as LeadTime, PurchaseRequestDept } from "../../../lib/departmentDashboard";
-import { formatQuoteDateThai } from "../../../lib/quotes";
 import { useI18n } from "../../../lib/i18n";
 import { agingTone } from "../../../lib/businessDays";
 import { UrgentBadge } from "../../purchaseRequest/purchasingAging";
@@ -10,6 +9,7 @@ import {
 } from "./DepartmentWidgets";
 import { CHART, TONE, TH } from "./dashboardTokens";
 import { fmtCount } from "./countFormat";
+import { formatDisplayDate } from "../../../lib/displayDate";
 
 /**
  * KPI ระยะเวลาออกใบสั่งซื้อบนแท็บจัดซื้อ (เจ้าของสั่ง 2026-10-02 — *"เพิ่มข้อมูลจะได้เอาไปทำ KPI ได้ว่าได้ใบ PR มาแล้ว
@@ -112,7 +112,7 @@ export function PurchasingLeadTimeSection({ data, onOpenInbox }: { data: LeadTim
                     </span>
                   </td>
                   <td className={`${TH} font-normal text-[13px]`}>{deptLabel[q.dept]}</td>
-                  <td className={`${TH} font-normal text-[13px]`}>{formatQuoteDateThai(q.receivedAt)}</td>
+                  <td className={`${TH} font-normal text-[13px]`}>{formatDisplayDate(q.receivedAt)}</td>
                   <td className={`${TH} font-normal`}>
                     <span className="flex items-center gap-2">
                       <span className="text-sm font-semibold tabular-nums text-foreground">{q.days === 0 ? t("purchaseRequest.age.today") : t("purchaseRequest.age.days").replace("{n}", String(q.days))}</span>
@@ -121,7 +121,7 @@ export function PurchasingLeadTimeSection({ data, onOpenInbox }: { data: LeadTim
                       </StageTag>
                     </span>
                   </td>
-                  <td className={`${TH} font-normal text-[13px]`}>{q.neededByDate ? formatQuoteDateThai(q.neededByDate) : "—"}</td>
+                  <td className={`${TH} font-normal text-[13px]`}>{q.neededByDate ? formatDisplayDate(q.neededByDate) : "—"}</td>
                 </tr>
               );
             })}

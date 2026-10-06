@@ -8,12 +8,12 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import {
   type MaterialRequisition, type MaterialRequisitionSummary,
   fetchMaterialRequisition, fetchStoreIssueQueue, postMaterialIssueBatch,
   issuedQtyOf, outstandingQtyOf, issueBatchesOf,
 } from "../../lib/materialRequisition";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const FILTER_ALL = "all";
 
@@ -238,7 +238,7 @@ export function StoreIssueInboxPage({
                     </span>
                     <span className="flex-1" />
                     <Pill tone="amber" label={t("storeIssue.outstandingLines").replace("{n}", String(m.outstandingLineCount ?? 0))} />
-                    <span className="text-[13px] text-[#3d5173] whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</span>
+                    <span className="text-[13px] text-[#3d5173] whitespace-nowrap">{formatDisplayDate(m.updatedAt)}</span>
                   </button>
 
                   {open && (

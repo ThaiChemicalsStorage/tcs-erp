@@ -5,7 +5,6 @@ import { deductArDocumentStock, DOC_TYPE_LABEL_KEY } from "../../lib/accounting"
 import type { Product } from "../../lib/products";
 import { fetchProducts } from "../../lib/products";
 import { fetchStockMovements, type StockMovement } from "../../lib/stock";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
@@ -16,6 +15,7 @@ import { ReadonlyField } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
 import { Pill } from "./accountingUi";
 import { money } from "./accountingFormat";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 interface DraftLine {
   key: number;
@@ -155,7 +155,7 @@ export function ArStockPanel({ doc, backLabel, receiptDocNo, canAdjust, onBack, 
         >
           <div className="px-6 py-[18px] grid grid-cols-[minmax(0,1fr)_120px] gap-x-5 gap-y-3.5 border-b border-[#eef1f6]">
             <ReadonlyField label={t("accounting.list.col.customer")} value={doc.customerSnapshot.companyName} />
-            <ReadonlyField label={t("accounting.list.col.date")} value={formatQuoteDateThai(doc.docDate)} />
+            <ReadonlyField label={t("accounting.list.col.date")} value={formatDisplayDate(doc.docDate)} />
             <ReadonlyField label={t("accounting.manual.field.address")} value={doc.customerSnapshot.address} className="col-span-2" />
           </div>
           <div className="overflow-x-auto">
@@ -253,7 +253,7 @@ export function ArStockPanel({ doc, backLabel, receiptDocNo, canAdjust, onBack, 
                     <div key={m.id} className={`grid ${HISTORY_GRID} gap-3 items-center px-6 h-12 border-b border-[#eef1f6] last:border-b-0 text-sm`}>
                       <span className="min-w-0 truncate"><span className="font-mono text-[13px] text-[#3d5173]">{m.productCode}</span> — {m.productName}</span>
                       <span className="text-right font-semibold tabular-nums text-[#b93636]">{m.delta}</span>
-                      <span className="text-right text-[#3d5173] whitespace-nowrap">{new Date(m.createdAt).toLocaleDateString("th-TH")}</span>
+                      <span className="text-right text-[#3d5173] whitespace-nowrap">{formatDisplayDate(m.createdAt)}</span>
                     </div>
                   ))}
                 </div>

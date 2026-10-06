@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * ตัวช่วยที่ไม่ใช่คอมโพเนนต์ของหน้าคลังสินค้า/สต๊อก/เครื่องมือ/คำขอเพิ่มสินค้า — แยกจาก inventoryUi.tsx
@@ -21,9 +22,9 @@ export function rowOpenProps(onOpen: () => void, ariaLabel: string) {
   };
 }
 
-/** วันที่แบบไทยสั้น "27 ก.ย. 2569" */
+/** วันที่สั้นตามภาษาที่เลือก "27 ก.ย. 2569" / "27 Sep 2026" */
 export function fmtProductDate(iso: string) {
-  return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+  return formatDisplayDate(iso);
 }
 
 /** เงินบาทสองตำแหน่ง */

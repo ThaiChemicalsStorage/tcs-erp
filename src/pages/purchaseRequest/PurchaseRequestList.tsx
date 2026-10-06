@@ -5,12 +5,12 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import type { PurchaseRequestSummary, PurchaseRequestStatus } from "../../lib/purchaseRequest";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalStatusPill, ListDateRangeSelect, StageTag } from "./docShared";
 import { UrgentBadge, useAgingLabel, useDaysText } from "./purchasingAging";
 import { businessDaysBetween, purchasingTargetDays, todayInThailand } from "../../lib/businessDays";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const PAGE_SIZE = 25;
 
@@ -305,7 +305,7 @@ export function PurchaseRequestList({
                         )}
                         {tabsMode === "stage" && (
                           <td className={`${table.td} text-[13px] whitespace-nowrap ${p.purchasingReceivedAt ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>
-                            {p.purchasingReceivedAt ? formatQuoteDateThai(p.purchasingReceivedAt) : "—"}
+                            {p.purchasingReceivedAt ? formatDisplayDate(p.purchasingReceivedAt) : "—"}
                           </td>
                         )}
                         <td className={`${table.td} whitespace-nowrap`}>{ageCell(p)}</td>

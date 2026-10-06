@@ -5,10 +5,10 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import type { DeliveryOrderListItem, DeliveryOrderStatus } from "../../lib/deliveryOrder";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalStatusPill, ListDateRangeSelect } from "../scopeOfWork/sowDoShared";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const PAGE_SIZE = 25;
 const thRight = table.th.replace("text-left", "text-right");
@@ -136,7 +136,7 @@ export function DeliveryOrderList({
                       </td>
                       <td className={`${table.td} text-right tabular-nums text-[#3d5173]`}>{d.installmentCount}</td>
                       <td className={table.td}><ApprovalStatusPill status={d.status} /></td>
-                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(d.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatDisplayDate(d.updatedAt)}</td>
                       <td className={table.td}>
                         <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                       </td>

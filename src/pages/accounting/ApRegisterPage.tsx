@@ -6,15 +6,15 @@ import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { fetchApEntries, updateApEntry, type ApEntry } from "../../lib/apEntries";
 import { ListPageHeader, ListEmpty } from "../../components/ui/ListPage";
 import { Field } from "../../components/ui/Field";
 import { btn, field, surface } from "../../components/ui/styles";
 import { AccountingDialog, MonthField, Pill, SummaryBox, TotalsStrip } from "./accountingUi";
-import { currentMonthLocal, groupApEntriesByVendor, money, thaiMonthLabel } from "./accountingFormat";
+import { currentMonthLocal, groupApEntriesByVendor, money } from "./accountingFormat";
 import { REPORT } from "./reportTable";
 import { ApRegisterPrint } from "./legacyReportPrint";
+import { formatDisplayDate, formatDisplayMonth } from "../../lib/displayDate";
 
 /**
  * ทะเบียนเจ้าหนี้ (2026-09-03) — จัดกลุ่มตามผู้ขาย ตอบคำถามเดียวที่บัญชีจ่ายถามทุกวัน:
@@ -115,7 +115,7 @@ export function ApRegisterPage({ currentUserId, canManage }: { currentUserId: st
         </div>
       ) : entries.length === 0 ? (
         <div className={surface.card}>
-          <ListEmpty title={t("apRegister.empty.title")} hint={`${t("apRegister.empty.descriptionPrefix")} ${thaiMonthLabel(month)}`} />
+          <ListEmpty title={t("apRegister.empty.title")} hint={`${t("apRegister.empty.descriptionPrefix")} ${formatDisplayMonth(month)}`} />
         </div>
       ) : (
         <>
@@ -166,7 +166,7 @@ export function ApRegisterPage({ currentUserId, canManage }: { currentUserId: st
                       const paid = e.status === "Paid";
                       return (
                         <tr key={e.id} className={REPORT.row}>
-                          <td className={`${REPORT.td} text-[#3d5173]`}>{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
+                          <td className={`${REPORT.td} text-[#3d5173]`}>{e.invoiceDate ? formatDisplayDate(e.invoiceDate) : "—"}</td>
                           <td className={`${REPORT.td} font-mono text-[13px] font-medium text-foreground`}>{e.invoiceNumber}</td>
                           <td className={`${REPORT.td} font-mono text-[13px] text-[#3d5173]`}>{e.receivingReportNumber}</td>
                           <td className={`${REPORT.td} font-mono text-[13px] ${e.jobCode ? "text-[#3d5173]" : "text-[#8a97ad]"}`}>{e.jobCode || "—"}</td>

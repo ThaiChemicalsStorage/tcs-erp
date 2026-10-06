@@ -23,7 +23,6 @@ import { Field, ReadonlyField } from "../../components/ui/Field";
 import { MoreMenu } from "../../components/ui/MoreMenu";
 import { btn, field } from "../../components/ui/styles";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ServiceCustomerSearch } from "./ServiceCustomerSearch";
 import { ServiceConfirmDialog, ServiceStatusBadge } from "./serviceUi";
 import { ApiError } from "../../lib/apiClient";
@@ -34,6 +33,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const emptyCustomerSnapshot = { companyName: "", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" };
 
@@ -788,7 +788,7 @@ export function ServiceReportEditor({
         <p className="text-[13px] text-[#8a5a00]">
           {t("service.approval.pending")
             .replace("{via}", approval.sentViaLine ? t("service.approval.viaLine") : "")
-            .replace("{date}", formatQuoteDateThai(approval.expiresAt))}
+            .replace("{date}", formatDisplayDate(approval.expiresAt))}
         </p>
       );
     }
@@ -797,7 +797,7 @@ export function ServiceReportEditor({
         <p className="text-[13px] text-[#1b7f4f]">
           {t("service.approval.approved")
             .replace("{by}", approval.signedName ? t("service.approval.by").replace("{name}", approval.signedName) : "")
-            .replace("{date}", formatQuoteDateThai(approval.respondedAt ?? ""))}
+            .replace("{date}", formatDisplayDate(approval.respondedAt ?? ""))}
         </p>
       );
     }
@@ -1064,7 +1064,7 @@ export function ServiceReportEditor({
                   </div>
                   <ReadonlyField
                     label={t("service.rail.createdBy")}
-                    value={[creator?.fullName, formatQuoteDateThai(report.createdAt)].filter(Boolean).join(" · ")}
+                    value={[creator?.fullName, formatDisplayDate(report.createdAt)].filter(Boolean).join(" · ")}
                   />
                 </RailCard>
               )}
@@ -1497,7 +1497,7 @@ function ApprovalLinkDialog({ url, sentViaLine, lineError, expiresAt, copied, on
         <div className="px-6 pt-5 pb-6 flex flex-col gap-[18px]">
           <div className="flex flex-col gap-1.5">
             <span className="text-xs text-muted-foreground">
-              {expiresAt ? t("service.approval.linkExpires").replace("{date}", formatQuoteDateThai(expiresAt)) : t("service.approval.linkLabel")}
+              {expiresAt ? t("service.approval.linkExpires").replace("{date}", formatDisplayDate(expiresAt)) : t("service.approval.linkLabel")}
             </span>
             <p aria-label={t("service.approval.linkLabel")} className="font-mono text-[13px] font-medium text-foreground break-all select-all">{url}</p>
           </div>
@@ -1509,7 +1509,7 @@ function ApprovalLinkDialog({ url, sentViaLine, lineError, expiresAt, copied, on
                 <span className="flex items-center gap-2.5 flex-wrap">
                   <span className="text-[13px] text-[#3d5173]">{t("service.approval.pairingCode")}</span>
                   <span className="h-8 px-3 border border-[#c3ccda] rounded-lg bg-white font-mono text-[15px] font-medium tracking-[0.08em] inline-flex items-center">{pairing.code}</span>
-                  <span className="text-xs text-muted-foreground">{t("service.approval.pairingValid").replace("{date}", formatQuoteDateThai(pairing.expiresAt))}</span>
+                  <span className="text-xs text-muted-foreground">{t("service.approval.pairingValid").replace("{date}", formatDisplayDate(pairing.expiresAt))}</span>
                 </span>
               ) : (
                 <button type="button" onClick={onCreatePairing} disabled={pairingBusy} className={`${btn.text} self-start`}>

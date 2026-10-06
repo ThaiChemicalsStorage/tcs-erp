@@ -3,13 +3,13 @@ import { Plus, ChevronRight } from "lucide-react";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import type { ServiceReportListItem, ServiceReportStatus } from "../../lib/serviceReports";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ListPageHeader, ListCard, ListTabs, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { btn, table } from "../../components/ui/styles";
 import { ServiceStatusBadge } from "./serviceUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const FILTER_ALL = "all";
 type StatusTab = typeof FILTER_ALL | ServiceReportStatus;
@@ -153,9 +153,9 @@ export function ServiceList({
                         <span className="block text-sm text-foreground truncate" title={s.serviceSystemName}>{s.serviceSystemName || t("common.dash")}</span>
                       </td>
                       <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap max-w-[150px] truncate`}>{s.assignedServiceEngineerName || t("common.dash")}</td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(s.inspectionDate) || t("common.dash")}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(s.inspectionDate) || t("common.dash")}</td>
                       <td className={table.td}><ServiceStatusBadge status={s.status} /></td>
-                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(s.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatDisplayDate(s.updatedAt)}</td>
                       <td className={`${table.td} text-[#a3aec2] group-hover:text-foreground`}><ChevronRight size={16} className="ml-auto" /></td>
                     </tr>
                   ))}

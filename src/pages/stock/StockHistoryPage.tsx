@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, FileText, Loader2, Search, Sheet } from "lucide-react";
 import { Combobox } from "../../components/Combobox";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { ALL_DATES, resolveRange, type DateRangeValue } from "../../lib/dateRanges";
 import type { Product } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
@@ -23,6 +23,7 @@ import { btn, field, surface, table } from "../../components/ui/styles";
 import { LoadErrorState } from "../receivingReport/receivingUi";
 import { DateRangeSelect, Pill, StatCard, type PillTone } from "./inventoryUi";
 import { rowOpenProps } from "./inventoryFormat";
+import { formatDisplayDate, formatDisplayTime } from "../../lib/displayDate";
 
 /**
  * หน้าประวัติความเคลื่อนไหวสต๊อก (2026-09-23) — แยกออกจากการ์ดท้ายหน้าสต๊อกสินค้า ตามคำสั่งเจ้าของ
@@ -80,7 +81,7 @@ const KIND_TEXT: Record<StockMovementKind, string> = {
 };
 
 function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+  return formatDisplayTime(iso, { timeZone: "Asia/Bangkok" });
 }
 /** จำนวนนับ (รายการ/ครั้ง) — ไม่มีทศนิยม */
 function int(n: number): string {
@@ -380,7 +381,7 @@ function AllMovements({ tabs, help, onTotal, onTrace, onPrint }: {
                       className="h-16 border-b border-[#eef1f6] bg-white hover:bg-[#f8f9fc] transition-colors text-sm cursor-pointer outline-none focus-visible:bg-[#f8f9fc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]/40"
                     >
                       <td className={table.td}>
-                        <span className="block text-[#3d5173] whitespace-nowrap">{formatQuoteDateThai(m.createdAt)}</span>
+                        <span className="block text-[#3d5173] whitespace-nowrap">{formatDisplayDate(m.createdAt)}</span>
                         <span className="block text-xs text-muted-foreground tabular-nums">{timeOf(m.createdAt)}</span>
                       </td>
                       <td className={table.td}>
@@ -667,7 +668,7 @@ function ItemTrace({ tabs, help, products, productId, onProductChange, onPrint }
                         <div className="px-6 pl-14 pt-1 pb-3 bg-[#f8f9fc]">
                           {g.rows.map((r) => (
                             <div key={r.id} className="grid grid-cols-[96px_minmax(0,1fr)_60px] sm:grid-cols-[96px_minmax(0,1fr)_180px_60px] gap-3 items-center min-h-[38px] py-1 border-b border-[#eef1f6] last:border-b-0 text-[13px]">
-                              <span className="text-muted-foreground">{formatQuoteDateThai(r.createdAt)}</span>
+                              <span className="text-muted-foreground">{formatDisplayDate(r.createdAt)}</span>
                               <span className="flex items-center gap-2 min-w-0">
                                 <span className="font-mono font-medium text-foreground truncate">{r.sourceLabel || "—"}</span>
                                 <KindPill kind={r.kind} />
@@ -709,7 +710,7 @@ function ItemTrace({ tabs, help, products, productId, onProductChange, onPrint }
                 ) : analysis.receipts.map((r) => (
                   <div key={r.id} className="px-5 py-3 border-b border-[#eef1f6] flex gap-3">
                     <span className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                      <span className="text-xs text-muted-foreground truncate">{formatQuoteDateThai(r.createdAt)}{r.link.vendorName ? ` · ${r.link.vendorName}` : ""}</span>
+                      <span className="text-xs text-muted-foreground truncate">{formatDisplayDate(r.createdAt)}{r.link.vendorName ? ` · ${r.link.vendorName}` : ""}</span>
                       <span className="font-mono text-[12.5px] font-medium text-foreground truncate">
                         {r.sourceLabel || t(SOURCE_LABEL_KEY[r.sourceType])}
                         {r.link.purchaseOrderNumber && <span className="font-normal text-muted-foreground"> · {r.link.purchaseOrderNumber}</span>}
@@ -729,7 +730,7 @@ function ItemTrace({ tabs, help, products, productId, onProductChange, onPrint }
                 ) : analysis.others.map((r) => (
                   <div key={r.id} className="px-5 py-3 border-b border-[#eef1f6] last:border-b-0 flex gap-3">
                     <span className="flex-1 min-w-0 flex flex-col gap-0.5 leading-snug">
-                      <span className="text-xs text-muted-foreground truncate">{formatQuoteDateThai(r.createdAt)}{r.createdByName ? ` · ${r.createdByName}` : ""}</span>
+                      <span className="text-xs text-muted-foreground truncate">{formatDisplayDate(r.createdAt)}{r.createdByName ? ` · ${r.createdByName}` : ""}</span>
                       <span className="text-[13px] text-foreground truncate">{r.reason || r.sourceLabel || "—"}</span>
                     </span>
                     <span className="flex flex-col items-end leading-snug tabular-nums">
@@ -761,14 +762,14 @@ function ItemTrace({ tabs, help, products, productId, onProductChange, onPrint }
                 <tbody>
                   {rows.length > 0 && (
                     <tr className="h-11 border-b border-[#eef1f6] bg-[#fbfcfe] text-sm text-muted-foreground">
-                      <td className={table.td}>{formatQuoteDateThai(rows[0].createdAt)}</td>
+                      <td className={table.td}>{formatDisplayDate(rows[0].createdAt)}</td>
                       <td colSpan={5} className={table.td}>{t("stockHistory.trace.opening")}</td>
                       <td className={`${table.td} text-right font-semibold text-foreground tabular-nums`}>{fmt(analysis.opening)}</td>
                     </tr>
                   )}
                   {rows.map((r) => (
                     <tr key={r.id} className="h-14 border-b border-[#eef1f6] bg-white text-sm">
-                      <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(r.createdAt)}</td>
+                      <td className={`${table.td} text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(r.createdAt)}</td>
                       <td className={table.td}><KindPill kind={r.kind} /></td>
                       <td className={`${table.td} truncate ${r.sourceLabel ? "font-mono text-[13px] font-medium" : "text-[13px]"}`} title={r.sourceLabel || r.reason}>{r.sourceLabel || r.reason || "—"}</td>
                       <td className={table.td}><LinkCell row={r} /></td>

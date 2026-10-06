@@ -1,8 +1,9 @@
 import type { Customer } from "../../lib/customers";
 import type { useI18n } from "../../lib/i18n";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 export function fmtCustomerDate(iso: string) {
-  return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+  return formatDisplayDate(iso);
 }
 
 // ป้ายสถานะของลูกค้า — เก็บถาวรมาก่อนเปิด/ปิดใช้งาน

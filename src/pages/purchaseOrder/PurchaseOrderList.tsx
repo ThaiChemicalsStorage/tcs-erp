@@ -1,7 +1,6 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { PurchaseOrderSummary, PurchaseOrderStatus } from "../../lib/purchaseOrder";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
@@ -10,6 +9,7 @@ import { table } from "../../components/ui/styles";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { DateRangeSelect, PurchaseOrderStatusPill } from "./purchasingUi";
 import { usePurchaseOrderStatusLabel } from "./purchasingHooks";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const PAGE_SIZE = 20;
 type StatusTab = "all" | PurchaseOrderStatus;
@@ -126,9 +126,9 @@ export function PurchaseOrderList({
                       </td>
                       <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{p.jobCode || dash}</td>
                       <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{p.purchaseRequestId || dash}</td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{p.neededByDate ? formatQuoteDateThai(p.neededByDate) : dash}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{p.neededByDate ? formatDisplayDate(p.neededByDate) : dash}</td>
                       <td className={table.td}><PurchaseOrderStatusPill status={p.status} /></td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(p.updatedAt)}</td>
                       <td className={`${table.td} w-10`}>
                         <ChevronRight size={18} className="text-[#a3aec2] group-hover:text-foreground transition-colors" aria-hidden="true" />
                       </td>

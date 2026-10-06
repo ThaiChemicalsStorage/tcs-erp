@@ -7,6 +7,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListPageHeader, ListCard, ListToolbar, ListPagination, ListEmpty } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
+import { formatDisplayDate, formatDisplayTime } from "../../lib/displayDate";
 
 /** แถวต่อหน้า — เดิมแสดงทุกแถวในหน้าเดียว (บันทึกสะสมหลายพันแถว) ดีไซน์ใหม่ 2026-09-30 เพิ่มการแบ่งหน้า */
 const PAGE_SIZE = 20;
@@ -101,8 +102,8 @@ export function AuditLogPage({
                     return (
                       <tr key={e.id} className="h-[60px] border-b border-[#eef1f6] last:border-b-0 bg-white hover:bg-[#f8f9fc] transition-colors">
                         <td className={table.td}>
-                          <span className="block text-foreground whitespace-nowrap">{at.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}</span>
-                          <span className="block text-xs text-muted-foreground tabular-nums">{at.toLocaleTimeString("th-TH")}</span>
+                          <span className="block text-foreground whitespace-nowrap">{formatDisplayDate(at)}</span>
+                          <span className="block text-xs text-muted-foreground tabular-nums">{formatDisplayTime(at, { seconds: true })}</span>
                         </td>
                         <td className={table.td}>
                           <span className="block font-medium text-foreground truncate" title={e.userName}>{e.userName}</span>

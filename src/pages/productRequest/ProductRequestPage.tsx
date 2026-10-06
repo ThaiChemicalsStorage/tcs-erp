@@ -6,7 +6,6 @@ import {
 } from "../../lib/productRequest";
 import { type ProductCategory, fetchCategories } from "../../lib/products";
 import { ApiError } from "../../lib/apiClient";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
 import { Toast } from "../../components/Toast";
@@ -19,6 +18,7 @@ import { Drawer } from "../../components/ui/Overlays";
 import { Field, SelectBox } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
 import { FormDialog, Pill, type PillTone } from "../stock/inventoryUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * หน้าคำขอเพิ่มสินค้า — เพิ่ม 2026-08-27 ตามคำขอของฝ่ายโครงการ
@@ -224,7 +224,7 @@ export function ProductRequestPage({
   };
 
   const requesterLine = (r: ProductRequest) =>
-    [r.requestedByName, r.requestedByDepartment, formatQuoteDateThai(r.requestedAt)].filter(Boolean).join(" · ");
+    [r.requestedByName, r.requestedByDepartment, formatDisplayDate(r.requestedAt)].filter(Boolean).join(" · ");
 
   // ปุ่มขอเพิ่ม (สิทธิ์สร้าง) และปุ่มตั้งรหัส (สโตร์ · แถวแรกที่ยังรอ) ไม่มีเสมอ — ทัวร์ข้ามขั้นที่หาไม่เจอเอง
   // hook ต้องอยู่เหนือ early return ตอนโหลด
@@ -303,7 +303,7 @@ export function ProductRequestPage({
                       <td className={table.td}>
                         <span className="block truncate" title={r.requestedByName}>{r.requestedByName}</span>
                         <span className="block text-xs text-muted-foreground truncate">
-                          {[r.requestedByDepartment || "—", formatQuoteDateThai(r.requestedAt)].join(" · ")}
+                          {[r.requestedByDepartment || "—", formatDisplayDate(r.requestedAt)].join(" · ")}
                         </span>
                       </td>
                       <td className={table.td}><Pill tone={STATUS_TONE[r.status]}>{statusLabel(r.status)}</Pill></td>

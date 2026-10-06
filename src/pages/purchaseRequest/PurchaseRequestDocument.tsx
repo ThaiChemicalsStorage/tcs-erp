@@ -33,7 +33,6 @@ import { Combobox } from "../../components/Combobox";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber, getRevisionRoot } from "../../lib/revisionDiff";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -54,6 +53,7 @@ import {
 } from "./docShared";
 import { useApprovalFlow } from "./useApprovalFlow";
 import { purchaseRequestProgress, type PurchaseRequestStepKey } from "./purchaseRequestSteps";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
@@ -645,7 +645,7 @@ export function PurchaseRequestDocument({
     po: progress.toBuy > 0 ? `${t("purchaseRequestDoc.step.po")} ${progress.ordered} / ${progress.toBuy}` : t("purchaseRequestDoc.step.po"),
   };
   const deptLabel = t(PURCHASE_REQUEST_CODE_LABEL_KEY[purchaseRequestCodeOf(doc)]);
-  const dateText = (iso: string) => (iso ? formatQuoteDateThai(iso) : "");
+  const dateText = (iso: string) => (iso ? formatDisplayDate(iso) : "");
   const itemsText = (n: number) => t("ui.itemCount").replace("{n}", String(n));
   const summaryBox = (secondary?: ReactNode) => (
     <SummaryBox primary={doc.id} secondary={secondary ?? (doc.jobCode ? `${t("purchaseRequestDoc.jobCodePrefix")} ${doc.jobCode} · ${deptLabel}` : deptLabel)} aside={itemsText(doc.lines.length)} />
@@ -821,7 +821,7 @@ export function PurchaseRequestDocument({
                 <ul className="flex flex-col gap-1">
                   {(doc.purchasingEdits ?? []).map((e, i) => (
                     <li key={`${e.at}-${i}`} className="text-xs text-[#6b4600]">
-                      <span className="tabular-nums">{formatQuoteDateThai(e.at.slice(0, 10))}</span> · {e.byName}
+                      <span className="tabular-nums">{formatDisplayDate(e.at.slice(0, 10))}</span> · {e.byName}
                       {e.note.trim() ? ` — ${e.note}` : ""}
                     </li>
                   ))}
@@ -987,7 +987,7 @@ export function PurchaseRequestDocument({
                         <span className="block text-xs mt-0.5">
                           {t("purchaseRequestDoc.purchasing.approvedBy")
                             .replace("{name}", doc.purchasingDeptBy || "")
-                            .replace("{date}", doc.purchasingDeptAt ? formatQuoteDateThai(doc.purchasingDeptAt) : "")}
+                            .replace("{date}", doc.purchasingDeptAt ? formatDisplayDate(doc.purchasingDeptAt) : "")}
                         </span>
                       )}
                     </span>
@@ -1184,7 +1184,7 @@ export function PurchaseRequestDocument({
                                 <span className="flex flex-col gap-0.5">
                                   <StageTag tone="green">{t("purchaseRequestDoc.purchasing.lineApproved")}</StageTag>
                                   {line.purchasingDecidedAt && (
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatQuoteDateThai(line.purchasingDecidedAt)}{line.purchasingDecidedByName ? ` · ${line.purchasingDecidedByName}` : ""}</span>
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDisplayDate(line.purchasingDecidedAt)}{line.purchasingDecidedByName ? ` · ${line.purchasingDecidedByName}` : ""}</span>
                                   )}
                                 </span>
                               ) : rejected ? (
@@ -1263,7 +1263,7 @@ export function PurchaseRequestDocument({
                   <CheckCircle2 size={14} />
                   {t("purchaseRequestDoc.store.reviewedBy")
                     .replace("{name}", doc.storeReviewedByName ?? "")
-                    .replace("{date}", formatQuoteDateThai(doc.storeReviewedAt))}
+                    .replace("{date}", formatDisplayDate(doc.storeReviewedAt))}
                 </p>
               )}
             </div>
@@ -1385,7 +1385,7 @@ export function PurchaseRequestDocument({
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                       <span className="flex items-center gap-2.5 flex-wrap">
                         <span className="text-sm font-semibold text-foreground">{t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(batch.seq))}</span>
-                        <span className="text-[13px] text-muted-foreground">{formatQuoteDateThai(batch.issuedDate)}</span>
+                        <span className="text-[13px] text-muted-foreground">{formatDisplayDate(batch.issuedDate)}</span>
                       </span>
                       <span className="text-[13px] text-[#3d5173]">
                         {batch.lines.map((bl) => {
@@ -1433,7 +1433,7 @@ export function PurchaseRequestDocument({
         summary={cancelBatchTarget ? (
           <SummaryBox
             monoPrimary={false}
-            primary={`${t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(cancelBatchTarget.seq))} · ${formatQuoteDateThai(cancelBatchTarget.issuedDate)}`}
+            primary={`${t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(cancelBatchTarget.seq))} · ${formatDisplayDate(cancelBatchTarget.issuedDate)}`}
             secondary={lastBatchSummary}
           />
         ) : undefined}
@@ -1523,7 +1523,7 @@ export function PurchaseRequestDocument({
         tone="warning"
         summary={summaryBox(
           doc.purchasingDeptBy || doc.purchasingDeptAt
-            ? `${t("purchaseRequestDoc.purchasing.stageBadge")} ${t("purchaseRequestDoc.purchasing.approvedBy").replace("{name}", doc.purchasingDeptBy || "").replace("{date}", doc.purchasingDeptAt ? formatQuoteDateThai(doc.purchasingDeptAt) : "")}`
+            ? `${t("purchaseRequestDoc.purchasing.stageBadge")} ${t("purchaseRequestDoc.purchasing.approvedBy").replace("{name}", doc.purchasingDeptBy || "").replace("{date}", doc.purchasingDeptAt ? formatDisplayDate(doc.purchasingDeptAt) : "")}`
             : undefined,
         )}
         busy={purchasingBusy}

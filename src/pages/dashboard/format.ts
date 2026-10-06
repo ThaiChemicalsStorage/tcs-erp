@@ -1,4 +1,5 @@
-// จัดรูปแบบตัวเลขเป็นสกุลเงินบาทแบบย่อ เช่น ฿1.50M หรือ ฿2.3K
+
+import { formatDisplayMonthShort } from "../../lib/displayDate";// จัดรูปแบบตัวเลขเป็นสกุลเงินบาทแบบย่อ เช่น ฿1.50M หรือ ฿2.3K
 // Formats a number as a compact Thai Baht string, e.g. ฿1.50M or ฿2.3K.
 export function fmtShort(n: number): string {
   const sign = n < 0 ? "-" : "";
@@ -37,7 +38,7 @@ export function fmtDateShort(iso: string, locale: "th" | "en"): string {
 export function monthLabel(key: string): string {
   const [y, m] = key.split("-").map(Number);
   if (!y || !m) return key;
-  return new Date(y, m - 1, 1).toLocaleDateString("th-TH", { month: "short" });
+  return formatDisplayMonthShort(key);
 }
 
 // แปลงคีย์ช่วงเวลาเป็นป้ายแสดงผลสั้น ๆ (สัปดาห์/เดือน/ไตรมาส/ปี)

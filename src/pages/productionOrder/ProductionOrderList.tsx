@@ -3,12 +3,12 @@ import { ChevronRight } from "lucide-react";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import type { ProductionOrderSummary, ProductionOrderStatus } from "../../lib/productionOrder";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalStatusPill, ListDateRangeSelect } from "../purchaseRequest/docShared";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const PAGE_SIZE = 25;
 
@@ -121,7 +121,7 @@ export function ProductionOrderList({
                         <span className="block text-sm text-[#3d5173] truncate" title={p.productName}>{p.productName || "—"}</span>
                       </td>
                       <td className={table.td}><ApprovalStatusPill status={p.status} /></td>
-                      <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(p.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(p.updatedAt)}</td>
                       <td className={table.td}>
                         <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                       </td>

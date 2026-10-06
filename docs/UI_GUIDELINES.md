@@ -19,6 +19,11 @@ pre-redesign look.
   drawer `z-40` (backdrop `z-30`) · dialogs/modals `z-50` · toasts/MoreMenu `z-[60]`. The topbar `<header>` has **no**
   z-index (giving it one would lift it above the mobile drawer's backdrop), so a topbar dropdown competes with page
   content directly and must outrank the sticky bars: the notification panel uses catcher `z-30` + panel `z-40` (2026-10-06).
+- **Dates on screen (2026-10-06):** use `src/lib/displayDate.ts` (`formatDisplayDate`, `…DateLong`, `…DateTime`, `…Time`,
+  `…Month`, `…MonthShort`, `displayYear2`) — Thai mode shows พ.ศ. + Thai months, English mode ค.ศ. + English months ("6 Oct 2026").
+  **Print documents and exported files keep Thai** (`formatQuoteDateThai`, `printDate`, `formatArDocDate`) — never pass a
+  `formatDisplay*` string into a `*PrintDocument` prop (QuoteDocument keeps a separate `preparerDateDisplay` for this reason).
+  Never hard-code `toLocaleDateString("th-TH")` in a screen component.
 - **Screen kit (phase 2, 2026-09-30):** build list pages, document pages, side panels and pickers from `src/components/ui/`
   (`ListPage`, `DocumentLayout`, `Overlays`, `MoreMenu`, `Field`, `SectionCard`, `styles`) — see CHANGELOG 2026-09-30b for the pieces.
 

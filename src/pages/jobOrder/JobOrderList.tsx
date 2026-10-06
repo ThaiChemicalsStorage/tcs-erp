@@ -5,10 +5,10 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import type { JobOrderSummary, JobOrderStatus } from "../../lib/jobOrder";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalPill, ListDateRangeSelect, paginate, rowOpenProps, useApprovalStatusLabel } from "../project/projectUi";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 type TabKey = "all" | JobOrderStatus;
 
@@ -113,7 +113,7 @@ export function JobOrderList({
                       <td className={`${table.td} ${table.code} whitespace-nowrap`}>{j.id}</td>
                       <td className={`${table.td} font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{j.jobCode || <span className="text-[#8a97ad]">—</span>}</td>
                       <td className={table.td}><ApprovalPill status={j.status} /></td>
-                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(j.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatDisplayDate(j.updatedAt)}</td>
                       <td className={table.td}>
                         <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                       </td>

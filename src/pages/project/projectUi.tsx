@@ -7,9 +7,9 @@ import { PromptDialog } from "../../components/PromptDialog";
 import { ApiError } from "../../lib/apiClient";
 import type { DateRangePreset, DateRangeValue } from "../../lib/dateRanges";
 import type { ProjectItemStatus, ProjectStatus } from "../../lib/project";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useUserDirectory } from "../../lib/userDirectory";
 import { useI18n } from "../../lib/i18n";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /**
  * ชิ้นส่วนหน้าตาแบบใหม่ (REDESIGN 2026-09-30) ที่ฝ่ายโครงการใช้ร่วมกัน — โครงการ ใบเบิก-คืนวัสดุ (รวมใบจ่ายของสโตร์
@@ -113,7 +113,7 @@ export function useApprovalHint({ status, approverLabel, rejectionComment = "", 
   if (status === "Final") {
     return finalHint || t("approval.step.hint.final")
       .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
-      .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(approvedAt)) : "");
+      .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatDisplayDate(approvedAt)) : "");
   }
   if (status === "PendingApproval") return t("approval.step.hint.pending").replace("{approver}", approverLabel || t("approval.step.defaultApprover"));
   return rejectionComment.trim() ? t("approval.step.hint.draftRejected") : t("approval.step.hint.draft");

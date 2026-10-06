@@ -20,7 +20,7 @@ import { ApiError } from "../../lib/apiClient";
 import { Combobox } from "../../components/Combobox";
 import { type ScopeOfWorkListItem, fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
 import { newId } from "../../lib/products";
-import { fmt, formatQuoteDateThai } from "../../lib/quotes";
+import { fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import type { Company } from "../../lib/storage";
 import {
@@ -32,6 +32,7 @@ import {
 import { CostControlPrintDocument } from "./CostControlPrintDocument";
 import { CostControlStatusPill } from "./costControlUi";
 import { useCostControlApproval } from "./costControlHooks";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 /** payload ที่ทั้งปุ่มบันทึกและ auto-save ส่ง — ต้องเป็นชุดเดียวกันเป๊ะ ไม่งั้นตัวจับการแก้ไขเพี้ยน */
 function toUpdateFields(d: CostControl): CostControlUpdateFields {
@@ -253,7 +254,7 @@ export function CostControlDocument({
     draft.status === "Final"
       ? t("approval.step.hint.final")
           .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
-          .replace("{at}", draft.approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(draft.approvedAt)) : "")
+          .replace("{at}", draft.approvedAt ? t("approval.step.at").replace("{date}", formatDisplayDate(draft.approvedAt)) : "")
       : draft.status === "PendingApproval"
       ? t("approval.step.hint.pending").replace("{approver}", t("costControlDoc.approverLabel"))
       : draft.rejectionComment?.trim()
@@ -365,7 +366,7 @@ export function CostControlDocument({
                         onChange={(e) => set("docDate", e.target.value)} />
                     </Field>
                   ) : (
-                    <ReadonlyField label={t("costControlDoc.field.docDate")} value={draft.docDate ? formatQuoteDateThai(draft.docDate) : ""} />
+                    <ReadonlyField label={t("costControlDoc.field.docDate")} value={draft.docDate ? formatDisplayDate(draft.docDate) : ""} />
                   )}
                   {textField(t("costControlDoc.field.workType"), "workType")}
                   {textField(t("costControlDoc.field.jobOrder"), "jobOrder", { mono: true })}

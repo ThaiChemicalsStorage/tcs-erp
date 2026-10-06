@@ -5,10 +5,10 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ListCard, ListEmpty, ListPageHeader, ListPagination, ListTabs, ListToolbar, FilterSelect } from "../../components/ui/ListPage";
 import { table } from "../../components/ui/styles";
 import { scopePoNumbers, scopeQuotationNumbers, type ScopeOfWorkListItem, type ScopeOfWorkStatus } from "../../lib/scopeOfWork";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ALL_DATES, resolveRange, isWithinRange, type DateRangeValue } from "../../lib/dateRanges";
 import { ApprovalStatusPill, ListDateRangeSelect } from "./sowDoShared";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 const FILTER_ALL = "all";
 const PAGE_SIZE = 25;
@@ -203,9 +203,9 @@ export function ScopeOfWorkList({
                           </span>
                         )}
                       </td>
-                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatQuoteDateThai(s.deliveryDate)}</td>
+                      <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{formatDisplayDate(s.deliveryDate)}</td>
                       <td className={table.td}><ApprovalStatusPill status={s.status} /></td>
-                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatQuoteDateThai(s.updatedAt)}</td>
+                      <td className={`${table.td} text-[13px] text-muted-foreground whitespace-nowrap`}>{formatDisplayDate(s.updatedAt)}</td>
                       <td className={table.td}>
                         <ChevronRight size={16} className="text-[#a3aec2] group-hover:text-foreground transition-colors ml-auto" aria-hidden="true" />
                       </td>

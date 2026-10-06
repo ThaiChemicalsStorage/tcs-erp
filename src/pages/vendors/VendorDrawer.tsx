@@ -6,7 +6,6 @@ import {
 } from "../../lib/vendors";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { RECEIVING_PRICE_TYPES, RECEIVING_PRICE_TYPE_LABEL_KEY } from "../../lib/receivingReport";
-import { formatQuoteDateThai } from "../../lib/quotes";
 import { Drawer } from "../../components/ui/Overlays";
 import { Field, ReadonlyField } from "../../components/ui/Field";
 import { MoreMenu } from "../../components/ui/MoreMenu";
@@ -16,6 +15,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
 import { TonePill } from "../purchaseOrder/purchasingUi";
 import { vendorApprovalTone, vendorApprovalLabelKey } from "./vendorDisplay";
+import { formatDisplayDate } from "../../lib/displayDate";
 
 function toDraft(v: Vendor | null): VendorDraft {
   if (!v) return emptyVendorDraft();
@@ -149,7 +149,7 @@ export function VendorDrawer({
         label={t(vendor.isDeleted ? "vendors.status.archived" : vendor.isActive ? "vendors.status.active" : "vendors.status.inactive")}
       />
       {!vendor.isActive && vendor.inactiveAt && (
-        <span className="text-xs text-muted-foreground">{t("vendors.form.inactiveSince").replace("{date}", formatQuoteDateThai(vendor.inactiveAt))}</span>
+        <span className="text-xs text-muted-foreground">{t("vendors.form.inactiveSince").replace("{date}", formatDisplayDate(vendor.inactiveAt))}</span>
       )}
       {!vendor.isDeleted && (
         <TonePill tone={vendorApprovalTone[vendorApprovalStatusOf(vendor)]} label={t(vendorApprovalLabelKey[vendorApprovalStatusOf(vendor)])} />
@@ -291,7 +291,7 @@ export function VendorDrawer({
           <div className="rounded-xl bg-[#f8f9fc] border border-border px-4 py-3 flex flex-col gap-3">
             <div className={grid}>
               <ReadonlyField label={t("vendors.form.balance")} value={vendor.balance === null || vendor.balance === undefined ? "" : `฿${fmtMoney(vendor.balance)}`} />
-              <ReadonlyField label={t("vendors.form.lastBillDate")} value={vendor.lastBillDate ? formatQuoteDateThai(vendor.lastBillDate) : ""} />
+              <ReadonlyField label={t("vendors.form.lastBillDate")} value={vendor.lastBillDate ? formatDisplayDate(vendor.lastBillDate) : ""} />
             </div>
             <p className="text-xs text-muted-foreground">{t(vendor.balance === null || vendor.balance === undefined ? "vendors.form.balanceNoAccess" : "vendors.form.balanceHint")}</p>
           </div>
