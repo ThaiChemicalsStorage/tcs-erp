@@ -2,7 +2,7 @@ import { type CostControl, lineTotalCost } from "../../lib/costControl";
 import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
 import { printDate, printText } from "../../lib/printFormat";
-import { PrintPageFrame } from "../../components/PrintPageFrame";
+import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 
 /**
  * ใบพิมพ์ Cost Control — **FM-SL-06 Rev.02 : 11/09/67**
@@ -25,6 +25,10 @@ import { PrintPageFrame } from "../../components/PrintPageFrame";
  * | ค่าศูนย์ | พิมพ์เป็น `-` ไม่ใช่ 0.00 |
  *
  * สามสีข้างบนอ่านมาจาก `fgColor` ของเซลล์ในไฟล์ Excel จริง ไม่ได้กะจากภาพ
+ *
+ * **จัดหน้าเองด้วย `PaginatedPrintForm` (2026-10-06)** — ทุกหน้ามีหัวจดหมาย + กล่อง COST CONTROL/ข้อมูลงาน + หัวตาราง
+ * + แถวว่างเติมจนเต็มหน้า และรหัสฟอร์มท้ายกระดาษ · หมายเหตุ/ช่องเซ็นอยู่หน้าสุดท้าย ถ้าไม่พอที่ยกไปหน้าใหม่ที่มีหัวและตารางว่างเต็มหน้า
+ * (เจ้าของสั่ง ดูไฟล์ component) · เดิมใช้ `PrintPageFrame` ให้เบราว์เซอร์หั่นเอง หัวเอกสารจึงไม่ซ้ำในหน้า 2 เป็นต้นไป
  *
  * ภาษาไทยตายตัว ห้ามเรียก `useI18n` — กฎใบพิมพ์ใน docs/CLAUDE.md
  */
@@ -63,10 +67,8 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
   /** พื้นที่เหนือเส้นลงนาม — สูงคงที่ 26px เท่าของเดิม ให้ชื่อนั่งชิดเส้นเหมือนคนเซ็นชื่อบนเส้น */
   const signatureArea: React.CSSProperties = { height: 26, display: "flex", alignItems: "flex-end", justifyContent: "center", overflow: "hidden" };
 
-  return (
-    <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px", paddingRight: EDGE_GUARD }}>
-      <PrintPageFrame>
-
+  const header = (
+    <>
       {/* หัวจดหมาย — โลโก้ซ้าย ข้อความขวา ตามฟอร์มจริง */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "10px" }}>
         <tbody>
@@ -106,52 +108,72 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
           </tr>
         </tbody>
       </table>
+    </>
+  );
 
-      {/* ปล่อยให้เบราว์เซอร์จัดความกว้างคอลัมน์เอง — เคยตั้ง table-layout: fixed พร้อม % ตายตัว
-          แล้วตัวเลขในคอลัมน์สุดท้ายถูกตัดหายไปตอนพิมพ์ เพราะเนื้อหา nowrap ล้นออกนอกช่องที่กำหนดไว้
-          แล้วโดน container ของหน้าเฉือนทิ้ง · ใส่ความกว้างเป็นคำใบ้เฉพาะคอลัมน์แคบก็พอ */}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ ...cell, width: "5%" }}>ลำดับที่</th>
-            <th style={cell}>รายละเอียด</th>
-            <th style={{ ...cell, width: "8%" }}>Model</th>
-            <th style={{ ...cell, width: "10%" }}>supplier name</th>
-            <th style={{ ...cell, width: "6%" }}>จำนวน</th>
-            <th style={{ ...cell, width: "6%" }}>หน่วย</th>
-            <th style={cell}>ต้นทุน</th>
-            <th style={cell}>ต้นทุนรวมทั้งหมด</th>
-          </tr>
-        </thead>
-        <tbody>
-          {c.lines.map((l) => {
-            const isGroup = l.kind === "group";
-            return (
-              <tr key={l.id}>
-                <td style={{ ...cell, textAlign: "center" }}>{l.seq}</td>
-                <td style={{
-                  ...cell,
-                  paddingLeft: l.kind === "sub" ? "14px" : "4px",
-                  background: isGroup ? GROUP_BG : l.kind === "item" ? ITEM_BG : undefined,
-                }}>{l.description}</td>
-                <td style={cell}>{isGroup ? "" : l.model}</td>
-                <td style={{ ...cell, textAlign: "center" }}>{isGroup ? "" : l.supplierName}</td>
-                <td style={{ ...cell, textAlign: "center" }}>{isGroup || l.qty === null ? "" : fmt(l.qty)}</td>
-                <td style={{ ...cell, textAlign: "center" }}>{isGroup ? "" : l.unit}</td>
-                <td style={num}>
-                  {isGroup || l.unitCost === null ? "" : (
-                    <span style={bahtRow}><span>฿</span><span>{money(l.unitCost)}</span></span>
-                  )}
-                </td>
-                {/* ยังไม่กรอกต้นทุน = ยังไม่มียอดรวม ปล่อยว่างให้เหมือนช่องต้นทุน ไม่พิมพ์ "-" ซึ่ง
-                    แปลว่า "ศูนย์" บนฟอร์มนี้ — ใบที่นำเข้ามาใหม่ยังไม่มีราคาเลยทั้งใบ */}
-                <td style={num}>{isGroup || l.unitCost === null ? "" : money(lineTotalCost(l))}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+  /* ปล่อยให้เบราว์เซอร์จัดความกว้างคอลัมน์เอง — เคยตั้ง table-layout: fixed พร้อม % ตายตัว
+     แล้วตัวเลขในคอลัมน์สุดท้ายถูกตัดหายไปตอนพิมพ์ เพราะเนื้อหา nowrap ล้นออกนอกช่องที่กำหนดไว้
+     แล้วโดน container ของหน้าเฉือนทิ้ง · ใส่ความกว้างเป็นคำใบ้เฉพาะคอลัมน์แคบก็พอ */
+  const tableHead = (
+    <thead>
+      <tr>
+        <th style={{ ...cell, width: "5%" }}>ลำดับที่</th>
+        <th style={cell}>รายละเอียด</th>
+        <th style={{ ...cell, width: "8%" }}>Model</th>
+        <th style={{ ...cell, width: "10%" }}>supplier name</th>
+        <th style={{ ...cell, width: "6%" }}>จำนวน</th>
+        <th style={{ ...cell, width: "6%" }}>หน่วย</th>
+        <th style={cell}>ต้นทุน</th>
+        <th style={cell}>ต้นทุนรวมทั้งหมด</th>
+      </tr>
+    </thead>
+  );
 
+  const bodyRows = c.lines.map((l) => {
+    const isGroup = l.kind === "group";
+    return {
+      key: l.id,
+      node: (
+        <tr>
+          <td style={{ ...cell, textAlign: "center" }}>{l.seq}</td>
+          <td style={{
+            ...cell,
+            paddingLeft: l.kind === "sub" ? "14px" : "4px",
+            background: isGroup ? GROUP_BG : l.kind === "item" ? ITEM_BG : undefined,
+          }}>{l.description}</td>
+          <td style={cell}>{isGroup ? "" : l.model}</td>
+          <td style={{ ...cell, textAlign: "center" }}>{isGroup ? "" : l.supplierName}</td>
+          <td style={{ ...cell, textAlign: "center" }}>{isGroup || l.qty === null ? "" : fmt(l.qty)}</td>
+          <td style={{ ...cell, textAlign: "center" }}>{isGroup ? "" : l.unit}</td>
+          <td style={num}>
+            {isGroup || l.unitCost === null ? "" : (
+              <span style={bahtRow}><span>฿</span><span>{money(l.unitCost)}</span></span>
+            )}
+          </td>
+          {/* ยังไม่กรอกต้นทุน = ยังไม่มียอดรวม ปล่อยว่างให้เหมือนช่องต้นทุน ไม่พิมพ์ "-" ซึ่ง
+              แปลว่า "ศูนย์" บนฟอร์มนี้ — ใบที่นำเข้ามาใหม่ยังไม่มีราคาเลยทั้งใบ */}
+          <td style={num}>{isGroup || l.unitCost === null ? "" : money(lineTotalCost(l))}</td>
+        </tr>
+      ),
+    };
+  });
+
+  // แถวว่างเติมให้เต็มหน้า — เส้นครบทุกช่อง · nbsp ในช่องแรกให้สูงเท่าบรรทัดรายการบรรทัดเดียวพอดี
+  const blankRow = (key: string) => (
+    <tr key={key}>
+      <td style={cell}>{" "}</td>
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+    </tr>
+  );
+
+  const footer = (
+    <>
       {/*
         บล็อกสรุปท้ายใบทั้งบล็อก (1. ราคาต้นทุน … 5. ราคาขาย + กำไร + คิดเป็น%) **ถอดออก 2026-08-31**
         ตามที่เจ้าของสั่ง รวมถึงยอดรวมต้นทุนที่เหลือไว้บรรทัดเดียวตอนแรก ซึ่งเจ้าของสั่งให้เอาออกด้วย
@@ -160,7 +182,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
         **ใบนี้จึงต่างจากฟอร์มจริง FM-SL-06 ตรงนี้ โดยตั้งใจ ไม่ใช่ตกหล่น** — ใบพิมพ์จบที่ตารางรายการ
         แล้วต่อด้วยหมายเหตุ/ผู้ลงนามเลย ไม่มียอดรวมที่ไหนอีก · คนอ่านยังเห็นต้นทุนรายบรรทัดในตาราง
       */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "16px", breakInside: "avoid" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "16px" }}>
         <tbody>
           <tr>
             <td style={{ border: "none", padding: "2px 6px", width: "120px", verticalAlign: "bottom" }}>หมายเหตุ :</td>
@@ -169,8 +191,8 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
         </tbody>
       </table>
 
-      {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px", breakInside: "avoid" }}>
+      {/* ช่องเซ็นอยู่หน้าสุดท้ายเสมอ — ตัวจัดหน้ายกทั้งบล็อกไปหน้าใหม่เองถ้าไม่พอที่ (เดิมใช้ break-inside: avoid) */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px" }}>
         <tbody>
           <tr>
             {/* เจ้าของสั่ง 2026-09-21 ให้ทำแบบเดียวกับใบสั่งซื้อ: **ไม่มีลายเซ็นสแกน ขึ้นชื่อที่กรอกไว้
@@ -196,9 +218,18 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
           </tr>
         </tbody>
       </table>
+    </>
+  );
 
-      <div style={{ textAlign: "right", marginTop: "10px" }}>{FORM_CODE}</div>
-      </PrintPageFrame>
-    </div>
+  return (
+    <PaginatedPrintForm
+      style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px", paddingRight: EDGE_GUARD }}
+      header={header}
+      tableHead={tableHead}
+      rows={bodyRows}
+      blankRow={blankRow}
+      footer={footer}
+      pageFooter={<div style={{ textAlign: "right", marginTop: "10px" }}>{FORM_CODE}</div>}
+    />
   );
 }

@@ -3,14 +3,14 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { PrintLetterhead } from "../../components/PrintLetterhead";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printDate, printDateOrBlank, printText, printTextOrBlank, printNumber } from "../../lib/printFormat";
-import { PrintPageFrame } from "../../components/PrintPageFrame";
+import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { kitBreakdownText } from "../../lib/products";
 
 /**
  * Print layout for FM-ST-04 Rev.02 — the form's own column layout
  * (No./Code/Description/Unit/Planned/1st/2nd/Return/Actual), rendered only while printing
- * (`hidden print:block`, the convention DeliveryOrderPrintDocument.tsx established).
+ * (`hidden print:block`, applied by `PaginatedPrintForm`).
  *
  * **2026-08-27**: gained the company letterhead, per the Production department's request that
  * ใบเบิกและใบคืนพัสดุ "ทำเทมเพลตออกมาคล้ายๆของใบเสนอราคา". The letterhead itself lives in the shared
@@ -21,8 +21,9 @@ import { kitBreakdownText } from "../../lib/products";
  * (เดิมยิงค่า ISO ดิบลงกระดาษ), ช่องที่ไม่มีข้อมูลพิมพ์ขีดกลางแทนที่ว่าง, และช่องผู้จัดทำ/ผู้อนุมัติ
  * วางรูปลายเซ็นจริงของเจ้าตัวจากโปรไฟล์ (ดู `PrintSignature.tsx`)
  *
- * The whole document is wrapped in one outer table so the FM-ST-04 form code can sit in `<tfoot>`
- * and repeat on every printed page, the same mechanism ProductionOrderPrintDocument.tsx uses.
+ * **จัดหน้าเองด้วย `PaginatedPrintForm` (2026-10-06)** — ทุกหน้ามีหัวเอกสาร (หัวจดหมาย ชื่อใบ เลขที่ ลูกค้า รหัสงาน …) + หัวตาราง
+ * + แถวว่างเติมจนเต็มหน้า และรหัสฟอร์มท้ายกระดาษ · หมายเหตุการแก้ไข/ช่องเซ็นอยู่หน้าสุดท้าย ถ้าไม่พอที่ยกไปหน้าใหม่ที่มีหัวและตารางว่างเต็มหน้า
+ * (เจ้าของสั่ง ดูไฟล์ component) · เดิมห่อทั้งใบด้วยตารางนอกให้ <tfoot> ซ้ำรหัสฟอร์ม แต่หัวเอกสารไม่ซ้ำ และช่องเซ็นที่ล้นไปขึ้นหน้าใหม่โดยไม่มีหัว
  *
  * Fixed Thai, no i18n — see docs/CLAUDE.md's print policy.
  */
@@ -55,13 +56,8 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
   const chargeTo = [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / ");
   const workType = [m.chargeWorkTypeCode, m.chargeWorkTypeName].filter(Boolean).join(" ");
 
-  return (
-    <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif" }}>
-      <PrintPageFrame>
-      <table className="w-full" style={{ borderCollapse: "collapse" }}>
-        <tbody>
-          <tr>
-            <td style={{ padding: 0, border: "none" }}>
+  const header = (
+    <>
       <PrintLetterhead
         companyHeader={companyHeader}
         docLabel="REQUISITION"
@@ -106,40 +102,56 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
           </tr>
         </tbody>
       </table>
+    </>
+  );
 
-      {/* ฟอร์ม FM-ST-04 มีสองช่องเบิก แต่ของจริงจ่ายกี่รอบก็ได้ตั้งแต่ 2026-09-07 — สองช่องนี้เป็นค่าที่
-          เซิร์ฟเวอร์คิดจากรอบการจ่าย (รอบ 1 ลงช่องแรก รอบ 2 ขึ้นไปรวมกันในช่องที่สอง) ไม่ใช่ค่าที่ใครกรอก
-          ประวัติเต็มทุกรอบดูได้ในหน้าเอกสาร ไม่ได้พิมพ์ลงกระดาษเพราะฟอร์มจริงไม่มีที่ให้ */}
-      <table className="w-full text-[10px]" style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {["No.", "รหัสสินค้า", "รายการ", "หน่วย", "เบิกของ", "เบิกครั้งที่1", "เบิกครั้งที่2", "คืนของ", "ใช้จริง"].map((h) => (
-              <th key={h} className="border border-black px-1.5 py-1 font-semibold text-center">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {m.lines.map((line, idx) => (
-            <tr key={line.id}>
-              <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
-              <td className="border border-black px-1.5 py-1">{printText(line.productCode)}</td>
-              <td className="border border-black px-1.5 py-1">
-                {printText(line.productName)}
-                {kits.has(line.productId) && (
-                  <span className="block text-[9px]">ชุด: {kitBreakdownText(kits.get(line.productId)!.components, line.plannedQty && line.plannedQty > 0 ? line.plannedQty : 1)}{line.plannedQty && line.plannedQty > 0 ? "" : " (ต่อชุด)"}</span>
-                )}
-              </td>
-              <td className="border border-black px-1.5 py-1 text-center">{printText(line.unit)}</td>
-              <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.plannedQty)}</td>
-              <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.withdrawal1Qty)}</td>
-              <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.withdrawal2Qty)}</td>
-              <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.returnQty)}</td>
-              <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.actualUsedQty)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  /* ฟอร์ม FM-ST-04 มีสองช่องเบิก แต่ของจริงจ่ายกี่รอบก็ได้ตั้งแต่ 2026-09-07 — สองช่องนี้เป็นค่าที่
+     เซิร์ฟเวอร์คิดจากรอบการจ่าย (รอบ 1 ลงช่องแรก รอบ 2 ขึ้นไปรวมกันในช่องที่สอง) ไม่ใช่ค่าที่ใครกรอก
+     ประวัติเต็มทุกรอบดูได้ในหน้าเอกสาร ไม่ได้พิมพ์ลงกระดาษเพราะฟอร์มจริงไม่มีที่ให้ */
+  const tableHead = (
+    <thead>
+      <tr>
+        {["No.", "รหัสสินค้า", "รายการ", "หน่วย", "เบิกของ", "เบิกครั้งที่1", "เบิกครั้งที่2", "คืนของ", "ใช้จริง"].map((h) => (
+          <th key={h} className="border border-black px-1.5 py-1 font-semibold text-center">{h}</th>
+        ))}
+      </tr>
+    </thead>
+  );
 
+  const bodyRows = m.lines.map((line, idx) => ({
+    key: line.id,
+    node: (
+      <tr>
+        <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
+        <td className="border border-black px-1.5 py-1">{printText(line.productCode)}</td>
+        <td className="border border-black px-1.5 py-1">
+          {printText(line.productName)}
+          {kits.has(line.productId) && (
+            <span className="block text-[9px]">ชุด: {kitBreakdownText(kits.get(line.productId)!.components, line.plannedQty && line.plannedQty > 0 ? line.plannedQty : 1)}{line.plannedQty && line.plannedQty > 0 ? "" : " (ต่อชุด)"}</span>
+          )}
+        </td>
+        <td className="border border-black px-1.5 py-1 text-center">{printText(line.unit)}</td>
+        <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.plannedQty)}</td>
+        <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.withdrawal1Qty)}</td>
+        <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.withdrawal2Qty)}</td>
+        <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.returnQty)}</td>
+        <td className="border border-black px-1.5 py-1 text-center">{printNumber(line.actualUsedQty)}</td>
+      </tr>
+    ),
+  }));
+
+  // แถวว่างเติมให้เต็มทุกหน้า (เดิมใบนี้ไม่มีแถวว่าง) — ช่องแรกใส่ช่องว่างไม่ตัดคำ ให้สูงเท่าบรรทัดรายการหนึ่งบรรทัดพอดี
+  const blankRow = (key: string) => (
+    <tr key={key}>
+      <td className="border border-black px-1.5 py-1">{" "}</td>
+      {Array.from({ length: 8 }, (_, i) => (
+        <td key={i} className="border border-black px-1.5 py-1" />
+      ))}
+    </tr>
+  );
+
+  const footer = (
+    <>
       {/* หมายเหตุการแก้ไข — พิมพ์จริงตามที่ฝ่ายผลิตขอ ("สามารถดูในใบปริ้นได้") ซ่อนเมื่อว่าง */}
       {(m.revisionNote ?? "").trim() !== "" && (
         <div className="border border-black px-2 py-1 mt-2 text-[10px]" style={{ whiteSpace: "pre-wrap" }}>
@@ -147,8 +159,7 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
         </div>
       )}
 
-      {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
-      <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse", breakInside: "avoid" }}>
+      <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse" }}>
         <tbody>
           {signatureRows.map((row, rowIdx) => (
             <tr key={rowIdx}>
@@ -168,19 +179,20 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
           ))}
         </tbody>
       </table>
-            </td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td style={{ padding: 0, border: "none" }}>
-              <p className="text-[9px] text-right mt-4">FM-ST-04 Rev.02 : 21/07/68</p>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+    </>
+  );
 
-      </PrintPageFrame>
-    </div>
+  return (
+    <PaginatedPrintForm
+      style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif" }}
+      header={header}
+      tableHead={tableHead}
+      // เดิมคือ className="text-[10px]" ของตารางรายการ — ตารางของตัวจัดหน้ารับได้แค่ style
+      tableStyle={{ fontSize: "10px" }}
+      rows={bodyRows}
+      blankRow={blankRow}
+      footer={footer}
+      pageFooter={<p className="text-[9px] text-right mt-4">FM-ST-04 Rev.02 : 21/07/68</p>}
+    />
   );
 }

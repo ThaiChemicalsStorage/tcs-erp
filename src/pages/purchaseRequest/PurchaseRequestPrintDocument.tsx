@@ -3,7 +3,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatArDocDate } from "../../lib/accounting";
 import { PrintSignatureLine } from "../../components/PrintSignature";
 import { printText } from "../../lib/printFormat";
-import { PrintPageFrame } from "../../components/PrintPageFrame";
+import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 
 /**
  * ฟอร์มพิมพ์ใบขอซื้อ — คัดตามฟอร์มจริง FM-PU-05 Rev.02 : 03/11/68
@@ -27,6 +27,11 @@ import { PrintPageFrame } from "../../components/PrintPageFrame";
  *   - ลงนาม 3 ช่อง โดย**ชื่อพิมพ์อยู่เหนือเส้น** ป้ายอยู่ใต้เส้น และวันที่เป็น ____/____/______
  *   - ปิดท้ายด้วยรหัสฟอร์มชิดขวา (บรรทัด "พิมพ์โดย/บันทึกโดย" ถอดออก 2026-09-21 ตามคำสั่งเจ้าของ)
  *
+ * **จัดหน้าเองด้วย `PaginatedPrintForm` (2026-10-06)** — ทุกหน้ามีหัวจดหมาย/หัวเรื่อง/สองคอลัมน์หัวเอกสาร + หัวตาราง
+ * + แถวว่างเติมจนเต็มหน้า และรหัสฟอร์มท้ายกระดาษ · กล่องหมายเหตุกับช่องเซ็นอยู่หน้าสุดท้าย ถ้าไม่พอที่ยกไปหน้าใหม่
+ * ที่มีหัวและตารางว่างเต็มหน้า (เจ้าของสั่ง ดูไฟล์ component) · เดิมเติมแถวว่างให้ครบ 10 แถวหน้าเดียวใน `PrintPageFrame`
+ * ความกว้างคอลัมน์ย้ายจาก `<colgroup>` มาอยู่ที่ `<th>` เพราะ `tableHead` ต้องเป็น `<thead>` ล้วน
+ *
  * **`estimatedCost` ไม่ถูกพิมพ์อีกต่อไป** — คอลัมน์ที่ 7 บนกระดาษจริงคือ "ให้ซื้อ" ซึ่งเป็นช่องว่าง
  * ให้ฝ่ายจัดซื้อเขียนเอง ไม่ใช่ราคาประเมินของผู้ขอ ราคาประเมินยังอยู่ครบทั้งในหน้าแก้ไขและฐานข้อมูล
  * ถ้าภายหลังยืนยันว่าฝ่ายจัดซื้อใช้ราคาบนใบพิมพ์จริง ให้เพิ่มเป็นคอลัมน์ที่ 8 อย่าไปทับ "ให้ซื้อ"
@@ -43,8 +48,6 @@ const DOC_FONT = "'Times New Roman', 'Noto Serif Thai', serif";
 const LINE = "1px solid #000";
 /** ดู JobOrderPrintDocument.tsx — เส้นขอบขวาสุดของตารางเต็มความกว้างหลุดขอบกระดาษถ้าไม่กันไว้ */
 const EDGE_GUARD = "2px";
-/** จำนวนแถวขั้นต่ำของตาราง เพื่อให้กล่องหมายเหตุกับช่องเซ็นลงไปอยู่ท้ายหน้าเหมือนกระดาษ */
-const MIN_BODY_ROWS = 10;
 
 /**
  * ชื่อแผนกในวงเล็บใต้หัวเรื่อง — ทุกฝ่ายใช้ฟอร์มเดียวกัน ต่างกันที่บรรทัดนี้
@@ -65,6 +68,12 @@ function Field({ label, value, labelWidth = "112px" }: { label: string; value: s
   );
 }
 
+/** คอลัมน์ตาราง + ความกว้าง (เดิมอยู่ใน `<colgroup>`) */
+const COLUMNS: [string, string][] = [
+  ["No.", "5%"], ["รหัสสินค้า/รายละเอียด", "43%"], ["คลัง คงเหลือ", "11%"], ["จำนวนขอซื้อ", "12%"],
+  ["วันต้องการ", "11%"], ["แผนก", "8%"], ["ให้ซื้อ", "10%"],
+];
+
 export function PurchaseRequestPrintDocument({
   purchaseRequest: p,
   companyHeader,
@@ -72,7 +81,6 @@ export function PurchaseRequestPrintDocument({
   purchaseRequest: PurchaseRequest;
   companyHeader: CompanyHeaderInfo;
 }) {
-  const padding = Math.max(0, MIN_BODY_ROWS - p.lines.length);
   const cell: React.CSSProperties = { border: LINE, padding: "2px 5px", verticalAlign: "top" };
   const headCell: React.CSSProperties = { ...cell, textAlign: "center", fontWeight: 700 };
   const dept = PRINT_DEPARTMENT_LABEL[purchaseRequestCodeOf(p)];
@@ -100,13 +108,8 @@ export function PurchaseRequestPrintDocument({
     </td>
   );
 
-  return (
-    <div
-      className="hidden print:block"
-      style={{ fontFamily: DOC_FONT, fontSize: "11px", color: "#000", background: "#fff", paddingRight: EDGE_GUARD }}
-    >
-      <PrintPageFrame>
-
+  const header = (
+    <>
       {/* หัวจดหมายไทย ซ้าย + หัวเรื่องขวา */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", marginBottom: "10px" }}>
         <div>
@@ -136,57 +139,55 @@ export function PurchaseRequestPrintDocument({
           <Field label="เลขที่ใบขออนุมัติซื้อ" value={p.id} labelWidth="130px" />
           <Field label="วันที่" value={d(p.issueDate)} labelWidth="130px" />
           <Field label="วันที่รับของ" value={d(p.neededByDate)} labelWidth="130px" />
-
         </div>
       </div>
+    </>
+  );
 
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
-        <colgroup>
-          <col style={{ width: "5%" }} />
-          <col style={{ width: "43%" }} />
-          <col style={{ width: "11%" }} />
-          <col style={{ width: "12%" }} />
-          <col style={{ width: "11%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "10%" }} />
-        </colgroup>
-        <thead>
-          <tr>
-            {["No.", "รหัสสินค้า/รายละเอียด", "คลัง คงเหลือ", "จำนวนขอซื้อ", "วันต้องการ", "แผนก", "ให้ซื้อ"].map((h) => (
-              <th key={h} style={headCell}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {p.lines.map((line, idx) => (
-            <tr key={line.id}>
-              <td style={{ ...cell, textAlign: "center" }}>{idx + 1}</td>
-              <td style={cell}>
-                {line.productCode ? `${line.productCode} ` : ""}{line.description}
-                {/* บรรทัดย่อย — กระดาษจริงไม่ได้เยื้องเข้ามา ชิดซ้ายเท่ากับคำอธิบาย */}
-                {(line.subDetails ?? []).map((sd, i) => (
-                  <p key={i} style={{ margin: "1px 0 0" }}>{sd}</p>
-                ))}
-              </td>
-              <td style={{ ...cell, textAlign: "center" }}>{printText(line.warehouseRemainingQty)}</td>
-              {/* กระดาษพิมพ์จำนวนกับหน่วยรวมในช่องเดียว ("1.00  ครั้ง") */}
-              <td style={{ ...cell, textAlign: "center" }}>
-                {line.qtyRequested !== null ? `${line.qtyRequested.toLocaleString()}${line.unit ? ` ${line.unit}` : ""}` : "-"}
-              </td>
-              <td style={{ ...cell, textAlign: "center" }}>{printText(d(line.neededByDate))}</td>
-              <td style={{ ...cell, textAlign: "center" }}>{printText(line.departmentCode)}</td>
-              {/* "ให้ซื้อ" เว้นว่างเสมอ — ฝ่ายจัดซื้อเขียนเองด้วยมือ */}
-              <td style={cell} />
-            </tr>
-          ))}
-          {Array.from({ length: padding }, (_, i) => (
-            <tr key={`pad-${i}`}>
-              {Array.from({ length: 7 }, (_, c) => <td key={c} style={{ ...cell, height: "17px" }} />)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  const tableHead = (
+    <thead>
+      <tr>
+        {COLUMNS.map(([h, w]) => (
+          <th key={h} style={{ ...headCell, width: w }}>{h}</th>
+        ))}
+      </tr>
+    </thead>
+  );
 
+  const bodyRows = p.lines.map((line, idx) => ({
+    key: line.id,
+    node: (
+      <tr>
+        <td style={{ ...cell, textAlign: "center" }}>{idx + 1}</td>
+        <td style={cell}>
+          {line.productCode ? `${line.productCode} ` : ""}{line.description}
+          {/* บรรทัดย่อย — กระดาษจริงไม่ได้เยื้องเข้ามา ชิดซ้ายเท่ากับคำอธิบาย */}
+          {(line.subDetails ?? []).map((sd, i) => (
+            <p key={i} style={{ margin: "1px 0 0" }}>{sd}</p>
+          ))}
+        </td>
+        <td style={{ ...cell, textAlign: "center" }}>{printText(line.warehouseRemainingQty)}</td>
+        {/* กระดาษพิมพ์จำนวนกับหน่วยรวมในช่องเดียว ("1.00  ครั้ง") */}
+        <td style={{ ...cell, textAlign: "center" }}>
+          {line.qtyRequested !== null ? `${line.qtyRequested.toLocaleString()}${line.unit ? ` ${line.unit}` : ""}` : "-"}
+        </td>
+        <td style={{ ...cell, textAlign: "center" }}>{printText(d(line.neededByDate))}</td>
+        <td style={{ ...cell, textAlign: "center" }}>{printText(line.departmentCode)}</td>
+        {/* "ให้ซื้อ" เว้นว่างเสมอ — ฝ่ายจัดซื้อเขียนเองด้วยมือ */}
+        <td style={cell} />
+      </tr>
+    ),
+  }));
+
+  // แถวว่าง — ตัวจัดหน้าเติมให้เต็มทุกหน้า (เดิมเติมให้ครบ 10 แถวหน้าเดียว)
+  const blankRow = (key: string) => (
+    <tr key={key}>
+      {Array.from({ length: 7 }, (_, c) => <td key={c} style={{ ...cell, height: "17px" }} />)}
+    </tr>
+  );
+
+  const footer = (
+    <>
       {/* กล่องหมายเหตุใต้ตาราง */}
       <div style={{ border: LINE, borderTop: "none", padding: "3px 6px", minHeight: "48px", whiteSpace: "pre-wrap" }}>
         <span style={{ fontWeight: 700 }}>หมายเหตุ</span>
@@ -200,7 +201,7 @@ export function PurchaseRequestPrintDocument({
         </div>
       )}
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px", breakInside: "avoid" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px" }}>
         <tbody>
           <tr>
             {signCell("ผู้ขอซื้อ", p.requestedBy, p.createdBy)}
@@ -211,12 +212,24 @@ export function PurchaseRequestPrintDocument({
           </tr>
         </tbody>
       </table>
+    </>
+  );
 
-      {/* บรรทัด "พิมพ์โดย … วันที่ … บันทึกโดย …" ถูกถอดออก 2026-09-21 ตามคำสั่งเจ้าของ
-          ("ทำไมในใบขอซื้อมีแบบนี้ขึ้นมา เอาออกไปด้วย") — มันพิมพ์ชื่อคนขอซื้อซ้ำสองครั้งใต้ช่องลงนาม
-          ที่มีชื่อเดียวกันอยู่แล้ว และไม่มีบรรทัดนี้บนฟอร์มจริง FM-PU-05 */}
-      <p style={{ textAlign: "right", margin: "16px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>
-      </PrintPageFrame>
-    </div>
+  // บรรทัด "พิมพ์โดย … วันที่ … บันทึกโดย …" ถูกถอดออก 2026-09-21 ตามคำสั่งเจ้าของ
+  // ("ทำไมในใบขอซื้อมีแบบนี้ขึ้นมา เอาออกไปด้วย") — มันพิมพ์ชื่อคนขอซื้อซ้ำสองครั้งใต้ช่องลงนาม
+  // ที่มีชื่อเดียวกันอยู่แล้ว และไม่มีบรรทัดนี้บนฟอร์มจริง FM-PU-05
+  const pageFooter = <p style={{ textAlign: "right", margin: "16px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>;
+
+  return (
+    <PaginatedPrintForm
+      style={{ fontFamily: DOC_FONT, fontSize: "11px", color: "#000", background: "#fff", paddingRight: EDGE_GUARD }}
+      header={header}
+      tableHead={tableHead}
+      tableStyle={{ fontSize: "10px" }}
+      rows={bodyRows}
+      blankRow={blankRow}
+      footer={footer}
+      pageFooter={pageFooter}
+    />
   );
 }

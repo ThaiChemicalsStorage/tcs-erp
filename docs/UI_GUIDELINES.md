@@ -764,6 +764,20 @@ Grids use Tailwind breakpoints (`grid-cols-2 xl:grid-cols-4` etc. for card/KPI g
 ### Print / PDF
 Use Tailwind's `print:` variant, not custom media-query CSS, for anything that should hide/show when printing. The established pattern (since 2026-07-09, `PrintDocument.tsx`): don't interleave print and screen markup in the same components — build a **separate, dedicated print-only component** (root class `hidden print:table`/`print:block`) that receives the same data as the screen view, and mark every screen-only editing component `print:hidden` at its own root instead of tagging individual descendants. This is simpler to reason about than the earlier approach of scattering `print:hidden` / `hidden print:table-row` pairs through a shared component (`QuoteDocument.tsx`/`LineItemsEditor.tsx` were refactored off that pattern), and is required for the next rule below.
 
+**Form-style documents paginate themselves (2026-10-06): `components/PaginatedPrintForm.tsx`.** Owner rule for printed forms: every
+page repeats the document header (title, number, customer/job info) **and** the column headings; the item table is filled
+with blank rows down to the bottom of every page; signatures/totals sit on the last page, and if they don't fit after the
+last item they move to a new page that still has the header and a full table of blank rows. The `<thead>` trick below can't
+do this (it repeats only the table head, can't know the remaining height, and `break-inside: avoid` drops the signature
+block onto a page with nothing above it). The component measures the real heights off-screen after every render (not at
+`beforeprint` — editors call `window.print()` inside `useEffect`, where `flushSync` cannot re-render), splits pages with
+`lib/printPagination.ts`'s `paginate()`, and renders fixed A4 boxes with `@page { margin: 0 }`. Pass `header`, a `<thead>`
+as `tableHead`, `rows` (one `<tr>` per entry), `blankRow`, `footer` (last page) and `pageFooter` (form code, every page).
+If the footer or any single row is taller than a page it falls back to normal browser flow so nothing is clipped.
+Used by: ใบสั่งผลิต FM-PD-02, ใบเบิก FM-ST-04, ใบขอซื้อ FM-PU-05, ใบสั่งซื้อ, ใบสั่งงาน FM-PJ-01, Cost Control FM-SL-06.
+Store slips (`StoreSlipPrint`, `IssueReturnSummaryPrint`), the receiving-report form and the vendor-bill form already paginate
+by a fixed row count. **Not converted**: the letterhead documents (ใบเสนอราคา, Scope of Work, ใบส่งมอบ, รายงานบริการ, AR/NCR).
+
 **Repeating print headers**: when a printed document needs its header/buyer-info/column-headers to repeat on every page (multi-page quotations, invoices, etc.), wrap the whole document in one `<table>` and put the repeating content in a `<thead>` — browsers natively repeat `<thead>` content across page breaks in print, verified end-to-end with a forced multi-page quotation (see `MODULES/Quotation.md`). Put one-time content (totals, notes, signature blocks) as ordinary `<tbody>` rows at the end, never in a `<tfoot>` (which also repeats every page). Known limitations of this approach: the header can't vary its content by page number (e.g. "full header on page 1, condensed on page 2+") since `<thead>` content is static, and there is no reliable cross-browser way to render "Page X of Y" from CSS alone in a browser print/PDF context — both are accepted simplifications, not bugs to chase.
 
 A small `@media print { @page { size: A4 portrait; margin: 12mm } }` rule lives in `src/styles/index.css` for page size/margins (`size: A4 portrait` made explicit 2026-07-15, Codex review Medium fix on Scope of Work — previously only `margin` was set, leaving paper size to each browser's own default).

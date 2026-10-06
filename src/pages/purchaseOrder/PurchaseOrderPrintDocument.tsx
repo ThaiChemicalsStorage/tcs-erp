@@ -2,7 +2,7 @@ import type { PurchaseOrder } from "../../lib/purchaseOrder";
 import { fmt } from "../../lib/quotes";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
 import { printDate, printText, printNumber } from "../../lib/printFormat";
-import { PrintPageFrame } from "../../components/PrintPageFrame";
+import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 
 /**
  * ⚠️ **ใบพิมพ์ชั่วคราว — รอฟอร์มจริง**
@@ -12,8 +12,11 @@ import { PrintPageFrame } from "../../components/PrintPageFrame";
  * ที่ยังไม่เคยเห็น เพราะ DESIGN.md ระบุว่าฟอร์มกระดาษจริงคือผู้มีอำนาจตัดสินหน้าตาของใบพิมพ์
  * ไม่ใช่ระบบดีไซน์ของแอป การเดาแล้วให้ดู "เหมือนฟอร์ม" จะทำให้แยกไม่ออกว่าอันไหนยืนยันแล้ว
  *
+ * **จัดหน้าเองด้วย `PaginatedPrintForm` (2026-10-06)** — ทุกหน้ามีหัวเอกสาร (ชื่อใบ เลขที่ ข้อมูลผู้ขาย) + หัวตาราง + แถวว่างเติมจนเต็มหน้า
+ * · ยอดรวม/หมายเหตุ/ช่องลงนามอยู่หน้าสุดท้าย ถ้าไม่พอที่ยกไปหน้าใหม่ที่มีหัวและตารางว่างเต็มหน้า (เจ้าของสั่ง ดูไฟล์ component)
+ *
  * เมื่อได้ฟอร์มจริงมา: แทนที่ทั้งไฟล์นี้ ใช้ `PrintLetterhead` ถ้าฟอร์มมีหัวจดหมายบริษัท
- * และใส่รหัสฟอร์มที่ `<tfoot>` (เบราว์เซอร์พิมพ์ tfoot ซ้ำทุกหน้า — วิธีเดียวที่ทำ footer หลายหน้าได้)
+ * และใส่รหัสฟอร์มที่ `pageFooter` ของ `PaginatedPrintForm` (พิมพ์ท้ายกระดาษทุกหน้า)
  *
  * ภาษาไทยฮาร์ดโค้ดเสมอ ห้ามเรียก `useI18n` — เอกสารธุรกิจที่พิมพ์ออกไปต้องไม่เปลี่ยนภาษา
  * ตามการตั้งค่าของคนกดพิมพ์ (ดู docs/CLAUDE.md)
@@ -27,10 +30,8 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
   /** พื้นที่เหนือเส้นลงนาม — สูงคงที่ 28px เท่าของเดิม ให้ชื่อนั่งชิดเส้นเหมือนคนเซ็นชื่อบนเส้น */
   const signatureArea: React.CSSProperties = { height: 28, display: "flex", alignItems: "flex-end", justifyContent: "center", overflow: "hidden" };
 
-  return (
-    <div className="hidden print:block" style={{ fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif", fontSize: "11px", color: "#000" }}>
-      <PrintPageFrame>
-
+  const header = (
+    <>
       <div style={{ textAlign: "center", marginBottom: 12 }}>
         <div style={{ fontSize: "16px", fontWeight: 700 }}>ใบสั่งซื้อ</div>
         <div style={{ fontSize: "10px" }}>PURCHASE ORDER</div>
@@ -69,53 +70,80 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
           </tr>
         </tbody>
       </table>
+    </>
+  );
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ ...head, width: 28 }}>ที่</th>
-            <th style={{ ...head, width: 90 }}>รหัสสินค้า</th>
-            <th style={head}>รายละเอียด</th>
-            <th style={{ ...head, width: 55 }}>หน่วย</th>
-            <th style={{ ...head, width: 55 }}>จำนวน</th>
-            <th style={{ ...head, width: 75 }}>ราคา/หน่วย</th>
-            <th style={{ ...head, width: 60 }}>ส่วนลด</th>
-            <th style={{ ...head, width: 85 }}>จำนวนเงิน</th>
-          </tr>
-        </thead>
-        <tbody>
-          {/* บรรทัดที่ถูกยกเลิก (2026-09-21) — **ยังพิมพ์อยู่** แต่ขีดทับ เพราะผู้ขายถือใบเดิมและต้อง
-              เห็นว่าอะไรถูกถอน · ยอดของบรรทัดยังโชว์ให้เทียบได้ว่าที่หายไปคือเท่าไร แต่ไม่ถูกคิดใน
-              ยอดรวม (กรองอยู่ใน purchaseOrderSubtotal ที่เดียว) */}
-          {doc.lines.map((l, i) => (
-            <tr key={l.id} style={l.cancelled ? { color: "#666", textDecoration: "line-through" } : undefined}>
-              <td style={{ ...cell, textAlign: "center" }}>{i + 1}</td>
-              <td style={cell}>{printText(l.productCode)}</td>
-              <td style={cell}>
-                {l.description}
-                {l.subDetails.map((sd, j) => (
-                  <div key={j} style={{ paddingLeft: 12, fontSize: "10px" }}>{sd}</div>
-                ))}
-                {/* ⚠️ `textDecoration: "none"` ตรงนี้**ไม่ได้ผล** — ขีดฆ่าของ `<tr>` ถูกวาดทับลูกหลาน
-                    ทุกตัวและลบจากข้างในไม่ได้ (CSS Text Decoration §Painting) · ใช้ `inline-block`
-                    แทน เพราะสเปกบอกว่าเส้นขีดฆ่าไม่ลากผ่าน atomic inline · ถ้าไม่ทำ เหตุผลการยกเลิก
-                    ซึ่งเป็นข้อความที่ผู้ขายต้องอ่านจะถูกขีดฆ่าไปด้วย */}
-                {l.cancelled && (
-                  <div style={{ paddingLeft: 12, fontSize: "10px", display: "inline-block", textDecoration: "none" }}>
-                    ยกเลิก: {printText(l.cancelRemark)}
-                  </div>
-                )}
-              </td>
-              <td style={{ ...cell, textAlign: "center" }}>{printText(l.unit)}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{printNumber(l.qty)}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{l.unitPrice !== null ? fmt(l.unitPrice) : "-"}</td>
-              {/* ส่วนลดพิมพ์ตามที่กรอก (10% หรือ 500) ไม่ใช่ยอดที่คิดแล้ว — คนอ่านใบต้องเห็นเงื่อนไข */}
-              <td style={{ ...cell, textAlign: "right" }}>
-                {l.discount ? `${fmt(l.discount)}${l.discountMode === "amount" ? "" : "%"}` : "-"}
-              </td>
-              <td style={{ ...cell, textAlign: "right" }}>{fmt(purchaseOrderLineTotal(l))}</td>
-            </tr>
+  const tableHead = (
+    <thead>
+      <tr>
+        <th style={{ ...head, width: 28 }}>ที่</th>
+        <th style={{ ...head, width: 90 }}>รหัสสินค้า</th>
+        <th style={head}>รายละเอียด</th>
+        <th style={{ ...head, width: 55 }}>หน่วย</th>
+        <th style={{ ...head, width: 55 }}>จำนวน</th>
+        <th style={{ ...head, width: 75 }}>ราคา/หน่วย</th>
+        <th style={{ ...head, width: 60 }}>ส่วนลด</th>
+        <th style={{ ...head, width: 85 }}>จำนวนเงิน</th>
+      </tr>
+    </thead>
+  );
+
+  // บรรทัดที่ถูกยกเลิก (2026-09-21) — **ยังพิมพ์อยู่** แต่ขีดทับ เพราะผู้ขายถือใบเดิมและต้อง
+  // เห็นว่าอะไรถูกถอน · ยอดของบรรทัดยังโชว์ให้เทียบได้ว่าที่หายไปคือเท่าไร แต่ไม่ถูกคิดใน
+  // ยอดรวม (กรองอยู่ใน purchaseOrderSubtotal ที่เดียว)
+  const bodyRows = doc.lines.map((l, i) => ({
+    key: l.id,
+    node: (
+      <tr style={l.cancelled ? { color: "#666", textDecoration: "line-through" } : undefined}>
+        <td style={{ ...cell, textAlign: "center" }}>{i + 1}</td>
+        <td style={cell}>{printText(l.productCode)}</td>
+        <td style={cell}>
+          {l.description}
+          {l.subDetails.map((sd, j) => (
+            <div key={j} style={{ paddingLeft: 12, fontSize: "10px" }}>{sd}</div>
           ))}
+          {/* ⚠️ `textDecoration: "none"` ตรงนี้**ไม่ได้ผล** — ขีดฆ่าของ `<tr>` ถูกวาดทับลูกหลาน
+              ทุกตัวและลบจากข้างในไม่ได้ (CSS Text Decoration §Painting) · ใช้ `inline-block`
+              แทน เพราะสเปกบอกว่าเส้นขีดฆ่าไม่ลากผ่าน atomic inline · ถ้าไม่ทำ เหตุผลการยกเลิก
+              ซึ่งเป็นข้อความที่ผู้ขายต้องอ่านจะถูกขีดฆ่าไปด้วย */}
+          {l.cancelled && (
+            <div style={{ paddingLeft: 12, fontSize: "10px", display: "inline-block", textDecoration: "none" }}>
+              ยกเลิก: {printText(l.cancelRemark)}
+            </div>
+          )}
+        </td>
+        <td style={{ ...cell, textAlign: "center" }}>{printText(l.unit)}</td>
+        <td style={{ ...cell, textAlign: "right" }}>{printNumber(l.qty)}</td>
+        <td style={{ ...cell, textAlign: "right" }}>{l.unitPrice !== null ? fmt(l.unitPrice) : "-"}</td>
+        {/* ส่วนลดพิมพ์ตามที่กรอก (10% หรือ 500) ไม่ใช่ยอดที่คิดแล้ว — คนอ่านใบต้องเห็นเงื่อนไข */}
+        <td style={{ ...cell, textAlign: "right" }}>
+          {l.discount ? `${fmt(l.discount)}${l.discountMode === "amount" ? "" : "%"}` : "-"}
+        </td>
+        <td style={{ ...cell, textAlign: "right" }}>{fmt(purchaseOrderLineTotal(l))}</td>
+      </tr>
+    ),
+  }));
+
+  // แถวว่าง — ตัวจัดหน้าเติมให้เต็มทุกหน้า
+  const blankRow = (key: string) => (
+    <tr key={key}>
+      <td style={{ ...cell, height: "20px" }} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+      <td style={cell} />
+    </tr>
+  );
+
+  const footer = (
+    <>
+      {/* ยอดรวม — เดิมอยู่ใน tbody เดียวกับรายการ ย้ายมาเป็นตารางแยกต่อใต้ (marginTop -1px ให้เส้นทับเป็นเส้นเดียว)
+          · ช่องยอดกว้าง 85 เท่าคอลัมน์ "จำนวนเงิน" ของหัวตาราง ตัวเลขจึงตรงแนวกัน */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "-1px" }}>
+        <tbody>
           {doc.lines.some((l) => l.cancelled) && (
             <tr>
               <td style={{ ...cell, fontSize: "10px" }} colSpan={8}>รายการที่ขีดฆ่าถูกยกเลิก ไม่รวมในยอดสุทธิ</td>
@@ -123,7 +151,7 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
           )}
           <tr>
             <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>รวมเป็นเงิน</td>
-            <td style={{ ...cell, textAlign: "right" }}>{fmt(totals.subtotal)}</td>
+            <td style={{ ...cell, textAlign: "right", width: 85 }}>{fmt(totals.subtotal)}</td>
           </tr>
           {totals.discountAmt > 0 && (
             <tr>
@@ -149,8 +177,7 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
       {doc.remarks ? <div style={{ marginTop: 8 }}><b>หมายเหตุ:</b> {doc.remarks}</div> : null}
       {doc.revisionNote ? <div style={{ marginTop: 6 }}><b>หมายเหตุการแก้ไข:</b> {doc.revisionNote}</div> : null}
 
-      {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 28, breakInside: "avoid" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 28 }}>
         <tbody>
           <tr>
             {/* เจ้าของสั่ง 2026-09-18: ใบสั่งซื้อ "ไม่ต้องมีลายเซ็นให้ขึ้นชื่อที่กรอกในช่องไปเลยแล้วชื่อวงเล็บ
@@ -170,7 +197,17 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
           </tr>
         </tbody>
       </table>
-      </PrintPageFrame>
-    </div>
+    </>
+  );
+
+  return (
+    <PaginatedPrintForm
+      style={{ fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif", fontSize: "11px", color: "#000" }}
+      header={header}
+      tableHead={tableHead}
+      rows={bodyRows}
+      blankRow={blankRow}
+      footer={footer}
+    />
   );
 }

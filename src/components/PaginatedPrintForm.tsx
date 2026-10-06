@@ -77,13 +77,15 @@ export function PaginatedPrintForm({
     // ทุก `rows[i].node` เป็น `<tr>` หนึ่งแถว → แถวที่ i ของ tbody = บรรทัดที่ i · แถวสุดท้ายคือแถวว่างตัวอย่าง
     const trs = [...root.querySelectorAll<HTMLElement>("[data-pf-table] > tbody > tr")].map((el) => el.getBoundingClientRect().height);
     const rowHeights = trs.slice(0, rows.length);
-    const next = paginate({
-      available: (contentHeightMm - SAFETY_MM) * PX_PER_MM - h("[data-pf-header]") - h("[data-pf-table] > thead") - h("[data-pf-pagefooter]"),
-      rowHeights,
-      blankHeight: Math.max(1, trs[rows.length] ?? 0),
-      footerHeight: h("[data-pf-footer]"),
-    });
-    setLayout((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    const available = (contentHeightMm - SAFETY_MM) * PX_PER_MM - h("[data-pf-header]") - h("[data-pf-table] > thead") - h("[data-pf-pagefooter]");
+    const footerHeight = h("[data-pf-footer]");
+    // หน้าแต่ละหน้าสูงตายตัว + overflow hidden — ถ้าช่องเซ็น (หรือบรรทัดเดียว) สูงเกินหนึ่งหน้า การจัดหน้าเองจะตัดเนื้อหาทิ้ง
+    // จึงถอยไปให้เบราว์เซอร์หั่นเองแบบเดิม (ไม่สวยแต่ครบ) — เช่นใบสั่งงานที่ Out of Scope ยาวมาก
+    const fits = available > 0 && footerHeight <= available && rowHeights.every((rh) => rh <= available);
+    const next = fits
+      ? paginate({ available, rowHeights, blankHeight: Math.max(1, trs[rows.length] ?? 0), footerHeight })
+      : null;
+    setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   });
 
   const flow: CSSProperties = { display: "flow-root" };
