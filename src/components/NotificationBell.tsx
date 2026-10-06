@@ -136,21 +136,20 @@ export function NotificationBell({
                 <p className="text-center text-xs text-muted-foreground py-10">{t("empty.notifications.title")}</p>
               ) : (
                 mine.map((n) => (
+                  // แถวเป็น div ธรรมดา ส่วนที่กดเปิดเป็น <button> จริง และปุ่มลบเป็นพี่น้องกัน — เดิมทั้งแถวเป็น role="button"
+                  // ที่มีปุ่มลบซ้อนอยู่ข้างใน (ปุ่มซ้อนปุ่ม โปรแกรมอ่านหน้าจออ่านผิด, 2026-10-06 Tuhmo #27)
                   <div
                     key={n.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${n.title} — ${n.description}`}
-                    className={`group flex items-start gap-3 px-4 py-3 border-b border-border/60 last:border-0 cursor-pointer transition-colors ${
+                    className={`group flex items-start gap-1 pr-3 border-b border-border/60 last:border-0 transition-colors ${
                       n.read ? "hover:bg-secondary/40" : "bg-[#f4f7fc] hover:bg-[#e8f0fb]"
                     }`}
-                    onClick={() => openNotification(n)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      openNotification(n);
-                    }}
                   >
+                    <button
+                      type="button"
+                      onClick={() => openNotification(n)}
+                      aria-label={`${n.title} — ${n.description}`}
+                      className="flex-1 min-w-0 flex items-start gap-3 pl-4 py-3 text-left rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a5fb4]"
+                    >
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-secondary text-muted-foreground" : "bg-[#e8f0fb] text-[#1a5fb4]"}`}>
                       {TYPE_ICON[n.type]}
                     </div>
@@ -161,14 +160,16 @@ export function NotificationBell({
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] font-mono text-muted-foreground">{n.module}</span>
-                        <span className="text-[10px] text-muted-foreground">·</span>
-                        <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt, t)}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{n.module}</span>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <span className="text-xs text-muted-foreground">{timeAgo(n.createdAt, t)}</span>
                       </div>
                     </div>
+                    </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
-                      className="opacity-50 hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1"
+                      type="button"
+                      onClick={() => onDelete(n.id)}
+                      className="mt-3 opacity-50 hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1 rounded outline-none focus-visible:ring-2 focus-visible:ring-[#1a5fb4]"
                       aria-label={t("notif.deleteAria")}
                     >
                       <Trash2 size={13} />

@@ -16,6 +16,7 @@ import type { PendingApprovalItem } from "./lib/pendingApprovals";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { UserDirectoryProvider } from "./lib/userDirectory";
+import { UnitOptionsProvider } from "./lib/unitOptions";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
 import { resolveNav, navKeyFromHash } from "./lib/navResolution";
 import { NavigationGuardContext, useNavigationGuardHost } from "./hooks/useNavigationGuard";
@@ -1081,6 +1082,7 @@ export default function App() {
   return (
     <NavigationGuardContext.Provider value={navGuard.contextValue}>
     <UserDirectoryProvider users={users}>
+    <UnitOptionsProvider products={products}>
     <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground print:h-auto print:overflow-visible print:block">
       <UnsavedChangesDialog {...navGuard.dialog} />
       <a
@@ -1401,6 +1403,7 @@ export default function App() {
         </div>
       )}
     </div>
+    </UnitOptionsProvider>
     </UserDirectoryProvider>
     </NavigationGuardContext.Provider>
   );

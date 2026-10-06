@@ -53,6 +53,7 @@ import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { storeIssueCodeInfo } from "../../lib/storeCodes";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 /**
  * payload ที่ปุ่ม "บันทึกฉบับร่าง" ส่ง — เบิกครั้งที่ 1/2 และคืนของ**ไม่อยู่ในนี้** ตั้งแต่ 2026-09-03
@@ -1019,8 +1020,8 @@ export function MaterialRequisitionDocument({
                             </td>
                             {editable && isFreeTypedLine(line) ? (
                               <td className={`${table.td} py-1.5`}>
-                                <input value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })}
-                                  aria-label={t("materialRequisitionDoc.col.unit")} className={`${field.cell} w-20`} />
+                                <UnitCombobox value={line.unit} onChange={(next) => updateLine(line.id, { unit: next })}
+                                  ariaLabel={t("materialRequisitionDoc.col.unit")} className={`${field.cell} w-20`} />
                               </td>
                             ) : (
                               <td className={`${table.td} py-2.5 text-sm text-[#3d5173] whitespace-nowrap`}>{line.unit}</td>

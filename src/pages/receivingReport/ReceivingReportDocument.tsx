@@ -40,6 +40,7 @@ import { ReceivingReportStatusPill } from "./ReceivingReportList";
 import { DiscountInput, RailSummaryCard, SuffixInput, SummaryLine, Tag } from "./receivingUi";
 import { discountText } from "./receivingFormat";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 /**
  * payload เดียวที่ใช้ทั้งกดบันทึกเองและบันทึกอัตโนมัติ — รอบการรับไม่เคยอยู่ในนี้
@@ -798,7 +799,7 @@ export function ReceivingReportDocument({
                           <tr key={l.id} className="border-b border-[#eef1f6] last:border-b-0">
                             <td className="px-3 first:pl-6 py-2 w-36"><input className={`${field.cell} w-full font-mono`} disabled={!canEdit || fromCatalog} value={l.productCode} aria-label={t("receivingReportDoc.col.productCode")} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
                             <td className="px-3 py-2"><input className={`${field.cell} w-full`} disabled={!canEdit} value={l.description} aria-label={t("receivingReportDoc.col.description")} onChange={(e) => setLine(l.id, { description: e.target.value })} /></td>
-                            <td className="px-3 py-2 w-24"><input className={`${field.cell} w-full`} disabled={!canEdit || fromCatalog} value={l.unit} aria-label={t("receivingReportDoc.col.unit")} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
+                            <td className="px-3 py-2 w-24"><UnitCombobox className={`${field.cell} w-full`} disabled={!canEdit || fromCatalog} value={l.unit} ariaLabel={t("receivingReportDoc.col.unit")} onChange={(next) => setLine(l.id, { unit: next })} /></td>
                             <td className="px-3 py-2 w-24"><input type="number" min={received} className={`${field.cell} w-full text-right tabular-nums`} disabled={!canEdit} value={l.qtyOrdered} aria-label={t("receivingReportDoc.col.qty")} onChange={(e) => setLine(l.id, { qtyOrdered: Number(e.target.value) || 0 })} /></td>
                             <td className="px-3 py-2 w-28"><input type="number" min={0} className={`${field.cell} w-full text-right tabular-nums`} disabled={!canEdit} value={l.unitPriceOrdered} aria-label={t("receivingReportDoc.col.unitPrice")} onChange={(e) => setLine(l.id, { unitPriceOrdered: Number(e.target.value) || 0 })} /></td>
                             <td className="px-3 py-2 w-36">{discountCell(l)}</td>

@@ -24,6 +24,9 @@ pre-redesign look.
   **Print documents and exported files keep Thai** (`formatQuoteDateThai`, `printDate`, `formatArDocDate`) — never pass a
   `formatDisplay*` string into a `*PrintDocument` prop (QuoteDocument keeps a separate `preparerDateDisplay` for this reason).
   Never hard-code `toLocaleDateString("th-TH")` in a screen component.
+- **Unit fields (2026-10-06):** every "หน่วย" input is `UnitCombobox` (`src/components/UnitCombobox.tsx`) — suggestions from the
+  catalog's units via `UnitOptionsProvider` in App, free typing still allowed. Style it with `className` exactly like the `<input>` it replaces.
+- **Dialogs return focus:** `useDialogA11y` restores focus to whatever opened the dialog when it closes — new dialogs get this by using the hook.
 - **Screen kit (phase 2, 2026-09-30):** build list pages, document pages, side panels and pickers from `src/components/ui/`
   (`ListPage`, `DocumentLayout`, `Overlays`, `MoreMenu`, `Field`, `SectionCard`, `styles`) — see CHANGELOG 2026-09-30b for the pieces.
 

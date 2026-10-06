@@ -32,6 +32,7 @@ import {
 } from "../purchaseRequest/docShared";
 import { useApprovalFlow } from "../purchaseRequest/useApprovalFlow";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
@@ -565,10 +566,10 @@ export function ProductionOrderDocument({
                               placeholder={t("productionOrderDoc.line.qty")} aria-label={t("productionOrderDoc.line.qty")}
                               className={`${field.cell} min-w-0 text-right tabular-nums`}
                             />
-                            <input
+                            <UnitCombobox
                               value={l.unit}
-                              onChange={(e) => updateLine(l.id, { unit: e.target.value })}
-                              placeholder={t("productionOrderDoc.line.unit")} aria-label={t("productionOrderDoc.line.unit")}
+                              onChange={(next) => updateLine(l.id, { unit: next })}
+                              placeholder={t("productionOrderDoc.line.unit")} ariaLabel={t("productionOrderDoc.line.unit")}
                               className={`${field.cell} min-w-0`}
                             />
                           </>

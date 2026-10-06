@@ -6,6 +6,16 @@ const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:
 // Handles Escape-to-close and a Tab focus trap for a modal dialog
 export function useDialogA11y(onCancel: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // ปุ่ม/ช่องที่เปิดกล่องนี้ — จับไว้ตั้งแต่ render แรก ก่อน autoFocus ในกล่องจะย้ายโฟกัสไป แล้วคืนโฟกัสให้ตอนกล่องปิด
+  // ผู้ใช้คีย์บอร์ด/โปรแกรมอ่านหน้าจอจะได้กลับมาที่เดิม ไม่หลุดไปต้นหน้า (2026-10-06, Tuhmo #27)
+  const openerRef = useRef<HTMLElement | null>(typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null);
+
+  useEffect(() => {
+    const opener = openerRef.current;
+    return () => {
+      if (opener && opener !== document.body && opener.isConnected) opener.focus();
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

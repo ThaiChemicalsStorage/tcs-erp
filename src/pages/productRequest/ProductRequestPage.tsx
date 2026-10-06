@@ -19,6 +19,7 @@ import { Field, SelectBox } from "../../components/ui/Field";
 import { btn, field, table } from "../../components/ui/styles";
 import { FormDialog, Pill, type PillTone } from "../stock/inventoryUi";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 /**
  * หน้าคำขอเพิ่มสินค้า — เพิ่ม 2026-08-27 ตามคำขอของฝ่ายโครงการ
@@ -364,7 +365,7 @@ export function ProductRequestPage({
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-[160px_minmax(0,1fr)] gap-4">
               <Field label={t("productRequest.field.unit")} htmlFor="pr-unit">
-                <input id="pr-unit" value={draft.unit} onChange={(e) => setDraft({ ...draft, unit: e.target.value })} className={`${field.input} w-full`} />
+                <UnitCombobox id="pr-unit" value={draft.unit} onChange={(next) => setDraft({ ...draft, unit: next })} className={`${field.input} w-full`} />
               </Field>
               <Field label={t("productRequest.field.category")} htmlFor="pr-category">
                 <SelectBox id="pr-category" value={draft.categoryId} onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}>

@@ -17,6 +17,7 @@ import { useI18n } from "../../lib/i18n";
 import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { TemplateProductPicker } from "./TemplateProductPicker";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 function newId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -534,11 +535,11 @@ function ItemEditor({
           />
         </td>
         <td className={td}>
-          <input
+          <UnitCombobox
             value={item.unit}
-            onChange={(e) => onChange((it) => ({ ...it, unit: e.target.value }))}
+            onChange={(next) => onChange((it) => ({ ...it, unit: next }))}
             placeholder={t("templates.form.unit")}
-            aria-label={t("templates.form.unit")}
+            ariaLabel={t("templates.form.unit")}
             className={`${field.cell} w-full`}
           />
         </td>

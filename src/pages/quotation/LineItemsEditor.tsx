@@ -8,6 +8,7 @@ import { QuoteProductPicker } from "./QuoteProductPicker";
 import { SectionCard } from "../../components/ui/SectionCard";
 import { btn, field, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 // ช่องย่อยใต้รายการ (รายละเอียดย่อย แท็ก) — เตี้ยกว่าช่องในตารางหนึ่งขั้น
 const compactCell = field.cell.replace("h-9", "h-8").replace("text-sm", "text-[13px]");
@@ -426,7 +427,7 @@ export function LineItemsEditor({
                     </div>
                   </td>
                   <td className={`${table.td} py-2 align-top`}>
-                    <input className={`${field.cell} w-full min-w-0`} value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} aria-label={t("quotation.lineItems.col.unit")} />
+                    <UnitCombobox className={`${field.cell} w-full min-w-0`} value={line.unit} onChange={(next) => updateLine(line.id, "unit", next)} ariaLabel={t("quotation.lineItems.col.unit")} />
                   </td>
                   <td className={`${table.td} py-2 align-top`}>
                     <input type="number" className={num} value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} aria-label={t("quotation.lineItems.col.qty")} />

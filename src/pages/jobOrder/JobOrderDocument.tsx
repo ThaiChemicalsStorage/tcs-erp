@@ -34,6 +34,7 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 function toUpdateFields(j: JobOrder): JobOrderUpdateFields {
   return {
@@ -541,7 +542,7 @@ export function JobOrderDocument({
                               <input type="number" aria-label={t("jobOrderDoc.col.quantity")} value={line.quantity ?? ""}
                                 onChange={(e) => updateLine(line.id, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
                                 className={`${cellCls} text-right tabular-nums`} />
-                              <input aria-label={t("jobOrderDoc.col.unit")} value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })} className={cellCls} />
+                              <UnitCombobox ariaLabel={t("jobOrderDoc.col.unit")} value={line.unit} onChange={(next) => updateLine(line.id, { unit: next })} className={cellCls} />
                               <input aria-label={t("jobOrderDoc.col.remark")} value={line.remark} onChange={(e) => updateLine(line.id, { remark: e.target.value })} className={cellCls} />
                               <button type="button" onClick={() => removeLine(line.id)} title={t("jobOrderDoc.removeLine")} aria-label={t("jobOrderDoc.removeLine")} className={rowRemoveBtn}>
                                 <X size={16} />

@@ -4,6 +4,7 @@ import { type ScopeOfWorkItem, newScopeItemId, newScopeSpecLineId, blankScopeOfW
 import { FieldError } from "../../components/FieldError";
 import { btn, field, surface, table } from "../../components/ui/styles";
 import { useI18n } from "../../lib/i18n";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 const iconBtn = "w-8 h-9 rounded-lg flex items-center justify-center text-[#8a97ad] hover:bg-[#f4f6fa] hover:text-foreground transition-colors disabled:opacity-30 disabled:pointer-events-none";
 const iconBtnGold = iconBtn.replace("text-[#8a97ad]", "text-[#7d6420]");
@@ -181,7 +182,7 @@ export function ScopeOfWorkItemsEditor({
                       <input disabled={disabled} type="number" inputMode="decimal" aria-label={t("scopeOfWorkItems.col.qty")} className={`${field.cell} w-full text-right tabular-nums`} value={item.quantity ?? ""} onChange={(e) => updateItem(item.id, "quantity", e.target.value === "" ? null : parseFloat(e.target.value) || 0)} min={0} />
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <input disabled={disabled} aria-label={t("scopeOfWorkItems.col.unit")} className={`${field.cell} w-full`} value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)} />
+                      <UnitCombobox disabled={disabled} ariaLabel={t("scopeOfWorkItems.col.unit")} className={`${field.cell} w-full`} value={item.unit} onChange={(next) => updateItem(item.id, "unit", next)} />
                     </td>
                     <td className="pl-3 pr-5 py-2 align-top">
                       <div className="flex items-center justify-end gap-0.5">

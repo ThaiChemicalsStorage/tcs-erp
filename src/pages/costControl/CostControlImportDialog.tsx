@@ -11,6 +11,7 @@ import {
   classifySheet, mergeCostControlImports, parseCostControlSheet, stripImportedPrices,
   type CostControlImportResult, type SheetFills, type SheetKind,
 } from "../../lib/costControlImport";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 interface ReadableSheet {
   name: string;
@@ -340,9 +341,9 @@ export function CostControlImportDialog({ onCreated, onClose }: {
                                 onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, qty: e.target.value === "" ? null : Number(e.target.value) } : x))} />
                             </td>
                             <td className="px-[3px] py-1.5">
-                              <input className={cellCls} value={l.unit}
-                                aria-label={t("costControlDoc.line.unit")}
-                                onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, unit: e.target.value } : x))} />
+                              <UnitCombobox className={cellCls} value={l.unit}
+                                ariaLabel={t("costControlDoc.line.unit")}
+                                onChange={(next) => setLines(lines.map((x, i) => i === idx ? { ...x, unit: next } : x))} />
                             </td>
                             <td className="px-[3px] py-1.5">
                               <input type="number" className={`${cellCls} text-right tabular-nums`} value={l.unitCost ?? ""}

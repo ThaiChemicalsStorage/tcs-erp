@@ -58,6 +58,8 @@ function PendingRow({ item, canReject, vatSuffix, onDone }: { item: PendingAppro
       onDone(t("dashboard.approval.actionSuccess.rejected").replace("{id}", item.id));
     } catch {
       setError(t("dashboard.approval.actionError"));
+    } finally {
+      // แบบเดียวกับปุ่มอนุมัติ — ถ้าแถวยังอยู่หลังรีเฟรช (เช่นรีเฟรชล้มเหลว) ปุ่มต้องไม่ค้างเป็นกดไม่ได้
       setBusy(false);
     }
   };

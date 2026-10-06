@@ -10,6 +10,7 @@ import { btn, field } from "../../components/ui/styles";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Tag, UnitInput } from "../stock/inventoryUi";
 import { fmtProductDate } from "../stock/inventoryFormat";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 export interface ProductDraft {
   code: string;
@@ -219,8 +220,7 @@ export function ProductDrawer({
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] gap-4">
             <Field label={t("products.col.unit")} htmlFor="product-unit" error={errors.unit}>
-              <input id="product-unit" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t("products.form.unitPlaceholder")}
-                aria-invalid={!!errors.unit} className={`${inputCls("unit")} w-full`} />
+              <UnitCombobox id="product-unit" value={unit} onChange={(next) => setUnit(next)} placeholder={t("products.form.unitPlaceholder")} className={`${inputCls("unit")} w-full`} />
             </Field>
             <Field label={t("products.col.price")} htmlFor="product-defaultPrice" error={errors.defaultPrice}>
               <UnitInput id="product-defaultPrice" type="number" min={0} step="any" unit={t("stock.unit.baht")}

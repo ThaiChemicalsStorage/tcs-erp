@@ -33,6 +33,7 @@ import { CostControlPrintDocument } from "./CostControlPrintDocument";
 import { CostControlStatusPill } from "./costControlUi";
 import { useCostControlApproval } from "./costControlHooks";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 /** payload ที่ทั้งปุ่มบันทึกและ auto-save ส่ง — ต้องเป็นชุดเดียวกันเป๊ะ ไม่งั้นตัวจับการแก้ไขเพี้ยน */
 function toUpdateFields(d: CostControl): CostControlUpdateFields {
@@ -560,8 +561,8 @@ export function CostControlDocument({
                               </td>
                               <td className={td}>
                                 {editable ? (
-                                  <input className={cellCls} value={l.unit} aria-label={t("costControlDoc.line.unit")}
-                                    onChange={(e) => setLine(l.id, { unit: e.target.value })} />
+                                  <UnitCombobox className={cellCls} value={l.unit} ariaLabel={t("costControlDoc.line.unit")}
+                                    onChange={(next) => setLine(l.id, { unit: next })} />
                                 ) : <span className="text-sm">{l.unit}</span>}
                               </td>
                               <td className={`${td} text-right`}>

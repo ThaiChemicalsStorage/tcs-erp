@@ -54,6 +54,7 @@ import {
 import { useApprovalFlow } from "./useApprovalFlow";
 import { purchaseRequestProgress, type PurchaseRequestStepKey } from "./purchaseRequestSteps";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
@@ -1133,7 +1134,7 @@ export function PurchaseRequestDocument({
                           </td>
                           <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-sm text-[#3d5173]`}>
                             {isCatalogLine || !rowEditable ? line.unit : (
-                              <input value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })} aria-label={t("purchaseRequestDoc.col.unit")} className={`${field.cell} w-20`} />
+                              <UnitCombobox value={line.unit} onChange={(next) => updateLine(line.id, { unit: next })} ariaLabel={t("purchaseRequestDoc.col.unit")} className={`${field.cell} w-20`} />
                             )}
                           </td>
                           <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-right tabular-nums text-sm text-[#3d5173]`}>

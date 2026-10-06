@@ -42,6 +42,7 @@ import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { DialogSummary, PurchaseOrderStatusPill, ReasonDialog } from "./purchasingUi";
 import { useApprovalCommands } from "./purchasingHooks";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { UnitCombobox } from "../../components/UnitCombobox";
 
 /** payload เดียวที่ใช้ทั้งกดบันทึกเอง บันทึกอัตโนมัติ ตรวจงานค้าง และเก็บร่างในเครื่อง */
 function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
@@ -756,7 +757,7 @@ export function PurchaseOrderDocument({
                     </div>
                   </td>
                   <td className="px-1.5 py-2">
-                    <input className={`${field.cell} w-full min-w-0 ${dim}`} aria-label={t("purchaseOrderDoc.col.unit")} value={l.unit} onChange={(e) => setLine(l.id, { unit: e.target.value })} />
+                    <UnitCombobox className={`${field.cell} w-full min-w-0 ${dim}`} ariaLabel={t("purchaseOrderDoc.col.unit")} value={l.unit} onChange={(next) => setLine(l.id, { unit: next })} />
                   </td>
                   {/* รหัสแผนก/บัญชีที่ดึงมาจากใบขอซื้อ — ก่อนหน้านี้คัดลอกมาแล้วแต่ไม่มีที่ให้เห็นหรือแก้
                       จัดซื้อมักต้องแก้รหัสบัญชีที่ผู้ขอกรอกมาผิดหมวด จึงต้องแก้ได้บนใบสั่งซื้อด้วย */}
