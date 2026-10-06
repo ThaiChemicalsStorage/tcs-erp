@@ -38,11 +38,13 @@ export interface PrintFormRow {
 
 
 export function PaginatedPrintForm({
-  header, tableHead, rows, blankRow, footer, pageFooter,
+  header, firstPageHeader, tableHead, rows, blankRow, footer, pageFooter,
   tableStyle, style, className, breakAfterLast = false, marginMm = 12, pageHeightMm = 297, pageWidthMm = 210,
 }: {
   /** ซ้ำทุกหน้า — ชื่อใบ เลขที่ หัวข้อมูลลูกค้า ฯลฯ */
   header: ReactNode;
+  /** ต่อจาก `header` เฉพาะหน้าแรก — เช่นเช็คลิสต์ของ Scope of Work (เจ้าของ 2026-10-06: "มีไว้แค่ใบแรกก็พอ หน้าอื่นไม่ต้อง") */
+  firstPageHeader?: ReactNode;
   /** `<thead>` ของตารางรายการ — ซ้ำทุกหน้า */
   tableHead: ReactNode;
   rows: PrintFormRow[];
@@ -95,11 +97,12 @@ export function PaginatedPrintForm({
     const blankHeight = trs[cursor] ?? 0;
     const available = (contentHeightMm - SAFETY_MM) * PX_PER_MM - h("[data-pf-header]") - h("[data-pf-table] > thead") - h("[data-pf-pagefooter]");
     const footerHeight = h("[data-pf-footer]");
+    const firstAvailable = available - h("[data-pf-first]");
     // หน้าแต่ละหน้าสูงตายตัว + overflow hidden — ถ้าช่องเซ็น (หรือบรรทัดเดียว) สูงเกินหนึ่งหน้า การจัดหน้าเองจะตัดเนื้อหาทิ้ง
     // จึงถอยไปให้เบราว์เซอร์หั่นเองแบบเดิม (ไม่สวยแต่ครบ) — เช่นใบสั่งงานที่ Out of Scope ยาวมาก
-    const fits = available > 0 && footerHeight <= available && rowHeights.every((rh) => rh <= available);
+    const fits = firstAvailable > 0 && footerHeight <= available && rowHeights.every((rh) => rh <= available);
     const next = fits
-      ? paginate({ available, rowHeights, blankHeight: Math.max(1, blankHeight), footerHeight })
+      ? paginate({ available, firstAvailable, rowHeights, blankHeight: Math.max(1, blankHeight), footerHeight })
       : null;
     setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   });
@@ -118,6 +121,7 @@ export function PaginatedPrintForm({
       <div ref={measureRef} aria-hidden="true" className={`print:hidden ${className ?? ""}`}
         style={{ ...style, position: "fixed", left: "-100000px", top: 0, visibility: "hidden", width: `${contentWidthMm}mm` }}>
         <div data-pf-header="" style={flow}>{header}</div>
+        <div data-pf-first="" style={flow}>{firstPageHeader}</div>
         <table data-pf-table="" style={{ width: "100%", borderCollapse: "collapse", ...tableStyle }}>
           {tableHead}
           <tbody>
@@ -138,6 +142,7 @@ export function PaginatedPrintForm({
             breakAfter: page.last && !breakAfterLast ? "auto" : "page", pageBreakAfter: page.last && !breakAfterLast ? "auto" : "always",
           }}>
             <div style={flow}>{header}</div>
+            {idx === 0 && firstPageHeader && <div style={flow}>{firstPageHeader}</div>}
             {table(<>
               {page.rows.map((i) => rows[i] && <Fragment key={rows[i].key}>{rows[i].node}</Fragment>)}
               {Array.from({ length: page.blanks }, (_, b) => <Fragment key={`blank-${idx}-${b}`}>{blankRow(`blank-${idx}-${b}`)}</Fragment>)}
@@ -148,6 +153,7 @@ export function PaginatedPrintForm({
         )) : (
           <div style={{ padding: `${marginMm}mm`, ...(breakAfterLast ? { breakAfter: "page" as const } : {}) }}>
             <div style={flow}>{header}</div>
+            {firstPageHeader && <div style={flow}>{firstPageHeader}</div>}
             {table(rows.map((r) => <Fragment key={r.key}>{r.node}</Fragment>))}
             <div style={{ ...flow, breakInside: "avoid" }}>{footer}</div>
             <div style={flow}>{pageFooter}</div>

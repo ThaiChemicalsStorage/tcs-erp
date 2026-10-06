@@ -1173,7 +1173,8 @@ export function QuoteDocument({
           <div className="print:hidden overflow-x-auto">
             {/* ใบพิมพ์ตัวจริง (PrintDocument) ซ่อนตัวเองบนจอด้วย `hidden print:block` — ตรงนี้บังคับให้โชว์ภายในกรอบกระดาษ
                 เพื่อดูก่อนพิมพ์เท่านั้น ใบที่พิมพ์ออกจริงคือตัวล่างสุดของหน้าเสมอ */}
-            <div className="mx-auto w-[210mm] bg-white border border-border rounded-xl py-[12mm] [&>div]:block">
+            {/* ไม่มี py-[12mm] แล้ว — ใบพิมพ์จัดหน้าเองเป็นหน้า A4 ที่มีขอบ 12mm ในตัว (PaginatedPrintForm, 2026-10-06) */}
+            <div className="mx-auto w-[210mm] bg-white border border-border rounded-xl overflow-hidden [&>div]:block">
               <PrintDocument {...printProps} />
             </div>
           </div>

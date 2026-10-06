@@ -30,7 +30,7 @@ function Checkbox({ checked }: { checked: boolean }) {
 
 // สร้างเอกสาร Scope of Work สำหรับพิมพ์/PDF ตามรูปแบบเอกสารต้นฉบับ ไม่แสดงราคา
 // Renders the printable Scope of Work document matching the reference layout, without pricing.
-// จัดหน้าเองด้วย PaginatedPrintForm (2026-10-06 เจ้าของ: "ทำกับทุกเอกสาร … scope of work ยังบัคอยู่") — ทุกหน้ามีหัวจดหมาย + ข้อมูลงาน + เช็คลิสต์
+// จัดหน้าเองด้วย PaginatedPrintForm (2026-10-06 เจ้าของ: "ทำกับทุกเอกสาร … scope of work ยังบัคอยู่") — ทุกหน้ามีหัวจดหมาย + ข้อมูลงาน (เช็คลิสต์เฉพาะหน้าแรก)
 // + หัวตาราง และขอบกระดาษครบทั้งบน/ล่าง (เดิมใช้ thead ซ้ำ หน้ากลางเอกสารไม่มีขอบล่าง เนื้อหาชนขอบกระดาษ) · หมายเหตุ+ลายเซ็นอยู่หน้าสุดท้ายด้วยกัน
 export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUser, approverUser }: {
   scopeOfWork: ScopeOfWork;
@@ -98,35 +98,39 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-x-3 gap-y-2 border-t border-b border-[#0b1d3a]/30 py-2 mb-2">
-        {s.checklistGroups.map((group) => (
-          <div key={group.key}>
-            <p className="font-bold text-[9.5px] mb-0.5 underline">{group.title}</p>
-            {group.options.map((opt) => (
-              <div key={opt.key} className="flex items-center gap-1 text-[9.5px] leading-[1.5]">
-                <Checkbox checked={opt.checked} /> <span>{opt.label}</span>
-              </div>
-            ))}
-            {group.note !== undefined && group.note.trim() && (
-              <p className="text-[9px] italic text-[#5a7299]">({group.note})</p>
-            )}
-          </div>
-        ))}
-        <div>
-          <p className="font-bold text-[9.5px] mb-0.5 underline">การเก็บเงิน</p>
-          {s.paymentConditions.installments.map((installment) => {
-            const method = formatPaymentMethod(installment);
-            return (
-              <p key={installment.id} className="text-[9.5px] leading-[1.5]">
-                {installment.pct !== null ? `${installment.pct}% ` : ""}{installment.label || "-"}{method ? ` (${method})` : ""}
-              </p>
-            );
-          })}
-          {s.paymentConditions.description.trim() && <p className="text-[9.5px] leading-[1.5] whitespace-pre-line">{s.paymentConditions.description}</p>}
-          {s.paymentConditions.notes.trim() && <p className="text-[9px] italic text-[#5a7299] whitespace-pre-line">{s.paymentConditions.notes}</p>}
-        </div>
-      </div>
     </>
+  );
+
+  // เช็คลิสต์ + การเก็บเงิน พิมพ์เฉพาะหน้าแรก (เจ้าของ 2026-10-06: "check list มีไว้แค่ใบแรกก็พอ หน้าอื่นไม่ต้อง")
+  const checklist = (
+    <div className="grid grid-cols-4 gap-x-3 gap-y-2 border-t border-b border-[#0b1d3a]/30 py-2 mb-2">
+      {s.checklistGroups.map((group) => (
+        <div key={group.key}>
+          <p className="font-bold text-[9.5px] mb-0.5 underline">{group.title}</p>
+          {group.options.map((opt) => (
+            <div key={opt.key} className="flex items-center gap-1 text-[9.5px] leading-[1.5]">
+              <Checkbox checked={opt.checked} /> <span>{opt.label}</span>
+            </div>
+          ))}
+          {group.note !== undefined && group.note.trim() && (
+            <p className="text-[9px] italic text-[#5a7299]">({group.note})</p>
+          )}
+        </div>
+      ))}
+      <div>
+        <p className="font-bold text-[9.5px] mb-0.5 underline">การเก็บเงิน</p>
+        {s.paymentConditions.installments.map((installment) => {
+          const method = formatPaymentMethod(installment);
+          return (
+            <p key={installment.id} className="text-[9.5px] leading-[1.5]">
+              {installment.pct !== null ? `${installment.pct}% ` : ""}{installment.label || "-"}{method ? ` (${method})` : ""}
+            </p>
+          );
+        })}
+        {s.paymentConditions.description.trim() && <p className="text-[9.5px] leading-[1.5] whitespace-pre-line">{s.paymentConditions.description}</p>}
+        {s.paymentConditions.notes.trim() && <p className="text-[9px] italic text-[#5a7299] whitespace-pre-line">{s.paymentConditions.notes}</p>}
+      </div>
+    </div>
   );
 
   // ความกว้างคอลัมน์อยู่ที่ <th> (เดิมอยู่ใน <colgroup> — ตัวจัดหน้ารับเฉพาะ <thead>) ค่าเท่าเดิม 6/68/13/13%
@@ -218,6 +222,7 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
       className="text-[#0b1d3a]"
       style={{ fontSize: "10.5px" }}
       header={header}
+      firstPageHeader={checklist}
       tableHead={tableHead}
       rows={bodyRows}
       // ตารางไม่มีเส้น — แถวว่างจึงเป็นแค่ที่ว่าง ทำให้ช่องลายเซ็นไปอยู่ก้นหน้าสุดท้าย

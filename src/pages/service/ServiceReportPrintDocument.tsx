@@ -5,15 +5,15 @@ import { formatQuoteDateThai as fmtThaiDate } from "../../lib/quotes";
 import { printText } from "../../lib/printFormat";
 import { BrandMark } from "../../components/BrandMark";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
+import { PaginatedPrintForm, type PrintFormRow } from "../../components/PaginatedPrintForm";
 
 /**
  * Printable Service Report (added 2026-08-06, pulled forward from the Phase 3 roadmap per direct
- * user request). Same technique as ScopeOfWorkPrintDocument.tsx/DeliveryOrderPrintDocument.tsx:
- * a `hidden print:table` full-width table with `@media print { @page { margin: 0 } }` to suppress
- * the browser's own date/URL/title header-footer, compensating with padding instead (repeats every
- * page via `<thead>`/table padding). No PDF library exists in this app — this is browser-native
- * print CSS, per DESIGN.md's "formal print documents use the reference-form look, not the
- * navy/gold app chrome" rule.
+ * user request). No PDF library exists in this app — this is browser-native print CSS, per
+ * DESIGN.md's "formal print documents use the reference-form look, not the navy/gold app chrome" rule.
+ *
+ * จัดหน้าเองด้วย `PaginatedPrintForm` (2026-10-06) — ทุกหน้ามีหัวจดหมาย + ชื่อใบ + ข้อมูลลูกค้า/สถานที่ + สรุปภาพรวม + หัวตาราง
+ * และขอบกระดาษครบทั้งบน/ล่าง · หมวดเช็คลิสต์หนึ่งหมวดไม่ถูกแยกคนละหน้า · หมายเหตุ + ช่องเซ็นอยู่หน้าสุดท้ายด้วยกัน
  *
  * Canonical per-item detail layout ("SERVICE ITEM n" blue-bar block) follows the real Oil Mist
  * Filter report reference (`public/Report Oil Mist Filter M - ...pdf`); the report-info field set
@@ -45,10 +45,13 @@ function PrintCheckboxCell({ active, variant }: { active: boolean; variant: "nor
   );
 }
 
+/** จำนวนรูปต่อแถวของกริดรูป — ใช้ทั้งเลือก class และแบ่งรูปเป็นแถว ๆ ให้ตัวจัดหน้า */
+function photoGridColumns(count: number): 1 | 2 {
+  return count <= 1 ? 1 : 2;
+}
+
 function photoGridClass(count: number): string {
-  if (count <= 1) return "grid-cols-1";
-  if (count === 2) return "grid-cols-2";
-  return "grid-cols-2";
+  return photoGridColumns(count) === 1 ? "grid-cols-1" : "grid-cols-2";
 }
 
 export function ServiceReportPrintDocument({ serviceReport, companyHeader, engineerUser }: {
@@ -97,148 +100,167 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
     }
   }
   const hasAbnormal = detailItems.some((it) => it.isAbnormal);
-  let serviceItemNumber = 0;
 
-  return (
+  const header = (
     <>
-      <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
-      {/* ระยะขอบกระดาษอยู่ที่ <div> ตัวนี้ ไม่ใช่ที่ <table> — ดู PrintDocument.tsx สำหรับเหตุผลเต็ม */}
-      <div className="hidden print:block" style={{ padding: "0 12mm" }}>
-      <table className="w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "10.5px" }}>
-        <colgroup>
-          <col style={{ width: "50%" }} />
-          <col style={{ width: "50%" }} />
-        </colgroup>
-        <thead>
-          <tr>
-            <td colSpan={2} className="pt-[12mm] px-0 pb-0">
-              <div className="flex items-start gap-3 mb-2">
-                {companyHeader.logoDataUrl ? (
-                  <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="w-11 h-11 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
-                ) : (
-                  <BrandMark size={44} variant="mark" theme="dark" className="flex-shrink-0" />
-                )}
-                <div>
-                  <p className="font-bold text-[12px]">{companyHeader.name}</p>
-                  {companyHeader.address.trim() && <p className="text-[9.5px] text-[#5a7299] leading-snug">{companyHeader.address}</p>}
-                  {(companyHeader.phone.trim() || companyHeader.email.trim()) && (
-                    <p className="text-[9.5px] text-[#5a7299]">
-                      {companyHeader.phone.trim() && <>โทรศัพท์ : {companyHeader.phone}</>}
-                      {companyHeader.phone.trim() && companyHeader.email.trim() && "  "}
-                      {companyHeader.email.trim() && <>E-mail : {companyHeader.email}</>}
-                    </p>
-                  )}
-                  {(companyHeader.facebookName.trim() || companyHeader.lineId.trim() || companyHeader.website.trim()) && (
-                    <div className="flex items-center gap-1.5 text-[9.5px] text-[#5a7299] mt-0.5">
-                      {companyHeader.facebookName.trim() && <span className="flex items-center gap-1"><FacebookIcon size={10} /> {companyHeader.facebookName}</span>}
-                      {companyHeader.lineId.trim() && <span className="flex items-center gap-1"><LineAppIcon size={10} /> {companyHeader.lineId}</span>}
-                      {companyHeader.website.trim() && <span>{companyHeader.website}</span>}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <p className="text-center font-bold text-[15px] tracking-widest pb-2 mb-2 border-b-2 border-[#0b1d3a]" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
-                SERVICE REPORT / รายงานสรุปงานบริการ
-              </p>
-
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
-                <div className="space-y-1">
-                  <Field label="Report No." value={r.id} mono />
-                  <Field label="ลูกค้า / โรงงาน" value={r.customerSnapshot.companyName} />
-                  <Field label="สถานที่" value={r.serviceLocation} />
-                  <Field label="ระบบที่ Service" value={r.serviceSystemName} />
-                  <Field label="ผู้เข้าตรวจสอบ" value={[engineerUser?.fullName, ...r.additionalInspectorNames].filter(Boolean).join(", ")} />
-                </div>
-                <div className="space-y-1">
-                  <Field label="วันที่เข้า Service" value={fmtThaiDate(r.inspectionDate)} />
-                  <Field label="วันที่ออกรายงาน" value={fmtThaiDate(r.reportDate)} />
-                  <Field label="ผู้ติดต่อหน้างาน" value={[r.onSiteContactName, r.onSiteContactPhone].filter(Boolean).join(" · ")} />
-                  <Field label="อ้างอิงโปรเจกต์" value={r.projectOrJobCode} mono />
-                  <Field label="รอบ PM ถัดไป" value={r.nextPmDate ? fmtThaiDate(r.nextPmDate) : ""} />
-                </div>
-              </div>
-            </td>
-          </tr>
-          {r.overallCustomerSummary.trim() && (
-            <tr>
-              <td colSpan={2} className="pb-2">
-                <div className="bg-[#1a3a6b] text-white px-2 py-1 text-[10.5px] font-semibold mb-1">สรุปภาพรวมสำหรับลูกค้า</div>
-                <p className="text-[10px] whitespace-pre-line leading-relaxed px-0.5">{r.overallCustomerSummary}</p>
-              </td>
-            </tr>
+      <div className="flex items-start gap-3 mb-2">
+        {companyHeader.logoDataUrl ? (
+          <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="w-11 h-11 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
+        ) : (
+          <BrandMark size={44} variant="mark" theme="dark" className="flex-shrink-0" />
+        )}
+        <div>
+          <p className="font-bold text-[12px]">{companyHeader.name}</p>
+          {companyHeader.address.trim() && <p className="text-[9.5px] text-[#5a7299] leading-snug">{companyHeader.address}</p>}
+          {(companyHeader.phone.trim() || companyHeader.email.trim()) && (
+            <p className="text-[9.5px] text-[#5a7299]">
+              {companyHeader.phone.trim() && <>โทรศัพท์ : {companyHeader.phone}</>}
+              {companyHeader.phone.trim() && companyHeader.email.trim() && "  "}
+              {companyHeader.email.trim() && <>E-mail : {companyHeader.email}</>}
+            </p>
           )}
-          <tr className="bg-[#1a5fb4] text-white">
-            <th colSpan={2} className="px-2 py-1.5 text-[10px] font-semibold text-left">รายการตรวจเช็ค / Inspection Checklist</th>
-          </tr>
-        </thead>
-        {r.templateSnapshot.sections.map((section) => {
-            const sectionValue = r.checklist.find((s) => s.key === section.key);
-            if (section.isOptionalAddon && !(sectionValue?.included ?? false)) return null;
+          {(companyHeader.facebookName.trim() || companyHeader.lineId.trim() || companyHeader.website.trim()) && (
+            <div className="flex items-center gap-1.5 text-[9.5px] text-[#5a7299] mt-0.5">
+              {companyHeader.facebookName.trim() && <span className="flex items-center gap-1"><FacebookIcon size={10} /> {companyHeader.facebookName}</span>}
+              {companyHeader.lineId.trim() && <span className="flex items-center gap-1"><LineAppIcon size={10} /> {companyHeader.lineId}</span>}
+              {companyHeader.website.trim() && <span>{companyHeader.website}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="text-center font-bold text-[15px] tracking-widest pb-2 mb-2 border-b-2 border-[#0b1d3a]" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+        SERVICE REPORT / รายงานสรุปงานบริการ
+      </p>
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
+        <div className="space-y-1">
+          <Field label="Report No." value={r.id} mono />
+          <Field label="ลูกค้า / โรงงาน" value={r.customerSnapshot.companyName} />
+          <Field label="สถานที่" value={r.serviceLocation} />
+          <Field label="ระบบที่ Service" value={r.serviceSystemName} />
+          <Field label="ผู้เข้าตรวจสอบ" value={[engineerUser?.fullName, ...r.additionalInspectorNames].filter(Boolean).join(", ")} />
+        </div>
+        <div className="space-y-1">
+          <Field label="วันที่เข้า Service" value={fmtThaiDate(r.inspectionDate)} />
+          <Field label="วันที่ออกรายงาน" value={fmtThaiDate(r.reportDate)} />
+          <Field label="ผู้ติดต่อหน้างาน" value={[r.onSiteContactName, r.onSiteContactPhone].filter(Boolean).join(" · ")} />
+          <Field label="อ้างอิงโปรเจกต์" value={r.projectOrJobCode} mono />
+          <Field label="รอบ PM ถัดไป" value={r.nextPmDate ? fmtThaiDate(r.nextPmDate) : ""} />
+        </div>
+      </div>
+      {r.overallCustomerSummary.trim() && (
+        <div className="pb-2">
+          <div className="bg-[#1a3a6b] text-white px-2 py-1 text-[10.5px] font-semibold mb-1">สรุปภาพรวมสำหรับลูกค้า</div>
+          <p className="text-[10px] whitespace-pre-line leading-relaxed px-0.5">{r.overallCustomerSummary}</p>
+        </div>
+      )}
+    </>
+  );
+
+  const tableHead = (
+    <thead>
+      <tr className="bg-[#1a5fb4] text-white">
+        <th colSpan={2} className="px-2 py-1.5 text-[10px] font-semibold text-left">รายการตรวจเช็ค / Inspection Checklist</th>
+      </tr>
+    </thead>
+  );
+
+  // หนึ่งหมวด = แถวชื่อหมวด + หนึ่งแถวต่อกลุ่ม — ส่ง span ให้ตัวจัดหน้าวางเป็นก้อนเดียว ไม่แยกคนละหน้า
+  const checklistRows: PrintFormRow[] = r.templateSnapshot.sections.flatMap((section): PrintFormRow[] => {
+    const sectionValue = r.checklist.find((s) => s.key === section.key);
+    if (section.isOptionalAddon && !(sectionValue?.included ?? false)) return [];
+    return [{
+      key: `section-${section.key}`,
+      span: 1 + section.groups.length,
+      node: (
+        <>
+          <tr><td colSpan={2} className="px-2 pt-2 pb-0.5 font-bold text-[10.5px] border-b border-[#0b1d3a]/20">{section.title}</td></tr>
+          {section.groups.map((group) => {
+            const groupValue = sectionValue?.groups.find((g) => g.key === group.key);
             return (
-              <tbody key={section.key} style={{ breakInside: "avoid" }}>
-                <tr><td colSpan={2} className="px-2 pt-2 pb-0.5 font-bold text-[10.5px] border-b border-[#0b1d3a]/20">{section.title}</td></tr>
-                {section.groups.map((group) => {
-                  const groupValue = sectionValue?.groups.find((g) => g.key === group.key);
-                  return (
-                    <tr key={group.key}>
-                      <td colSpan={2} className="px-2 pb-1.5">
-                        <table className="w-full border-collapse mt-1">
-                          <colgroup>
-                            <col />
-                            <col style={{ width: "9mm" }} />
-                            <col style={{ width: "9mm" }} />
-                          </colgroup>
-                          <thead>
-                            <tr className="border-b border-[#0b1d3a]/30">
-                              <th className="text-left py-0.5 pr-2 text-[9.5px] font-semibold text-[#5a7299]">{group.title}</th>
-                              <th className="text-center py-0.5 text-[8px] font-semibold text-[#5a7299]">ปกติ</th>
-                              <th className="text-center py-0.5 text-[8px] font-semibold text-[#5a7299]">ผิดปกติ</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {group.items.map((item) => {
-                              const itemValue = groupValue?.items.find((it) => it.key === item.key);
-                              return (
-                                <tr key={item.key} className="border-b border-[#0b1d3a]/10">
-                                  <td className="py-1 pr-2 text-[9.5px] leading-[1.4]">
-                                    {/* Same display-only dash as the on-screen checklist
-                                        (ServiceChecklistItemControl.tsx) — never stored in the
-                                        label. Uses this document's own literal ink color and a
-                                        tighter margin rather than the app's design tokens, per the
-                                        print-document convention. */}
-                                    <span className="text-[#5a7299] mr-1" aria-hidden="true">-</span>
-                                    {item.label}
-                                    {item.kind === "measurement" && item.unit && <span className="text-[#5a7299]"> ({item.unit})</span>}
-                                  </td>
-                                  {item.kind === "measurement" ? (
-                                    <td colSpan={2} className="py-1 text-[9.5px] font-mono text-center text-[#5a7299]">{itemValue?.measurementValue || "-"}</td>
-                                  ) : (
-                                    <>
-                                      <td className="py-1 text-center"><PrintCheckboxCell active={itemValue?.status === "normal"} variant="normal" /></td>
-                                      <td className="py-1 text-center"><PrintCheckboxCell active={itemValue?.status === "abnormal"} variant="abnormal" /></td>
-                                    </>
-                                  )}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+              <tr key={group.key}>
+                <td colSpan={2} className="px-2 pb-1.5">
+                  <table className="w-full border-collapse mt-1">
+                    <colgroup>
+                      <col />
+                      <col style={{ width: "9mm" }} />
+                      <col style={{ width: "9mm" }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b border-[#0b1d3a]/30">
+                        <th className="text-left py-0.5 pr-2 text-[9.5px] font-semibold text-[#5a7299]">{group.title}</th>
+                        <th className="text-center py-0.5 text-[8px] font-semibold text-[#5a7299]">ปกติ</th>
+                        <th className="text-center py-0.5 text-[8px] font-semibold text-[#5a7299]">ผิดปกติ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.items.map((item) => {
+                        const itemValue = groupValue?.items.find((it) => it.key === item.key);
+                        return (
+                          <tr key={item.key} className="border-b border-[#0b1d3a]/10">
+                            <td className="py-1 pr-2 text-[9.5px] leading-[1.4]">
+                              {/* Same display-only dash as the on-screen checklist
+                                  (ServiceChecklistItemControl.tsx) — never stored in the
+                                  label. Uses this document's own literal ink color and a
+                                  tighter margin rather than the app's design tokens, per the
+                                  print-document convention. */}
+                              <span className="text-[#5a7299] mr-1" aria-hidden="true">-</span>
+                              {item.label}
+                              {item.kind === "measurement" && item.unit && <span className="text-[#5a7299]"> ({item.unit})</span>}
+                            </td>
+                            {item.kind === "measurement" ? (
+                              <td colSpan={2} className="py-1 text-[9.5px] font-mono text-center text-[#5a7299]">{itemValue?.measurementValue || "-"}</td>
+                            ) : (
+                              <>
+                                <td className="py-1 text-center"><PrintCheckboxCell active={itemValue?.status === "normal"} variant="normal" /></td>
+                                <td className="py-1 text-center"><PrintCheckboxCell active={itemValue?.status === "abnormal"} variant="abnormal" /></td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
             );
           })}
+        </>
+      ),
+    }];
+  });
 
-        <tbody>
-          {detailItems.map((it) => {
-            serviceItemNumber += 1;
-            return (
-              <tr key={`${it.sectionTitle}-${it.groupTitle}-${it.label}-${serviceItemNumber}`} style={{ breakInside: "avoid" }}>
-                <td colSpan={2} className="pb-3">
-                  {/* Heading lives inside the first item's cell (not its own row) so breakInside:avoid
-                      can never strand it alone at the bottom of a page while the item jumps to the next. */}
+  // รายการรายละเอียด: แต่ละ SERVICE ITEM แตกเป็นหนึ่งแถว <tr> ต่อแถวรูป (รูปสูง 42mm) ให้ตัวจัดหน้าขึ้นหน้าใหม่ระหว่างแถวรูปได้
+  // แถวแรกมีแถบหัว + หมวด/รายละเอียด + รูปแถวแรกเสมอ หัวจึงไม่ค้างท้ายหน้าเดี่ยว ๆ · กรอบต่อกันด้วยขอบซ้าย/ขวา ปิดขอบล่างที่แถวสุดท้าย
+  // ระยะห่างเท่าเดิม: pt-1.5 ของแถวรูปถัดไป = gap-1.5 ของกริดเดิม, pb-2 ของแถวสุดท้าย = py-2 ของกรอบเดิม
+  const detailRows: PrintFormRow[] = detailItems.flatMap((it, idx) => {
+    const serviceItemNumber = idx + 1;
+    const perRow = photoGridColumns(it.photos.length);
+    const photoRows: DetailEntry["photos"][] = [];
+    for (let i = 0; i < it.photos.length; i += perRow) photoRows.push(it.photos.slice(i, i + perRow));
+    const chunkCount = Math.max(1, photoRows.length);
+    const baseKey = `${it.sectionTitle}-${it.groupTitle}-${it.label}-${serviceItemNumber}`;
+    const photoGrid = (photos: DetailEntry["photos"], padTop: string) => (
+      <div className={`grid ${photoGridClass(it.photos.length)} gap-1.5 ${padTop}`}>
+        {photos.map((p) => (
+          // object-contain, not cover: site photos are mostly portrait (taken on a
+          // phone held upright), and covering them into a short wide box cropped the
+          // top and bottom away — usually the part worth photographing.
+          <img key={p.id} src={p.url} alt={p.fileName} className="w-full h-[42mm] object-contain bg-white border border-[#0b1d3a]/15" style={{ breakInside: "avoid" }} />
+        ))}
+      </div>
+    );
+    return Array.from({ length: chunkCount }, (_, ci): PrintFormRow => {
+      const last = ci === chunkCount - 1;
+      const boxClass = `border border-[#0b1d3a]/20 border-t-0 px-2 ${last ? "pb-2" : "border-b-0"}`;
+      return {
+        key: `${baseKey}-p${ci}`,
+        node: (
+          <tr>
+            <td colSpan={2} className={last ? "pb-3" : undefined}>
+              {ci === 0 ? (
+                <>
+                  {/* หัวข้อส่วนรายละเอียดอยู่ในแถวเดียวกับรายการแรก (ไม่แยกแถว) — ตัวจัดหน้าวางเป็นก้อนเดียว หัวจึงไม่ค้างท้ายหน้าเดี่ยว ๆ */}
                   {serviceItemNumber === 1 && (
                     <p className="text-[10.5px] font-bold pt-3 pb-1.5">
                       {hasAbnormal
@@ -251,80 +273,83 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
                     {/* ปกติ/ผิดปกติ ต้องแยกให้ชัดบนเอกสารที่ส่งลูกค้า — รายการที่ผ่านการตรวจต้องไม่ถูกอ่านว่าเป็นข้อบกพร่อง */}
                     <span className="text-[9px] font-bold whitespace-nowrap">{it.isAbnormal ? "ผิดปกติ / ABNORMAL" : "ปกติ / NORMAL"}</span>
                   </div>
-                  <div className="border border-[#0b1d3a]/20 border-t-0 px-2 py-2 space-y-1.5">
+                  <div className={`${boxClass} pt-2 space-y-1.5`}>
                     <p className="text-[9.5px]"><span className="text-[#5a7299]">หมวด: </span>{it.sectionTitle} — {it.groupTitle}</p>
                     {it.detail.trim() && (
                       <p className="text-[9.5px] whitespace-pre-line">
                         <span className="font-semibold">{it.isAbnormal ? "ผลการตรวจ / สิ่งที่พบ: " : "รายละเอียดเพิ่มเติม: "}</span>{it.detail}
                       </p>
                     )}
-                    {it.photos.length > 0 && (
-                      <div className={`grid ${photoGridClass(it.photos.length)} gap-1.5 pt-1`}>
-                        {it.photos.map((p) => (
-                          // object-contain, not cover: site photos are mostly portrait (taken on a
-                          // phone held upright), and covering them into a short wide box cropped the
-                          // top and bottom away — usually the part worth photographing.
-                          <img key={p.id} src={p.url} alt={p.fileName} className="w-full h-[42mm] object-contain bg-white border border-[#0b1d3a]/15" style={{ breakInside: "avoid" }} />
-                        ))}
-                      </div>
-                    )}
+                    {photoRows[0] && photoGrid(photoRows[0], "pt-1")}
                   </div>
-                </td>
-              </tr>
-            );
-          })}
-
-          {r.overallRemark.trim() && (
-            <tr>
-              <td colSpan={2} className="pt-4">
-                <p className="text-[10.5px] font-semibold mb-1">หมายเหตุ</p>
-                <p className="text-[10px] whitespace-pre-line leading-relaxed">{r.overallRemark}</p>
-              </td>
-            </tr>
-          )}
-
-          <tr>
-            <td colSpan={2} className="pt-5 pb-[12mm]" style={{ breakInside: "avoid" }}>
-              <table className="w-full border-collapse border border-[#0b1d3a]/20">
-                {/* แถวหัวอยู่ใน tbody ไม่ใช่ thead โดยตั้งใจ — thead ถูกเบราว์เซอร์พิมพ์ซ้ำทุกหน้า
-                    ถ้าบล็อกนี้ถูกหั่นคร่อมหน้าจะเห็นบล็อกลายเซ็นสองอันบนกระดาษ */}
-                <tbody>
-                  <tr className="bg-[#1a5fb4] text-white">
-                    <th className="px-2 py-1 text-[10px] font-semibold border-r border-white/20">ผู้ตรวจสอบ / Service Engineer</th>
-                    <th className="px-2 py-1 text-[10px] font-semibold">ผู้รับทราบ / Customer</th>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-2 align-bottom h-20 relative border-r border-[#0b1d3a]/20">
-                      <div className="h-10 flex items-end justify-center">
-                        {engineerUser?.signatureDataUrl && <img src={engineerUser.signatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />}
-                      </div>
-                      <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
-                        <p className="text-[10px]">{engineerUser?.fullName || " "}</p>
-                        <p className="text-[9px] text-[#5a7299]">{fmtThaiDate(r.reportDate) || "..... / ..... / ....."}</p>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 align-bottom h-20 relative">
-                      {/* Mirrors the engineer column exactly. An unsigned report still prints the
-                          blank ruled lines it always did, so it stays usable as a paper sign-off
-                          sheet when the customer wasn't on site (signing is optional by design). */}
-                      <div className="h-10 flex items-end justify-center">
-                        {r.customerSignatureDataUrl && <img src={r.customerSignatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />}
-                      </div>
-                      <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
-                        <p className="text-[10px]">{r.customerSignedName || " "}</p>
-                        <p className="text-[9px] text-[#5a7299]">
-                          {(r.customerSignedAt && fmtThaiDate(r.customerSignedAt.slice(0, 10))) || "..... / ..... / ....."}
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                </>
+              ) : (
+                <div className={boxClass}>{photoGrid(photoRows[ci], "pt-1.5")}</div>
+              )}
             </td>
           </tr>
-        </tbody>
-      </table>
+        ),
+      };
+    });
+  });
+
+  const footer = (
+    <>
+      {/* หมายเหตุ + ช่องเซ็นอยู่หน้าสุดท้ายด้วยกันเสมอ (ตัวจัดหน้ายกทั้งก้อนไปหน้าใหม่ถ้าไม่พอที่) */}
+      {r.overallRemark.trim() && (
+        <div className="pt-4">
+          <p className="text-[10.5px] font-semibold mb-1">หมายเหตุ</p>
+          <p className="text-[10px] whitespace-pre-line leading-relaxed">{r.overallRemark}</p>
+        </div>
+      )}
+      <div className="pt-5">
+        <table className="w-full border-collapse border border-[#0b1d3a]/20">
+          <tbody>
+            <tr className="bg-[#1a5fb4] text-white">
+              <th className="px-2 py-1 text-[10px] font-semibold border-r border-white/20">ผู้ตรวจสอบ / Service Engineer</th>
+              <th className="px-2 py-1 text-[10px] font-semibold">ผู้รับทราบ / Customer</th>
+            </tr>
+            <tr>
+              <td className="px-3 py-2 align-bottom h-20 relative border-r border-[#0b1d3a]/20">
+                <div className="h-10 flex items-end justify-center">
+                  {engineerUser?.signatureDataUrl && <img src={engineerUser.signatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />}
+                </div>
+                <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
+                  <p className="text-[10px]">{engineerUser?.fullName || " "}</p>
+                  <p className="text-[9px] text-[#5a7299]">{fmtThaiDate(r.reportDate) || "..... / ..... / ....."}</p>
+                </div>
+              </td>
+              <td className="px-3 py-2 align-bottom h-20 relative">
+                {/* Mirrors the engineer column exactly. An unsigned report still prints the
+                    blank ruled lines it always did, so it stays usable as a paper sign-off
+                    sheet when the customer wasn't on site (signing is optional by design). */}
+                <div className="h-10 flex items-end justify-center">
+                  {r.customerSignatureDataUrl && <img src={r.customerSignatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />}
+                </div>
+                <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
+                  <p className="text-[10px]">{r.customerSignedName || " "}</p>
+                  <p className="text-[9px] text-[#5a7299]">
+                    {(r.customerSignedAt && fmtThaiDate(r.customerSignedAt.slice(0, 10))) || "..... / ..... / ....."}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </>
+  );
+
+  return (
+    <PaginatedPrintForm
+      className="text-[#0b1d3a]"
+      style={{ fontSize: "10.5px" }}
+      header={header}
+      tableHead={tableHead}
+      rows={[...checklistRows, ...detailRows]}
+      // ตารางไม่มีเส้น — แถวว่างจึงเป็นแค่ที่ว่าง ทำให้ช่องลายเซ็นไปอยู่ก้นหน้าสุดท้าย
+      blankRow={(key) => <tr key={key}><td colSpan={2} style={{ height: "18px" }} /></tr>}
+      footer={footer}
+    />
   );
 }

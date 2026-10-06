@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { Pin } from "lucide-react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
@@ -8,6 +7,7 @@ import {
 } from "../../lib/quotes";
 import { BrandMark } from "../../components/BrandMark";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
+import { PaginatedPrintForm, type PrintFormRow } from "../../components/PaginatedPrintForm";
 
 // ตรวจว่าหัวข้อหมวดมีรายการตามหลังหรือไม่ ถ้าไม่มีจะไม่พิมพ์หัวข้อนั้นออกมา
 // Checks whether a section header has an item right after it, so empty headers are skipped when printing
@@ -30,6 +30,8 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
 
 // ตารางใบเสนอราคาแบบสำหรับพิมพ์ (แสดงเฉพาะตอนสั่งพิมพ์) รวมหัวเอกสาร รายการ ยอดรวม และช่องลายเซ็น
 // Print-only quotation table (shown only when printing), including header, line items, totals, and signatures
+// จัดหน้าเองด้วย PaginatedPrintForm (2026-10-06) — ทุกหน้ามีหัวจดหมาย + ข้อมูลผู้ซื้อ/ใบเสนอราคา + หัวตาราง และขอบกระดาษครบทั้งบน/ล่าง
+// (เดิมใช้ thead ซ้ำ หน้ากลางเอกสารไม่มีขอบล่าง) · ยอดรวม + หมายเหตุ + ลายเซ็นอยู่หน้าสุดท้ายด้วยกัน
 export function PrintDocument({
   isDetail,
   quote,
@@ -81,243 +83,238 @@ export function PrintDocument({
     { label: "ผู้ยืนยันการสั่งซื้อ", user: undefined, name: "", date: "" },
   ];
 
-  return (
-    <>
-      {/* ยกเลิก margin ของ @page เพื่อไม่ให้เบราว์เซอร์วาดวันที่/URL/ชื่อหน้าตอนพิมพ์ — ชดเชยระยะขอบ
-          กระดาษเองด้วย padding แทน (ซ้าย/ขวาซ้ำทุกหน้าผ่าน padding ของ table เอง, บนซ้ำทุกหน้าผ่าน
-          thead ที่พิมพ์ซ้ำ, ล่างชดเชยเฉพาะหน้าสุดท้ายที่บล็อคลายเซ็นอยู่) */}
-      <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
-      {/* ระยะขอบกระดาษอยู่ที่ <div> ตัวนี้ ไม่ใช่ที่ <table> — padding บนตารางที่ border-collapse
-          ถูกสเปกสั่งให้ทิ้ง (CSS 2.2 §17.6.2) ของเดิมจึงพิมพ์ออกมาไม่มีขอบและโดนตัดขอบขวา */}
-      <div className="hidden print:block" style={{ padding: "0 12mm" }}>
-      <table className="w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "11px" }}>
-        <colgroup>
-          <col style={{ width: "4%" }} />
-          <col style={{ width: "33%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "15%" }} />
-          <col style={{ width: "16%" }} />
-          <col style={{ width: "16%" }} />
-        </colgroup>
-        <thead>
+  const header = (
+    <div className="relative pb-3 mb-2 border-b-2 border-[#0b1d3a]/10">
+      <div className="absolute top-0 right-0 w-6 h-20 bg-[#1a5fb4] flex items-center justify-center">
+        <span className="text-white text-[9px] font-bold tracking-[0.2em]" style={{ writingMode: "vertical-rl" }}>QUOTATION</span>
+      </div>
+
+      <div className="flex justify-between items-start pr-8">
+        <span className="text-[10px] font-mono text-[#5a7299]">{fmtNumericDate(issueDate)}</span>
+        <span className="text-[10px] font-mono text-[#5a7299]">{quoteId}</span>
+      </div>
+
+      <div className="flex items-start gap-3 mt-1 pr-8">
+        {companyHeader.logoDataUrl ? (
+          <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="w-12 h-12 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
+        ) : (
+          <BrandMark size={48} variant="mark" theme="dark" className="flex-shrink-0" />
+        )}
+        <div>
+          <p className="font-bold text-[13px]">{companyHeader.name}</p>
+          {companyHeader.address.trim() && <p className="text-[10px] text-[#5a7299] leading-snug">{companyHeader.address}</p>}
+          {companyHeader.taxId.trim() && <p className="text-[10px] text-[#5a7299]">เลขประจำตัวผู้เสียภาษี : {companyHeader.taxId}</p>}
+          {(companyHeader.phone.trim() || companyHeader.email.trim()) && (
+            <p className="text-[10px] text-[#5a7299]">
+              {companyHeader.phone.trim() && <>โทรศัพท์ : {companyHeader.phone}</>}
+              {companyHeader.phone.trim() && companyHeader.email.trim() && "  "}
+              {companyHeader.email.trim() && <>E-mail : {companyHeader.email}</>}
+            </p>
+          )}
+          {(companyHeader.facebookName.trim() || companyHeader.lineId.trim() || companyHeader.website.trim()) && (
+            <div className="flex items-center gap-1.5 text-[10px] text-[#5a7299] mt-0.5">
+              {companyHeader.facebookName.trim() && (
+                <span className="flex items-center gap-1"><FacebookIcon size={11} /> {companyHeader.facebookName}</span>
+              )}
+              {companyHeader.lineId.trim() && (
+                <span className="flex items-center gap-1"><LineAppIcon size={11} /> {companyHeader.lineId}</span>
+              )}
+              {companyHeader.website.trim() && <span>{companyHeader.website}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6 mt-3">
+        <div className="space-y-0.5">
+          <p className="font-bold text-[13px] mb-1">ผู้ซื้อ</p>
+          <p className="font-semibold text-[11px]">{client}</p>
+          {address.trim() && <p className="text-[10.5px] leading-snug">{address}</p>}
+          <Field label="เลขประจำตัวผู้เสียภาษี" value={taxId} mono />
+          {/* ผู้ติดต่อหลักคงสามบรรทัดเดิม (ใบเก่าทุกใบมีคนเดียว หน้าตาจึงไม่เปลี่ยน) · คนที่ 2 ขึ้นไป
+              พิมพ์บรรทัดย่อ "ชื่อ (ตำแหน่ง) · เบอร์ · อีเมล" — คอลัมน์ผู้ซื้อกว้างครึ่งกระดาษ
+              บรรทัดย่อยาวสุดราว 70 ตัวอักษร ตัดได้ไม่เกินสองบรรทัด */}
+          {contacts[0] && (
+            <>
+              <Field label="ชื่อผู้ติดต่อ" value={contacts[0].position.trim() ? `${contacts[0].name} (${contacts[0].position})` : contacts[0].name} />
+              <Field label="เบอร์โทร" value={contacts[0].phone} mono />
+              <Field label="E-mail" value={contacts[0].email} />
+            </>
+          )}
+          {contacts.slice(1).map((c, i) => (
+            <Field key={c.id} label={`ผู้ติดต่อ ${i + 2}`} value={contactLine(c)} />
+          ))}
+          <Field label="วิธีจัดส่ง" value={deliveryMethod} />
+          <Field label="ที่อยู่จัดส่ง" value={deliveryAddress} />
+          <Field label="โครงการ" value={project} />
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-[#1a5fb4] font-bold text-[17px] mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ใบเสนอราคา</p>
+          <Field label="เลขที่" value={quoteId} mono />
+          <Field label="วันที่" value={fmtThaiDate(issueDate)} />
+          <Field label="วันที่ยืนราคา" value={fmtThaiDate(expiryDate)} />
+          <Field label="ประเภทงาน" value={jobTypeName} />
+          <Field label="อ้างอิง PO" value={poRef} mono />
+          <Field label="เงื่อนไขการชำระเงิน" value={paymentTerms} />
+          <Field label="Salesperson" value={preparerName} />
+          <Field label="โทรศัพท์" value={preparerUser?.phone ?? ""} mono />
+          <Field label="E-mail" value={preparerUser?.email ?? ""} />
+        </div>
+      </div>
+    </div>
+  );
+
+  // ความกว้างคอลัมน์อยู่ที่ <th> (เดิมอยู่ใน <colgroup> — ตัวจัดหน้ารับเฉพาะ <thead>) ค่าเท่าเดิม 4/33/8/8/15/16/16%
+  const columnWidths = ["4%", "33%", "8%", "8%", "15%", "16%", "16%"];
+  const tableHead = (
+    <thead>
+      <tr className="bg-[#1a5fb4] text-white">
+        {["ลำดับ", "รายละเอียด", "จำนวน", "หน่วย", "ราคา/หน่วย", "ส่วนลด/หน่วย", "มูลค่า"].map((h, i) => (
+          <th key={h} style={{ width: columnWidths[i] }} className={`px-2 py-1.5 text-[10px] font-semibold ${i === 0 || i === 2 || i === 3 ? "text-center" : i === 1 ? "text-left" : "text-right"}`}>
+            {h}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+
+  // หนึ่งรายการ = แถวรายการ + แถวรายละเอียดย่อย (ถ้ามี) — ส่ง span ให้ตัวจัดหน้าวางเป็นก้อนเดียว ไม่แยกคนละหน้า
+  // หัวข้อหมวดที่ไม่มีรายการตามหลังไม่ถูกพิมพ์ (กรองทิ้งก่อนส่งให้ตัวจัดหน้า)
+  const bodyRows: PrintFormRow[] = [];
+  lines.forEach((line, idx) => {
+    if (line.isSectionHeader) {
+      if (!sectionHeaderHasItems(lines, idx)) return;
+      bodyRows.push({
+        key: String(line.id),
+        node: (
           <tr>
-            <td colSpan={7} className="p-0">
-              <div className="relative pt-[12mm] pb-3 mb-2 border-b-2 border-[#0b1d3a]/10">
-                <div className="absolute top-0 right-0 w-6 h-20 bg-[#1a5fb4] flex items-center justify-center">
-                  <span className="text-white text-[9px] font-bold tracking-[0.2em]" style={{ writingMode: "vertical-rl" }}>QUOTATION</span>
-                </div>
-
-                <div className="flex justify-between items-start pr-8">
-                  <span className="text-[10px] font-mono text-[#5a7299]">{fmtNumericDate(issueDate)}</span>
-                  <span className="text-[10px] font-mono text-[#5a7299]">{quoteId}</span>
-                </div>
-
-                <div className="flex items-start gap-3 mt-1 pr-8">
-                  {companyHeader.logoDataUrl ? (
-                    <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="w-12 h-12 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
-                  ) : (
-                    <BrandMark size={48} variant="mark" theme="dark" className="flex-shrink-0" />
-                  )}
-                  <div>
-                    <p className="font-bold text-[13px]">{companyHeader.name}</p>
-                    {companyHeader.address.trim() && <p className="text-[10px] text-[#5a7299] leading-snug">{companyHeader.address}</p>}
-                    {companyHeader.taxId.trim() && <p className="text-[10px] text-[#5a7299]">เลขประจำตัวผู้เสียภาษี : {companyHeader.taxId}</p>}
-                    {(companyHeader.phone.trim() || companyHeader.email.trim()) && (
-                      <p className="text-[10px] text-[#5a7299]">
-                        {companyHeader.phone.trim() && <>โทรศัพท์ : {companyHeader.phone}</>}
-                        {companyHeader.phone.trim() && companyHeader.email.trim() && "  "}
-                        {companyHeader.email.trim() && <>E-mail : {companyHeader.email}</>}
-                      </p>
-                    )}
-                    {(companyHeader.facebookName.trim() || companyHeader.lineId.trim() || companyHeader.website.trim()) && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-[#5a7299] mt-0.5">
-                        {companyHeader.facebookName.trim() && (
-                          <span className="flex items-center gap-1"><FacebookIcon size={11} /> {companyHeader.facebookName}</span>
-                        )}
-                        {companyHeader.lineId.trim() && (
-                          <span className="flex items-center gap-1"><LineAppIcon size={11} /> {companyHeader.lineId}</span>
-                        )}
-                        {companyHeader.website.trim() && <span>{companyHeader.website}</span>}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6 mt-3">
-                  <div className="space-y-0.5">
-                    <p className="font-bold text-[13px] mb-1">ผู้ซื้อ</p>
-                    <p className="font-semibold text-[11px]">{client}</p>
-                    {address.trim() && <p className="text-[10.5px] leading-snug">{address}</p>}
-                    <Field label="เลขประจำตัวผู้เสียภาษี" value={taxId} mono />
-                    {/* ผู้ติดต่อหลักคงสามบรรทัดเดิม (ใบเก่าทุกใบมีคนเดียว หน้าตาจึงไม่เปลี่ยน) · คนที่ 2 ขึ้นไป
-                        พิมพ์บรรทัดย่อ "ชื่อ (ตำแหน่ง) · เบอร์ · อีเมล" — คอลัมน์ผู้ซื้อกว้างครึ่งกระดาษ
-                        บรรทัดย่อยาวสุดราว 70 ตัวอักษร ตัดได้ไม่เกินสองบรรทัด */}
-                    {contacts[0] && (
-                      <>
-                        <Field label="ชื่อผู้ติดต่อ" value={contacts[0].position.trim() ? `${contacts[0].name} (${contacts[0].position})` : contacts[0].name} />
-                        <Field label="เบอร์โทร" value={contacts[0].phone} mono />
-                        <Field label="E-mail" value={contacts[0].email} />
-                      </>
-                    )}
-                    {contacts.slice(1).map((c, i) => (
-                      <Field key={c.id} label={`ผู้ติดต่อ ${i + 2}`} value={contactLine(c)} />
-                    ))}
-                    <Field label="วิธีจัดส่ง" value={deliveryMethod} />
-                    <Field label="ที่อยู่จัดส่ง" value={deliveryAddress} />
-                    <Field label="โครงการ" value={project} />
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[#1a5fb4] font-bold text-[17px] mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ใบเสนอราคา</p>
-                    <Field label="เลขที่" value={quoteId} mono />
-                    <Field label="วันที่" value={fmtThaiDate(issueDate)} />
-                    <Field label="วันที่ยืนราคา" value={fmtThaiDate(expiryDate)} />
-                    <Field label="ประเภทงาน" value={jobTypeName} />
-                    <Field label="อ้างอิง PO" value={poRef} mono />
-                    <Field label="เงื่อนไขการชำระเงิน" value={paymentTerms} />
-                    <Field label="Salesperson" value={preparerName} />
-                    <Field label="โทรศัพท์" value={preparerUser?.phone ?? ""} mono />
-                    <Field label="E-mail" value={preparerUser?.email ?? ""} />
-                  </div>
-                </div>
-              </div>
+            <td colSpan={7} className="px-2 pt-2.5 pb-1 font-bold text-[11.5px] border-b border-[#0b1d3a]/15">
+              {line.description}
             </td>
           </tr>
-          <tr className="bg-[#1a5fb4] text-white">
-            {["ลำดับ", "รายละเอียด", "จำนวน", "หน่วย", "ราคา/หน่วย", "ส่วนลด/หน่วย", "มูลค่า"].map((h, i) => (
-              <th key={h} className={`px-2 py-1.5 text-[10px] font-semibold ${i === 0 || i === 2 || i === 3 ? "text-center" : i === 1 ? "text-left" : "text-right"}`}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((line, idx) => {
-            if (line.isSectionHeader) {
-              if (!sectionHeaderHasItems(lines, idx)) return null;
-              return (
-                <tr key={line.id}>
-                  <td colSpan={7} className="px-2 pt-2.5 pb-1 font-bold text-[11.5px] border-b border-[#0b1d3a]/15">
-                    {line.description}
-                  </td>
-                </tr>
-              );
-            }
-            const hasDetails = lineHasDetails(line);
-            // คอลัมน์ในเอกสารพิมพ์คือ "ส่วนลด/หน่วย" เสมอ ถ้าผู้ใช้กรอกส่วนลดเป็นจำนวนเงินของทั้งรายการ
-            // จะถูกเฉลี่ยกลับมาเป็นต่อหน่วยเพื่อให้แบบฟอร์มที่พิมพ์ออกมายังคงรูปแบบเดิม
-            // The printed column is always "discount per unit". A line whose discount was entered as
-            // a baht amount is a discount on the whole line, so it is divided back down per unit
-            // here — the printed form keeps the exact layout it has always had either way.
-            const lineDiscount = lineDiscountAmount(line);
-            const unitDiscount = line.qty > 0 ? lineDiscount / line.qty : lineDiscount;
-            return (
-              <Fragment key={line.id}>
-                {/* กันแถวรายการถูกหั่นครึ่งคร่อมหน้า — แถวที่มีบรรทัดย่อยหลายบรรทัดสูงพอที่จะโดน */}
-                <tr className="align-top" style={{ breakInside: "avoid" }}>
-                  <td className="px-2 py-1.5 text-center font-mono">{itemNumbers[idx]}</td>
-                  <td className="px-2 py-1.5">
-                    <span className="font-semibold">{line.description}</span>
-                    {line.tags.map((tag) => (
-                      <span key={tag} className="inline-block ml-1 px-1 text-[9px] border border-[#1a5fb4]/30 text-[#1a5fb4] rounded">{tag}</span>
-                    ))}
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono">{fmt(line.qty)}</td>
-                  <td className="px-2 py-1.5 text-center">{line.unit}</td>
-                  <td className="px-2 py-1.5 text-right font-mono">{fmt(line.unitPrice)}</td>
-                  <td className="px-2 py-1.5 text-right font-mono">
-                    {unitDiscount > 0
-                      ? `${fmt(unitDiscount)}${line.discountMode === "amount" ? "" : ` (${line.discount}%)`}`
-                      : fmt(0)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono font-semibold">{fmt(lineSubtotal(line))}</td>
-                </tr>
-                {hasDetails && (
-                  <tr style={{ breakInside: "avoid" }}>
-                    <td />
-                    <td colSpan={6} className="px-2 pb-2 text-[10px] text-[#3b5a85]">
-                      {line.subDetails.filter((sd) => sd.text.trim()).map((sd) => (
-                        <div key={sd.id} className="flex items-start gap-1 mt-0.5">
-                          <Pin size={9} className="mt-0.5 flex-shrink-0 text-[#7a9ac9]" />
-                          <span>{sd.text}</span>
-                        </div>
-                      ))}
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            );
-          })}
-
-          <tr>
-            <td colSpan={7} className="pt-4">
-              <div className="flex justify-end">
-                <div className="w-64 space-y-1">
-                  <div className="flex justify-between text-[11px]"><span>รวมเป็นเงิน</span><span className="font-mono">{fmt(subtotal)}</span></div>
-                  <div className="flex justify-between text-[11px]">
-                    <span>ส่วนลดพิเศษ{discount > 0 && discountMode !== "amount" ? ` (${discount}%)` : ""}</span>
-                    <span className="font-mono">{fmt(discountAmt)}</span>
-                  </div>
-                  <div className="flex justify-between text-[11px] border-t border-[#0b1d3a]/15 pt-1"><span>ยอดหลังหักส่วนลด</span><span className="font-mono">{fmt(afterDiscount)}</span></div>
-                  <div className="flex justify-between text-[11px]"><span>VAT {VAT_RATE}%</span><span className="font-mono">{fmt(vatAmt)}</span></div>
-                  <div className="flex justify-between text-[13px] font-bold border-t-2 border-[#0b1d3a]/30 pt-1.5 mt-1">
-                    <span>จำนวนเงินรวมทั้งหมด THB</span><span className="font-mono">{fmt(total)}</span>
-                  </div>
-                  <p className="text-right text-[10px] italic text-[#5a7299]">{bahtText(total)}</p>
-                </div>
-              </div>
+        ),
+      });
+      return;
+    }
+    const hasDetails = lineHasDetails(line);
+    // คอลัมน์ในเอกสารพิมพ์คือ "ส่วนลด/หน่วย" เสมอ ถ้าผู้ใช้กรอกส่วนลดเป็นจำนวนเงินของทั้งรายการ
+    // จะถูกเฉลี่ยกลับมาเป็นต่อหน่วยเพื่อให้แบบฟอร์มที่พิมพ์ออกมายังคงรูปแบบเดิม
+    // The printed column is always "discount per unit". A line whose discount was entered as
+    // a baht amount is a discount on the whole line, so it is divided back down per unit
+    // here — the printed form keeps the exact layout it has always had either way.
+    const lineDiscount = lineDiscountAmount(line);
+    const unitDiscount = line.qty > 0 ? lineDiscount / line.qty : lineDiscount;
+    bodyRows.push({
+      key: String(line.id),
+      span: hasDetails ? 2 : 1,
+      node: (
+        <>
+          <tr className="align-top">
+            <td className="px-2 py-1.5 text-center font-mono">{itemNumbers[idx]}</td>
+            <td className="px-2 py-1.5">
+              <span className="font-semibold">{line.description}</span>
+              {line.tags.map((tag) => (
+                <span key={tag} className="inline-block ml-1 px-1 text-[9px] border border-[#1a5fb4]/30 text-[#1a5fb4] rounded">{tag}</span>
+              ))}
             </td>
+            <td className="px-2 py-1.5 text-center font-mono">{fmt(line.qty)}</td>
+            <td className="px-2 py-1.5 text-center">{line.unit}</td>
+            <td className="px-2 py-1.5 text-right font-mono">{fmt(line.unitPrice)}</td>
+            <td className="px-2 py-1.5 text-right font-mono">
+              {unitDiscount > 0
+                ? `${fmt(unitDiscount)}${line.discountMode === "amount" ? "" : ` (${line.discount}%)`}`
+                : fmt(0)}
+            </td>
+            <td className="px-2 py-1.5 text-right font-mono font-semibold">{fmt(lineSubtotal(line))}</td>
           </tr>
-
-          {remarks.trim() && (
+          {hasDetails && (
             <tr>
-              {/* กติกาเดียวกับใบ Scope of Work (2026-09-07) — บล็อกหมายเหตุห้ามถูกหั่นคร่อมหน้า
-                  ไม่งั้นหัวข้อค้างท้ายหน้าแรกแล้วเนื้อความไปโผล่หน้าถัดไปเป็นคนละก้อน */}
-              <td colSpan={7} className="pt-4" style={{ breakInside: "avoid", orphans: 3, widows: 3 }}>
-                <p className="text-[11px] font-semibold mb-1" style={{ breakAfter: "avoid" }}>หมายเหตุ / เงื่อนไข</p>
-                <p className="text-[10.5px] whitespace-pre-line leading-relaxed">{remarks}</p>
+              <td />
+              <td colSpan={6} className="px-2 pb-2 text-[10px] text-[#3b5a85]">
+                {line.subDetails.filter((sd) => sd.text.trim()).map((sd) => (
+                  <div key={sd.id} className="flex items-start gap-1 mt-0.5">
+                    <Pin size={9} className="mt-0.5 flex-shrink-0 text-[#7a9ac9]" />
+                    <span>{sd.text}</span>
+                  </div>
+                ))}
               </td>
             </tr>
           )}
+        </>
+      ),
+    });
+  });
 
-          <tr>
-            {/* กันไม่ให้บล็อกลายเซ็นถูกหั่นคร่อมหน้า — ถ้าโดนหั่น <thead> ของตารางนี้จะถูกพิมพ์ซ้ำ
-                บนหน้าถัดไป กลายเป็นบล็อกลายเซ็นสองอันบนกระดาษ (บั๊กที่เจ้าของเจอบน production) */}
-            <td colSpan={7} className="pt-5 pb-[12mm]" style={{ breakInside: "avoid" }}>
-              <table className="w-full border-collapse border border-[#0b1d3a]/20">
-                {/* แถวหัวอยู่ใน tbody ไม่ใช่ thead โดยตั้งใจ — thead ถูกเบราว์เซอร์พิมพ์ซ้ำทุกหน้า
-                    ถ้าบล็อกนี้ถูกหั่นคร่อมหน้าจะเห็นบล็อกลายเซ็นสองอันบนกระดาษ */}
-                <tbody>
-                  <tr className="bg-[#1a5fb4] text-white">
-                    {signatureColumns.map((col, i) => (
-                      <th key={col.label} className={`px-2 py-1 text-[10px] font-semibold ${i < 2 ? "border-r border-white/20" : ""}`}>{col.label}</th>
-                    ))}
-                  </tr>
-                  <tr>
-                    {signatureColumns.map((col, i) => (
-                      <td key={col.label} className={`px-3 py-2 align-bottom h-20 relative ${i < 2 ? "border-r border-[#0b1d3a]/20" : ""}`}>
-                        {i === 1 && companyHeader.stampDataUrl && (
-                          <img src={companyHeader.stampDataUrl} alt="ตราประทับ" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
-                        )}
-                        <div className="h-10 flex items-end justify-center">
-                          {col.user?.signatureDataUrl && (
-                            <img src={col.user.signatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />
-                          )}
-                        </div>
-                        <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
-                          <p className="text-[10px]">{col.name || " "}</p>
-                          <p className="text-[9px] text-[#5a7299]">{col.date || "..... / ..... / ....."}</p>
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+  const footer = (
+    <>
+      {/* ยอดรวม + หมายเหตุ + ลายเซ็นอยู่หน้าสุดท้ายด้วยกันเสมอ (ตัวจัดหน้ายกทั้งก้อนไปหน้าใหม่ถ้าไม่พอที่) — แทน breakInside/orphans เดิม */}
+      <div className="pt-4">
+        <div className="flex justify-end">
+          <div className="w-64 space-y-1">
+            <div className="flex justify-between text-[11px]"><span>รวมเป็นเงิน</span><span className="font-mono">{fmt(subtotal)}</span></div>
+            <div className="flex justify-between text-[11px]">
+              <span>ส่วนลดพิเศษ{discount > 0 && discountMode !== "amount" ? ` (${discount}%)` : ""}</span>
+              <span className="font-mono">{fmt(discountAmt)}</span>
+            </div>
+            <div className="flex justify-between text-[11px] border-t border-[#0b1d3a]/15 pt-1"><span>ยอดหลังหักส่วนลด</span><span className="font-mono">{fmt(afterDiscount)}</span></div>
+            <div className="flex justify-between text-[11px]"><span>VAT {VAT_RATE}%</span><span className="font-mono">{fmt(vatAmt)}</span></div>
+            <div className="flex justify-between text-[13px] font-bold border-t-2 border-[#0b1d3a]/30 pt-1.5 mt-1">
+              <span>จำนวนเงินรวมทั้งหมด THB</span><span className="font-mono">{fmt(total)}</span>
+            </div>
+            <p className="text-right text-[10px] italic text-[#5a7299]">{bahtText(total)}</p>
+          </div>
+        </div>
+      </div>
+
+      {remarks.trim() && (
+        <div className="pt-4">
+          <p className="text-[11px] font-semibold mb-1">หมายเหตุ / เงื่อนไข</p>
+          <p className="text-[10.5px] whitespace-pre-line leading-relaxed">{remarks}</p>
+        </div>
+      )}
+
+      <div className="pt-5">
+        <table className="w-full border-collapse border border-[#0b1d3a]/20">
+          <tbody>
+            <tr className="bg-[#1a5fb4] text-white">
+              {signatureColumns.map((col, i) => (
+                <th key={col.label} className={`px-2 py-1 text-[10px] font-semibold ${i < 2 ? "border-r border-white/20" : ""}`}>{col.label}</th>
+              ))}
+            </tr>
+            <tr>
+              {signatureColumns.map((col, i) => (
+                <td key={col.label} className={`px-3 py-2 align-bottom h-20 relative ${i < 2 ? "border-r border-[#0b1d3a]/20" : ""}`}>
+                  {i === 1 && companyHeader.stampDataUrl && (
+                    <img src={companyHeader.stampDataUrl} alt="ตราประทับ" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
+                  )}
+                  <div className="h-10 flex items-end justify-center">
+                    {col.user?.signatureDataUrl && (
+                      <img src={col.user.signatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />
+                    )}
+                  </div>
+                  <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
+                    <p className="text-[10px]">{col.name || " "}</p>
+                    <p className="text-[9px] text-[#5a7299]">{col.date || "..... / ..... / ....."}</p>
+                  </div>
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
       </div>
     </>
+  );
+
+  return (
+    <PaginatedPrintForm
+      className="text-[#0b1d3a]"
+      style={{ fontSize: "11px" }}
+      header={header}
+      tableHead={tableHead}
+      rows={bodyRows}
+      // ตารางไม่มีเส้น — แถวว่างจึงเป็นแค่ที่ว่าง ทำให้ยอดรวม/ช่องลายเซ็นไปอยู่ก้นหน้าสุดท้าย
+      blankRow={(key) => <tr key={key}><td colSpan={7} style={{ height: "18px" }} /></tr>}
+      footer={footer}
+    />
   );
 }

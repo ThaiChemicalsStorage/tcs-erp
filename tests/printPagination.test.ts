@@ -37,6 +37,13 @@ describe("paginate", () => {
     expect(paginate({ ...base, rowHeights: [] }).pages).toEqual([{ rows: [], blanks: 7, last: true }]);
   });
 
+  it("หน้าแรกที่ว่างน้อยกว่า (เช็คลิสต์ Scope of Work พิมพ์เฉพาะหน้าแรก) — หน้าแรกรับบรรทัดน้อยกว่า หน้าถัดไปรับเต็ม", () => {
+    const { pages } = paginate({ ...base, firstAvailable: 50, rowHeights: Array(12).fill(10) });
+    expect(pages.map((p) => p.rows.length)).toEqual([5, 7]);
+    expect(pages[0].blanks).toBe(0);
+    expect(pages[1]).toMatchObject({ last: true, blanks: 0 });
+  });
+
   it("บรรทัดเดียวสูงเกินหน้า — วางลงหน้าของมันเอง ไม่วนไม่จบ", () => {
     const { pages } = paginate({ ...base, rowHeights: [10, 150, 10] });
     expect(pages.map((p) => p.rows)).toEqual([[0], [1], [2]]);

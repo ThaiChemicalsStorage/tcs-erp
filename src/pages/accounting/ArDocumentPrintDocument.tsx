@@ -1,11 +1,14 @@
 import type { ArDocument, ArDocumentType } from "../../lib/accounting";
 import { formatArDocDate, formatArPaymentCondition } from "../../lib/accounting";
+import { PaginatedPrintForm, type PrintFormRow } from "../../components/PaginatedPrintForm";
 
 /**
  * AR/IV/BI/RE print document (added 2026-08-17, Phase 1; BI given its own dedicated layout
- * 2026-08-18 — see below). One page per copy label (ต้นฉบับ/สำเนา 1/สำเนา 2...), matching Delivery
- * Order's exact multi-copy pattern (`COPY_LABELS.map()` over `breakAfter:"page"` blocks, same
- * `@page{margin:0}` override, see DeliveryOrderPrintDocument.tsx). Company block is hardcoded per
+ * 2026-08-18 — see below). One set of pages per copy label (ต้นฉบับ/สำเนา 1/สำเนา 2...).
+ * **จัดหน้าเองด้วย `PaginatedPrintForm` (2026-10-06)** — แต่ละสำเนาเป็นใบของตัวเอง (`breakAfterLast` ทุกสำเนายกเว้นสำเนาสุดท้าย)
+ * ทุกหน้ามีหัวจดหมาย ชื่อใบ เลขที่/วันที่ ข้อมูลลูกค้า + หัวตาราง + แถวว่างเติมจนเต็มหน้า และป้ายต้นฉบับ/สำเนาท้ายกระดาษทุกหน้า ·
+ * ยอดรวม/ตัวอักษร/หมายเหตุ/ช่องเซ็นอยู่หน้าสุดท้าย ถ้าไม่พอที่ยกไปหน้าใหม่ที่มีหัวและตารางว่างเต็มหน้า (ดูไฟล์ component)
+ * Company block is hardcoded per
  * the spec's real reference PDFs (§2), same precedent as DeliveryOrderPrintDocument.tsx's own
  * LETTERHEAD constant — Settings' Company record is a single-line Thai name/address, a different
  * shape than this bilingual block.
@@ -57,9 +60,12 @@ function money(n: number): string {
 
 // ─── AR / IV / RE — shared frame (per the real reference photos) ────────────────────────
 
-function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel: string }) {
-  return (
-    <div className="hidden print:block" style={{ breakAfter: "page", fontFamily: "'Noto Sans Thai', sans-serif", color: "#000", background: "#fff", padding: "12mm", fontSize: "12px" }}>
+const PAGE_STYLE: React.CSSProperties = { fontFamily: "'Noto Sans Thai', sans-serif", color: "#000", background: "#fff", fontSize: "12px" };
+const TABLE_STYLE: React.CSSProperties = { marginTop: "10px", fontSize: "11px" };
+
+function DocumentPage({ document, copyLabel, breakAfterLast }: { document: ArDocument; copyLabel: string; breakAfterLast: boolean }) {
+  const header = (
+    <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #000", paddingBottom: "8px" }}>
         <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
           <img src="/logo.png" alt="" style={{ width: "56px", height: "56px", objectFit: "contain" }} />
@@ -99,8 +105,10 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
           {document.reference && <p><strong>อ้างถึง / Ref:</strong> {document.reference}</p>}
         </div>
       </div>
+    </>
+  );
 
-      <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse", fontSize: "11px" }}>
+  const tableHead = (
         <thead>
           <tr style={{ borderTop: "1px solid #000", borderBottom: "1px solid #000" }}>
             <th style={{ textAlign: "left", padding: "4px" }}>ลำดับ</th>
@@ -111,9 +119,12 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
             <th style={{ textAlign: "right", padding: "4px" }}>จำนวนเงิน</th>
           </tr>
         </thead>
-        <tbody>
-          {document.lines.map((l) => (
-            <tr key={l.seq} style={{ borderBottom: "1px solid #ddd" }}>
+  );
+
+  const rows: PrintFormRow[] = document.lines.map((l) => ({
+    key: String(l.seq),
+    node: (
+            <tr style={{ borderBottom: "1px solid #ddd" }}>
               <td style={{ padding: "4px" }}>{l.seq}</td>
               <td style={{ padding: "4px" }}>
                 {l.description}
@@ -128,10 +139,23 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
               <td style={{ textAlign: "right", padding: "4px" }}>{money(l.unitPrice)}</td>
               <td style={{ textAlign: "right", padding: "4px" }}>{money(l.amount)}</td>
             </tr>
-          ))}
-        </tbody>
-      </table>
+    ),
+  }));
 
+  // แถวว่างเติมให้เต็มหน้า — เส้นใต้สีเทาและ padding เดียวกับแถวรายการ
+  const blankRow = (key: string) => (
+    <tr key={key} style={{ borderBottom: "1px solid #ddd" }}>
+      <td style={{ padding: "4px" }}>&nbsp;</td>
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+    </tr>
+  );
+
+  const footer = (
+    <>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
         <div style={{ fontSize: "11px", maxWidth: "300px" }}>
           {document.remarks.map((r, i) => <p key={i}>{r}</p>)}
@@ -158,9 +182,23 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
           <p style={{ marginTop: "4px" }}>ผู้มีอำนาจลงนาม / Authorized Signature</p>
           <p>วันที่ / Date ___/___/___</p>
         </div>
-        <div style={{ textAlign: "right", fontSize: "10px", alignSelf: "flex-end" }}>{copyLabel}</div>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <PaginatedPrintForm
+      header={header}
+      tableHead={tableHead}
+      rows={rows}
+      blankRow={blankRow}
+      footer={footer}
+      // ป้ายต้นฉบับ/สำเนา — เดิมอยู่มุมขวาล่างข้างช่องเซ็น ตอนนี้ท้ายกระดาษชิดขวาทุกหน้าของสำเนานั้น
+      pageFooter={<div style={{ textAlign: "right", fontSize: "10px" }}>{copyLabel}</div>}
+      tableStyle={TABLE_STYLE}
+      style={PAGE_STYLE}
+      breakAfterLast={breakAfterLast}
+    />
   );
 }
 
@@ -171,10 +209,10 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
  * เพื่อไม่ให้ component พิมพ์ต้องรู้จัก state ของเอกสารอื่นเอง ไม่ระบุ = ถือว่ายังไม่ชำระ (0). */
 export type ArPaidByInvoiceId = Record<string, number>;
 
-function BillingNotePage({ document, copyLabel, paidByInvoiceId }: { document: ArDocument; copyLabel: string; paidByInvoiceId: ArPaidByInvoiceId }) {
+function BillingNotePage({ document, copyLabel, paidByInvoiceId, breakAfterLast }: { document: ArDocument; copyLabel: string; paidByInvoiceId: ArPaidByInvoiceId; breakAfterLast: boolean }) {
   const condition = formatArPaymentCondition(document);
-  return (
-    <div className="hidden print:block" style={{ breakAfter: "page", fontFamily: "'Noto Sans Thai', sans-serif", color: "#000", background: "#fff", padding: "12mm", fontSize: "12px" }}>
+  const header = (
+    <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
           <img src="/logo.png" alt="" style={{ width: "44px", height: "44px", objectFit: "contain" }} />
@@ -199,8 +237,10 @@ function BillingNotePage({ document, copyLabel, paidByInvoiceId }: { document: A
           {condition && <p><strong>เงื่อนไขการชำระเงิน</strong> &nbsp; {condition}</p>}
         </div>
       </div>
+    </>
+  );
 
-      <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse", fontSize: "11px" }}>
+  const tableHead = (
         <thead>
           <tr style={{ borderTop: "1px solid #000", borderBottom: "1px solid #000" }}>
             <th style={{ textAlign: "left", padding: "4px" }}>No.</th>
@@ -212,11 +252,14 @@ function BillingNotePage({ document, copyLabel, paidByInvoiceId }: { document: A
             <th style={{ textAlign: "right", padding: "4px" }}>เงินคงค้าง</th>
           </tr>
         </thead>
-        <tbody>
-          {document.lines.map((l) => {
+  );
+
+  const rows: PrintFormRow[] = document.lines.map((l) => {
             const paid = (l.linkedArDocumentId && paidByInvoiceId[l.linkedArDocumentId]) || 0;
-            return (
-              <tr key={l.seq} style={{ borderBottom: "1px solid #ddd" }}>
+            return {
+              key: String(l.seq),
+              node: (
+              <tr style={{ borderBottom: "1px solid #ddd" }}>
                 <td style={{ padding: "4px" }}>{l.seq}</td>
                 <td style={{ padding: "4px" }}>{l.description}</td>
                 <td style={{ padding: "4px" }}>{formatArDocDate(document.docDate)}</td>
@@ -225,11 +268,25 @@ function BillingNotePage({ document, copyLabel, paidByInvoiceId }: { document: A
                 <td style={{ textAlign: "right", padding: "4px" }}>{paid > 0 ? money(paid) : ""}</td>
                 <td style={{ textAlign: "right", padding: "4px" }}>{money(l.amount - paid)}</td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              ),
+            };
+  });
 
+  // แถวว่างเติมให้เต็มหน้า — เส้นใต้สีเทาและ padding เดียวกับแถวรายการ
+  const blankRow = (key: string) => (
+    <tr key={key} style={{ borderBottom: "1px solid #ddd" }}>
+      <td style={{ padding: "4px" }}>&nbsp;</td>
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+      <td style={{ padding: "4px" }} />
+    </tr>
+  );
+
+  const footer = (
+    <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: "8px" }}>
         {/* bahtText() already returns its own "(...)" wrapper — no extra parens here */}
         <p style={{ fontSize: "11px", border: "1px solid #000", padding: "4px" }}>{document.amountTextTh}</p>
@@ -254,19 +311,34 @@ function BillingNotePage({ document, copyLabel, paidByInvoiceId }: { document: A
           <p style={{ marginTop: "4px" }}>ชื่อผู้วางบิล</p>
         </div>
       </div>
-      <div style={{ textAlign: "right", fontSize: "10px", marginTop: "8px" }}>{copyLabel}</div>
-    </div>
+    </>
+  );
+
+  return (
+    <PaginatedPrintForm
+      header={header}
+      tableHead={tableHead}
+      rows={rows}
+      blankRow={blankRow}
+      footer={footer}
+      // ป้ายต้นฉบับ/สำเนา — เดิมอยู่ใต้ช่องเซ็นชิดขวา ตอนนี้ท้ายกระดาษชิดขวาทุกหน้าของสำเนานั้น
+      pageFooter={<div style={{ textAlign: "right", fontSize: "10px", marginTop: "8px" }}>{copyLabel}</div>}
+      tableStyle={TABLE_STYLE}
+      style={PAGE_STYLE}
+      breakAfterLast={breakAfterLast}
+    />
   );
 }
 
 export function ArDocumentPrintDocument({ document, paidByInvoiceId = {} }: { document: ArDocument; paidByInvoiceId?: ArPaidByInvoiceId }) {
+  const labels = copyLabels(document.docType);
+  // แต่ละสำเนาจัดหน้าของตัวเอง — ทุกสำเนายกเว้นสำเนาสุดท้ายขึ้นหน้าใหม่ต่อท้าย (@page มาจาก PaginatedPrintForm)
   return (
     <>
-      <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
-      {copyLabels(document.docType).map((label) => (
+      {labels.map((label, i) => (
         document.docType === "BI"
-          ? <BillingNotePage key={label} document={document} copyLabel={label} paidByInvoiceId={paidByInvoiceId} />
-          : <DocumentPage key={label} document={document} copyLabel={label} />
+          ? <BillingNotePage key={label} document={document} copyLabel={label} paidByInvoiceId={paidByInvoiceId} breakAfterLast={i < labels.length - 1} />
+          : <DocumentPage key={label} document={document} copyLabel={label} breakAfterLast={i < labels.length - 1} />
       ))}
     </>
   );

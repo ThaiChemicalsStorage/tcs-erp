@@ -774,9 +774,16 @@ block onto a page with nothing above it). The component measures the real height
 `lib/printPagination.ts`'s `paginate()`, and renders fixed A4 boxes with `@page { margin: 0 }`. Pass `header`, a `<thead>`
 as `tableHead`, `rows` (one `<tr>` per entry), `blankRow`, `footer` (last page) and `pageFooter` (form code, every page).
 If the footer or any single row is taller than a page it falls back to normal browser flow so nothing is clipped.
-Used by: ใบสั่งผลิต FM-PD-02, ใบเบิก FM-ST-04, ใบขอซื้อ FM-PU-05, ใบสั่งซื้อ, ใบสั่งงาน FM-PJ-01, Cost Control FM-SL-06.
+Used by every business document since 2026-10-06 (owner: "ทำกับทุกเอกสาร"): ใบสั่งผลิต FM-PD-02, ใบเบิก FM-ST-04, ใบขอซื้อ FM-PU-05,
+ใบสั่งซื้อ, ใบสั่งงาน FM-PJ-01, Cost Control FM-SL-06, ใบเสนอราคา, Scope of Work, ใบส่งมอบ FM-SL-05, รายงานบริการ, AR/BI/RE/IV.
+Options: `span` = an entry rendering several `<tr>` (item + spec lines) kept together; `firstPageHeader` = printed after the
+header on page 1 only (Scope of Work's checklist — owner: "check list มีไว้แค่ใบแรกก็พอ"); `breakAfterLast` = one instance per
+copy/installment, each starting a new page (AR copies, Delivery Order installments); `className` for Tailwind colours.
 Store slips (`StoreSlipPrint`, `IssueReturnSummaryPrint`), the receiving-report form and the vendor-bill form already paginate
-by a fixed row count. **Not converted**: the letterhead documents (ใบเสนอราคา, Scope of Work, ใบส่งมอบ, รายงานบริการ, AR/NCR).
+by a fixed row count. **Deliberately not converted**: the NCR dot-matrix form (fixed positions on pre-printed paper) and the
+reports (stock card, count sheet, tool report, accounting reports, list print — `PrintPageFrame` + repeating `<thead>` already
+give every page its header and margins). The paragraphs below describe the older `<thead>`/zero-margin approach, still used by
+those reports.
 
 **Repeating print headers**: when a printed document needs its header/buyer-info/column-headers to repeat on every page (multi-page quotations, invoices, etc.), wrap the whole document in one `<table>` and put the repeating content in a `<thead>` — browsers natively repeat `<thead>` content across page breaks in print, verified end-to-end with a forced multi-page quotation (see `MODULES/Quotation.md`). Put one-time content (totals, notes, signature blocks) as ordinary `<tbody>` rows at the end, never in a `<tfoot>` (which also repeats every page). Known limitations of this approach: the header can't vary its content by page number (e.g. "full header on page 1, condensed on page 2+") since `<thead>` content is static, and there is no reliable cross-browser way to render "Page X of Y" from CSS alone in a browser print/PDF context — both are accepted simplifications, not bugs to chase.
 
