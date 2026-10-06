@@ -16,8 +16,19 @@ import companyHandler from "../api/company/index.js";
 import auditLogHandler from "../api/audit-log/index.js";
 import dashboardHandler from "../api/dashboard/index.js";
 import { handleFiles as filesHandler } from "../api/_lib/upload/filesHandler.js";
+import { getAuthContext } from "../api/_lib/auth.js";
 
 type ApiHandler = (req: ApiRequest, res: ApiResponse) => void | Promise<void>;
+
+/** หน้าคู่มือและภาพในคู่มือ — ต้องล็อกอินก่อน (ดู middleware ใน createApp) */
+export function isManualPath(rawPathname: string): boolean {
+  // ถอดรหัส %XX และยุบ ../ ก่อนเทียบ — express.static ถอดเองตอนหาไฟล์ ถ้าเทียบกับ url ดิบ
+  // "/%6Danual.html" จะหลุดผ่านไปได้
+  let decoded: string;
+  try { decoded = decodeURIComponent(rawPathname); } catch { return true; }
+  const p = path.posix.normalize(decoded).toLowerCase();
+  return p === "/manual.html" || p.startsWith("/manual-images/");
+}
 
 /**
  * First-path-segment → handler map — the one routing table for the API (a new resource needs an
@@ -113,6 +124,17 @@ export function createApp(): Express {
     // handlers actually use (url, method, headers, query, body, status().json(), setHeader(),
     // send(), end()) exists identically on Express's req/res.
     Promise.resolve(handler(req as unknown as ApiRequest, res as unknown as ApiResponse)).catch(next);
+  });
+
+  // คู่มือ (public/manual.html + ภาพหน้าจอ) เปิดได้เฉพาะคนที่ล็อกอินแล้ว — เจ้าของสั่ง 2026-10-06 (Tuhmo #31)
+  // ยังไม่ล็อกอินเด้งไปหน้าแรก (หน้าล็อกอิน) · production จริงกันที่ nginx ด้วย `auth_request` (nginx/nginx.conf)
+  // เพราะ nginx เสิร์ฟไฟล์ static เองโดยไม่ผ่านตรงนี้ — ตัวนี้ครอบกรณีรัน `npm start` ตรง ๆ
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const pathname = req.url.split("?")[0];
+    if (!isManualPath(pathname)) return next();
+    getAuthContext(req as unknown as ApiRequest)
+      .then((ctx) => (ctx ? next() : res.redirect(302, "/")))
+      .catch(next);
   });
 
   // Built frontend + SPA fallback. dist/ is absent in API-only setups (tests, `npm run dev`

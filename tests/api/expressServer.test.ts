@@ -80,6 +80,22 @@ describe("standalone Express server", () => {
     expect(((await r.json()) as { error: string }).error).toBe("Not found");
   });
 
+  // คู่มือต้องล็อกอินก่อน (Tuhmo #31, 2026-10-06) — nginx เรียก /api/auth/check ผ่าน auth_request
+  it("GET /api/auth/check is 204 signed in and 401 signed out", async () => {
+    expect((await fetch(`${baseUrl}/api/auth/check`, { headers: { cookie: sessionCookie } })).status).toBe(204);
+    expect((await fetch(`${baseUrl}/api/auth/check`)).status).toBe(401);
+  });
+
+  it("the manual redirects to the login page when signed out, including encoded/odd-case paths", async () => {
+    for (const p of ["/manual.html", "/manual-images/ch1.webp", "/%6Danual.html", "/Manual.html", "/x/../manual.html"]) {
+      const r = await fetch(`${baseUrl}${p}`, { redirect: "manual" });
+      expect(r.status, p).toBe(302);
+      expect(r.headers.get("location"), p).toBe("/");
+    }
+    const signedIn = await fetch(`${baseUrl}/manual.html`, { headers: { cookie: sessionCookie }, redirect: "manual" });
+    expect(signedIn.status).not.toBe(302);
+  });
+
   it("query strings reach handlers as plain strings: GET /api/search?q=", async () => {
     const r = await fetch(`${baseUrl}/api/search?q=test`, { headers: { cookie: sessionCookie } });
     expect(r.status).toBe(200);

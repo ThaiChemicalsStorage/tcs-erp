@@ -276,7 +276,10 @@ committed `Dockerfile` (2026-08-07: two targets)** plus MongoDB —
 - target **`app`** → the Express API (`npm ci` + `npm run build`, pruned runtime layer)
 - target **`web`** → nginx with `nginx/nginx.conf` AND the built frontend (`dist/`) baked in;
   nginx serves the SPA directly (immutable `/assets/` caching, no-cache `index.html`, gzip) and
-  proxies only `/api/` to the app container
+  proxies only `/api/` to the app container — **except** `/manual.html` + `/manual-images/`, which
+  it gates with `auth_request` against `GET /api/auth/check` (2026-10-06: the manual requires a
+  signed-in session; signed out → 302 to `/`). `nginx:alpine` ships the `auth_request` module.
+  An nginx.conf change only reaches production after the **web** image is rebuilt and pushed.
 - **MongoDB** (named volume `mongo_data`, starts empty → Setup Wizard on first visit)
 
 **Build & push happen on the dev machine; the server only pulls** (registry: Docker Hub

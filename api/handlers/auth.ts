@@ -1,7 +1,7 @@
 import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { usersCollection, loginAttemptsCollection, ensureIndexes, toPublicUser } from "../_lib/collections.js";
-import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext, startSession, endSession, signedOutReason } from "../_lib/auth.js";
+import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext, requireUser, startSession, endSession, signedOutReason } from "../_lib/auth.js";
 import { seedDefaultRolesIfEmpty, bootstrapRbac } from "../_lib/rbacSeed.js";
 import { seedSystemDataIfEmpty } from "../_lib/systemSeed.js";
 import { handleForgotPassword } from "../_lib/passwordResetHandler.js";
@@ -173,6 +173,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const [path] = getPathSegments(req, "/api/auth");
 
     if (path === "session") return handleSession(req, res);
+    // เช็คสั้น ๆ ว่าล็อกอินอยู่ไหม (204/401) — nginx ใช้กันคู่มือ (`auth_request`) ดู nginx/nginx.conf (2026-10-06)
+    if (path === "check") {
+      if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "Method not allowed");
+      await requireUser(req);
+      return void res.status(204).end();
+    }
     if (path === "setup") return handleSetup(req, res);
     if (path === "login") return handleLogin(req, res);
     if (path === "logout") return handleLogout(req, res);
