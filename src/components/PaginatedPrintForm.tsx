@@ -137,10 +137,16 @@ export function PaginatedPrintForm({
         <style>{`@media print { @page { size: A4 portrait; margin: 0 } }`}</style>
         {layout ? layout.pages.map((page, idx) => (
           <div key={idx} style={{
+            position: "relative",
             width: `${pageWidthMm}mm`, height: `${pageHeightMm - 0.5}mm`, boxSizing: "border-box", padding: `${marginMm}mm`,
             overflow: "hidden", display: "flex", flexDirection: "column",
             breakAfter: page.last && !breakAfterLast ? "auto" : "page", pageBreakAfter: page.last && !breakAfterLast ? "auto" : "always",
           }}>
+            {/* เลขหน้า (เจ้าของ 2026-10-06: "อยากมีเลขหน้าด้วย 1/2 2/2") — วางในขอบล่างของกระดาษ ไม่กินที่ของเนื้อหา จึงไม่กระทบการวัด
+                เอกสารหลายชุด (ต้นฉบับ/สำเนา, ใบส่งมอบหลายงวด) นับแยกต่อชุด เพราะแต่ละชุดเป็น instance ของตัวเอง */}
+            <div style={{ position: "absolute", right: `${marginMm}mm`, bottom: `${Math.max(3, marginMm / 2 - 2)}mm`, fontSize: "9px", lineHeight: 1 }}>
+              {idx + 1}/{layout.pages.length}
+            </div>
             <div style={flow}>{header}</div>
             {idx === 0 && firstPageHeader && <div style={flow}>{firstPageHeader}</div>}
             {table(<>
