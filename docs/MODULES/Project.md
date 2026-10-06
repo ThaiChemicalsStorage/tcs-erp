@@ -169,7 +169,17 @@ line.
 
 ## Products-Catalog Reuse
 
-Material Requisition lines reference an existing `Product` by id (`productId`, required) rather than
+> **2026-10-06: `productId` is no longer required.** A line with `productId: ""` is a **free-typed line**
+> (owner: *"หน้าใบเบิกอยากให้เขียนสินค้าเองได้ทั้งแบบไม่มีชื่อและไม่มีรหัส"*) — name/code/unit typed by the user
+> ("เพิ่มรายการเอง" button, grey "ไม่ตัดสต๊อก" tag). It can be requested, approved and issued, but never
+> touches stock: `deductionsFor()` already skipped product-less lines, so no movement and no cost; the
+> requisition's return route refuses to change its `returnQty` (400) and store receipts leave it out of the
+> return lines (`sourceLinesOf()`). A blank name may be saved as a draft (auto-save fires mid-typing) but is
+> rejected at submit (`beforeSubmit`) and at issue (`assertFreeLinesNamed()`). Lines the store adds while
+> issuing (`newLines`) must still be catalog products. Tests: "รายการพิมพ์เอง" in
+> `tests/api/materialRequisitionIssue.test.ts`.
+
+Material Requisition lines reference an existing `Product` by id (`productId`, required until 2026-10-06 — see above) rather than
 a duplicate parallel catalog; Purchase Request lines do the same but optionally. Confirmed working: a
 real seed run (`tests/api/materialCatalogSeed.test.ts`) inserted **4 categories** (เคมี/เรซิ่น,
 วัสดุสิ้นเปลือง, น็อตและสกรู, อื่นๆ (คลัง)) and **82 real products**, transcribed from

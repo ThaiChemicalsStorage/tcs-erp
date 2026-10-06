@@ -28,7 +28,9 @@ export type MaterialRequisitionCategory = "chemical" | "consumable" | "hardware"
 export interface MaterialRequisitionLine {
   id: string;
   /** -> Product.id. Never live-referenced after creation — code/name/unit below are a frozen
-   * snapshot, same convention as QuoteLine/ScopeOfWorkItem. */
+   * snapshot, same convention as QuoteLine/ScopeOfWorkItem.
+   * **`""` = รายการพิมพ์เอง** (2026-10-06 เจ้าของ: *"หน้าใบเบิกอยากให้เขียนสินค้าเองได้ทั้งแบบไม่มีชื่อและไม่มีรหัส"*) — ชื่อ/รหัส/หน่วยพิมพ์เอง
+   * ขอ-อนุมัติ-จ่ายได้ตามปกติ แต่ **ไม่ตัดสต๊อก ไม่มีต้นทุน และคืนเข้าคลังไม่ได้** (ของที่ไม่มีรหัสไม่ได้อยู่ในคลังอยู่แล้ว) · ดู `isFreeTypedLine()` */
   productId: string;
   productCode: string;
   productName: string;
@@ -355,6 +357,21 @@ export function blankMaterialRequisitionLine(product: Product, categoryName: str
     id: newId("mrline"),
     productId: product.id, productCode: product.code, productName: product.name, unit: product.unit,
     category: resolveMaterialCategoryKey(categoryName),
+    plannedQty: null, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null, actualUsedQty: null,
+  };
+}
+
+/** รายการพิมพ์เอง (ไม่ผูกสินค้าในคลัง) — ไม่ตัดสต๊อก ไม่มีต้นทุน คืนเข้าคลังไม่ได้ (2026-10-06) */
+export function isFreeTypedLine(line: Pick<MaterialRequisitionLine, "productId">): boolean {
+  return !line.productId;
+}
+
+// บรรทัดพิมพ์เองว่าง ๆ — ผู้ใช้พิมพ์ชื่อ/รหัส/หน่วยเอง (2026-10-06)
+export function blankFreeTypedMaterialRequisitionLine(): MaterialRequisitionLine {
+  return {
+    id: newId("mrline"),
+    productId: "", productCode: "", productName: "", unit: "",
+    category: "other",
     plannedQty: null, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null, actualUsedQty: null,
   };
 }

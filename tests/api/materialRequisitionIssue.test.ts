@@ -568,3 +568,41 @@ describe("POST /api/material-requisitions — ใบเปล่า ไม่ม
     expect(await stockOf(productB)).toBe(before - 6);
   });
 });
+
+/**
+ * รายการพิมพ์เอง (2026-10-06 เจ้าของ: *"หน้าใบเบิกอยากให้เขียนสินค้าเองได้ทั้งแบบไม่มีชื่อและไม่มีรหัส"*) — `productId: ""`
+ * ขอ-อนุมัติ-จ่ายได้ แต่ไม่ตัดสต๊อก ไม่มี movement และคืนเข้าคลังไม่ได้
+ */
+describe("รายการพิมพ์เอง (ไม่มีรหัสสินค้า)", () => {
+  it("บันทึกร่างได้ทั้งที่ยังไม่มีชื่อ · ชื่อ/รหัส/หน่วยเก็บตามที่พิมพ์ · ส่งขออนุมัติตอนชื่อว่าง → 400", async () => {
+    const id = await seedRequisition("Draft");
+    const patch = (lines: unknown[]) => api(`/api/material-requisitions/${id}`, { method: "PATCH", body: JSON.stringify({ lines }) });
+    const blank = { id: "free1", productId: "", productCode: "", productName: "", unit: "", category: "other", plannedQty: 2 };
+    expect((await patch([blank])).status).toBe(200);
+    expect((await api(`/api/material-requisitions/${id}/submit-approval`, { method: "POST" })).status).toBe(400);
+
+    const named = await patch([{ ...blank, productCode: "X-01", productName: "ถุงมือผ้า", unit: "คู่" }]);
+    expect(named.status).toBe(200);
+    expect((await docOf(id)).lines[0]).toMatchObject({ productId: "", productCode: "X-01", productName: "ถุงมือผ้า", unit: "คู่" });
+    expect((await api(`/api/material-requisitions/${id}/submit-approval`, { method: "POST" })).status).toBe(200);
+  });
+
+  it("จ่ายรายการพิมพ์เองพร้อมสินค้าในคลัง — ตัดสต๊อกเฉพาะสินค้าในคลัง · คืนรายการพิมพ์เอง → 400", async () => {
+    await setStock(productB, 50);
+    const id = await seedRequisition("Final", [
+      { id: "l1", productId: "", plannedQty: 3 },
+      { id: "l2", productId: productB, plannedQty: 5 },
+    ], "project");
+    const res = await issue(id, [{ lineId: "l1", qty: 3 }, { lineId: "l2", qty: 5 }]);
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(await stockOf(productB)).toBe(45);
+    const moves = await movementsOf(id);
+    expect(moves).toHaveLength(1);
+    expect(moves[0].productId).toBe(productB);
+    const doc = await docOf(id);
+    expect(doc.issues[0].lines).toEqual(expect.arrayContaining([{ lineId: "l1", qty: 3 }]));
+
+    const ret = await api(`/api/material-requisitions/${id}/return`, { method: "POST", body: JSON.stringify({ lines: [{ id: "l1", returnQty: 1 }] }) });
+    expect(ret.status).toBe(400);
+  });
+});

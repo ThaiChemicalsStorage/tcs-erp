@@ -6,7 +6,7 @@ import {
   fetchMaterialRequisition, updateMaterialRequisition,
   postMaterialIssueBatch, cancelMaterialIssueBatch,
   logMaterialRequisitionPrinted, deleteMaterialRequisition,
-  blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
+  blankMaterialRequisitionLine, blankFreeTypedMaterialRequisitionLine, isFreeTypedLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
   rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf, storeSlipSkipsApproval,
   fetchStoreIssueSources, type StoreIssueSourceCandidate,
@@ -928,6 +928,10 @@ export function MaterialRequisitionDocument({
                 <button type="button" onClick={() => openProductPicker()} className={btn.secondarySm}>
                   <Plus size={14} /> {t("materialRequisitionDoc.addLine")}
                 </button>
+                <button type="button" onClick={() => setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankFreeTypedMaterialRequisitionLine()] })}
+                  title={t("materialRequisitionDoc.freeLine.noStockHint")} className={btn.secondarySm}>
+                  <Plus size={14} /> {t("materialRequisitionDoc.addFreeLine")}
+                </button>
               </span>
             ) : undefined}
             bodyClassName=""
@@ -961,9 +965,29 @@ export function MaterialRequisitionDocument({
                         const shortBy = stock !== undefined && outstanding > stock ? outstanding - stock : 0;
                         return (
                           <tr key={line.id} className="border-b border-[#eef1f6] last:border-b-0 align-top">
-                            <td className={`${table.td} py-2.5 font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{line.productCode}</td>
+                            {/* รายการพิมพ์เอง (2026-10-06) — รหัส/ชื่อ/หน่วยพิมพ์ได้ระหว่างร่าง · ไม่ตัดสต๊อก */}
+                            {editable && isFreeTypedLine(line) ? (
+                              <td className={`${table.td} py-1.5`}>
+                                <input value={line.productCode} onChange={(e) => updateLine(line.id, { productCode: e.target.value })}
+                                  placeholder={t("materialRequisitionDoc.freeLine.codePlaceholder")}
+                                  aria-label={t("materialRequisitionDoc.col.productCode")} className={`${field.cell} w-28 font-mono text-[13px]`} />
+                              </td>
+                            ) : (
+                              <td className={`${table.td} py-2.5 font-mono text-[13px] text-[#3d5173] whitespace-nowrap`}>{line.productCode || "—"}</td>
+                            )}
                             <td className={`${table.td} py-2.5 min-w-[220px]`}>
-                              <span className="block text-sm font-medium text-foreground leading-snug">{line.productName}</span>
+                              {editable && isFreeTypedLine(line) ? (
+                                <input value={line.productName} onChange={(e) => updateLine(line.id, { productName: e.target.value })}
+                                  placeholder={t("materialRequisitionDoc.freeLine.namePlaceholder")}
+                                  aria-label={t("materialRequisitionDoc.col.item")} className={`${field.cell} w-full`} />
+                              ) : (
+                                <span className="block text-sm font-medium text-foreground leading-snug">{line.productName}</span>
+                              )}
+                              {isFreeTypedLine(line) && (
+                                <span className="mt-1 inline-flex" title={t("materialRequisitionDoc.freeLine.noStockHint")}>
+                                  <Tag tone="grey">{t("materialRequisitionDoc.freeLine.noStock")}</Tag>
+                                </span>
+                              )}
                               {shortBy > 0 && (
                                 <span className="mt-1 inline-flex">
                                   <Tag tone="amber"><AlertTriangle size={12} /> {t("materialRequisitionDoc.shortBy").replace("{n}", shortBy.toLocaleString())}</Tag>
@@ -971,7 +995,14 @@ export function MaterialRequisitionDocument({
                               )}
                               <KitBreakdown productId={line.productId} qty={line.plannedQty} kits={kits} />
                             </td>
-                            <td className={`${table.td} py-2.5 text-sm text-[#3d5173] whitespace-nowrap`}>{line.unit}</td>
+                            {editable && isFreeTypedLine(line) ? (
+                              <td className={`${table.td} py-1.5`}>
+                                <input value={line.unit} onChange={(e) => updateLine(line.id, { unit: e.target.value })}
+                                  aria-label={t("materialRequisitionDoc.col.unit")} className={`${field.cell} w-20`} />
+                              </td>
+                            ) : (
+                              <td className={`${table.td} py-2.5 text-sm text-[#3d5173] whitespace-nowrap`}>{line.unit}</td>
+                            )}
                             <td className={`${numTd} ${shortBy > 0 ? "text-[#8a5a00] font-semibold" : "text-[#3d5173]"}`}>{stock === undefined ? "—" : stock.toLocaleString()}</td>
                             <td className={`${table.td} py-1.5 text-right`}>
                               {editable ? (
@@ -1088,9 +1119,10 @@ export function MaterialRequisitionDocument({
                           return (
                             <tr key={line.id} className="border-b border-[#eef1f6] align-top">
                               <td className={`${table.td} py-2.5 min-w-[220px]`}>
-                                <span className="flex items-baseline gap-2 min-w-0">
+                                <span className="flex items-baseline gap-2 flex-wrap min-w-0">
                                   <span className="font-mono text-[12.5px] text-muted-foreground flex-shrink-0">{line.productCode}</span>
                                   <span className="text-sm font-medium text-foreground">{line.productName}</span>
+                                  {isFreeTypedLine(line) && <Tag tone="grey">{t("materialRequisitionDoc.freeLine.noStock")}</Tag>}
                                 </span>
                                 <KitBreakdown productId={line.productId} qty={typed > 0 ? typed : null} kits={kits} />
                               </td>

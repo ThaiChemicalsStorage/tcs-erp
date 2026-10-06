@@ -307,11 +307,18 @@ function orgTagsOf(doc: MaterialRequisitionFields): StockMovementOrgTags {
   };
 }
 
+/** รายการพิมพ์เองที่ยังไม่มีชื่อ — ส่งขออนุมัติ/จ่ายของไม่ได้ (2026-10-06) */
+function assertFreeLinesNamed(lines: MaterialRequisitionLine[]): void {
+  const idx = lines.findIndex((l) => !l.productId && !l.productName.trim());
+  if (idx >= 0) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: กรุณาพิมพ์ชื่อรายการ`);
+}
+
 /**
- * Every line REQUIRES a real, resolvable `productId` (unlike Purchase Request's optional one) —
- * see MaterialRequisitionLine's own doc comment. `productCode`/`productName`/`unit` are always
- * rebuilt server-side from the resolved Product record, never trusted from client input — same
- * "server-resolved snapshot" integrity rule Quotation Templates' product links already established.
+ * A line either references a real, resolvable `productId`, or — since 2026-10-06 — is **free-typed**
+ * (`productId: ""`, name/code/unit typed by the user; never touches stock — see MaterialRequisitionLine).
+ * For catalog lines `productCode`/`productName`/`unit` are always rebuilt server-side from the resolved
+ * Product record, never trusted from client input — same "server-resolved snapshot" integrity rule
+ * Quotation Templates' product links already established.
  *
  * `withdrawal1Qty`/`withdrawal2Qty` (จ่ายจริง) และ `returnQty` **ไม่รับจาก PATCH** ตั้งแต่ 2026-09-03 —
  * เป็นของสโตร์ผ่าน `/issue` และ `/return` เท่านั้น ค่าเดิมของบรรทัดเดียวกัน (จับคู่ด้วย `id`) ถูกคงไว้
@@ -331,14 +338,22 @@ async function sanitizeLines(raw: unknown, existing: MaterialRequisitionLine[]):
 
   return rows.map((r, idx) => {
     const productId = typeof r.productId === "string" ? r.productId : "";
-    if (!productId) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: กรุณาระบุสินค้า`);
-    const product = productById.get(productId);
-    if (!product) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ไม่พบสินค้าที่ระบุ`);
+    const product = productId ? productById.get(productId) : undefined;
+    if (productId && !product) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ไม่พบสินค้าที่ระบุ`);
     const id = typeof r.id === "string" && r.id ? r.id : newId("mrline");
     const prev = existingById.get(id);
+    // รายการพิมพ์เอง (2026-10-06) — ชื่อ/รหัส/หน่วยมาจากที่ผู้ใช้พิมพ์ · ชื่อว่างบันทึกร่างได้ (บันทึกอัตโนมัติยิงก่อนพิมพ์เสร็จ)
+    // แต่ส่งขออนุมัติและจ่ายของไม่ได้ (`assertFreeLinesNamed`)
+    const snapshot = product
+      ? { productCode: product.code, productName: product.name, unit: product.unit }
+      : {
+          productCode: sanitizeShortText(r.productCode, `รหัสลำดับที่ ${idx + 1}`),
+          productName: sanitizeShortText(r.productName, `ชื่อรายการลำดับที่ ${idx + 1}`),
+          unit: sanitizeShortText(r.unit, `หน่วยลำดับที่ ${idx + 1}`),
+        };
     return {
       id,
-      productId, productCode: product.code, productName: product.name, unit: product.unit,
+      productId, ...snapshot,
       category: sanitizeEnum(r.category, MATERIAL_CATEGORIES, `หมวดหมู่ลำดับที่ ${idx + 1}`),
       plannedQty: sanitizeNullableNumber(r.plannedQty, `จำนวนที่วางแผนลำดับที่ ${idx + 1}`),
       withdrawal1Qty: prev?.withdrawal1Qty ?? null,
@@ -843,6 +858,8 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   if (rawNewLines.length > 0 && doc.ownerDepartment !== "store") throw new HttpError(400, "เพิ่มรายการตอนจ่ายได้เฉพาะใบจ่ายของสโตร์");
   if (doc.lines.length + rawNewLines.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
   const newRows = (rawNewLines as Record<string, unknown>[]).map((r, idx) => {
+    // เพิ่มตอนจ่ายได้เฉพาะสินค้าในคลัง — รายการพิมพ์เองเพิ่มที่ตัวใบ (sanitizeLines ยอมรับ productId ว่างแล้ว จึงต้องกันตรงนี้)
+    if (typeof r?.productId !== "string" || !r.productId) throw new HttpError(400, `รายการที่เพิ่มลำดับที่ ${idx + 1}: กรุณาเลือกสินค้า`);
     const qty = sanitizeNullableNumber(r?.qty, `จำนวนจ่ายของรายการที่เพิ่มลำดับที่ ${idx + 1}`) ?? 0;
     if (!(qty > 0)) throw new HttpError(400, `รายการที่เพิ่มลำดับที่ ${idx + 1}: กรุณากรอกจำนวนที่จ่าย`);
     return { productId: r?.productId, category: typeof r?.category === "string" ? r.category : "other", plannedQty: qty, actualUsedQty: null };
@@ -859,6 +876,8 @@ async function handlePostIssueBatch(req: ApiRequest, res: ApiResponse, id: strin
   }
   const slipLines = [...doc.lines, ...addedLines];
   if (qtyByLineId.size === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่จ่ายอย่างน้อยหนึ่งรายการ");
+  // ใบจ่ายที่อ้างใบเบิกแผนกไม่ผ่านขั้นส่งขออนุมัติ — ด่านชื่อรายการพิมพ์เองจึงต้องอยู่ตรงนี้ด้วย
+  assertFreeLinesNamed(slipLines.filter((l) => qtyByLineId.has(l.id)));
 
   if (source) {
     const srcLineIds = new Set((source.lines ?? []).map((l) => l.id));
@@ -1131,6 +1150,9 @@ async function handleReturn(req: ApiRequest, res: ApiResponse, id: string) {
     if (!r) return line;
     const returnQty = sanitizeNullableNumber(r.returnQty, `คืนของ (${line.productName})`);
     if ((returnQty ?? 0) < 0) throw new HttpError(400, `คืนของ (${line.productName}) ต้องไม่ติดลบ`);
+    if (!line.productId && (returnQty ?? 0) !== (line.returnQty ?? 0)) {
+      throw new HttpError(400, `${line.productName || "รายการพิมพ์เอง"}: เป็นรายการพิมพ์เอง ไม่ได้ออกจากคลัง จึงคืนเข้าคลังไม่ได้`);
+    }
     const issued = issuedQtyOf(line);
     if ((returnQty ?? 0) > issued) {
       throw new HttpError(400, `คืน ${line.productName} ${returnQty} เกินที่จ่ายไปแล้ว ${issued} ${line.unit}`);
@@ -1208,6 +1230,7 @@ const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }
   collection: async () => (await materialRequisitionsCollection()) as unknown as Collection<MaterialRequisitionFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,
+  beforeSubmit: (_ctx, doc) => assertFreeLinesNamed(doc.lines ?? []),
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
   onApproved: async (ctx, doc) => {

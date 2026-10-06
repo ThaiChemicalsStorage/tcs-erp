@@ -96,7 +96,8 @@ async function loadSourceRequisition(_receiptCode: StoreReceiptCode, requisition
 }
 
 function sourceLinesOf(mr: MaterialRequisitionFields): StoreReceiptSourceLine[] {
-  return (mr.lines ?? []).map((l) => ({
+  // รายการพิมพ์เองของใบเบิก (2026-10-06) ไม่เคยออกจากคลัง จึงคืนเข้าคลังไม่ได้ — ไม่ให้โผล่เป็นบรรทัดคืน
+  return (mr.lines ?? []).filter((l) => l.productId).map((l) => ({
     lineId: l.id, productId: l.productId, productCode: l.productCode, productName: l.productName, unit: l.unit,
     issued: issuedQtyOf(l), returned: l.returnQty ?? 0,
   }));
