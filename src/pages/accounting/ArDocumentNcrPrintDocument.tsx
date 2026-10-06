@@ -31,17 +31,24 @@ import type { ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
  */
 
 import type { NcrPrintSettings } from "../../lib/ncrPrintSettings";
+import { canvasMeasurer, wrapTextToWidth, type TextMeasurer } from "../../lib/printTextWrap";
 
 // ─── ผังตำแหน่งฟอร์ม (มม. จากมุมซ้ายบนของกระดาษ) — ร่างแรกจากภาพถ่าย ───────────────
 const FORM = {
   pageIndicator: { top: 36, left: 192 },          // "หน้า 1/2" (เอกสารออกเป็นชุด)
+  // รหัสลูกค้า (เช่น "P-077") อยู่บนบรรทัดป้าย "ลูกค้า :" ถัดจากป้าย เหนือชื่อลูกค้าเล็กน้อย — ตาม
+  // ใบเสร็จ RE6903035 ที่โปรแกรมเดิมพิมพ์ (added 2026-10-06, ร่างแรกเหมือนช่องอื่น)
+  customerCode: { top: 50.5, left: 13, width: 10 },
   customerName: { top: 55, left: 24, width: 118 },
-  customerAddress1: { top: 61, left: 26, width: 116 },
-  customerAddress2: { top: 67, left: 26, width: 116 },
+  // ที่อยู่ตัดได้ 3 บรรทัด — บรรทัดที่ 3 ตกบนแถว "สถานที่ส่งสินค้า / Place To Delivery" เหมือนที่โปรแกรมเดิม
+  // พิมพ์ (เช่น "10560" ในใบ IV6903036) ฟอร์มจริงใช้แถวนั้นเป็นบรรทัดต่อของที่อยู่ ไม่ใช่ข้อมูลแยก
+  customerAddress: { top: 61, left: 26, width: 116, lineHeightMm: 6, maxLines: 3 },
   taxId: { top: 81, left: 58 },
   branch: { top: 81, left: 118 },
   docNo: { top: 50, left: 150 },
   docDate: { top: 61, left: 150 },
+  // ช่อง "ผู้ขาย / Sale" กล่องขวา คอลัมน์เดียวกับเลขที่/วันที่ ต่ำกว่าแถวเลขภาษีเล็กน้อย (added 2026-10-06)
+  salesperson: { top: 83, left: 150, width: 65 },
   conditionDays: { top: 92, left: 22 },
   dueDate: { top: 92, left: 62 },
   reference: { top: 92, left: 150 },
@@ -52,6 +59,7 @@ const FORM = {
     seqLeft: 9,
     descLeft: 22,
     descWidth: 108,
+    subDetailIndent: 2,   // บรรทัดรายละเอียดย่อยเยื้องเข้าเล็กน้อย เหมือนฟอร์มจริง ("-Pipe for use…")
     qtyRight: 152,
     unitLeft: 156,
     unitPriceRight: 188,
@@ -73,11 +81,12 @@ const FORM = {
 // ตารางอ้างอิงใบกำกับภาษีต่อบรรทัด) — เปลี่ยนแค่การจัดวางเป็นตำแหน่งสัมบูรณ์
 const FORM_BI = {
   pageIndicator: { top: 36, left: 192 },
+  customerCode: { top: 43, left: 20 },   // "ลูกค้า P-077" บรรทัดบนสุดของกล่องลูกค้า (added 2026-10-06)
   docNo: { top: 45, left: 150 },
   docDate: { top: 52, left: 150 },
   condition: { top: 59, left: 150, width: 65 },
   customerName: { top: 50, left: 20, width: 110 },
-  customerAddress: { top: 57, left: 20, width: 110 },
+  customerAddress: { top: 57, left: 20, width: 110, lineHeightMm: 6, maxLines: 3 },
   table: {
     top: 78,
     rowHeightMm: 7,
@@ -97,6 +106,35 @@ const FORM_BI = {
 
 const mm = (n: number) => `${n}mm`;
 
+// ขนาดฟอนต์ของข้อมูลบนฟอร์ม — ใช้ทั้งตอนพิมพ์และตอนวัดความกว้างเพื่อตัดบรรทัด
+const NCR_FONT_PT = 10.5;
+const NCR_FONT_PX = (NCR_FONT_PT * 96) / 72;
+const NCR_FONT_FAMILY = "'Noto Sans Thai', sans-serif";
+
+// เผื่อขอบขวาของช่องเล็กน้อย — ความกว้างที่ canvas วัดได้กับที่เครื่องพิมพ์วาดจริงต่างกันได้นิดหน่อย
+const WRAP_SAFETY_MM = 1;
+
+function ncrMeasurer(): TextMeasurer {
+  return canvasMeasurer(`${NCR_FONT_PX}px ${NCR_FONT_FAMILY}`, NCR_FONT_PX);
+}
+
+/** โหลดฟอนต์ของฟอร์ม NCR (ทั้งชุดอักษรไทยและละติน) ให้เสร็จก่อนเรนเดอร์ใบพิมพ์ — เรียกก่อนเปิดพิมพ์ทุกครั้ง
+ * Google Fonts แบ่ง Noto Sans Thai เป็นหลายไฟล์ตาม unicode-range และหน้าจอของแอปใช้ Inter กับอักษรละติน
+ * ไฟล์ละตินของ Noto Sans Thai จึงมักยังไม่ถูกโหลด ถ้าวัดความกว้างตอนนั้น canvas จะวัดด้วยฟอนต์สำรองที่แคบกว่า
+ * แล้วการตัดบรรทัดจะผิด (ข้อความล้นช่องจำนวน) · ไม่ throw และไม่รอเกิน 3 วินาที — พิมพ์ต่อได้เสมอ */
+export async function prepareNcrFonts(): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts) return;
+  const load = document.fonts.load(`${NCR_FONT_PX}px ${NCR_FONT_FAMILY}`, "AZaz09.,-()ภาษาไทยก่ข้ำ").catch(() => []);
+  await Promise.race([load, new Promise((resolve) => setTimeout(resolve, 3000))]);
+}
+
+/** ที่อยู่ลูกค้าตัดเป็นบรรทัดตามความกว้างช่อง ไม่เกิน maxLines — ส่วนที่ล้นต่อท้ายบรรทัดสุดท้าย (ถูกตัดที่ขอบช่อง) */
+function addressLines(address: string, widthMm: number, maxLines: number): string[] {
+  const lines = wrapTextToWidth(address.trim(), widthMm - WRAP_SAFETY_MM, ncrMeasurer()).filter((l) => l.trim());
+  if (lines.length <= maxLines) return lines;
+  return [...lines.slice(0, maxLines - 1), lines.slice(maxLines - 1).join(" ")];
+}
+
 function money(n: number): string {
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
 }
@@ -108,6 +146,8 @@ function daysBetween(fromIso: string, toIso: string): number {
 }
 
 interface NcrRow {
+  /** บรรทัดรายละเอียดย่อย — เยื้องเข้าเล็กน้อย */
+  indent?: boolean;
   seq: string;
   description: string;
   qty: string;
@@ -122,22 +162,32 @@ function buildRows(doc: ArDocument): NcrRow[] {
   // บรรทัดรายละเอียดย่อยกลายเป็นแถวของตัวเองใต้รายการหลัก (คอลัมน์อื่นเว้นว่าง) ตรงกับฟอร์มจริง
   // ที่พิมพ์ "For Installation" เป็นอีกบรรทัดใต้ "(งวดที่1/4)30%DownPayment" — ใช้ flatMap เพื่อให้
   // การแบ่งหน้า (rowsPerPage ด้านล่าง) นับแถวย่อยเหล่านี้ด้วย ไม่ให้ล้นออกนอกกรอบฟอร์ม
-  const lineRows: NcrRow[] = doc.lines.flatMap((l) => [
-    {
-      seq: String(l.seq),
-      description: l.description,
-      qty: doc.docType === "RE" ? "" : l.qty.toLocaleString("th-TH", { minimumFractionDigits: 2 }),
-      unit: doc.docType === "RE" ? "" : l.unit,
-      unitPrice: doc.docType === "RE" ? "" : money(l.unitPrice),
-      amount: money(l.amount),
-    },
-    ...(l.subDetails ?? []).map((sd) => ({
-      seq: "", description: sd, qty: "", unit: "", unitPrice: "", amount: "",
-    })),
-  ]);
-  const remarkRows: NcrRow[] = doc.remarks.map((r) => ({
-    seq: "", description: r, qty: "", unit: "", unitPrice: "", amount: "",
-  }));
+  //
+  // ข้อความที่ยาวเกินช่องรายการตัดเป็นหลายแถว (added 2026-10-06) — เดิมพิมพ์บรรทัดเดียวแล้วส่วนที่เกินถูกตัด
+  // หายไปเงียบ ๆ ตอนนี้ต่อลงแถวถัดไปแบบที่โปรแกรมเดิมทำ ("Transportation and Crane Charge" / "to Nonthaburi")
+  // และนับรวมในการแบ่งหน้าด้วย
+  const T = FORM.table;
+  const measure = ncrMeasurer();
+  const wrap = (text: string, indent: boolean) =>
+    wrapTextToWidth(text, T.descWidth - (indent ? T.subDetailIndent : 0) - WRAP_SAFETY_MM, measure);
+  const textRows = (text: string, indent: boolean): NcrRow[] =>
+    wrap(text, indent).map((description) => ({ indent, seq: "", description, qty: "", unit: "", unitPrice: "", amount: "" }));
+  const lineRows: NcrRow[] = doc.lines.flatMap((l) => {
+    const [first = "", ...rest] = wrap(l.description, false);
+    return [
+      {
+        seq: String(l.seq),
+        description: first,
+        qty: doc.docType === "RE" ? "" : l.qty.toLocaleString("th-TH", { minimumFractionDigits: 2 }),
+        unit: doc.docType === "RE" ? "" : l.unit,
+        unitPrice: doc.docType === "RE" ? "" : money(l.unitPrice),
+        amount: money(l.amount),
+      },
+      ...rest.map((description) => ({ seq: "", description, qty: "", unit: "", unitPrice: "", amount: "" })),
+      ...(l.subDetails ?? []).flatMap((sd) => textRows(sd, true)),
+    ];
+  });
+  const remarkRows: NcrRow[] = doc.remarks.flatMap((r) => textRows(r, false));
   return [...lineRows, ...remarkRows];
 }
 
@@ -178,8 +228,8 @@ function NcrPage({ doc, rows, pageIndex, pageCount, settings }: {
         breakAfter: "page",
         color: "#000",
         background: "#fff",
-        fontFamily: "'Noto Sans Thai', sans-serif",
-        fontSize: "10.5pt",
+        fontFamily: NCR_FONT_FAMILY,
+        fontSize: `${NCR_FONT_PT}pt`,
         // offset เยื้องทั้งหน้า — calibrate กับเครื่องพิมพ์จริงผ่านหน้าตั้งค่า
         paddingTop: mm(settings.offsetYMm),
         paddingLeft: mm(settings.offsetXMm),
@@ -195,8 +245,11 @@ function NcrPage({ doc, rows, pageIndex, pageCount, settings }: {
         )}
         {pageCount > 1 && <Field top={FORM.pageIndicator.top} left={FORM.pageIndicator.left}>{pageIndex + 1}/{pageCount}</Field>}
 
+        {doc.customerSnapshot.code && <Field top={FORM.customerCode.top} left={FORM.customerCode.left} width={FORM.customerCode.width}>{doc.customerSnapshot.code}</Field>}
         <Field top={FORM.customerName.top} left={FORM.customerName.left} width={FORM.customerName.width}>{doc.customerSnapshot.companyName}</Field>
-        <Field top={FORM.customerAddress1.top} left={FORM.customerAddress1.left} width={FORM.customerAddress1.width}>{doc.customerSnapshot.address}</Field>
+        {addressLines(doc.customerSnapshot.address, FORM.customerAddress.width, FORM.customerAddress.maxLines).map((line, i) => (
+          <Field key={i} top={FORM.customerAddress.top + i * FORM.customerAddress.lineHeightMm} left={FORM.customerAddress.left} width={FORM.customerAddress.width}>{line}</Field>
+        ))}
         <Field top={FORM.taxId.top} left={FORM.taxId.left}>{doc.customerSnapshot.taxId}</Field>
         {doc.customerSnapshot.branch && <Field top={FORM.branch.top} left={FORM.branch.left}>{doc.customerSnapshot.branch}</Field>}
 
@@ -205,13 +258,15 @@ function NcrPage({ doc, rows, pageIndex, pageCount, settings }: {
         {days > 0 && <Field top={FORM.conditionDays.top} left={FORM.conditionDays.left}>{days}</Field>}
         {days > 0 && <Field top={FORM.dueDate.top} left={FORM.dueDate.left}>{formatArDocDate(doc.dueDate)}</Field>}
         {doc.reference && <Field top={FORM.reference.top} left={FORM.reference.left}>{doc.reference}</Field>}
+        {/* ใบเสร็จ (RE) บนฟอร์มจริงเว้นช่องผู้ขายว่าง — พิมพ์เฉพาะใบกำกับภาษี/ใบรับเงินมัดจำ */}
+        {doc.salesperson && doc.docType !== "RE" && <Field top={FORM.salesperson.top} left={FORM.salesperson.left} width={FORM.salesperson.width}>{doc.salesperson}</Field>}
 
         {rows.map((row, i) => {
           const top = T.top + i * T.rowHeightMm;
           return (
             <div key={i}>
               {row.seq && <Field top={top} left={T.seqLeft}>{row.seq}</Field>}
-              <Field top={top} left={T.descLeft} width={T.descWidth}>{row.description}</Field>
+              <Field top={top} left={T.descLeft + (row.indent ? T.subDetailIndent : 0)} width={T.descWidth - (row.indent ? T.subDetailIndent : 0)}>{row.description}</Field>
               {row.qty && <Field top={top} right={T.qtyRight}>{row.qty}</Field>}
               {row.unit && <Field top={top} left={T.unitLeft}>{row.unit}</Field>}
               {row.unitPrice && <Field top={top} right={T.unitPriceRight}>{row.unitPrice}</Field>}
@@ -261,8 +316,8 @@ function BillingNoteNcrPage({ doc, pageIndex, pageCount, settings, paidByInvoice
         breakAfter: "page",
         color: "#000",
         background: "#fff",
-        fontFamily: "'Noto Sans Thai', sans-serif",
-        fontSize: "10.5pt",
+        fontFamily: NCR_FONT_FAMILY,
+        fontSize: `${NCR_FONT_PT}pt`,
         paddingTop: mm(settings.offsetYMm),
         paddingLeft: mm(settings.offsetXMm),
         boxSizing: "border-box",
@@ -271,8 +326,11 @@ function BillingNoteNcrPage({ doc, pageIndex, pageCount, settings, paidByInvoice
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
         {pageCount > 1 && <Field top={FORM_BI.pageIndicator.top} left={FORM_BI.pageIndicator.left}>{pageIndex + 1}/{pageCount}</Field>}
 
+        {doc.customerSnapshot.code && <Field top={FORM_BI.customerCode.top} left={FORM_BI.customerCode.left}>{doc.customerSnapshot.code}</Field>}
         <Field top={FORM_BI.customerName.top} left={FORM_BI.customerName.left} width={FORM_BI.customerName.width}>{doc.customerSnapshot.companyName}</Field>
-        <Field top={FORM_BI.customerAddress.top} left={FORM_BI.customerAddress.left} width={FORM_BI.customerAddress.width}>{doc.customerSnapshot.address}</Field>
+        {addressLines(doc.customerSnapshot.address, FORM_BI.customerAddress.width, FORM_BI.customerAddress.maxLines).map((line, i) => (
+          <Field key={i} top={FORM_BI.customerAddress.top + i * FORM_BI.customerAddress.lineHeightMm} left={FORM_BI.customerAddress.left} width={FORM_BI.customerAddress.width}>{line}</Field>
+        ))}
 
         <Field top={FORM_BI.docNo.top} left={FORM_BI.docNo.left}>{doc.docNo}</Field>
         <Field top={FORM_BI.docDate.top} left={FORM_BI.docDate.left}>{formatArDocDate(doc.docDate)}</Field>
@@ -338,6 +396,7 @@ export function ArDocumentNcrPrintDocument({ document: doc, settings, paidByInvo
  * `variant="billingNote"` ทดสอบผัง BI (โครงสร้างต่างจาก AR/IV/RE โดยสิ้นเชิง) แทน */
 export function NcrCalibrationTestPage({ settings, variant = "standard" }: { settings: NcrPrintSettings; variant?: "standard" | "billingNote" }) {
   const marks: { top: number; left: number; label: string }[] = variant === "billingNote" ? [
+    { ...FORM_BI.customerCode, label: "รหัสลูกค้า" },
     { ...FORM_BI.customerName, label: "ลูกค้า" },
     { top: FORM_BI.docNo.top, left: FORM_BI.docNo.left, label: "เลขที่ใบวางบิล" },
     { top: FORM_BI.docDate.top, left: FORM_BI.docDate.left, label: "วันที่" },
@@ -346,8 +405,11 @@ export function NcrCalibrationTestPage({ settings, variant = "standard" }: { set
     { top: FORM_BI.totalTop, left: FORM_BI.totalRight - 30, label: "รวมเงินทั้งสิ้น" },
     { top: FORM_BI.amountText.top, left: FORM_BI.amountText.left, label: "ตัวอักษร" },
   ] : [
+    { top: FORM.customerCode.top, left: FORM.customerCode.left, label: "รหัสลูกค้า" },
     { ...FORM.customerName, label: "ลูกค้า" },
+    { top: FORM.customerAddress.top + 2 * FORM.customerAddress.lineHeightMm, left: FORM.customerAddress.left, label: "ที่อยู่บรรทัด 3" },
     { top: FORM.taxId.top, left: FORM.taxId.left, label: "เลขภาษี" },
+    { top: FORM.salesperson.top, left: FORM.salesperson.left, label: "ผู้ขาย" },
     { top: FORM.docNo.top, left: FORM.docNo.left, label: "เลขที่" },
     { top: FORM.docDate.top, left: FORM.docDate.left, label: "วันที่" },
     { top: FORM.conditionDays.top, left: FORM.conditionDays.left, label: "เงื่อนไข" },

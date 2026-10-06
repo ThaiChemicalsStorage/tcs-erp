@@ -115,6 +115,7 @@ export function ManualTaxInvoicePage({ docType: initialDocType, backLabel, onBac
       const documents = await issueManualArDocument({
         docType,
         customer: { companyName: companyName.trim(), address, taxId, branch, contactName, phone, email },
+        customerId: customerId || undefined,
         paymentType,
         days: paymentType === "Credit" ? Number(days) || null : null,
         lines: validLines,

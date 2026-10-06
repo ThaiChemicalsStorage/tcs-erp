@@ -11,7 +11,7 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
-import { ArDocumentNcrPrintDocument, NcrCalibrationTestPage } from "./ArDocumentNcrPrintDocument";
+import { ArDocumentNcrPrintDocument, NcrCalibrationTestPage, prepareNcrFonts } from "./ArDocumentNcrPrintDocument";
 import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSettings } from "../../lib/ncrPrintSettings";
 import { ArStockPanel } from "./ArStockPanel";
 import { ManualTaxInvoicePage } from "./ManualTaxInvoicePage";
@@ -201,7 +201,8 @@ export function ArDocumentListPage({
 
   const handleNcrPrint = async (id: string) => {
     try {
-      setNcrPrintDoc(await fetchArDocument(id));
+      const [doc] = await Promise.all([fetchArDocument(id), prepareNcrFonts()]);
+      setNcrPrintDoc(doc);
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("accounting.list.toast.openFailed"));
     }

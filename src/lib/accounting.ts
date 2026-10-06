@@ -71,6 +71,8 @@ export interface ArDocumentCustomerSnapshot {
   contactName: string;
   phone: string;
   email: string;
+  /** รหัสลูกค้า ณ ตอนออกเอกสาร (added 2026-10-06) — เอกสารเก่าไม่มี */
+  code?: string;
 }
 
 export interface ArDocument {
@@ -93,6 +95,8 @@ export interface ArDocument {
   netTotal: number;
   amountTextTh: string;
   remarks: string[];
+  /** ผู้ขาย ณ ตอนออกเอกสาร (added 2026-10-06) — ใบ Manual และเอกสารเก่าไม่มี */
+  salesperson?: string;
   /** True once any stock has been cut against this document (added 2026-08-18, IV only in
    * practice) — see src/lib/stock.ts and api/_lib/collections.ts's StockMovementFields. */
   stockDeducted: boolean;
@@ -172,6 +176,8 @@ export interface ManualArDocumentPayload {
     phone: string;
     email: string;
   };
+  /** ลูกค้าที่เลือกจากรายชื่อ (ถ้ามี) — เซิร์ฟเวอร์ใช้หารหัสลูกค้าไปพิมพ์บนฟอร์ม NCR (added 2026-10-06) */
+  customerId?: string;
   paymentType: "" | "Cash" | "Credit";
   days: number | null;
   lines: { description: string; subDetails?: string[]; qty: number; unit: string; unitPrice: number }[];

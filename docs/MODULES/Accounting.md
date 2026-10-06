@@ -296,8 +296,23 @@ calibration in localStorage) + per-row "NCR" print buttons and a "ตั้ง�
 crosshair test page on `ArDocumentListPage.tsx`. **The `FORM` coordinate map is a first draft
 derived proportionally from the photos — calibrate against the physical form + dot-matrix printer
 before real use** (the still-open hardware questions below are exactly what's needed for that).
-Fields the form has but `ArDocument` doesn't carry yet (printed blank): customer code,
-สถานที่ส่งสินค้า, ผู้ขาย — see TODO.md. See CHANGELOG.md 2026-08-18c.
+~~Fields the form has but `ArDocument` doesn't carry yet (printed blank): customer code,
+สถานที่ส่งสินค้า, ผู้ขาย — see TODO.md.~~ See CHANGELOG.md 2026-08-18c.
+
+**Update 2026-10-06 (Tuhmo #37)** — matched against the Express-printed originals in
+`reference/accounting/`:
+- **Customer code** (`customerSnapshot.code`, from `Customer.code` at issue time via the quote's
+  `customerId`, or the customer picked on the Manual page) prints on the "ลูกค้า :" label row of
+  AR/IV/RE and at the top of the BI customer box. **Salesperson** (`ArDocument.salesperson`, from
+  `scope.quotationSalesperson`) prints in the "ผู้ขาย / Sale" box — AR/IV only; the real RE leaves it
+  blank. Documents issued before this date have neither (snapshot, no backfill).
+- **สถานที่ส่งสินค้า** is not a separate field: the old program uses that row as the 3rd address line,
+  so the address now wraps to up to 3 lines.
+- **Long text wraps instead of being clipped** — description, sub-detail and remark rows wrap at the
+  column width (`src/lib/printTextWrap.ts`, word-aware for Thai via `Intl.Segmenter`, canvas-measured)
+  and the extra rows count toward `rowsPerPage`. `prepareNcrFonts()` must run before rendering (the
+  list page does it alongside the fetch): Noto Sans Thai's Latin subset is usually not loaded yet
+  because the app UI renders Latin in Inter, and measuring with the fallback font under-measures.
 
 **BI (ใบแจ้งหนี้/ใบวางบิล) confirmed NCR too, same day**: the owner's own uncertainty about this form
 ("ไม่แน่ใจว่าซื้อมารึเปล่า") was resolved a few hours later with a photo of the actual blank stock —

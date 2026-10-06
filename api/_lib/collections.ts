@@ -821,6 +821,9 @@ export interface ArDocumentCustomerSnapshot {
   contactName: string;
   phone: string;
   email: string;
+  /** รหัสลูกค้า (`Customer.code` เช่น "P-077") ณ ตอนออกเอกสาร — พิมพ์ในช่อง "ลูกค้า" ของฟอร์ม NCR
+   * (added 2026-10-06) · เอกสารที่ออกก่อนวันนั้นไม่มีค่านี้ */
+  code?: string;
 }
 
 /** One row per issued AR/IV/BI/RE (discriminated by `docType` — RE, the receipt, added 2026-08-18
@@ -850,6 +853,9 @@ export interface ArDocumentFields {
   netTotal: number;
   amountTextTh: string;
   remarks: string[];
+  /** ผู้ขาย — พนักงานขายของ Scope of Work ต้นทาง (`quotationSalesperson`) ณ ตอนออกเอกสาร พิมพ์ในช่อง
+   * "ผู้ขาย / Sale" ของฟอร์ม NCR (added 2026-10-06) · ใบ Manual และเอกสารเก่าไม่มีค่านี้ */
+  salesperson?: string;
   /** True once any stock has been cut against this document (added 2026-08-18, IV only in
    * practice — AR/BI/RE carry no real product lines, see stockHandler.ts). Denormalized off the
    * `stock_movements` ledger purely so the print layout can stamp "ตัดสต๊อกแล้ว"/"ยังไม่ตัดสต๊อก"

@@ -1,5 +1,5 @@
 import type { ApiRequest, ApiResponse } from "./httpTypes.js";
-import { type WithId } from "mongodb";
+import { ObjectId, type WithId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -9,7 +9,7 @@ import {
   scopeOfWorksCollection, quotesCollection, auditLogCollection, withStringId, toObjectId,
   type ArMilestoneFields, type ArDocumentFields, type ArDocumentLine, type ArChecklistKey,
   type ArWorkClassification, type ArDocumentType, type ArBillingStatus, type ArDocumentCustomerSnapshot,
-  type ScopeOfWorkFields, type QuoteFields, countersCollection, type StockMovementFields,
+  type ScopeOfWorkFields, type QuoteFields, countersCollection, type StockMovementFields, customersCollection,
 } from "./collections.js";
 import { storeUpload, deleteUpload, filesCollection } from "./upload/uploadService.js";
 import { storage } from "./upload/storage.js";
@@ -78,6 +78,15 @@ async function loadTotalContractValueExVat(scope: WithId<ScopeOfWorkFields>): Pr
     quote.discountMode,
   );
   return { total: round2(total), quote };
+}
+
+/** รหัสลูกค้า (`Customer.code`) สำหรับช่อง "ลูกค้า" ของฟอร์ม NCR (added 2026-10-06) — "" ถ้าไม่มี id,
+ * id ไม่ถูกรูปแบบ หรือลูกค้ายังไม่ได้ตั้งรหัส · ไม่ throw เพราะรหัสเป็นแค่ข้อมูลประกอบใบพิมพ์ */
+async function lookupCustomerCode(customerId: string | undefined): Promise<string> {
+  if (!customerId || !ObjectId.isValid(customerId)) return "";
+  const customers = await customersCollection();
+  const customer = await customers.findOne({ _id: new ObjectId(customerId) }, { projection: { code: 1 } });
+  return customer?.code?.trim() ?? "";
 }
 
 /** Whether a Scope of Work payment installment is the deposit/down-payment one — matched by label,
@@ -452,6 +461,7 @@ async function handleIssueDocuments(req: ApiRequest, res: ApiResponse) {
     contactName: scope.customerSnapshot.contactName,
     phone: scope.customerSnapshot.phone,
     email: scope.customerSnapshot.email,
+    code: await lookupCustomerCode(quote.customerId),
   };
   const poNumbers = scopePoNumbers({
     customerPoNumber: scope.customerPoNumber ?? "",
@@ -484,6 +494,7 @@ async function handleIssueDocuments(req: ApiRequest, res: ApiResponse) {
     vatRate: 7,
     amountTextTh: bahtText(totals.netTotal),
     remarks,
+    salesperson: scope.quotationSalesperson ?? "",
     stockDeducted: false,
     isManual: false,
     status: "issued",
@@ -570,6 +581,7 @@ async function handleManualIssue(req: ApiRequest, res: ApiResponse) {
     contactName: str(customerBody.contactName),
     phone: str(customerBody.phone),
     email: str(customerBody.email),
+    code: await lookupCustomerCode(str(body.customerId)),
   };
 
   const rawLines = Array.isArray(body.lines) ? body.lines : [];
