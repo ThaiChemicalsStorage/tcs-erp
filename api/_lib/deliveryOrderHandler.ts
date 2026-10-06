@@ -96,13 +96,16 @@ export async function departmentIdForUser(ctx: AuthContext): Promise<string | nu
  *
  * ผู้สร้างเอกสารเองไม่ติดกฎนี้ แม้จะบังเอิญอยู่ในแผนกที่ถูกติ๊ก
  */
-async function assertNotDepartmentRecipientOnly(ctx: AuthContext, id: string): Promise<void> {
-  const doc = await loadDeliveryOrderOrThrow(id);
-  if (isOwnerOf(ctx, doc)) return;
+async function isDepartmentRecipientOnly(ctx: AuthContext, doc: Awaited<ReturnType<typeof loadDeliveryOrderOrThrow>>): Promise<boolean> {
+  if (isOwnerOf(ctx, doc)) return false;
   const ids = doc.sentToDepartmentIds ?? [];
-  if (ids.length === 0) return;
+  if (ids.length === 0) return false;
   const myDepartmentId = await departmentIdForUser(ctx);
-  if (myDepartmentId !== null && ids.includes(myDepartmentId)) {
+  return myDepartmentId !== null && ids.includes(myDepartmentId);
+}
+
+async function assertNotDepartmentRecipientOnly(ctx: AuthContext, id: string): Promise<void> {
+  if (await isDepartmentRecipientOnly(ctx, await loadDeliveryOrderOrThrow(id))) {
     throw new HttpError(403, "เอกสารนี้ถูกส่งมาให้แผนกของคุณเพื่อดูและพิมพ์เท่านั้น ไม่สามารถแก้ไขได้");
   }
 }
@@ -297,9 +300,10 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
 
 async function handleGetOne(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
-  await requirePermission(req, "deliveryOrder:view");
+  const ctx = await requirePermission(req, "deliveryOrder:view");
   const doc = await loadDeliveryOrderOrThrow(id);
-  res.status(200).json({ deliveryOrder: toClient(doc) });
+  // จอใช้ซ่อนปุ่มแก้/ลบ/ส่งอนุมัติของผู้รับจากการส่งถึงแผนก (2026-10-06) — ด่านจริงยังเป็น chokepoint ด้านล่าง
+  res.status(200).json({ deliveryOrder: toClient(doc), recipientOnly: await isDepartmentRecipientOnly(ctx, doc) });
 }
 
 const MAX_INSTALLMENT_ROWS = 50;

@@ -26,7 +26,7 @@ import type { Company } from "../../lib/storage";
 import {
   type CostControl, type CostControlUpdateFields, type CostControlLineKind,
   blankCostControlLine, lineTotalCost,
-  fetchCostControl, updateCostControl, deleteCostControl, rewriteCostControl, logCostControlPrinted,
+  fetchCostControlForViewer, updateCostControl, deleteCostControl, rewriteCostControl, logCostControlPrinted,
   submitCostControlApproval, approveCostControl, rejectCostControl, withdrawCostControlApproval,
 } from "../../lib/costControl";
 import { CostControlPrintDocument } from "./CostControlPrintDocument";
@@ -47,8 +47,8 @@ function toUpdateFields(d: CostControl): CostControlUpdateFields {
 }
 
 export function CostControlDocument({
-  costControlId, currentUserId, canEdit, canApprove, canPrint, canDelete, canCreate, canViewScopeOfWork, company,
-  onBack, onDeleted, onOpenOther, showToast,
+  costControlId, currentUserId, canEdit: canEditRole, canApprove: canApproveRole, canPrint, canDelete: canDeleteRole, canCreate: canCreateRole,
+  canViewScopeOfWork, company, onBack, onDeleted, onOpenOther, showToast,
 }: {
   costControlId: string;
   currentUserId: string;
@@ -106,6 +106,12 @@ export function CostControlDocument({
     return () => { cancelled = true; };
   }, [canViewScopeOfWork]);
 
+  // ผู้รับเอกสารผ่าน Scope of Work ดู/พิมพ์ได้อย่างเดียว แม้บทบาทจะมีสิทธิ์แก้ (เซิร์ฟเวอร์กันอยู่แล้ว — ที่นี่ซ่อนปุ่ม, 2026-10-06)
+  const [recipientOnly, setRecipientOnly] = useState(false);
+  const canEdit = canEditRole && !recipientOnly;
+  const canApprove = canApproveRole && !recipientOnly;
+  const canDelete = canDeleteRole && !recipientOnly;
+  const canCreate = canCreateRole && !recipientOnly;
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
   const scopeQuery = scopeTyped ?? (draft?.scopeOfWorkId
     ? scopes.find((s) => s.id === draft.scopeOfWorkId)?.scopeNumber ?? ""
@@ -113,9 +119,10 @@ export function CostControlDocument({
 
   useEffect(() => {
     let cancelled = false;
-    fetchCostControl(costControlId)
-      .then((d) => {
+    fetchCostControlForViewer(costControlId)
+      .then(({ costControl: d, recipientOnly: ro }) => {
         if (cancelled) return;
+        setRecipientOnly(ro);
         setDoc(d); setDraft(d); setLoading(false); setScopeTyped(null);
         dirty.markSaved(toUpdateFields(d));
       })
@@ -428,6 +435,7 @@ export function CostControlDocument({
                   {textField(t("costControlDoc.field.approvedBy"), "approvedBy")}
                 </RailCard>
                 </div>
+                {recipientOnly && <NextStepHint title={t("doc.recipientOnly.title")}>{t("costControlDoc.recipientOnly")}</NextStepHint>}
                 <NextStepHint title={t("costControlDoc.nextStep")}>{nextStepHint}</NextStepHint>
               </>
             }

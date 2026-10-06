@@ -185,6 +185,14 @@ describe("ส่งใบส่งมอบงานถึงแผนก", () =
     expect(notes[0].relatedDeliveryOrderId).toBe(deliveryOrderId);
   });
 
+  it("GET บอกจอว่าผู้รับดูได้อย่างเดียว เจ้าของไม่ใช่ (ใช้ซ่อนปุ่ม, 2026-10-06)", async () => {
+    const asRecipient = await call(quotesHandler, "GET", `/api/delivery-orders/${deliveryOrderId}`, undefined, factoryCookie);
+    expect(asRecipient.statusCode, JSON.stringify(asRecipient.body)).toBe(200);
+    expect((asRecipient.body as { recipientOnly: boolean }).recipientOnly).toBe(true);
+    const asOwner = await call(quotesHandler, "GET", `/api/delivery-orders/${deliveryOrderId}`);
+    expect((asOwner.body as { recipientOnly: boolean }).recipientOnly).toBe(false);
+  });
+
   it("ผู้รับแก้เอกสารไม่ได้ แม้ role จะมีสิทธิ์ :edit/:finalize/:delete ครบก็ตาม", async () => {
     const edit = await call(quotesHandler, "PATCH", `/api/delivery-orders/${deliveryOrderId}`, { installments: [] }, factoryCookie);
     expect(edit.statusCode, "ผู้รับต้องดู/พิมพ์ได้อย่างเดียว").toBe(403);

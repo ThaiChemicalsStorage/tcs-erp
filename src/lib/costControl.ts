@@ -148,8 +148,13 @@ export async function fetchAllCostControls(): Promise<CostControlSummary[]> {
 }
 
 export async function fetchCostControl(id: string): Promise<CostControl> {
-  const { costControl } = await apiFetch<{ costControl: CostControl }>(`/cost-controls/${encodeURIComponent(id)}`);
-  return costControl;
+  return (await fetchCostControlForViewer(id)).costControl;
+}
+
+/** เหมือน fetchCostControl แต่บอกด้วยว่าผู้เรียกเป็นผู้รับเอกสาร (ผ่าน Scope of Work) ที่ดู/พิมพ์ได้อย่างเดียว (2026-10-06) */
+export async function fetchCostControlForViewer(id: string): Promise<{ costControl: CostControl; recipientOnly: boolean }> {
+  const res = await apiFetch<{ costControl: CostControl; recipientOnly?: boolean }>(`/cost-controls/${encodeURIComponent(id)}`);
+  return { costControl: res.costControl, recipientOnly: res.recipientOnly === true };
 }
 
 /** ข้อมูลที่หน้า preview ยืนยันแล้ว — ส่งเป็น JSON ที่แกะจากไฟล์ฝั่งเบราว์เซอร์แล้ว ไม่ได้อัปโหลดไฟล์ดิบ */

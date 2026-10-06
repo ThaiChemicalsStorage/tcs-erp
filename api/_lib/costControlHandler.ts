@@ -78,13 +78,16 @@ async function writeAuditEntry(ctx: AuthContext, action: string, details: string
  *
  * เจ้าของใบ และผู้ถือ `costControl:viewAll` ไม่ถูกกระทบ — สิทธิ์ของเขาไม่ได้มาจากทางที่สาม
  */
-async function assertNotScopeRecipientOnly(ctx: AuthContext, doc: CostControlFields & { _id: string }): Promise<void> {
-  if (isOwnerOf(ctx, doc)) return;
-  if (roleHasPermission(ctx.role, "costControl:viewAll")) return;
+async function isScopeRecipientOnly(ctx: AuthContext, doc: CostControlFields & { _id: string }): Promise<boolean> {
+  if (isOwnerOf(ctx, doc)) return false;
+  if (roleHasPermission(ctx.role, "costControl:viewAll")) return false;
   const scopeOfWorkId = doc.scopeOfWorkId ?? "";
-  if (!scopeOfWorkId) return;
-  const ids = await recipientScopeOfWorkIds(ctx);
-  if (ids.includes(scopeOfWorkId)) {
+  if (!scopeOfWorkId) return false;
+  return (await recipientScopeOfWorkIds(ctx)).includes(scopeOfWorkId);
+}
+
+async function assertNotScopeRecipientOnly(ctx: AuthContext, doc: CostControlFields & { _id: string }): Promise<void> {
+  if (await isScopeRecipientOnly(ctx, doc)) {
     throw new HttpError(403, "เอกสารนี้ถูกส่งมาให้คุณพร้อมกับ Scope of Work เพื่อดูและพิมพ์เท่านั้น ไม่สามารถแก้ไขได้");
   }
 }
@@ -262,8 +265,11 @@ async function handleCreate(req: ApiRequest, res: ApiResponse) {
 
 async function handleGet(req: ApiRequest, res: ApiResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
-  await requirePermission(req, "costControl:view");
-  res.status(200).json({ costControl: toClient(await loadOrThrow(id)) });
+  const ctx = await requirePermission(req, "costControl:view");
+  const doc = await loadOrThrow(id);
+  // บอกจอว่าผู้เรียกเป็น "ผู้รับเอกสารที่ดูได้อย่างเดียว" ไหม (2026-10-06) — จอจะได้ซ่อนปุ่มที่กดแล้วเจอ 403 แน่ ๆ
+  // ด่านจริงยังเป็น assertNotScopeRecipientOnly() ที่ chokepoint ด้านล่าง
+  res.status(200).json({ costControl: toClient(doc), recipientOnly: await isScopeRecipientOnly(ctx, doc) });
 }
 
 const SHORT_TEXT_FIELDS: { key: keyof CostControlFields; label: string }[] = [

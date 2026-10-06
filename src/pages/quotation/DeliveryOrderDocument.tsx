@@ -3,7 +3,7 @@ import { ArrowLeft, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, Aler
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
   type DeliveryOrder, type DeliveryOrderUpdateFields, type DeliveryOrderInstallment,
-  fetchDeliveryOrder, updateDeliveryOrder, finalizeDeliveryOrder, refreshDeliveryOrderFromScope, deleteDeliveryOrder,
+  fetchDeliveryOrderForViewer, updateDeliveryOrder, finalizeDeliveryOrder, refreshDeliveryOrderFromScope, deleteDeliveryOrder,
   updateDeliveryOrderInstallmentNumbers,
   submitDeliveryOrderApproval, rejectDeliveryOrder, withdrawDeliveryOrderApproval, rewriteDeliveryOrder,
   uploadDeliveryOrderAttachment, deleteDeliveryOrderAttachment,
@@ -169,11 +169,11 @@ export function DeliveryOrderDocument({
   deliveryOrderId,
   company,
   currentUserId,
-  canEdit,
-  canFinalize,
+  canEdit: canEditRole,
+  canFinalize: canFinalizeRole,
   canPrint,
-  canDelete,
-  canCreate,
+  canDelete: canDeleteRole,
+  canCreate: canCreateRole,
   onBack,
   onRewritten,
   backLabel,
@@ -216,12 +216,18 @@ export function DeliveryOrderDocument({
   // หน้านี้ใช้ state เดียวเป็นทั้งข้อมูลที่โหลดมาและบัฟเฟอร์แก้ไข ทุกจุดที่รับคำตอบจากเซิร์ฟเวอร์จึงต้องตั้งฐานเทียบใหม่
   // ตั้งแต่ 2026-08-27 ช่องเลขที่/วันที่ของงวดแก้ได้แม้เอกสารพ้นสถานะร่างไปแล้ว ตัวจับ "ยังไม่บันทึก" จึงต้อง
   // ทำงานทุกสถานะ ไม่ใช่เฉพาะร่าง — ไม่งั้นแก้เลขที่แล้วเปลี่ยนหน้า ข้อมูลหายเงียบ ๆ โดยไม่มีอะไรเตือน
+  // ผู้รับจากการส่งถึงแผนกดู/พิมพ์ได้อย่างเดียว แม้บทบาทจะมีสิทธิ์แก้ (เซิร์ฟเวอร์กันอยู่แล้ว — ที่นี่ซ่อนปุ่ม, 2026-10-06)
+  const [recipientOnly, setRecipientOnly] = useState(false);
+  const canEdit = canEditRole && !recipientOnly;
+  const canFinalize = canFinalizeRole && !recipientOnly;
+  const canDelete = canDeleteRole && !recipientOnly;
+  const canCreate = canCreateRole && !recipientOnly;
   const dirty = useDirtyTracker(deliveryOrder && canEdit ? toUpdateFields(deliveryOrder) : null);
 
   useEffect(() => {
     let cancelled = false;
-    fetchDeliveryOrder(deliveryOrderId)
-      .then((d) => { if (!cancelled) { setDeliveryOrder(d); dirty.markSaved(toUpdateFields(d)); } })
+    fetchDeliveryOrderForViewer(deliveryOrderId)
+      .then(({ deliveryOrder: d, recipientOnly: ro }) => { if (!cancelled) { setRecipientOnly(ro); setDeliveryOrder(d); dirty.markSaved(toUpdateFields(d)); } })
       .catch((err) => {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : "");
@@ -580,6 +586,7 @@ export function DeliveryOrderDocument({
                   </SourceNote>
                 </RailCard>
 
+                {recipientOnly && <NextStepHint title={t("doc.recipientOnly.title")}>{t("deliveryOrderDoc.recipientOnly")}</NextStepHint>}
                 <NextStepHint title={t("sowdo.nextStep")}>{nextStepHint}</NextStepHint>
               </>
             }

@@ -90,8 +90,13 @@ export async function fetchAllDeliveryOrders(): Promise<DeliveryOrderListItem[]>
   return deliveryOrders;
 }
 export async function fetchDeliveryOrder(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}`);
-  return deliveryOrder;
+  return (await fetchDeliveryOrderForViewer(id)).deliveryOrder;
+}
+
+/** เหมือน fetchDeliveryOrder แต่บอกด้วยว่าผู้เรียกเป็นผู้รับจากการส่งถึงแผนกที่ดู/พิมพ์ได้อย่างเดียว (2026-10-06) */
+export async function fetchDeliveryOrderForViewer(id: string): Promise<{ deliveryOrder: DeliveryOrder; recipientOnly: boolean }> {
+  const res = await apiFetch<{ deliveryOrder: DeliveryOrder; recipientOnly?: boolean }>(`/delivery-orders/${encodeURIComponent(id)}`);
+  return { deliveryOrder: res.deliveryOrder, recipientOnly: res.recipientOnly === true };
 }
 export async function createDeliveryOrderFromScope(scopeOfWorkId: string): Promise<DeliveryOrder> {
   const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>("/delivery-orders", {

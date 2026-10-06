@@ -44,7 +44,7 @@ live in `api/_lib/visibility.ts` / `api/_lib/costControlHandler.ts`; see [RBAC.m
 recipients' sight of the document on the next request. That is the intended escape hatch, not a
 side effect.
 
-🔸 **Known rough edge, shared with Delivery Order.** The document page still renders บันทึก / ลบ /
+✅ **Fixed 2026-10-06 (Tuhmo #34)**: `GET /api/cost-controls/:id` now returns `recipientOnly` (computed by `isScopeRecipientOnly()`, the same function the guard uses) and the page drops edit/approve/delete/rewrite for a recipient, with a "ดูและพิมพ์ได้อย่างเดียว" note — Delivery Order got the same fix. Original note: 🔸 **Known rough edge, shared with Delivery Order.** The document page still renders บันทึก / ลบ /
 ส่งขออนุมัติ for a recipient, because the client decides those from the caller's *role*, and the
 role does hold `:edit`. The server refuses each one with
 *"เอกสารนี้ถูกส่งมาให้คุณพร้อมกับ Scope of Work เพื่อดูและพิมพ์เท่านั้น ไม่สามารถแก้ไขได้"* — verified

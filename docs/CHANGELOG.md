@@ -4,7 +4,20 @@
 
 ---
 
-## 2026-10-06l (absolute latest) — แท็บ "ประเภทงาน" ในหน้าตั้งค่า + ปุ่มหน้าสินค้าตามสิทธิ์ (Tuhmo #41)
+## 2026-10-06m (absolute latest) — ผู้รับเอกสารไม่เห็นปุ่มแก้/ลบ/ส่งอนุมัติ: Cost Control + ใบส่งมอบสินค้า (Tuhmo #34)
+
+เดิมเซิร์ฟเวอร์กันผู้รับ (ผ่าน Scope of Work / ส่งถึงแผนก) ครบแล้ว แต่จอตัดสินจากสิทธิ์ของบทบาท ปุ่มจึงขึ้นให้กดแล้วเจอ 403
+- `GET /api/cost-controls/:id` และ `GET /api/delivery-orders/:id` ตอบ `recipientOnly: boolean` เพิ่ม — คำนวณด้วยฟังก์ชันเดียวกับด่านจริง
+  (แยก `isScopeRecipientOnly()` / `isDepartmentRecipientOnly()` ออกมา แล้ว `assert…` เรียกตัวนี้ — ตรรกะชุดเดียว ไม่มีทางเพี้ยนกัน)
+- `src/lib`: `fetchCostControlForViewer()` / `fetchDeliveryOrderForViewer()` (ตัวเดิม `fetch…` ยังคืนเฉพาะเอกสารเหมือนเดิม)
+- หน้าเอกสารทั้งสอง: `canEdit/canApprove(Finalize)/canDelete/canCreate = สิทธิ์บทบาท && !recipientOnly` → ซ่อนบันทึก ส่งอนุมัติ อนุมัติ ถอน ลบ
+  Rewrite แนบไฟล์ · ปุ่มพิมพ์ยังอยู่ · มีกล่อง "ดูและพิมพ์ได้อย่างเดียว" อธิบายเหตุผลในคอลัมน์ขวา
+- เทสต์ +2 (`costControlScopeLink`, `deliveryOrderDepartmentRouting`): ผู้รับได้ `recipientOnly: true` เจ้าของได้ `false`
+- ยังไม่ได้ดูบนเบราว์เซอร์ (MongoDB ของเครื่อง dev อยู่ใน Docker ที่ไม่ได้เปิด)
+
+---
+
+## 2026-10-06l — แท็บ "ประเภทงาน" ในหน้าตั้งค่า + ปุ่มหน้าสินค้าตามสิทธิ์ (Tuhmo #41)
 
 - **จัดการประเภทงาน (Job Type)** — API `POST/PATCH /api/jobtypes` มีมาตั้งแต่ 2026-07-10 แต่ไม่มีหน้า ใช้ได้แค่ 13 ค่าตั้งต้น · ตอนนี้เป็นแท็บใน
   ตั้งค่า (`src/pages/settings/JobTypesSection.tsx`) เห็นเมื่อมีสิทธิ์ `company:manage` (ตัวเดียวกับ API): เพิ่ม (รหัสพิมพ์ใหญ่อัตโนมัติ กันรหัสซ้ำ) ·

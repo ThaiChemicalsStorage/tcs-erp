@@ -219,6 +219,10 @@ describe("ผู้รับเอกสารของ Scope มองเห็
   it("ผู้รับ **เปิดอ่านได้แต่แก้ไม่ได้** ถึงจะถือสิทธิ์ :edit/:delete/:finalize ครบ", async () => {
     const got = await call(quotesHandler, "GET", `/api/cost-controls/${encodeURIComponent(costControlId)}`, undefined, recipientCookie);
     expect(got.statusCode, JSON.stringify(got.body)).toBe(200);
+    // จอใช้ค่านี้ซ่อนปุ่มแก้/ลบ/ส่งอนุมัติ (2026-10-06)
+    expect((got.body as { recipientOnly: boolean }).recipientOnly).toBe(true);
+    const asOwner = await call(quotesHandler, "GET", `/api/cost-controls/${encodeURIComponent(costControlId)}`, undefined, bdCookie);
+    expect((asOwner.body as { recipientOnly: boolean }).recipientOnly).toBe(false);
 
     const patched = await call(quotesHandler, "PATCH", `/api/cost-controls/${encodeURIComponent(costControlId)}`, { jobName: "แอบแก้" }, recipientCookie);
     expect(patched.statusCode, JSON.stringify(patched.body)).toBe(403);

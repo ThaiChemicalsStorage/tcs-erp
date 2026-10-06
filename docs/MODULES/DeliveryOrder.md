@@ -474,3 +474,7 @@ there). The shared `TourReplayButton` replays the tour any time. This introduced
 `currentUserId: string` prop (threaded from DeliveryOrderPage) and its first `useI18n()` usage
 (tour strings only). Keep `data-tour` anchors in sync with the steps array — missing anchors are
 silently filtered out at start.
+
+## Recipients see a view-only page (2026-10-06, Tuhmo #34)
+
+A department recipient (`sentToDepartmentIds`) was always blocked server-side by `assertNotDepartmentRecipientOnly()`, but the page still offered บันทึก/ส่งขออนุมัติ/อนุมัติ/ลบ/Rewrite/แนบไฟล์ because it decided from the role. `GET /api/delivery-orders/:id` now also returns `recipientOnly` (from `isDepartmentRecipientOnly()`, the same check the guard uses) and `DeliveryOrderDocument` ANDs it into every write permission, leaving print available and showing a "ดูและพิมพ์ได้อย่างเดียว" note. Same fix as Cost Control — see [CostControl.md](./CostControl.md).
