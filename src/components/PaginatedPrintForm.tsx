@@ -29,12 +29,17 @@ const SAFETY_MM = 3;
 export interface PrintFormRow {
   key: string;
   node: ReactNode;
+  /**
+   * จำนวน `<tr>` ใน `node` (ค่าเริ่มต้น 1) — รายการที่กินหลายแถว (ชื่อ + spec ของใบเสนอราคา/Scope of Work) ถูกวัดและวางเป็นก้อนเดียว
+   * ไม่ถูกแยกคนละหน้า · ต้องตรงกับจำนวน `<tr>` จริง ไม่งั้นการวัดของบรรทัดถัด ๆ ไปเลื่อนทั้งหมด
+   */
+  span?: number;
 }
 
 
 export function PaginatedPrintForm({
   header, tableHead, rows, blankRow, footer, pageFooter,
-  tableStyle, style, marginMm = 12, pageHeightMm = 297, pageWidthMm = 210,
+  tableStyle, style, className, breakAfterLast = false, marginMm = 12, pageHeightMm = 297, pageWidthMm = 210,
 }: {
   /** ซ้ำทุกหน้า — ชื่อใบ เลขที่ หัวข้อมูลลูกค้า ฯลฯ */
   header: ReactNode;
@@ -50,6 +55,10 @@ export function PaginatedPrintForm({
   tableStyle?: CSSProperties;
   /** ฟอนต์/สีของทั้งใบ — ใช้ทั้งตอนวัดและตอนพิมพ์ ความสูงจึงตรงกัน */
   style?: CSSProperties;
+  /** class ของทั้งใบ (เช่นสีตัวอักษร Tailwind) — ใส่ทั้งกล่องวัดและกล่องพิมพ์ */
+  className?: string;
+  /** ขึ้นหน้าใหม่หลังหน้าสุดท้าย — เอกสารที่พิมพ์หลายชุดต่อกัน (ต้นฉบับ/สำเนา) แต่ละชุดต้องเริ่มหน้าใหม่ */
+  breakAfterLast?: boolean;
   marginMm?: number;
   pageHeightMm?: number;
   pageWidthMm?: number;
@@ -74,16 +83,23 @@ export function PaginatedPrintForm({
     if (!measureRef.current) return;
     const root = measureRef.current;
     const h = (sel: string) => root.querySelector<HTMLElement>(sel)?.getBoundingClientRect().height ?? 0;
-    // ทุก `rows[i].node` เป็น `<tr>` หนึ่งแถว → แถวที่ i ของ tbody = บรรทัดที่ i · แถวสุดท้ายคือแถวว่างตัวอย่าง
+    // แถวของ tbody เรียงตาม `rows` (แต่ละรายการกิน `span` แถว) แล้วตามด้วยแถวว่างตัวอย่างหนึ่งแถว
     const trs = [...root.querySelectorAll<HTMLElement>("[data-pf-table] > tbody > tr")].map((el) => el.getBoundingClientRect().height);
-    const rowHeights = trs.slice(0, rows.length);
+    let cursor = 0;
+    const rowHeights = rows.map((r) => {
+      const span = Math.max(1, r.span ?? 1);
+      const sum = trs.slice(cursor, cursor + span).reduce((a, b) => a + b, 0);
+      cursor += span;
+      return sum;
+    });
+    const blankHeight = trs[cursor] ?? 0;
     const available = (contentHeightMm - SAFETY_MM) * PX_PER_MM - h("[data-pf-header]") - h("[data-pf-table] > thead") - h("[data-pf-pagefooter]");
     const footerHeight = h("[data-pf-footer]");
     // หน้าแต่ละหน้าสูงตายตัว + overflow hidden — ถ้าช่องเซ็น (หรือบรรทัดเดียว) สูงเกินหนึ่งหน้า การจัดหน้าเองจะตัดเนื้อหาทิ้ง
     // จึงถอยไปให้เบราว์เซอร์หั่นเองแบบเดิม (ไม่สวยแต่ครบ) — เช่นใบสั่งงานที่ Out of Scope ยาวมาก
     const fits = available > 0 && footerHeight <= available && rowHeights.every((rh) => rh <= available);
     const next = fits
-      ? paginate({ available, rowHeights, blankHeight: Math.max(1, trs[rows.length] ?? 0), footerHeight })
+      ? paginate({ available, rowHeights, blankHeight: Math.max(1, blankHeight), footerHeight })
       : null;
     setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   });
@@ -99,7 +115,7 @@ export function PaginatedPrintForm({
   return (
     <>
       {/* วัดบนจอ (มองไม่เห็น ไม่ถูกพิมพ์) ด้วยความกว้างเท่าพื้นที่พิมพ์จริง — อยู่ตลอด เพราะวัดหลังทุก render */}
-      <div ref={measureRef} aria-hidden="true" className="print:hidden"
+      <div ref={measureRef} aria-hidden="true" className={`print:hidden ${className ?? ""}`}
         style={{ ...style, position: "fixed", left: "-100000px", top: 0, visibility: "hidden", width: `${contentWidthMm}mm` }}>
         <div data-pf-header="" style={flow}>{header}</div>
         <table data-pf-table="" style={{ width: "100%", borderCollapse: "collapse", ...tableStyle }}>
@@ -113,13 +129,13 @@ export function PaginatedPrintForm({
         <div data-pf-pagefooter="" style={flow}>{pageFooter}</div>
       </div>
 
-      <div className="hidden print:block" style={style}>
+      <div className={`hidden print:block ${className ?? ""}`} style={style}>
         <style>{`@media print { @page { size: A4 portrait; margin: 0 } }`}</style>
         {layout ? layout.pages.map((page, idx) => (
           <div key={idx} style={{
             width: `${pageWidthMm}mm`, height: `${pageHeightMm - 0.5}mm`, boxSizing: "border-box", padding: `${marginMm}mm`,
             overflow: "hidden", display: "flex", flexDirection: "column",
-            breakAfter: page.last ? "auto" : "page", pageBreakAfter: page.last ? "auto" : "always",
+            breakAfter: page.last && !breakAfterLast ? "auto" : "page", pageBreakAfter: page.last && !breakAfterLast ? "auto" : "always",
           }}>
             <div style={flow}>{header}</div>
             {table(<>
@@ -130,7 +146,7 @@ export function PaginatedPrintForm({
             <div style={{ ...flow, marginTop: "auto" }}>{pageFooter}</div>
           </div>
         )) : (
-          <div style={{ padding: `${marginMm}mm` }}>
+          <div style={{ padding: `${marginMm}mm`, ...(breakAfterLast ? { breakAfter: "page" as const } : {}) }}>
             <div style={flow}>{header}</div>
             {table(rows.map((r) => <Fragment key={r.key}>{r.node}</Fragment>))}
             <div style={{ ...flow, breakInside: "avoid" }}>{footer}</div>
