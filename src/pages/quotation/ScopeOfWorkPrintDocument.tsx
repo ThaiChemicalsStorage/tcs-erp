@@ -28,6 +28,10 @@ function Checkbox({ checked }: { checked: boolean }) {
   );
 }
 
+// รหัสฟอร์ม ISO ท้ายกระดาษทุกหน้า (2026-10-08) — เจ้าของส่งรายการรหัสมา Scope of Work = FM-SL-04 Rev.03 · วันที่ตามฟอร์มจริง
+// (`reference/company/Scope Of Work PQ202607-174-LI-SK …pdf` มุมขวาล่าง) · เดิมใบนี้ใบเดียวที่ไม่มีรหัสฟอร์ม
+const FORM_CODE = "FM-SL-04 Rev.03 : 26/06/69";
+
 // สร้างเอกสาร Scope of Work สำหรับพิมพ์/PDF ตามรูปแบบเอกสารต้นฉบับ ไม่แสดงราคา
 // Renders the printable Scope of Work document matching the reference layout, without pricing.
 // จัดหน้าเองด้วย PaginatedPrintForm (2026-10-06 เจ้าของ: "ทำกับทุกเอกสาร … scope of work ยังบัคอยู่") — ทุกหน้ามีหัวจดหมาย + ข้อมูลงาน (เช็คลิสต์เฉพาะหน้าแรก)
@@ -228,6 +232,7 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
       // ตารางไม่มีเส้น — แถวว่างจึงเป็นแค่ที่ว่าง ทำให้ช่องลายเซ็นไปอยู่ก้นหน้าสุดท้าย
       blankRow={(key) => <tr key={key}><td colSpan={4} style={{ height: "18px" }} /></tr>}
       footer={footer}
+      pageFooter={<p style={{ textAlign: "right", margin: "6px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>}
     />
   );
 }

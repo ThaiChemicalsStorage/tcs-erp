@@ -126,6 +126,7 @@ The reference PDF has four kinds of content, and each is treated differently:
 | Printed quotation/job data (customer name, job code, PO number, quotation number) | Auto-filled from the source quotation at creation time (`deriveFromQuotation()`, `api/_lib/scopeOfWorkHandler.ts`). |
 | Blue handwritten values (delivery info, contact names/phones, seller/approver names & dates) | **Never imported as default data.** Every field this maps to starts blank and editable — see "Field-by-field mapping" below. |
 | Yellow highlighter marks | Annotations only in the sample — never reproduced. Checked options print with a plain `✓` inside a square box; nothing is highlighted. |
+| ISO form code (bottom right) | **`FM-SL-04 Rev.03 : 26/06/69`**, printed bottom-right on every page via `PaginatedPrintForm`'s `pageFooter` (`FORM_CODE` in `ScopeOfWorkPrintDocument.tsx`) — added 2026-10-08e when the owner listed the ISO codes; the Scope of Work was the only form of the list still missing one. |
 
 ### Field-by-field mapping (header)
 
