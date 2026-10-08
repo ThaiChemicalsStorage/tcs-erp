@@ -9,7 +9,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
   deliveryOrdersCollection, scopeOfWorksCollection, auditLogCollection,
-  usersCollection, notificationsCollection, departmentsCollection,
+  usersCollection, departmentsCollection,
   toObjectId, withStringId, type DeliveryOrderFields, type ScopeOfWorkFields,
 } from "./collections.js";
 import { activeUserIdsWithPermission } from "./departmentNotify.js";
@@ -23,6 +23,7 @@ import type {
   DeliveryOrderSummary, DeliveryOrderListItem, DeliveryOrderStatus,
   DeliveryOrderItem, DeliveryOrderInstallment,
 } from "../../src/lib/deliveryOrder.js";
+import { insertNotifications } from "./notificationDelivery.js";
 
 /**
  * Delivery Order API (added 2026-07-23) — `api/handlers/quotes.ts` dispatches
@@ -528,8 +529,7 @@ async function notifyDeliveryOrderApprovalEvent(
   const ids = [...new Set(recipientUserIds)].filter((uid) => uid !== "");
   if (ids.length === 0) return;
   const createdAt = nowIso();
-  const notifications = await notificationsCollection();
-  await notifications.insertMany(ids.map((recipientUserId) => ({
+  await insertNotifications(ids.map((recipientUserId) => ({
     recipientUserId, type, title, description,
     module: "Delivery Order",
     // Deep-links to the record on the standalone Delivery Order page — new Notification field

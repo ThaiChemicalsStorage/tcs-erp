@@ -58,6 +58,13 @@ src/
   `req.rawBody` for the signature check and routes `line:` to the customers handler (see [MODULES/Service.md](./MODULES/Service.md)
   "Customer Approval"). The public `/approve` page is served by the SPA fallback and rendered
   session-free (`src/main.tsx` branches before the auth gate).
+- **LINE staff notifications (added 2026-10-08, Tuhmo #50)**: a **second, separate** OA ("Huma-ERP
+  แจ้งเตือน") in `api/_lib/staffLine.ts` — env `LINE_STAFF_CHANNEL_ACCESS_TOKEN`/`LINE_STAFF_CHANNEL_SECRET`,
+  webhook `POST /api/line/webhook/staff`, self-service pairing at `/api/line/staff/*`. Every in-app
+  notification is now written through **one function**, `insertNotifications()` in
+  `api/_lib/notificationDelivery.ts`, which saves to the bell first and then pushes LINE for the
+  "needs your action" types (`LINE_ACTION_TYPES`) to recipients who linked LINE. LINE failures are
+  logged and swallowed — they never fail the request. Free OA quota: 300 messages/month.
 - **Outbound email: none (removed 2026-08-07)**. The app sends no email at all — Scope of Work's document-recipient feature is in-app-notification-only (bell + record visibility). History, all within 2026-07-23 → 2026-08-07: central Resend (`RESEND_API_KEY`/`EMAIL_FROM`) → person-to-person nodemailer/Gmail-SMTP with per-user encrypted App Passwords (`api/_lib/email.ts` + `api/_lib/emailCredentials.ts`, `EMAIL_CRED_SECRET` env var; a few hours, same day) → removed entirely on direct user request after the App Password setup proved too hard for staff. Both `_lib` files, the env var, and the nodemailer dependency are deleted (see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients").
 
 ### API layout: `API_ROUTES` + consolidated handler files, two dispatch patterns

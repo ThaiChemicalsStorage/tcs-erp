@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { readNotificationDeepLink, withoutNotificationDeepLink } from "./lib/notificationDeepLink";
 import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
@@ -846,6 +847,48 @@ export default function App() {
     }).catch(() => {});
   };
 
+  // พาไปเอกสารของแจ้งเตือน — ใช้ทั้งตอนกดในกระดิ่ง และตอนเปิดลิงก์จากปุ่มในข้อความ LINE (`?n=`, 2026-10-08)
+  const openNotificationTarget = (n: Notification) => {
+    if (n.relatedServiceReportId) navigateToServiceReport(n.relatedServiceReportId);
+    else if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
+    // เอกสารกลุ่มโครงการ/ผลิต (2026-08-27) — ต้องมาก่อน relatedScopeId เพราะแจ้งเตือนพวกนี้
+    // แนบ scope มาด้วยเสมอ (audit ของโมดูลเหล่านี้ผูกกับ scope) ถ้าเช็ค scope ก่อน จะพาไปผิดหน้า
+    // ใบเบิกแผนกอนุมัติแล้ว → สโตร์ (2026-09-24): ไปแท็บ "ใบเบิกจากแผนก" ของหน้าสโตร์ แล้วเน้นใบนั้น ให้ทำใบจ่ายต่อได้เลย
+    else if (n.type === "material_requisition_approved" && n.relatedMaterialRequisitionId && !isStoreIssueDocumentId(n.relatedMaterialRequisitionId)) navigateToStoreDocument("incoming", n.relatedMaterialRequisitionId);
+    else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
+    else if (n.relatedPasswordResetRequestId) guardedNav(() => setActiveNav("passwordResets"));
+    else if (n.relatedStoreReceiptId) navigateToStoreDocument("receipt", n.relatedStoreReceiptId);
+    else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);
+    else if (n.relatedProductRequestId) navigateToProductRequest(n.relatedProductRequestId);
+    // อีก 4 ใบบนเครื่องอนุมัติร่วม (2026-08-31) — มาพร้อมแจ้งเตือน "รออนุมัติ" ซึ่งเป็น
+    // แจ้งเตือนตัวแรกที่เอกสารพวกนี้เคยมี · ต้องอยู่เหนือ relatedScopeId ด้วยเหตุผลเดียวกับข้างบน
+    else if (n.relatedJobOrderId) navigateToJobOrder(n.relatedJobOrderId);
+    else if (n.relatedProductionOrderId) navigateToProductionOrder(n.relatedProductionOrderId);
+    else if (n.relatedPurchaseOrderId) navigateToPurchaseOrder(n.relatedPurchaseOrderId);
+    else if (n.relatedCostControlId) navigateToCostControl(n.relatedCostControlId);
+    else if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
+    else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
+  };
+
+  // ลิงก์จาก LINE: `/?n=<id แจ้งเตือน>` — รอให้แจ้งเตือนกับบทบาทโหลดเสร็จ (ไม่งั้นหน้าที่ต้องใช้สิทธิ์จะถูกเด้งกลับ)
+  // แล้วเปิดเหมือนกดในกระดิ่ง ทำครั้งเดียวต่อการเปิดแอป และลบ `n` ออกจาก URL ทันทีไม่ให้รีเฟรชแล้วเด้งซ้ำ
+  const deepLinkHandledRef = useRef(false);
+  const openNotificationTargetRef = useRef(openNotificationTarget);
+  useEffect(() => { openNotificationTargetRef.current = openNotificationTarget; });
+  useEffect(() => {
+    if (deepLinkHandledRef.current || !currentUser) return;
+    if (resourceStatus.notifications === "loading" || resourceStatus.roles === "loading") return;
+    deepLinkHandledRef.current = true;
+    const id = readNotificationDeepLink(window.location.search);
+    if (!id) return;
+    window.history.replaceState(null, "", withoutNotificationDeepLink(window.location.href));
+    const target = notifications.find((n) => n.id === id);
+    if (!target) return;
+    if (!target.read) markNotificationRead(target.id);
+    openNotificationTargetRef.current(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ทำครั้งเดียวเมื่อข้อมูลพร้อม ไม่ใช่ทุกครั้งที่แจ้งเตือนเปลี่ยน
+  }, [currentUser, resourceStatus.notifications, resourceStatus.roles]);
+
   const handleAudit = (action: string, details: string) => {
     if (!currentUser) return;
     logAudit({ module: moduleForAction(action), action, details }).catch(() => {});
@@ -1223,27 +1266,7 @@ export default function App() {
               onMarkRead={markNotificationRead}
               onMarkAllRead={markAllNotificationsRead}
               onDelete={deleteNotification}
-              onNavigate={(n) => {
-                if (n.relatedServiceReportId) navigateToServiceReport(n.relatedServiceReportId);
-                else if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
-                // เอกสารกลุ่มโครงการ/ผลิต (2026-08-27) — ต้องมาก่อน relatedScopeId เพราะแจ้งเตือนพวกนี้
-                // แนบ scope มาด้วยเสมอ (audit ของโมดูลเหล่านี้ผูกกับ scope) ถ้าเช็ค scope ก่อน จะพาไปผิดหน้า
-                // ใบเบิกแผนกอนุมัติแล้ว → สโตร์ (2026-09-24): ไปแท็บ "ใบเบิกจากแผนก" ของหน้าสโตร์ แล้วเน้นใบนั้น ให้ทำใบจ่ายต่อได้เลย
-                else if (n.type === "material_requisition_approved" && n.relatedMaterialRequisitionId && !isStoreIssueDocumentId(n.relatedMaterialRequisitionId)) navigateToStoreDocument("incoming", n.relatedMaterialRequisitionId);
-                else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
-                else if (n.relatedPasswordResetRequestId) guardedNav(() => setActiveNav("passwordResets"));
-                else if (n.relatedStoreReceiptId) navigateToStoreDocument("receipt", n.relatedStoreReceiptId);
-                else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);
-                else if (n.relatedProductRequestId) navigateToProductRequest(n.relatedProductRequestId);
-                // อีก 4 ใบบนเครื่องอนุมัติร่วม (2026-08-31) — มาพร้อมแจ้งเตือน "รออนุมัติ" ซึ่งเป็น
-                // แจ้งเตือนตัวแรกที่เอกสารพวกนี้เคยมี · ต้องอยู่เหนือ relatedScopeId ด้วยเหตุผลเดียวกับข้างบน
-                else if (n.relatedJobOrderId) navigateToJobOrder(n.relatedJobOrderId);
-                else if (n.relatedProductionOrderId) navigateToProductionOrder(n.relatedProductionOrderId);
-                else if (n.relatedPurchaseOrderId) navigateToPurchaseOrder(n.relatedPurchaseOrderId);
-                else if (n.relatedCostControlId) navigateToCostControl(n.relatedCostControlId);
-                else if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
-                else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
-              }}
+              onNavigate={openNotificationTarget}
             />
           </div>
           <span aria-hidden="true" className="hidden sm:block w-px h-7 bg-border flex-shrink-0" />

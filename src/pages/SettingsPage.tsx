@@ -21,6 +21,7 @@ import { SignaturePad } from "../components/SignaturePad";
 import { Toggle } from "../components/Toggle";
 import type { JobType } from "../lib/jobTypes";
 import { JobTypesSection } from "./settings/JobTypesSection";
+import { LineNotifySection } from "./settings/LineNotifySection";
 
 // ช่องเลือกภาษาของระบบ (ไทย/อังกฤษ) — เปลี่ยนทันที ไม่ต้องกดบันทึก
 // Field for switching the system language (Thai/English) — applies immediately, not part of the save.
@@ -514,6 +515,8 @@ export function SettingsPage({
 
             {tab === "notifications" && (
               <>
+                {/* LINE แจ้งเตือน (2026-10-08, Tuhmo #50) — ของจริง บันทึกที่เซิร์ฟเวอร์ · คำเตือนข้างล่างเป็นของสวิตช์ชุดเดิมเท่านั้น */}
+                <LineNotifySection />
                 <Note tone="warning" icon={AlertTriangle}>{t("settings.notifications.hint")}</Note>
                 <SectionCard title={t("settings.tab.notifications")} bodyClassName="">
                   {notifRows.map((n, i) => (

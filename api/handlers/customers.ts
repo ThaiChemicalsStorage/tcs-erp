@@ -5,6 +5,7 @@ import { handleSearch } from "../_lib/searchHandler.js";
 import { handleServiceTemplate } from "../_lib/serviceTemplateHandler.js";
 import { handleServiceReport } from "../_lib/serviceReportHandler.js";
 import { handleLineWebhook } from "../_lib/lineHandler.js";
+import { handleStaffLine, handleStaffLineWebhook } from "../_lib/staffLine.js";
 import { handleVendors } from "../_lib/vendorsHandler.js";
 import { handleCodeEntries } from "../_lib/codeEntriesHandler.js";
 import { handlePendingApprovals } from "../_lib/pendingApprovals.js";
@@ -50,6 +51,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // LINE OA webhook (2026-08-10) — server/app.ts routes /api/line/* here and captures the raw
     // body its signature check needs (see api/_lib/lineHandler.ts).
     if (pathname === "/api/line/webhook") return handleLineWebhook(req, res);
+    // LINE แจ้งเตือนพนักงาน (2026-10-08, Tuhmo #50) — OA แยกจากของลูกค้า ดู api/_lib/staffLine.ts
+    if (pathname === "/api/line/webhook/staff") return handleStaffLineWebhook(req, res);
+    if (pathname.startsWith("/api/line/staff/")) return handleStaffLine(req, res);
     return handleCustomers(req, res);
   });
 }

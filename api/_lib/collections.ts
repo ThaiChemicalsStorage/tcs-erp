@@ -31,7 +31,17 @@ import type { VendorApprovalStatus } from "../../src/lib/vendors.js";
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
  * `toPublicUser()` still strips it defensively from any legacy document.) */
-export type UserFields = Omit<User, "id"> & { passwordHash: string; emailAppPasswordEnc?: string };
+export type UserFields = Omit<User, "id"> & {
+  passwordHash: string;
+  emailAppPasswordEnc?: string;
+  /**
+   * LINE แจ้งเตือนพนักงาน (2026-10-08, Tuhmo #50 — ดู `staffLine.ts`) · `lineUserId` คือ id ของ LINE ที่ใช้ส่งข้อความได้
+   * จึงเป็นข้อมูลฝั่งเซิร์ฟเวอร์ล้วน `toPublicUser()` ตัดทิ้งเสมอ เหมือน `passwordHash` · `linePairing` = รหัสผูกบัญชีที่ยังไม่หมดอายุ
+   */
+  lineUserId?: string;
+  lineLinkedAt?: string;
+  linePairing?: { code: string; expiresAt: string } | null;
+};
 export type PublicUser = User;
 export type ProductFields = Omit<Product, "id">;
 type CategoryFields = Omit<ProductCategory, "id">;
@@ -1274,7 +1284,12 @@ export function toObjectId(id: string): ObjectId {
 export function toPublicUser(doc: WithId<UserFields>): PublicUser {
   // `emailAppPasswordEnc` (legacy, feature removed 2026-08-07) is still destructured out
   // defensively — old documents may carry it, and this function feeds every user-facing response.
-  const { _id, passwordHash: _passwordHash, emailAppPasswordEnc: _legacyEnc, ...rest } = doc;
+  // LINE fields (2026-10-08) ก็ตัดทิ้ง — ข้อมูลผู้ใช้ส่งถึงพนักงานทุกคน ถ้ารั่ว `lineUserId` ใครก็ยิงข้อความหาคนนั้นได้
+  // ด้วย token ของ OA และรหัสผูกบัญชีที่รั่วทำให้คนอื่นแย่งผูก LINE ของตัวเองเข้ากับบัญชีเรา
+  const {
+    _id, passwordHash: _passwordHash, emailAppPasswordEnc: _legacyEnc,
+    lineUserId: _lineUserId, lineLinkedAt: _lineLinkedAt, linePairing: _linePairing, ...rest
+  } = doc;
   return { id: _id.toString(), ...rest };
 }
 

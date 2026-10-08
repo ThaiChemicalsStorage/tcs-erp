@@ -6,6 +6,22 @@
 
 Tell each user, specifically, when a quotation event relevant to them happens — matching "modern business software" bell/badge/panel conventions.
 
+## LINE delivery (2026-10-08, Tuhmo #50)
+
+- **One write path.** Every notification is inserted via `insertNotifications()` (`api/_lib/notificationDelivery.ts`) —
+  the shared helpers in `departmentNotify.ts` and the formerly hand-rolled `insertMany` calls in quotes / Scope of Work /
+  Delivery Order / Service Report all go through it. New notification sites must use it too, or they get no LINE.
+- **What goes to LINE** (owner: "เฉพาะเรื่องที่ต้องลงมือ", to stay inside the free OA's 300 messages/month):
+  `LINE_ACTION_TYPES` in `api/_lib/staffLine.ts` — every `*_submitted` (waiting for your approval), documents sent to
+  you/your department (`scope_of_work_document_sent`, `delivery_order_sent_to_department`, `material_requisition_approved`
+  → Store, `purchase_request_approved` → Store/Purchasing, `scope_of_work_po_chase`) and `password_reset_requested`.
+  Outcomes (approved/rejected/won/lost), stock-low and the rest stay bell-only.
+- **Who gets it:** only active users who linked LINE themselves (Settings → การแจ้งเตือน → เชื่อม LINE → add the OA →
+  type the `TCS-XXXXX` code). Blocking the OA unlinks automatically.
+- **The button** opens `${APP_URL}/?n=<notification id>`; `App.tsx` waits for notifications + roles to load, opens the
+  same target as a bell click (`openNotificationTarget`), marks it read, and strips `n` from the URL. Works through login.
+- LINE errors (quota 429, blocked, bad token) are logged and swallowed — the bell entry is always saved first.
+
 ## Business Flow
 
 1. **Bell** (header, always visible): no badge when the signed-in user has 0 unread notifications; a red badge with the unread count otherwise, capped at displaying "99+" beyond 99.

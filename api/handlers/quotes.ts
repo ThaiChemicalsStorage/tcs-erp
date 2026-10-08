@@ -2,7 +2,7 @@ import type { ApiRequest, ApiResponse } from "../_lib/httpTypes.js";
 import { withErrorHandling, HttpError, getPathSegments, isAutoSaveRequest } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
 import { buildOwnershipClause } from "../_lib/visibility.js";
-import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, companyCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { quotesCollection, usersCollection, rolesCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, companyCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { handleScopeOfWork } from "../_lib/scopeOfWorkHandler.js";
 import { handleDeliveryOrder } from "../_lib/deliveryOrderHandler.js";
 import { handleAr } from "../_lib/arHandler.js";
@@ -36,6 +36,7 @@ import { primaryContactFields, isBlankContact, type QuoteContact } from "../../s
 import { randomUUID } from "node:crypto";
 import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
 import { getRevisionRoot } from "../_lib/quoteRevisions.js";
+import { insertNotifications } from "../_lib/notificationDelivery.js";
 
 /** อัตรา VAT ปัจจุบันจากหน้าตั้งค่าบริษัท (2026-10-06) — ยังไม่เคยตั้ง/ค่าผิดรูป = 7 */
 async function currentCompanyVatRate(): Promise<number> {
@@ -974,8 +975,7 @@ async function createWorkflowNotifications(
   }
 
   if (docs.length > 0) {
-    const notifications = await notificationsCollection();
-    await notifications.insertMany(docs);
+    await insertNotifications(docs);
   }
 }
 

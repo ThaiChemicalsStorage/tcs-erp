@@ -1,4 +1,5 @@
-import { usersCollection, notificationsCollection, rolesCollection } from "./collections.js";
+import { usersCollection, rolesCollection } from "./collections.js";
+import { insertNotifications } from "./notificationDelivery.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -56,8 +57,7 @@ export async function notifyDepartments(
   if (recipientIds.length === 0) return 0;
 
   const createdAt = nowIso();
-  const notifications = await notificationsCollection();
-  await notifications.insertMany(recipientIds.map((recipientUserId) => ({
+  await insertNotifications(recipientIds.map((recipientUserId) => ({
     recipientUserId,
     type: notification.type,
     title: notification.title,
@@ -106,8 +106,7 @@ export async function notifyUsers(
   if (recipients.length === 0) return 0;
 
   const createdAt = nowIso();
-  const notifications = await notificationsCollection();
-  await notifications.insertMany(recipients.map((recipientUserId) => ({
+  await insertNotifications(recipients.map((recipientUserId) => ({
     recipientUserId,
     type: notification.type,
     title: notification.title,
@@ -127,8 +126,7 @@ export async function notifyUser(
   notification: DepartmentNotification,
 ): Promise<number> {
   if (!recipientUserId || recipientUserId === actingUserId) return 0;
-  const notifications = await notificationsCollection();
-  await notifications.insertOne({
+  await insertNotifications([{
     recipientUserId,
     type: notification.type,
     title: notification.title,
@@ -137,6 +135,6 @@ export async function notifyUser(
     ...notification.related,
     createdAt: nowIso(),
     read: false,
-  });
+  }]);
   return 1;
 }

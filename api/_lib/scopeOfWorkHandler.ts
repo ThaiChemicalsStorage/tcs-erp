@@ -7,7 +7,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
   scopeOfWorksCollection, quotesCollection, usersCollection, countersCollection, auditLogCollection,
-  notificationsCollection, scopeAttachmentFilesCollection, costControlsCollection, toObjectId, withStringId,
+  scopeAttachmentFilesCollection, costControlsCollection, toObjectId, withStringId,
   type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
 import { storeUpload, deleteUpload } from "./upload/uploadService.js";
@@ -28,6 +28,7 @@ import type {
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
   ScopeOfWorkPaymentType, ScopeOfWorkSignatory, ScopeOfWorkCustomerSnapshot, ScopeOfWorkAttachment,
 } from "../../src/lib/scopeOfWork.js";
+import { insertNotifications } from "./notificationDelivery.js";
 
 /**
  * Scope of Work API (added 2026-07-15) — `api/handlers/quotes.ts` dispatches
@@ -763,8 +764,7 @@ async function notifyScopeApprovalEvent(
   const ids = [...new Set(recipientUserIds)].filter((uid) => uid !== "");
   if (ids.length === 0) return;
   const createdAt = nowIso();
-  const notifications = await notificationsCollection();
-  await notifications.insertMany(ids.map((recipientUserId) => ({
+  await insertNotifications(ids.map((recipientUserId) => ({
     recipientUserId, type, title, description,
     module: "Scope of Work", relatedScopeId: scopeId, relatedScopeNumber: scopeNumber,
     createdAt, read: false,
@@ -1349,8 +1349,7 @@ async function handleSendDocumentNotifications(req: ApiRequest, res: ApiResponse
     read: false,
   }));
   if (notifDocs.length > 0) {
-    const notifications = await notificationsCollection();
-    await notifications.insertMany(notifDocs);
+    await insertNotifications(notifDocs);
   }
 
   await writeScopeAuditEntry(
@@ -1414,8 +1413,7 @@ async function handleChasePo(req: ApiRequest, res: ApiResponse, id: string) {
   }
   if (!targetId) throw new HttpError(400, "ไม่พบบัญชีผู้ใช้ของพนักงานขาย/ผู้สร้างเอกสารนี้ในระบบ จึงส่งการแจ้งเตือนไม่ได้");
 
-  const notifications = await notificationsCollection();
-  await notifications.insertOne({
+  await insertNotifications([{
     recipientUserId: targetId,
     type: "scope_of_work_po_chase" satisfies NotificationType,
     title: "ทวงเลข PO",
@@ -1425,7 +1423,7 @@ async function handleChasePo(req: ApiRequest, res: ApiResponse, id: string) {
     relatedScopeNumber: doc.scopeNumber,
     createdAt: nowIso(),
     read: false,
-  });
+  }]);
   await writeScopeAuditEntry(ctx, "Scope of Work PO Chased", `ทวงเลข PO ของ Scope of Work ${doc.scopeNumber} ไปยัง ${targetName}`, {
     scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
   });

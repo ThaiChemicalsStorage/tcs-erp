@@ -5,8 +5,7 @@ import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   serviceReportsCollection, serviceTemplatesCollection, customersCollection, usersCollection,
-  countersCollection, auditLogCollection, notificationsCollection,
-  serviceChecklistPhotoFilesCollection,
+  countersCollection, auditLogCollection, serviceChecklistPhotoFilesCollection,
   toObjectId, withStringId, type ServiceReportFields, type CustomerFields,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -26,6 +25,7 @@ import { companyCollection } from "./collections.js";
 import { storeUpload, deleteUpload, filesCollection } from "./upload/uploadService.js";
 import { sendFileRow } from "./upload/filesHandler.js";
 import { isLinePushConfigured, pushLineMessage, buildApprovalFlexMessage } from "./lineHandler.js";
+import { insertNotifications } from "./notificationDelivery.js";
 
 /**
  * Service Report API (added 2026-08-06, Phase 1; photo attachments + print added the same day,
@@ -208,8 +208,7 @@ async function notifyServiceEvent(
   const ids = [...new Set(recipientUserIds)].filter((uid) => uid !== "");
   if (ids.length === 0) return;
   const createdAt = nowIso();
-  const notifications = await notificationsCollection();
-  await notifications.insertMany(ids.map((recipientUserId) => ({
+  await insertNotifications(ids.map((recipientUserId) => ({
     recipientUserId, type, title, description, module: "บริการ", relatedServiceReportId: serviceReportId, createdAt, read: false,
   })));
 }
