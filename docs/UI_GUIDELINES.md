@@ -27,6 +27,8 @@ pre-redesign look.
 - **Unit fields (2026-10-06):** every "หน่วย" input is `UnitCombobox` (`src/components/UnitCombobox.tsx`) — suggestions from the
   catalog's units via `UnitOptionsProvider` in App, free typing still allowed. Style it with `className` exactly like the `<input>` it replaces.
   It passes `searchHint={false}` — its hint line ("ใช้ใน N สินค้า") is description, not search data (2026-10-08).
+- **Disabled fields look the same everywhere (2026-10-08):** `field.input`/`field.textarea` grey out with `disabled:`; a wrapper box
+  around an input (`UnitInput`, a checkbox card) uses `has-[:disabled]:bg-[#f8f9fc]` so a `<fieldset disabled>` form reads as one consistent read-only surface.
 - **Dialogs return focus:** `useDialogA11y` restores focus to whatever opened the dialog when it closes — new dialogs get this by using the hook.
 - **Screen kit (phase 2, 2026-09-30):** build list pages, document pages, side panels and pickers from `src/components/ui/`
   (`ListPage`, `DocumentLayout`, `Overlays`, `MoreMenu`, `Field`, `SectionCard`, `styles`) — see CHANGELOG 2026-09-30b for the pieces.

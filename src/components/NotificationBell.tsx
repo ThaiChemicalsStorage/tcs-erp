@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, BellRing, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon, Mail, Wrench, PackagePlus, Warehouse, ShoppingCart, Store, KeyRound, Hash } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
 import { useI18n, type TranslationKey } from "../lib/i18n";
@@ -82,6 +82,7 @@ export function NotificationBell({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const bellRef = useRef<HTMLButtonElement>(null);
   const mine = notifications
     .filter((n) => n.recipientUserId === currentUserId)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -90,7 +91,8 @@ export function NotificationBell({
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    // Esc ปิดแล้วคืนโฟกัสให้กระดิ่ง — ผู้ใช้คีย์บอร์ดจะได้ไม่หลุดไปต้นหน้า (2026-10-08) · ปิดด้วยการคลิกนอกแผงไม่ต้อง
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); bellRef.current?.focus(); } };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
@@ -104,6 +106,7 @@ export function NotificationBell({
   return (
     <div className="relative">
       <button
+        ref={bellRef}
         onClick={() => setOpen((v) => !v)}
         className="relative w-10 h-10 rounded-lg flex items-center justify-center text-[#3d5173] hover:bg-[#f4f6fa] hover:text-foreground transition-colors"
         aria-label={t("notif.bellAria")}

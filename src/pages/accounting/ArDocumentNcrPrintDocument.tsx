@@ -227,7 +227,8 @@ function NcrPage({ doc, rows, pageIndex, pageCount, settings }: {
         position: "relative",
         width: mm(settings.pageWidthMm),
         height: mm(settings.pageHeightMm),
-        breakAfter: "page",
+        // ขึ้นหน้าใหม่เฉพาะระหว่างหน้า — break หลังหน้าสุดท้ายทำให้ Chrome พ่นหน้าเปล่าต่อท้าย = ฟอร์ม NCR เสียฟรี 1 ชุด (2026-10-08)
+        breakAfter: isLast ? "auto" : "page",
         color: "#000",
         background: "#fff",
         fontFamily: NCR_FONT_FAMILY,
@@ -315,7 +316,8 @@ function BillingNoteNcrPage({ doc, pageIndex, pageCount, settings, paidByInvoice
         position: "relative",
         width: mm(settings.pageWidthMm),
         height: mm(settings.pageHeightMm),
-        breakAfter: "page",
+        // ขึ้นหน้าใหม่เฉพาะระหว่างหน้า — break หลังหน้าสุดท้ายทำให้ Chrome พ่นหน้าเปล่าต่อท้าย = ฟอร์ม NCR เสียฟรี 1 ชุด (2026-10-08)
+        breakAfter: isLast ? "auto" : "page",
         color: "#000",
         background: "#fff",
         fontFamily: NCR_FONT_FAMILY,

@@ -229,7 +229,7 @@ export function ProductDrawer({
           </div>
           {/* เครื่องมือ (2026-09-03) — สินค้าที่ทีมเบิกไปแล้ว "ถือ" อยู่จนกว่าจะคืน ต่างจากวัสดุสิ้นเปลืองที่ใช้หมด
               ติ๊กแล้วจะถูกนับในหน้า "เครื่องมือประจำทีม" */}
-          <label className="flex items-start gap-3 rounded-lg border border-[#c3ccda] bg-white px-3.5 py-3 cursor-pointer">
+          <label className="flex items-start gap-3 rounded-lg border border-[#c3ccda] bg-white px-3.5 py-3 cursor-pointer has-[:disabled]:bg-[#f8f9fc] has-[:disabled]:cursor-default">
             <input type="checkbox" className="mt-0.5 w-[18px] h-[18px] rounded accent-[#0b1d3a] flex-shrink-0" checked={isTool} onChange={(e) => setIsTool(e.target.checked)} />
             <span className="flex flex-col gap-0.5 min-w-0">
               <span className="text-sm font-medium text-foreground">{t("products.form.isToolLabel")}</span>

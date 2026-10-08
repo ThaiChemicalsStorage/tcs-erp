@@ -587,7 +587,8 @@ export function DeliveryOrderDocument({
                 </RailCard>
 
                 {recipientOnly && <NextStepHint title={t("doc.recipientOnly.title")}>{t("deliveryOrderDoc.recipientOnly")}</NextStepHint>}
-                <NextStepHint title={t("sowdo.nextStep")}>{nextStepHint}</NextStepHint>
+                {/* ใบร่างบอกให้ "กดส่งขออนุมัติ" — ผู้รับดูอย่างเดียวกดไม่ได้ จึงไม่แสดง (2026-10-08) · สถานะอื่นเป็นข้อมูล แสดงตามปกติ */}
+                {!(recipientOnly && deliveryOrder.status === "Draft") && <NextStepHint title={t("sowdo.nextStep")}>{nextStepHint}</NextStepHint>}
               </>
             }
           />

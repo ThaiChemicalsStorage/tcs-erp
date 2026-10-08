@@ -437,7 +437,8 @@ export function CostControlDocument({
                 </RailCard>
                 </div>
                 {recipientOnly && <NextStepHint title={t("doc.recipientOnly.title")}>{t("costControlDoc.recipientOnly")}</NextStepHint>}
-                <NextStepHint title={t("costControlDoc.nextStep")}>{nextStepHint}</NextStepHint>
+                {/* ใบร่างบอกให้ "กดส่งขออนุมัติ" — ผู้รับดูอย่างเดียวกดไม่ได้ จึงไม่แสดง (2026-10-08) */}
+                {!(recipientOnly && draft.status === "Draft") && <NextStepHint title={t("costControlDoc.nextStep")}>{nextStepHint}</NextStepHint>}
               </>
             }
           />

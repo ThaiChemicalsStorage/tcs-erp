@@ -19,7 +19,7 @@ export const field = {
   input: "h-10 px-3 rounded-lg border border-[#c3ccda] bg-white text-sm text-foreground placeholder:text-[#8a97ad] outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:bg-[#f8f9fc] disabled:text-muted-foreground",
   /** ช่องในตาราง 36px */
   cell: "h-9 px-2.5 rounded-lg border border-[#c3ccda] bg-white text-sm text-foreground placeholder:text-[#8a97ad] outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors",
-  textarea: "px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white text-sm text-foreground leading-relaxed placeholder:text-[#8a97ad] outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors",
+  textarea: "px-3 py-2.5 rounded-lg border border-[#c3ccda] bg-white text-sm text-foreground leading-relaxed placeholder:text-[#8a97ad] outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors disabled:bg-[#f8f9fc] disabled:text-muted-foreground",
   /** กรอบรวม (ไอคอน + ช่องพิมพ์) */
   box: "h-10 px-3 rounded-lg border border-[#c3ccda] bg-white flex items-center gap-2 focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors",
   label: "text-[13px] font-medium text-[#26395a]",

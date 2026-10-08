@@ -124,7 +124,7 @@ export function UnitInput({ unit, small = false, className = "", ...props }: Inp
   small?: boolean;
 }) {
   return (
-    <span className={`${small ? "h-9" : "h-10"} rounded-lg border border-[#c3ccda] bg-white flex items-stretch overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors ${className}`}>
+    <span className={`${small ? "h-9" : "h-10"} rounded-lg border border-[#c3ccda] bg-white has-[:disabled]:bg-[#f8f9fc] flex items-stretch overflow-hidden focus-within:border-[#1a5fb4] focus-within:ring-2 focus-within:ring-[#1a5fb4]/20 transition-colors ${className}`}>
       <input {...props} className={`flex-1 min-w-0 ${small ? "px-2" : "px-3"} bg-transparent text-sm text-foreground text-right tabular-nums outline-none placeholder:text-[#8a97ad] disabled:text-muted-foreground`} />
       {unit && <span className="px-3 flex items-center bg-[#f4f6fa] border-l border-border text-[13px] text-[#3d5173] whitespace-nowrap">{unit}</span>}
     </span>

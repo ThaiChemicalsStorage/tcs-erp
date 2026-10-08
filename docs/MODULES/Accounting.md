@@ -308,6 +308,9 @@ before real use** (the still-open hardware questions below are exactly what's ne
   blank. Documents issued before this date have neither (snapshot, no backfill).
   The IV/AR/RE code box was 10 mm (≈5 characters — "C-0001" printed as "C-000"); widened to 40 mm
   2026-10-08. The row is empty up to the doc-number column, so nothing overlaps.
+- **No page break after the last page (2026-10-08b):** every NCR page used to carry `break-after: page`,
+  so Chrome emitted a trailing blank page — one wasted continuous form per document. Now only
+  between pages, same rule as `PaginatedPrintForm`'s `breakAfterLast`.
 - **สถานที่ส่งสินค้า** is not a separate field: the old program uses that row as the 3rd address line,
   so the address now wraps to up to 3 lines.
 - **Long text wraps instead of being clipped** — description, sub-detail and remark rows wrap at the
