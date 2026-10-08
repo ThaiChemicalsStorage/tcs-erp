@@ -4,6 +4,19 @@
     "ignoreFiles": [
       "public/manual.html"
     ],
-    "ignoreValues": []
+    "ignoreValues": [
+      {
+        "rule": "design-system-color",
+        "value": "#000",
+        "createdAt": "2026-10-08T05:30:00.611Z",
+        "reason": "หมึกดำล้วนของใบพิมพ์ฟอร์มกระดาษ"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "17px",
+        "createdAt": "2026-10-08T05:30:25.369Z",
+        "reason": "หัวเรื่องฟอร์ม FM-ST-01 วัดจากฟอร์มเดิม"
+      }
+    ]
   }
 }
