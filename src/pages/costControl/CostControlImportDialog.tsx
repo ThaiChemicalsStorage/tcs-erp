@@ -12,6 +12,7 @@ import {
   type CostControlImportResult, type SheetFills, type SheetKind,
 } from "../../lib/costControlImport";
 import { UnitCombobox } from "../../components/UnitCombobox";
+import { DateInput } from "../../components/DateInput";
 
 interface ReadableSheet {
   name: string;
@@ -289,8 +290,8 @@ export function CostControlImportDialog({ onCreated, onClose }: {
                     onChange={(e) => setHeader("jobOrder", e.target.value)} />
                 </Field>
                 <Field label={t("costControlDoc.field.docDate")} htmlFor="cci-docDate">
-                  <input id="cci-docDate" type="date" className={`${field.input} w-full min-w-0`} value={result.header.docDate}
-                    onChange={(e) => setHeader("docDate", e.target.value)} />
+                  <DateInput id="cci-docDate" className={`${field.input} w-full min-w-0`} value={result.header.docDate}
+                    onChange={(v) => setHeader("docDate", v)} />
                 </Field>
               </div>
 

@@ -2,6 +2,8 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import { vendorBillTotals, type VendorBill, type VendorBillRow } from "../../lib/vendorBill";
 import { bahtText } from "../../lib/bahtText";
 import { printDateShortBE, splitAddressTwoLines } from "../../lib/printFormat";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { useUserDirectory } from "../../lib/userDirectory";
 
 /**
  * ใบพิมพ์ใบรับวางบิล — ลอกฟอร์มของโปรแกรมบัญชีเดิม (2026-09-23, ตัวอย่างจากเจ้าของ `reference/company/ใบวางบิล.pdf`
@@ -32,6 +34,8 @@ export function VendorBillPrintDocument({ doc, rows, companyHeader }: {
   companyHeader: CompanyHeaderInfo;
 }) {
   const printable = rows.filter((r) => !r.missing);
+  const { byId } = useUserDirectory();
+  const receiverName = byId(doc.createdBy)?.fullName ?? "";
   const pages: VendorBillRow[][] = [];
   for (let i = 0; i < printable.length; i += ROWS_PER_PAGE) pages.push(printable.slice(i, i + ROWS_PER_PAGE));
   if (pages.length === 0) pages.push([]);
@@ -122,8 +126,21 @@ export function VendorBillPrintDocument({ doc, rows, companyHeader }: {
                   <div style={{ position: "absolute", top: "4.4mm", left: "129mm", whiteSpace: "pre" }}>รวมเงินทั้งสิ้น</div>
                   <div style={{ position: "absolute", top: "4.4mm", left: `${colLeft(6)}mm`, width: `${COLS[6]}mm`, textAlign: "right", paddingRight: "3mm", boxSizing: "border-box" }}>{money(totals.outstanding)}</div>
                   <div style={{ position: "absolute", top: "17.4mm", left: "3mm", whiteSpace: "pre" }}>หมายเหตุ</div>
-                  <div style={{ position: "absolute", top: "42.8mm", left: "6.3mm", whiteSpace: "pre" }}>{"ชื่อผู้รับวางบิล ____________________"}</div>
-                  <div style={{ position: "absolute", top: "50.4mm", left: "6.3mm", whiteSpace: "pre" }}>{"วันที่รับ        ___/___/___"}</div>
+                  {/* ผู้รับวางบิล = คนสร้างใบในระบบ (2026-10-08, Tuhmo #49) — ลายเซ็นจากโปรไฟล์ลอยเหนือเส้น ชื่อบนเส้น วันที่รับ = วันที่ของใบ
+                      ขีดยังพิมพ์ตามฟอร์มเดิม ตำแหน่งในแถวไม่เปลี่ยน */}
+                  <div style={{ position: "absolute", top: "42.8mm", left: "6.3mm", whiteSpace: "pre" }}>
+                    {"ชื่อผู้รับวางบิล "}
+                    <span style={{ position: "relative" }}>
+                      {"____________________"}
+                      {receiverName || doc.createdBy ? (
+                        <span style={{ position: "absolute", left: "50%", bottom: "100%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", whiteSpace: "nowrap" }}>
+                          <span style={{ display: "block", width: "40mm" }}><PrintSignatureLine userId={doc.createdBy} height={34} /></span>
+                          <span style={{ lineHeight: 1.2 }}>{receiverName}</span>
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div style={{ position: "absolute", top: "50.4mm", left: "6.3mm", whiteSpace: "pre" }}>{`วันที่รับ        ${doc.billDate ? printDateShortBE(doc.billDate) : "___/___/___"}`}</div>
                   <div style={{ position: "absolute", top: "50.4mm", left: "75.5mm", whiteSpace: "pre" }}>{"ภาษีหัก ณ. ที่จ่าย 3 % / 5%___________________"}</div>
                   <div style={{ position: "absolute", top: "56.1mm", left: "6.3mm", whiteSpace: "pre" }}>{"วันที่นัดรับเช็ค ___/___/___"}</div>
                   <div style={{ position: "absolute", top: "56.1mm", left: "75.5mm", whiteSpace: "pre" }}>{"ภาษีหัก ณ. ที่จ่าย 1 %___________________"}</div>

@@ -20,7 +20,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import {
   type ReceivingReport, type ReceivingReportUpdateFields, type ReceivingReportLine, type ReceiveBatchInput, type ReceivingReportPrintInfo,
-  fetchReceivingReport, updateReceivingReport, deleteReceivingReport, postReceivingBatch, deleteReceivingBatch,
+  fetchReceivingReport, updateReceivingReport, deleteReceivingReport, postReceivingBatch, deleteReceivingBatch, setReceivingBatchChecked,
   logReceivingReportPrinted, uploadReceivingReportAttachment, deleteReceivingReportAttachment,
   receivingReportTotals, receivedQtyOf, receivedAmountOf, outstandingQtyOf,
   isBlankReceivingReport, receivingReportCodeOf, blankReceivingReportLine, RECEIVING_REPORT_CODE_LABEL_KEY,
@@ -81,12 +81,13 @@ function toUpdateFields(d: ReceivingReport): ReceivingReportUpdateFields {
  * การกระทำที่ตั้งใจ ไม่ใช่การพิมพ์ทิ้งไว้
  */
 export function ReceivingReportDocument({
-  receivingReportId, currentUserId, canEdit, canReceive, canPrint, canDelete, companyHeader, onBack, onDeleted, showToast,
+  receivingReportId, currentUserId, canEdit, canReceive, canCheck, canPrint, canDelete, companyHeader, onBack, onDeleted, showToast,
 }: {
   receivingReportId: string;
   currentUserId: string;
   canEdit: boolean;
   canReceive: boolean;
+  canCheck: boolean;
   canPrint: boolean;
   canDelete: boolean;
   companyHeader: CompanyHeaderInfo;
@@ -292,6 +293,19 @@ export function ReceivingReportDocument({
     } finally {
       setBusy(false);
       setConfirmReverse(null);
+    }
+  };
+
+  // บัญชีตรวจสอบรอบการรับ (2026-10-08, Tuhmo #49) — ชื่อ/ลายเซ็น/วันที่ไปขึ้นช่อง "ผู้ตรวจสอบ" บนใบพิมพ์ของรอบนั้น
+  const runCheck = async (batchId: string, checked: boolean) => {
+    setBusy(true);
+    try {
+      applyServerDoc(await setReceivingBatchChecked(draft.id, batchId, checked));
+      showToast(t(checked ? "receivingReportDoc.checkedToast" : "receivingReportDoc.uncheckedToast"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("receivingReportDoc.errorCheck"));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -877,7 +891,8 @@ export function ReceivingReportDocument({
                     <tr className={table.head}>
                       {[
                         { label: t("receivingReportDoc.historyCol.batch") }, { label: t("receivingReportDoc.receive.invoiceDate") },
-                        { label: t("receivingReportDoc.receive.receivedBy") }, { label: t("receivingReportDoc.priceType") },
+                        { label: t("receivingReportDoc.receive.receivedBy") }, { label: t("receivingReportDoc.checkCol") },
+                        { label: t("receivingReportDoc.priceType") },
                         { label: t("receivingReportDoc.dueDate") }, { label: t("receivingReportDoc.receive.total"), right: true }, { label: "" },
                       ].map((h, i) => (
                         <th key={i} className={`${h.right ? table.th.replace("text-left", "text-right") : table.th} first:pl-6 last:pr-6`}>{h.label}</th>
@@ -895,6 +910,30 @@ export function ReceivingReportDocument({
                         </td>
                         <td className={`${table.td} text-sm text-[#3d5173] whitespace-nowrap`}>{b.invoiceDate ? formatDisplayDate(b.invoiceDate) : "—"}</td>
                         <td className={`${table.td} text-sm text-[#3d5173]`}>{b.receivedBy || b.postedByName || "—"}</td>
+                        <td className={`${table.td} text-sm`}>
+                          {b.checkedBy ? (
+                            <div className="flex flex-col leading-snug">
+                              <span className="inline-flex items-center gap-1.5 text-[#1b7f4f] font-medium">
+                                <CheckCircle2 size={14} aria-hidden="true" /> {b.checkedByName}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {b.checkedAt ? formatDisplayDate(b.checkedAt) : ""}
+                                {canCheck && (
+                                  <button type="button" onClick={() => void runCheck(b.id, false)} disabled={busy}
+                                    className="ml-2 text-[#1a5fb4] hover:underline disabled:opacity-60">
+                                    {t("receivingReportDoc.uncheckBtn")}
+                                  </button>
+                                )}
+                              </span>
+                            </div>
+                          ) : canCheck ? (
+                            <button type="button" onClick={() => void runCheck(b.id, true)} disabled={busy} className={btn.secondarySm}>
+                              <CheckCircle2 size={15} aria-hidden="true" /> {t("receivingReportDoc.checkBtn")}
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">{t("receivingReportDoc.notChecked")}</span>
+                          )}
+                        </td>
                         <td className={`${table.td} text-sm text-[#3d5173]`}>
                           {t(RECEIVING_PRICE_TYPE_LABEL_KEY[priceTypeOf(b)])}
                           {b.discountAmt ? <span className="block text-xs text-muted-foreground">{t("receivingReportDoc.summary.discount")} {fmt(b.discountAmt)}</span> : null}
@@ -933,7 +972,7 @@ export function ReceivingReportDocument({
 
       {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
           (บั๊กเดิมของหกโมดูลที่แก้ไปเมื่อ 2026-09-02: เรนเดอร์เฉพาะตอนกดปุ่ม แล้ว Ctrl+P ได้กระดาษเปล่า) */}
-      <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} printInfo={printInfo} batchId={printBatchId ?? undefined} />
+      <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} printInfo={printInfo} batchId={printBatchId ?? undefined} printedByUserId={currentUserId} />
 
       <ProductPickerModal
         open={productPickerOpen}

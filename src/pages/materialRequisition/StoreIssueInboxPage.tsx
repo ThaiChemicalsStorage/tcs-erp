@@ -14,6 +14,7 @@ import {
   issuedQtyOf, outstandingQtyOf, issueBatchesOf,
 } from "../../lib/materialRequisition";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 const FILTER_ALL = "all";
 
@@ -314,7 +315,7 @@ export function StoreIssueInboxPage({
                               <input id={`si-by-${m.id}`} value={issuedBy} onChange={(e) => setIssuedBy(e.target.value)} className={`${field.input} w-full`} />
                             </Field>
                             <Field label={t("materialRequisitionDoc.field.issuedDate")} htmlFor={`si-date-${m.id}`}>
-                              <input id={`si-date-${m.id}`} type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={`${field.input} w-full`} />
+                              <DateInput id={`si-date-${m.id}`} value={issueDate} onChange={(v) => setIssueDate(v)} className={`${field.input} w-full`} />
                             </Field>
                             <Field className="sm:col-span-2" label={t("materialRequisitionDoc.field.issueRemark")} htmlFor={`si-remark-${m.id}`}>
                               <input id={`si-remark-${m.id}`} value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)} className={`${field.input} w-full`} />

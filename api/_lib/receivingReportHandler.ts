@@ -925,6 +925,35 @@ async function handleDeleteBatch(req: ApiRequest, res: ApiResponse, id: string, 
   res.status(200).json({ receivingReport: toClient(await loadOrThrow(id)) });
 }
 
+/**
+ * บัญชีตรวจสอบรอบการรับ (2026-10-08, Tuhmo #49) — เจ้าของ: ช่อง "ผู้ตรวจสอบ" บนใบรับสินค้า *"ส่วนใหญ่ปกติแผนกบัญชีจะเป็นคนตรวจสอบ"*
+ * แล้วเลือกให้มีปุ่ม "ตรวจสอบแล้ว" · เก็บต่อรอบ เพราะใบพิมพ์ออกหนึ่งแผ่นต่อหนึ่งรอบการรับ (แต่ละรอบมีบิลของตัวเอง)
+ *
+ * ไม่ล็อกอะไรเพิ่ม: ตรวจแล้วยังยกเลิกรอบได้ตามกติกาเดิม (ผลตรวจหายไปพร้อมรอบ) · ยกเลิกการตรวจได้ด้วยสิทธิ์เดียวกัน เผื่อกดผิด ·
+ * ชื่อ/เวลาเก็บเป็น snapshot ตอนกด ส่วนรูปลายเซ็นบนใบพิมพ์อ่านจากโปรไฟล์ของ `checkedBy` แบบเดียวกับทุกเอกสาร
+ */
+async function handleCheckBatch(req: ApiRequest, res: ApiResponse, id: string, batchId: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "receivingReport:check");
+  const checked = (req.body as { checked?: unknown } | undefined)?.checked;
+  if (typeof checked !== "boolean") throw new HttpError(400, "ต้องระบุ checked เป็น true หรือ false");
+  const current = toClient(await loadOrThrow(id));
+  const batch = current.batches.find((b) => b.id === batchId);
+  if (!batch) throw new HttpError(404, "ไม่พบรอบการรับนี้ — อาจถูกยกเลิกไปแล้ว");
+  const now = nowIso();
+  const stamp = checked
+    ? { "batches.$.checkedBy": ctx.user.id, "batches.$.checkedByName": ctx.user.fullName, "batches.$.checkedAt": now }
+    : { "batches.$.checkedBy": "", "batches.$.checkedByName": "", "batches.$.checkedAt": "" };
+  const receivingReports = await receivingReportsCollection();
+  await receivingReports.updateOne(
+    { _id: id, "batches.id": batchId } as never,
+    { $set: { ...stamp, updatedAt: now, updatedBy: ctx.user.id } } as never,
+  );
+  await writeAuditEntry(ctx, checked ? "Receiving Report Batch Checked" : "Receiving Report Batch Unchecked",
+    `${checked ? "ตรวจสอบ" : "ยกเลิกการตรวจสอบ"}การรับครั้งที่ ${batch.seq} ของใบ ${current.documentNumber} (ใบกำกับ ${batch.invoiceNumber})`);
+  res.status(200).json({ receivingReport: toClient(await loadOrThrow(id)) });
+}
+
 /** ไฟล์แนบ — ใบส่งของ/ใบกำกับภาษีที่สแกน ใช้ระบบกลางตัวเดียวกับใบสั่งงาน/ใบขอซื้อ/ใบส่งมอบ */
 const attachmentConfig: AttachmentConfig<ReceivingReportFields & { _id: string }> = {
   label: "ใบรับสินค้า",
@@ -965,6 +994,9 @@ export async function handleReceivingReport(req: ApiRequest, res: ApiResponse): 
       if (req.method === "GET") return handlePurchaseOrderCandidates(req, res, parts[0]);
       return handleAddPurchaseOrder(req, res, parts[0]);
     }
+  }
+  if (parts.length === 4 && parts[1] === "receipts" && parts[3] === "check") {
+    return handleCheckBatch(req, res, parts[0], parts[2]);
   }
   if (parts.length === 3) {
     if (parts[1] === "receipts") return handleDeleteBatch(req, res, parts[0], parts[2]);

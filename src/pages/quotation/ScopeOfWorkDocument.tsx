@@ -52,6 +52,7 @@ import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS, ADDITIONAL_REC
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 // แปลงข้อมูล Scope of Work เต็มรูปแบบให้เหลือเฉพาะฟิลด์ที่ใช้บันทึกอัปเดตได้ (สำหรับฉบับร่าง)
 // Converts a full Scope of Work record into just the fields allowed for a Draft update
@@ -140,13 +141,12 @@ function SignatoryField({ label, value, onChange, users, disabled, required, err
           />
           {!disabled && <ChevronDown size={16} className="absolute right-2.5 top-3 text-muted-foreground pointer-events-none" aria-hidden="true" />}
         </div>
-        <input
+        <DateInput
           disabled={disabled}
-          type="date"
-          aria-label={t("scopeOfWorkDoc.signDateAria").replace("{label}", label)}
+          ariaLabel={t("scopeOfWorkDoc.signDateAria").replace("{label}", label)}
           className={`${field.input} w-full min-w-0`}
           value={value.date}
-          onChange={(e) => onChange({ ...value, date: e.target.value })}
+          onChange={(v) => onChange({ ...value, date: v })}
         />
       </div>
       <FieldError message={error} />
@@ -1055,10 +1055,10 @@ export function ScopeOfWorkDocument({
                         <input id="sow-drawingCode" disabled={!editable} className={`${field.input} w-full`} value={scope.drawingCode} onChange={(e) => updateField("drawingCode", e.target.value)} />
                       </Field>
                       <Field label={t("scopeOfWorkDoc.field.issueDate")} htmlFor="sow-issueDate" required error={fe.issueDate}>
-                        <input id="sow-issueDate" disabled={!editable} type="date" className={`${field.input} w-full`} value={scope.issueDate} onChange={(e) => updateField("issueDate", e.target.value)} />
+                        <DateInput id="sow-issueDate" disabled={!editable} className={`${field.input} w-full`} value={scope.issueDate} onChange={(v) => updateField("issueDate", v)} />
                       </Field>
                       <Field label={t("scopeOfWorkDoc.field.deliveryDate")} htmlFor="sow-deliveryDate" required error={fe.deliveryDate}>
-                        <input id="sow-deliveryDate" disabled={!editable} type="date" className={`${field.input} w-full`} value={scope.deliveryDate} onChange={(e) => updateField("deliveryDate", e.target.value)} />
+                        <DateInput id="sow-deliveryDate" disabled={!editable} className={`${field.input} w-full`} value={scope.deliveryDate} onChange={(v) => updateField("deliveryDate", v)} />
                       </Field>
                       {/* ลูกค้าออก PO มาได้หลายใบต่อหนึ่งงาน — เก็บเลขแรกไว้ที่ `customerPoNumber` (ตัวที่
                           แท็บ "ยังไม่มี PO" กับคำสั่งทวง PO ใช้) ที่เหลือลง `additionalPoNumbers` ·

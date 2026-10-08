@@ -400,6 +400,13 @@ payment; neither role should acquire the other half by default.
 `receivingReport:receive` is separate from `:edit` because posting a receipt writes stock and creates
 a payable, which is a materially different act from correcting the form number in the header.
 
+**Checker per round (2026-10-08, Tuhmo #49).** Owner: the "ผู้ตรวจสอบ" box on FM-ST-01 is normally
+Accounting. A user with `receivingReport:check` presses **ตรวจสอบแล้ว** in the round history table
+(`POST /:id/receipts/:batchId/check`, `{ checked }`, undoable); the round stores `checkedBy` (user id),
+`checkedByName`, `checkedAt`. The printed slip now shows, per round: receiver = profile signature of
+`postedBy` + `receivedBy || postedByName` + `receivedDate`; checker = the checked fields; "พิมพ์โดย" =
+the person printing. Rounds with no data keep the original underscores exactly.
+
 Shipped with the append-only migration **`store-ap-permissions-2026-09-03`** in
 `api/_lib/rbacSeed.ts`: Administrator gets all nine, `accounting_user` gets `ap:*` only. Without that
 migration an already-provisioned database would never see the new menu entries — the mistake that has

@@ -5,6 +5,7 @@ import { FilterSelect } from "../../components/ui/ListPage";
 import { field } from "../../components/ui/styles";
 import type { DateRangePreset, DateRangeValue } from "../../lib/dateRanges";
 import type { DiscountMode } from "../../lib/quoteMath";
+import { DateInput } from "../../components/DateInput";
 
 /**
  * ชิ้นส่วนหน้าตาที่หน้าคลังฝั่งรับของใช้ร่วมกัน (ใบรับสินค้า · ใบรับวางบิล · ใบเบิก-คืนวัสดุของสโตร์) — ดีไซน์ใหม่ 2026-09-30
@@ -205,11 +206,11 @@ export function ListDateRangeSelect({ value, onChange }: { value: DateRangeValue
       />
       {value.preset === "custom" && (
         <div className="flex items-center gap-1.5">
-          <input type="date" value={value.from} max={value.to || undefined} aria-label={t("dateFilter.from")}
-            onChange={(e) => onChange({ ...value, preset: "custom", from: e.target.value })} className={`${field.input} w-[150px]`} />
+          <DateInput value={value.from} max={value.to || undefined} ariaLabel={t("dateFilter.from")}
+            onChange={(v) => onChange({ ...value, preset: "custom", from: v })} className={`${field.input} w-[150px]`} />
           <span className="text-sm text-muted-foreground">–</span>
-          <input type="date" value={value.to} min={value.from || undefined} aria-label={t("dateFilter.to")}
-            onChange={(e) => onChange({ ...value, preset: "custom", to: e.target.value })} className={`${field.input} w-[150px]`} />
+          <DateInput value={value.to} min={value.from || undefined} ariaLabel={t("dateFilter.to")}
+            onChange={(v) => onChange({ ...value, preset: "custom", to: v })} className={`${field.input} w-[150px]`} />
           {(value.from || value.to) && (
             <button type="button" onClick={() => onChange({ preset: "custom", from: "", to: "" })} aria-label={t("dateFilter.clear")} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-[#f4f6fa] hover:text-foreground">
               <X size={14} />

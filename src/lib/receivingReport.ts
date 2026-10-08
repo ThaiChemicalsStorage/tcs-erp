@@ -187,6 +187,13 @@ export interface ReceivingBatch {
   postedAt: string;
   postedBy: string;
   postedByName: string;
+  /**
+   * ผู้ตรวจสอบรอบนี้ (2026-10-08, Tuhmo #49) — ปกติคือแผนกบัญชี กด "ตรวจสอบแล้ว" ด้วยสิทธิ์ `receivingReport:check`
+   * id ผู้ใช้ (ลายเซ็นบนใบพิมพ์) + ชื่อ/เวลา snapshot · ยังไม่ตรวจหรือยกเลิกการตรวจ = ไม่มี/ว่าง
+   */
+  checkedBy?: string;
+  checkedByName?: string;
+  checkedAt?: string;
   stockMovementIds: string[];
   apEntryId: string;
 }
@@ -492,6 +499,15 @@ export async function deleteReceivingBatch(id: string, batchId: string): Promise
   const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>(
     `/receiving-reports/${encodeURIComponent(id)}/receipts/${encodeURIComponent(batchId)}`,
     { method: "DELETE" },
+  );
+  return receivingReport;
+}
+
+/** บัญชีกด "ตรวจสอบแล้ว" / ยกเลิกการตรวจของรอบการรับ (2026-10-08, Tuhmo #49) — สิทธิ์ `receivingReport:check` */
+export async function setReceivingBatchChecked(id: string, batchId: string, checked: boolean): Promise<ReceivingReport> {
+  const { receivingReport } = await apiFetch<{ receivingReport: ReceivingReport }>(
+    `/receiving-reports/${encodeURIComponent(id)}/receipts/${encodeURIComponent(batchId)}/check`,
+    { method: "POST", body: JSON.stringify({ checked }) },
   );
   return receivingReport;
 }

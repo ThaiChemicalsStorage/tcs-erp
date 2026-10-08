@@ -15,6 +15,7 @@ import { useModuleTour, type TourStep } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { PAGE_CLASS } from "./accountingUi";
 import { AGING_RAMP, money } from "./accountingFormat";
+import { DateInput } from "../../components/DateInput";
 
 // แดชบอร์ดบัญชี (เพิ่ม 2026-08-18) — ภาพรวมและรายละเอียดเชิงลึกของบัญชีลูกหนี้ (AR/IV/BI/RE)
 // แยกจากแดชบอร์ดหลักของบริษัท (ซึ่งเน้นภาพรวมงานขาย/ใบเสนอราคา) — ดึงข้อมูลจาก GET /api/ar-dashboard
@@ -107,9 +108,9 @@ export function AccountingDashboardView({ heading }: { heading?: { module: strin
       </IconSelect>
       {preset === "custom" && (
         <div className="flex items-center gap-1.5">
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t("accountingDashboard.filter.fromDateLabel")} className={`${field.input} font-mono`} />
+          <DateInput value={from} onChange={(v) => setFrom(v)} ariaLabel={t("accountingDashboard.filter.fromDateLabel")} className={`${field.input} font-mono`} />
           <span className="text-sm text-muted-foreground">—</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("accountingDashboard.filter.toDateLabel")} className={`${field.input} font-mono`} />
+          <DateInput value={to} onChange={(v) => setTo(v)} ariaLabel={t("accountingDashboard.filter.toDateLabel")} className={`${field.input} font-mono`} />
         </div>
       )}
       <IconSelect

@@ -261,6 +261,27 @@ describe("ใบรับสินค้า", () => {
     expect((await api("DELETE", `/api/receiving-reports/${rrId}`)).status).toBe(400);
   });
 
+  // บัญชีกด "ตรวจสอบแล้ว" ต่อรอบการรับ (2026-10-08, Tuhmo #49) — ชื่อ/เวลาเก็บที่รอบนั้น ใบพิมพ์ช่องผู้ตรวจสอบอ่านจากตรงนี้
+  it("ตรวจสอบรอบการรับ: ประทับผู้ตรวจ/เวลา · ยกเลิกการตรวจได้ · รอบที่ไม่มีอยู่ได้ 404", async () => {
+    const doc = (await api("GET", `/api/receiving-reports/${rrId}`)).body.receivingReport;
+    const batchId = doc.batches[0].id;
+    expect((await api("POST", `/api/receiving-reports/${rrId}/receipts/${batchId}/check`, {})).status).toBe(400);
+    expect((await api("POST", `/api/receiving-reports/${rrId}/receipts/no-such-batch/check`, { checked: true })).status).toBe(404);
+
+    const checked = await api("POST", `/api/receiving-reports/${rrId}/receipts/${batchId}/check`, { checked: true });
+    expect(checked.status, JSON.stringify(checked.body)).toBe(200);
+    const b = checked.body.receivingReport.batches[0];
+    expect(b.checkedByName).toBe("Store Admin");
+    expect(b.checkedBy).toMatch(/^[0-9a-f]{24}$/);
+    expect(Number.isNaN(Date.parse(b.checkedAt))).toBe(false);
+    // ข้อมูลอื่นของรอบไม่ถูกแตะ
+    expect(b.invoiceNumber).toBe("INV-001");
+
+    const unchecked = await api("POST", `/api/receiving-reports/${rrId}/receipts/${batchId}/check`, { checked: false });
+    expect(unchecked.status).toBe(200);
+    expect(unchecked.body.receivingReport.batches[0]).toMatchObject({ checkedBy: "", checkedByName: "", checkedAt: "" });
+  });
+
   it("กดพิมพ์ได้ข้อมูลเสริมของฟอร์ม FM-ST-01 จากใบสั่งซื้อ/ทะเบียนผู้ขาย และนับครั้งที่พิมพ์ (2026-09-23)", async () => {
     const first = await api("POST", `/api/receiving-reports/${rrId}/print`);
     expect(first.status, JSON.stringify(first.body)).toBe(200);

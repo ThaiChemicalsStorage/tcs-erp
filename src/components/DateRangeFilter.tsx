@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CalendarRange, X } from "lucide-react";
 import { type DateRangePreset, type DateRangeValue } from "../lib/dateRanges";
 import { useI18n } from "../lib/i18n";
+import { DateInput } from "./DateInput";
 
 /**
  * ตัวกรองช่วงวันที่สำหรับ**หน้ารายการเอกสารทุกหน้า** — เพิ่ม 2026-09-21 ตามคำสั่งเจ้าของ:
@@ -66,21 +67,19 @@ export function DateRangeFilter({ value, onChange }: {
 
       {customOpen && (
         <div className="flex items-center gap-1.5">
-          <input
-            type="date"
+          <DateInput
             value={value.from}
             max={value.to || undefined}
-            onChange={(e) => onChange({ ...value, preset: "custom", from: e.target.value })}
-            aria-label={t("dateFilter.from")}
+            onChange={(v) => onChange({ ...value, preset: "custom", from: v })}
+            ariaLabel={t("dateFilter.from")}
             className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
           <span className="text-xs text-muted-foreground">–</span>
-          <input
-            type="date"
+          <DateInput
             value={value.to}
             min={value.from || undefined}
-            onChange={(e) => onChange({ ...value, preset: "custom", to: e.target.value })}
-            aria-label={t("dateFilter.to")}
+            onChange={(v) => onChange({ ...value, preset: "custom", to: v })}
+            ariaLabel={t("dateFilter.to")}
             className="h-9 px-2 text-xs text-foreground bg-white border border-[#c3ccda] rounded-lg outline-none focus:border-[#1a5fb4] focus:ring-2 focus:ring-[#1a5fb4]/20 transition-colors"
           />
           {(value.from || value.to) && (

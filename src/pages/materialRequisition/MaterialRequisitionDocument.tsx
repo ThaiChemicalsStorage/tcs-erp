@@ -54,6 +54,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { storeIssueCodeInfo } from "../../lib/storeCodes";
 import { formatDisplayDate } from "../../lib/displayDate";
 import { UnitCombobox } from "../../components/UnitCombobox";
+import { DateInput } from "../../components/DateInput";
 
 /**
  * payload ที่ปุ่ม "บันทึกฉบับร่าง" ส่ง — เบิกครั้งที่ 1/2 และคืนของ**ไม่อยู่ในนี้** ตั้งแต่ 2026-09-03
@@ -1107,7 +1108,7 @@ export function MaterialRequisitionDocument({
                       <input id="mr-issue-storeDeptBy" value={draft.storeDeptBy} onChange={(e) => setDraft({ ...draft, storeDeptBy: e.target.value })} className={inputCls} />
                     </Field>
                     <Field label={t("materialRequisitionDoc.field.issuedDate")} htmlFor="mr-issue-date">
-                      <input id="mr-issue-date" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={inputCls} />
+                      <DateInput id="mr-issue-date" value={issueDate} onChange={(v) => setIssueDate(v)} className={inputCls} />
                     </Field>
                     <Field label={t("materialRequisitionDoc.field.issueRemark")} htmlFor="mr-issue-remark">
                       <input id="mr-issue-remark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)} className={inputCls} />

@@ -66,6 +66,7 @@ import { validateQuotationForFinalization, quotationRequiredFields } from "../..
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
 import { formatDisplayDate, formatDisplayDateTime } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
 
@@ -799,7 +800,7 @@ export function QuoteDocument({
             </div>
           )}
           <Field label={t("quotation.field.followUpDate")} htmlFor="quote-followUpDate">
-            <input id="quote-followUpDate" type="date" className={input} value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
+            <DateInput id="quote-followUpDate" className={input} value={followUpDate} onChange={(v) => setFollowUpDate(v)} />
           </Field>
           {followUpEditable && (
             <Field label={t("quotation.field.poRef")} htmlFor="quote-poRef" help={t("quotation.followUp.editableHelp")}>
@@ -992,7 +993,7 @@ export function QuoteDocument({
             </select>
           </Field>
           <Field label={t("quotation.field.issueDate")} htmlFor="quote-issueDate" error={validation.fieldErrors.issueDate}>
-            <input id="quote-issueDate" type="date" className={input} value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            <DateInput id="quote-issueDate" className={input} value={issueDate} onChange={(v) => setIssueDate(v)} />
           </Field>
           <Field
             label={t("quotation.field.expiryDate")}
@@ -1000,7 +1001,7 @@ export function QuoteDocument({
             error={validation.fieldErrors.expiryDate}
             help={expiryFromIssue !== null && expiryFromIssue >= 0 ? t("quotation.expiry.fromIssue").replace("{n}", String(expiryFromIssue)) : undefined}
           >
-            <input id="quote-expiryDate" type="date" className={input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+            <DateInput id="quote-expiryDate" className={input} value={expiryDate} onChange={(v) => setExpiryDate(v)} />
           </Field>
           <Field label={t("quotation.field.poRef")} htmlFor="quote-poRef">
             <input id="quote-poRef" className={`${input} font-mono`} value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />

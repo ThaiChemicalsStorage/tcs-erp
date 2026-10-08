@@ -36,6 +36,9 @@ export function StoreIssuePrintDocument({ materialRequisition: m, unitCostByProd
     .filter((r) => r.qty > 0), kits);
   // วันที่ของใบจ่าย = วันที่สโตร์จ่ายรอบล่าสุด · ยังไม่จ่าย = วันที่จัดทำ
   const lastIssue = issues.length > 0 ? issues[issues.length - 1].issuedDate : "";
+  // ช่องเซ็น (2026-10-08, Tuhmo #49): ผู้บันทึกใบเบิก = คนสร้างใบ · ผู้จ่ายวัสดุ = คนที่สโตร์บันทึกจ่ายรอบล่าสุด
+  const lastIssueBatch = issues.length > 0 ? issues[issues.length - 1] : null;
+  const recorderName = (m.preparedBy || "").trim();
   const remark = [...new Set([m.jobCode, m.customerName, m.productName, m.storeReference ?? ""].map((s) => (s ?? "").trim()).filter(Boolean))].join(" ");
 
   return (
@@ -49,6 +52,12 @@ export function StoreIssuePrintDocument({ materialRequisition: m, unitCostByProd
       remark={remark}
       extraRemark={(m.revisionNote ?? "").trim()}
       rows={rows}
+      signers={{
+        recorder: m.createdBy || recorderName ? { userId: m.createdBy, name: recorderName, date: m.preparedAt || m.createdAt } : null,
+        storeKeeper: lastIssueBatch
+          ? { userId: lastIssueBatch.postedBy, name: (lastIssueBatch.issuedBy || lastIssueBatch.postedByName || "").trim(), date: lastIssueBatch.issuedDate }
+          : null,
+      }}
     />
   );
 }

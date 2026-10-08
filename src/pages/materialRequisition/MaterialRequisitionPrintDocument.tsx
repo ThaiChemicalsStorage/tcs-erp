@@ -35,13 +35,21 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
    * อีกสี่ช่อง (สโตร์/ต้นทุน/ผู้คืน/ผู้รับคืน) เป็นการเซ็นรับของหน้างาน ไม่มี user id ผูกไว้ จึงเว้นเส้น
    * ให้เซ็นมือเหมือนเดิม
    */
+  const issues = m.issues ?? [];
+  const lastIssue = issues.length > 0 ? issues[issues.length - 1] : undefined;
+  const storeName = (m.storeDeptBy ?? "").trim();
+  const storeSignerId = lastIssue && storeName && [lastIssue.issuedBy, lastIssue.postedByName].some((n) => (n ?? "").trim() === storeName)
+    ? lastIssue.postedBy
+    : "";
   const signatureRows = [
     [
       { label: "ผู้จัดทำ", name: m.preparedBy, date: m.preparedAt, userId: m.createdBy },
       { label: "ผู้อนุมัติ", name: m.approvedBy, date: m.approvedAt, userId: m.approvedByUserId ?? "" },
     ],
     [
-      { label: "แผนกสโตร์", name: m.storeDeptBy, date: m.storeDeptAt, userId: "" },
+      // ลายเซ็นของคนที่สโตร์บันทึกจ่ายรอบล่าสุด (2026-10-08, Tuhmo #49) — เฉพาะเมื่อชื่อในช่องยังเป็นคนนั้น
+      // ช่องนี้แก้ชื่อเองได้ ถ้าแก้เป็นคนอื่นแล้วยังวางลายเซ็นคนเดิม ใบจะเซ็นผิดคน จึงเว้นให้เซ็นมือแทน
+      { label: "แผนกสโตร์", name: m.storeDeptBy, date: m.storeDeptAt, userId: storeSignerId },
       { label: "แผนกต้นทุน", name: m.costDeptBy, date: m.costDeptAt, userId: "" },
     ],
     [

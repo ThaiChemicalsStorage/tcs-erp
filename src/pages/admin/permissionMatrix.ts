@@ -109,6 +109,7 @@ export const EXTRA_SHORT_LABEL_KEY: Record<string, TranslationKey> = {
   receive: "roles.extra.receive",
   complete: "roles.extra.complete",
   editApproved: "roles.extra.editApproved",
+  check: "roles.extra.check",
 };
 
 export const COLUMN_LABEL_KEY: Record<MatrixColumn, TranslationKey> = {

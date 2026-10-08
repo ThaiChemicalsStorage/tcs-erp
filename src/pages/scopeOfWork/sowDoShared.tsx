@@ -5,6 +5,7 @@ import { field } from "../../components/ui/styles";
 import type { DateRangePreset, DateRangeValue } from "../../lib/dateRanges";
 import { useI18n } from "../../lib/i18n";
 import { useApprovalStatusLabel, type ApprovalStatus } from "./sowDoStatus";
+import { DateInput } from "../../components/DateInput";
 
 /**
  * ชิ้นส่วนที่ Scope of Work กับใบส่งมอบสินค้าใช้ร่วมกัน (ดีไซน์ใหม่ 2026-09-30) — ทั้งสองเอกสารมีสถานะ
@@ -54,21 +55,19 @@ export function ListDateRangeSelect({ value, onChange }: { value: DateRangeValue
       />
       {value.preset === "custom" && (
         <div className="flex items-center gap-1.5">
-          <input
-            type="date"
+          <DateInput
             value={value.from}
             max={value.to || undefined}
-            onChange={(e) => onChange({ ...value, preset: "custom", from: e.target.value })}
-            aria-label={t("dateFilter.from")}
+            onChange={(v) => onChange({ ...value, preset: "custom", from: v })}
+            ariaLabel={t("dateFilter.from")}
             className={`${field.input} w-[150px]`}
           />
           <span className="text-sm text-muted-foreground">–</span>
-          <input
-            type="date"
+          <DateInput
             value={value.to}
             min={value.from || undefined}
-            onChange={(e) => onChange({ ...value, preset: "custom", to: e.target.value })}
-            aria-label={t("dateFilter.to")}
+            onChange={(v) => onChange({ ...value, preset: "custom", to: v })}
+            ariaLabel={t("dateFilter.to")}
             className={`${field.input} w-[150px]`}
           />
           {(value.from || value.to) && (

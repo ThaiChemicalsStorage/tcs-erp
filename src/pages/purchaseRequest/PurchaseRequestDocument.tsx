@@ -55,6 +55,7 @@ import { useApprovalFlow } from "./useApprovalFlow";
 import { purchaseRequestProgress, type PurchaseRequestStepKey } from "./purchaseRequestSteps";
 import { formatDisplayDate } from "../../lib/displayDate";
 import { UnitCombobox } from "../../components/UnitCombobox";
+import { DateInput } from "../../components/DateInput";
 
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
@@ -867,10 +868,10 @@ export function PurchaseRequestDocument({
                   {editable ? (
                     <>
                       <Field label={t("purchaseRequestDoc.field.issueDate")} htmlFor="pr-issueDate">
-                        <input id="pr-issueDate" type="date" value={draft.issueDate} onChange={(e) => setDraft({ ...draft, issueDate: e.target.value })} className={`${field.input} w-full`} />
+                        <DateInput id="pr-issueDate" value={draft.issueDate} onChange={(v) => setDraft({ ...draft, issueDate: v })} className={`${field.input} w-full`} />
                       </Field>
                       <Field label={t("purchaseRequestDoc.field.neededByDate")} htmlFor="pr-neededByDate">
-                        <input id="pr-neededByDate" type="date" value={draft.neededByDate} onChange={(e) => setDraft({ ...draft, neededByDate: e.target.value })} className={`${field.input} w-full`} />
+                        <DateInput id="pr-neededByDate" value={draft.neededByDate} onChange={(v) => setDraft({ ...draft, neededByDate: v })} className={`${field.input} w-full`} />
                       </Field>
                       <Field label={t("purchaseRequestDoc.field.deliveryContact")} htmlFor="pr-deliveryContact">
                         <input id="pr-deliveryContact" value={draft.deliveryContact} onChange={(e) => setDraft({ ...draft, deliveryContact: e.target.value })} className={`${field.input} w-full`} />
@@ -970,7 +971,7 @@ export function PurchaseRequestDocument({
                       <label htmlFor={`pr-${nameField}`} className={field.label}>{label}</label>
                       <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-2">
                         <input id={`pr-${nameField}`} value={draft[nameField]} onChange={(e) => setDraft({ ...draft, [nameField]: e.target.value })} className={`${field.input} w-full min-w-0`} />
-                        <input type="date" aria-label={`${t("materialRequisitionDoc.field.date")} — ${label}`} value={draft[dateField]} onChange={(e) => setDraft({ ...draft, [dateField]: e.target.value })} className={`${field.input} w-full min-w-0 px-2`} />
+                        <DateInput ariaLabel={`${t("materialRequisitionDoc.field.date")} — ${label}`} value={draft[dateField]} onChange={(v) => setDraft({ ...draft, [dateField]: v })} className={`${field.input} w-full min-w-0 px-2`} />
                       </div>
                     </div>
                   ))
@@ -1149,7 +1150,7 @@ export function PurchaseRequestDocument({
                           </td>
                           <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} text-sm text-[#3d5173] whitespace-nowrap`}>
                             {rowEditable ? (
-                              <input type="date" value={line.neededByDate} onChange={(e) => updateLine(line.id, { neededByDate: e.target.value })} aria-label={t("purchaseRequestDoc.col.neededByDate")} className={`${field.cell} w-[150px]`} />
+                              <DateInput value={line.neededByDate} onChange={(v) => updateLine(line.id, { neededByDate: v })} ariaLabel={t("purchaseRequestDoc.col.neededByDate")} className={`${field.cell} w-[150px]`} />
                             ) : (dateText(line.neededByDate) || <span className="text-[#8a97ad]">—</span>)}
                           </td>
                           <td className={`${table.td} ${rowEditable ? "py-2" : "py-3.5"} font-mono text-[13px] text-[#3d5173]`}>
@@ -1361,7 +1362,7 @@ export function PurchaseRequestDocument({
                 <input id="pr-store-remark" value={storeRemark} onChange={(e) => setStoreRemark(e.target.value)} className={`${field.input} w-full`} />
               </Field>
               <Field label={t("purchaseRequestDoc.store.issuedDate")} htmlFor="pr-store-issuedate">
-                <input id="pr-store-issuedate" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={`${field.input} w-full`} />
+                <DateInput id="pr-store-issuedate" value={issueDate} onChange={(v) => setIssueDate(v)} className={`${field.input} w-full`} />
               </Field>
               <Field label={t("purchaseRequestDoc.store.issueRemark")} htmlFor="pr-store-issueremark" className="sm:col-span-2">
                 <input id="pr-store-issueremark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)} className={`${field.input} w-full`} />

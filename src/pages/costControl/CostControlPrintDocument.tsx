@@ -1,7 +1,7 @@
 import { type CostControl, lineTotalCost } from "../../lib/costControl";
 import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
-import { printDate, printText } from "../../lib/printFormat";
+import { printDate, printDateOrBlank, printText } from "../../lib/printFormat";
 import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 
 /**
@@ -213,8 +213,9 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
             </td>
           </tr>
           <tr>
-            <td style={{ border: "none", padding: "2px 6px", textAlign: "center" }}>Date (ว/ด/ป)&nbsp; ...................................</td>
-            <td style={{ border: "none", padding: "2px 6px", textAlign: "center" }}>Date (ว/ด/ป)&nbsp; ...................................</td>
+            {/* วันที่จริงของแต่ละช่อง (2026-10-08, Tuhmo #49) — ผู้ส่ง = วันที่บนหัวใบ · ผู้อนุมัติ = วันที่กดอนุมัติ · ยังไม่มี = เส้นประเดิม */}
+            <td style={{ border: "none", padding: "2px 6px", textAlign: "center" }}>Date (ว/ด/ป)&nbsp; {printDateOrBlank(c.docDate) || "..................................."}</td>
+            <td style={{ border: "none", padding: "2px 6px", textAlign: "center" }}>Date (ว/ด/ป)&nbsp; {printDateOrBlank(c.approvedAt) || "..................................."}</td>
           </tr>
         </tbody>
       </table>

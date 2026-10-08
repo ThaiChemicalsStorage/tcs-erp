@@ -44,6 +44,7 @@ import { useApprovalHint } from "../project/projectUi";
 import { Pill, RailSummaryCard, SummaryLine, Tag, type PillTone } from "../receivingReport/receivingUi";
 import { countReturningLines, storeReceiptStepIndex } from "./storeDocsFormat";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 /** payload เดียวของปุ่มบันทึกและบันทึกอัตโนมัติ — ช่องที่เซิร์ฟเวอร์เขียนเอง (สถานะ/รับเข้าคลัง) ไม่อยู่ในนี้ */
 function toUpdateFields(d: StoreReceipt): StoreReceiptUpdateFields {
@@ -401,7 +402,7 @@ export function StoreReceiptDocument({
               <input id={`sr-${nameField}`} value={draft[nameField]} onChange={(e) => set({ [nameField]: e.target.value })} className={`${field.input} w-full`} />
             </Field>
             <Field label={t("materialRequisitionDoc.field.date")} htmlFor={`sr-${dateField}`}>
-              <input id={`sr-${dateField}`} type="date" value={draft[dateField]} onChange={(e) => set({ [dateField]: e.target.value })} className={`${field.input} w-full`} />
+              <DateInput id={`sr-${dateField}`} value={draft[dateField]} onChange={(v) => set({ [dateField]: v })} className={`${field.input} w-full`} />
             </Field>
           </div>
         ))}

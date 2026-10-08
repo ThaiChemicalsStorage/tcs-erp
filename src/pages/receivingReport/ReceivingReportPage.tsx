@@ -20,13 +20,15 @@ import { btn } from "../../components/ui/styles";
  * รับ deep link จากผลค้นหา/ปุ่ม "รับสินค้า" บนใบสั่งซื้อ ผ่าน `initialReceivingReportId`
  */
 export function ReceivingReportPage({
-  currentUserId, canCreate, canEdit, canReceive, canPrint, canDelete, company,
+  currentUserId, canCreate, canEdit, canReceive, canCheck, canPrint, canDelete, company,
   initialReceivingReportId, onReceivingReportIdConsumed,
 }: {
   currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canReceive: boolean;
+  /** บัญชีกด "ตรวจสอบแล้ว" ต่อรอบการรับ (`receivingReport:check`, 2026-10-08) */
+  canCheck: boolean;
   canPrint: boolean;
   canDelete: boolean;
   company: Company;
@@ -113,6 +115,7 @@ export function ReceivingReportPage({
           currentUserId={currentUserId}
           canEdit={canEdit}
           canReceive={canReceive}
+          canCheck={canCheck}
           canPrint={canPrint}
           canDelete={canDelete}
           companyHeader={companyHeader}

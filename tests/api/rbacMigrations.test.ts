@@ -355,14 +355,17 @@ describe("applyRbacMigrations (store receiving report + AP registers)", () => {
     const expected = (defaultRoles.find((r) => r.key === "administrator")?.permissions ?? [])
       .filter((p) => STORE_PERMISSION.test(p)).sort();
     expect(after.filter((p) => STORE_PERMISSION.test(p)).sort()).toEqual(expected);
-    expect(expected.length, "รายการนี้ต้องแจกสิทธิ์จริง ไม่ใช่ว่างเปล่า").toBe(9);
+    // 9 ตัวเดิม + `receivingReport:check` (2026-10-08, migration "receiving-report-check-2026-10-08")
+    expect(expected.length, "รายการนี้ต้องแจกสิทธิ์จริง ไม่ใช่ว่างเปล่า").toBe(10);
   });
 
-  it("บัญชีได้เฉพาะ ap:* ไม่ได้สิทธิ์รับของ", async () => {
+  // 2026-10-08 (Tuhmo #49): บัญชีเป็นผู้ตรวจสอบใบรับสินค้า → ได้ดู + ตรวจสอบ แต่ยัง**ไม่ได้**สิทธิ์รับของ/แก้/ลบ ซึ่งเป็นงานของสโตร์
+  it("บัญชีได้ ap:* + ดู/ตรวจสอบใบรับสินค้า แต่ไม่ได้สิทธิ์รับของ", async () => {
     await applyRbacMigrations();
     const acct = await permissionsOf("accounting_user");
     expect(acct.filter((p) => p.startsWith("ap:")).sort()).toEqual(["ap:manage", "ap:view"]);
-    expect(acct.filter((p) => p.startsWith("receivingReport:"))).toEqual([]);
+    expect(acct.filter((p) => p.startsWith("receivingReport:")).sort())
+      .toEqual(["receivingReport:check", "receivingReport:view", "receivingReport:viewAll"]);
   });
 
   it("role อื่นไม่ได้อะไรเพิ่ม", async () => {

@@ -34,6 +34,7 @@ import { CostControlStatusPill } from "./costControlUi";
 import { useCostControlApproval } from "./costControlHooks";
 import { formatDisplayDate } from "../../lib/displayDate";
 import { UnitCombobox } from "../../components/UnitCombobox";
+import { DateInput } from "../../components/DateInput";
 
 /** payload ที่ทั้งปุ่มบันทึกและ auto-save ส่ง — ต้องเป็นชุดเดียวกันเป๊ะ ไม่งั้นตัวจับการแก้ไขเพี้ยน */
 function toUpdateFields(d: CostControl): CostControlUpdateFields {
@@ -370,8 +371,8 @@ export function CostControlDocument({
                   {textField(t("costControlDoc.field.documentNumber"), "documentNumber", { mono: true })}
                   {editable ? (
                     <Field label={t("costControlDoc.field.docDate")} htmlFor="cc-docDate">
-                      <input id="cc-docDate" type="date" className={`${field.input} w-full`} value={draft.docDate}
-                        onChange={(e) => set("docDate", e.target.value)} />
+                      <DateInput id="cc-docDate" className={`${field.input} w-full`} value={draft.docDate}
+                        onChange={(v) => set("docDate", v)} />
                     </Field>
                   ) : (
                     <ReadonlyField label={t("costControlDoc.field.docDate")} value={draft.docDate ? formatDisplayDate(draft.docDate) : ""} />

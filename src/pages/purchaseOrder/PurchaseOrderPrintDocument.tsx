@@ -1,7 +1,7 @@
 import type { PurchaseOrder } from "../../lib/purchaseOrder";
 import { fmt } from "../../lib/quotes";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
-import { printDate, printText, printNumber } from "../../lib/printFormat";
+import { printDate, printDateOrBlank, printText, printNumber } from "../../lib/printFormat";
 import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 
 /**
@@ -188,11 +188,14 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
               <div style={signatureArea}>{(doc.orderedBy ?? "").trim()}</div>
               <div>....................................................</div>
               <div>ผู้สั่งซื้อ</div>
+              {/* วันที่ใต้ช่อง (2026-10-08, Tuhmo #49 — "วันที่ไม่ขึ้นตรงลายเซ็น") · ยังไม่มีวันที่ = ไม่พิมพ์บรรทัดนี้ */}
+              {printDateOrBlank(doc.orderDate) && <div>วันที่ {printDateOrBlank(doc.orderDate)}</div>}
             </td>
             <td style={{ width: "50%", textAlign: "center", paddingTop: 20 }}>
               <div style={signatureArea}>{(doc.approvedBy ?? "").trim()}</div>
               <div>....................................................</div>
               <div>ผู้อนุมัติ</div>
+              {printDateOrBlank(doc.approvedAt) && <div>วันที่ {printDateOrBlank(doc.approvedAt)}</div>}
             </td>
           </tr>
         </tbody>

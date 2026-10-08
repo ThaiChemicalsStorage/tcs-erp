@@ -26,6 +26,11 @@ Nine permissions shipped with the Store department's module set:
 `receivingReport:receive` is deliberately **separate from `:edit`**: posting a receipt writes stock
 movements and creates a payable, which is a materially different act from correcting the form number
 in the document header. `:edit` covers the header; `:receive` covers posting and reversing rounds.
+`receivingReport:check` (2026-10-08, Tuhmo #49) is a third, separate act: the checker — normally
+Accounting — marks a posted round as checked, which prints their signature, name and date in the
+form's "ผู้ตรวจสอบ" box. `accounting_user` gets `view` + `viewAll` + `check` (migration
+`receiving-report-check-2026-10-08`) but still **not** `receive`/`edit`/`delete`; custom accounting roles
+must be ticked by hand.
 
 The split between the two families is also deliberate — Store receives the goods and posts the
 payable, Accounting chases the payment. `accounting_user` therefore gets `ap:*` and **not**

@@ -129,6 +129,8 @@ export const defaultRoles: Role[] = withDashboardTicks([
       "receivingReport:receive",
       "receivingReport:print",
       "receivingReport:delete",
+      // ผู้ตรวจสอบรอบการรับ (2026-10-08, Tuhmo #49) — มี RBAC migration "receiving-report-check-2026-10-08" คู่กัน
+      "receivingReport:check",
       "ap:view",
       "ap:manage",
       // ทะเบียนผู้ขาย (2026-08-31) — ข้อมูลหลักของฝ่ายจัดซื้อ
@@ -239,6 +241,9 @@ export const defaultRoles: Role[] = withDashboardTicks([
       "stock:view", "stock:adjust",
       // ทะเบียนเจ้าหนี้/ภาษีซื้อ (2026-09-03) — หนี้ตั้งจากใบรับสินค้าของสโตร์ บัญชีเป็นคนตามจ่าย
       "ap:view", "ap:manage",
+      // ตรวจสอบใบรับสินค้า (2026-10-08, Tuhmo #49) — เจ้าของ: ผู้ตรวจสอบบนใบรับสินค้า "ปกติแผนกบัญชี" · ต้องเปิดใบได้ทุกใบด้วย
+      // มี RBAC migration "receiving-report-check-2026-10-08" คู่กัน
+      "receivingReport:view", "receivingReport:viewAll", "receivingReport:check",
       // ทะเบียนผู้ขาย (2026-09-21) — บัญชีเป็นด่านอนุมัติก่อนเปิดใบสั่งซื้อ (คำสั่งเจ้าของข้อ 5)
       // ต้องมี `vendor:view` ด้วย ไม่ใช่แค่ `vendor:approve` — ไม่งั้นยิง GET /api/vendors ได้ 403
       // เพราะด่านของ handleList ผ่านได้สามทางเท่านั้น: vendor:view / purchaseOrder:view / purchaseRequest:view

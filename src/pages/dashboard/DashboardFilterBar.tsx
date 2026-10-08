@@ -5,6 +5,7 @@ import { Toggle } from "../../components/Toggle";
 import { field } from "../../components/ui/styles";
 import { type DateRangePreset, rangeForPreset } from "../../lib/dateRanges";
 import type { DashboardVatMode } from "../../lib/dashboard";
+import { DateInput } from "../../components/DateInput";
 
 export interface DashboardFilterState {
   /**
@@ -80,14 +81,14 @@ export function DashboardPeriodFilter({ filters, onChange }: {
       </LabeledSelect>
       {filters.preset === "custom" && (
         <div role="group" aria-label={t("dashboard.filter.customRange")} className="flex items-center gap-1.5">
-          <input
-            type="date" value={filters.from} onChange={(e) => onChange({ ...filters, from: e.target.value })}
-            aria-label={t("dashboard.filter.dateFrom.label")} className={`${field.input} font-mono w-[150px]`}
+          <DateInput
+            value={filters.from} onChange={(v) => onChange({ ...filters, from: v })}
+            ariaLabel={t("dashboard.filter.dateFrom.label")} className={`${field.input} font-mono w-[150px]`}
           />
           <span className="text-sm text-muted-foreground" aria-hidden="true">—</span>
-          <input
-            type="date" value={filters.to} onChange={(e) => onChange({ ...filters, to: e.target.value })}
-            aria-label={t("dashboard.filter.dateTo.label")} className={`${field.input} font-mono w-[150px]`}
+          <DateInput
+            value={filters.to} onChange={(v) => onChange({ ...filters, to: v })}
+            ariaLabel={t("dashboard.filter.dateTo.label")} className={`${field.input} font-mono w-[150px]`}
           />
         </div>
       )}

@@ -5,6 +5,7 @@ import { btn, field } from "../../components/ui/styles";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import type { DateRangePreset, DateRangeValue } from "../../lib/dateRanges";
 import { useI18n } from "../../lib/i18n";
+import { DateInput } from "../../components/DateInput";
 
 /**
  * ชิ้นส่วนที่ใบขอซื้อกับใบสั่งผลิตใช้ร่วมกัน (ดีไซน์ใหม่ 2026-09-30) — สองเอกสารมีสถานะ
@@ -79,11 +80,11 @@ export function ListDateRangeSelect({ value, onChange }: { value: DateRangeValue
       />
       {value.preset === "custom" && (
         <div className="flex items-center gap-1.5">
-          <input type="date" value={value.from} max={value.to || undefined} aria-label={t("dateFilter.from")}
-            onChange={(e) => onChange({ ...value, preset: "custom", from: e.target.value })} className={`${field.input} w-[150px]`} />
+          <DateInput value={value.from} max={value.to || undefined} ariaLabel={t("dateFilter.from")}
+            onChange={(v) => onChange({ ...value, preset: "custom", from: v })} className={`${field.input} w-[150px]`} />
           <span className="text-sm text-muted-foreground">–</span>
-          <input type="date" value={value.to} min={value.from || undefined} aria-label={t("dateFilter.to")}
-            onChange={(e) => onChange({ ...value, preset: "custom", to: e.target.value })} className={`${field.input} w-[150px]`} />
+          <DateInput value={value.to} min={value.from || undefined} ariaLabel={t("dateFilter.to")}
+            onChange={(v) => onChange({ ...value, preset: "custom", to: v })} className={`${field.input} w-[150px]`} />
           {(value.from || value.to) && (
             <button type="button" onClick={() => onChange({ preset: "custom", from: "", to: "" })} aria-label={t("dateFilter.clear")} className={btn.icon}>
               <X size={14} />

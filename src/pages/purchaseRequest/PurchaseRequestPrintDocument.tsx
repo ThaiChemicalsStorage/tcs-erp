@@ -95,7 +95,7 @@ export function PurchaseRequestPrintDocument({
    * `userId` คือเจ้าของช่องในระบบ (คนสร้างใบ / คนที่กดอนุมัติ) รูปลายเซ็นจากโปรไฟล์ของเขาจะถูกวาง
    * เหนือชื่อให้ — เจ้าของสั่งไว้ 2026-09-02 · ช่อง "ฝ่ายจัดซื้อ" ไม่มีเจ้าของในระบบ จึงเว้นให้เซ็นมือ
    */
-  const signCell = (label: string, name: string, userId?: string) => (
+  const signCell = (label: string, name: string, userId: string | undefined, date: string) => (
     <td style={{ width: "33.33%", padding: "0 10px", verticalAlign: "bottom", textAlign: "center" }}>
       {userId ? <PrintSignatureLine userId={userId} height={26} /> : null}
       <p style={{ margin: 0, minHeight: "30px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>{name || " "}</p>
@@ -104,7 +104,8 @@ export function PurchaseRequestPrintDocument({
           สามช่องจึงพิมพ์ออกมาดูเหมือนเส้นเดียวลากยาวตลอดหน้า */}
       <div style={{ borderBottom: LINE, width: "76%", margin: "0 auto" }} />
       <p style={{ margin: "2px 0 0" }}>{label}</p>
-      <p style={{ margin: "6px 0 0" }}>____/____/______</p>
+      {/* วันที่ของแต่ละช่อง (2026-10-08, Tuhmo #49 — เจ้าของ: "วันที่ไม่ขึ้นตรงลายเซ็น") · ไม่มีวันที่ = เส้นให้เขียนมือเหมือนเดิม */}
+      <p style={{ margin: "6px 0 0" }}>{d(date) || "____/____/______"}</p>
     </td>
   );
 
@@ -204,11 +205,11 @@ export function PurchaseRequestPrintDocument({
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px" }}>
         <tbody>
           <tr>
-            {signCell("ผู้ขอซื้อ", p.requestedBy, p.createdBy)}
-            {signCell("ผู้อนุมัติ", p.approvedBy, p.approvedByUserId)}
+            {signCell("ผู้ขอซื้อ", p.requestedBy, p.createdBy, p.requestedAt)}
+            {signCell("ผู้อนุมัติ", p.approvedBy, p.approvedByUserId, p.approvedAt)}
             {/* ลายเซ็นจริงของคนที่กดอนุมัติฝั่งจัดซื้อ (2026-09-21) — ก่อนหน้านี้คอลัมน์นี้ส่ง userId
                 ไม่ได้ เพราะระบบไม่เคยรู้ว่าใครอนุมัติฝั่งจัดซื้อ มีแต่ชื่อที่พิมพ์ลงช่องเอง */}
-            {signCell("ฝ่ายจัดซื้อ", p.purchasingDeptBy, p.purchasingApprovedByUserId)}
+            {signCell("ฝ่ายจัดซื้อ", p.purchasingDeptBy, p.purchasingApprovedByUserId, p.purchasingDeptAt)}
           </tr>
         </tbody>
       </table>

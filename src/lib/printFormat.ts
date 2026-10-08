@@ -84,6 +84,18 @@ export function printDateShortBE(value: string | null | undefined): string {
   return `${m[3]}/${m[2]}/${String((Number(m[1]) + 543) % 100).padStart(2, "0")}`;
 }
 
+/**
+ * เวลาที่เซิร์ฟเวอร์ประทับ (ISO UTC เช่น `postedAt`) → `YYYY-MM-DD` ตามเวลาเครื่อง — ใช้กับวันที่ข้างลายเซ็น (2026-10-08)
+ * ตัดสิบตัวแรกตรง ๆ จะได้วันก่อนหน้าถ้ากดก่อน 7 โมงเช้า · ค่าที่เป็นวันที่ล้วนอยู่แล้วคืนตามเดิม · ค่าผิดรูป → `""`
+ */
+export function localIsoDate(value: string | null | undefined): string {
+  const v = (value ?? "").trim();
+  if (!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("sv-SE");
+}
+
 /** บวกจำนวนวันให้วันที่ `YYYY-MM-DD` (คิดแบบปฏิทิน ไม่สนเขตเวลา) · ค่าผิดรูป → `""` */
 export function addDaysIso(value: string, days: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((value ?? "").trim());

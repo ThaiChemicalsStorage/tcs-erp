@@ -14,6 +14,7 @@ import { Field, ReadonlyField, SelectBox } from "../../components/ui/Field";
 import { btn, field } from "../../components/ui/styles";
 import { DiscountInput, SuffixInput } from "./receivingUi";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 /**
  * แผง "บันทึกรับของ" — หนึ่งรอบการรับ ตามที่เจ้าของสั่ง: *"มีช่องให้กรอกแบบราคาต่อหน่วยเท่าไหร่
@@ -168,10 +169,10 @@ export function ReceiveBatchDialog({
               <input id="rb-invoice" ref={firstFieldRef} className={`${field.input} w-full font-mono`} value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
             </Field>
             <Field label={t("receivingReportDoc.receive.invoiceDate")} htmlFor="rb-invoice-date">
-              <input id="rb-invoice-date" type="date" className={`${field.input} w-full`} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <DateInput id="rb-invoice-date" className={`${field.input} w-full`} value={invoiceDate} onChange={(v) => setInvoiceDate(v)} />
             </Field>
             <Field label={t("receivingReportDoc.receive.receivedDate")} htmlFor="rb-received-date">
-              <input id="rb-received-date" type="date" className={`${field.input} w-full`} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+              <DateInput id="rb-received-date" className={`${field.input} w-full`} value={receivedDate} onChange={(v) => setReceivedDate(v)} />
             </Field>
             <Field label={t("receivingReportDoc.priceType")} htmlFor="rb-price-type">
               <SelectBox id="rb-price-type" value={priceType} onChange={(e) => setPriceType(e.target.value as ReceivingPriceType)}>

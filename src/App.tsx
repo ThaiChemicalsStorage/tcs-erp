@@ -1037,6 +1037,7 @@ export default function App() {
   const canCreateReceivingReport = hasPermission(currentUser, roles, "receivingReport:create");
   const canEditReceivingReport = hasPermission(currentUser, roles, "receivingReport:edit");
   const canReceiveGoods = hasPermission(currentUser, roles, "receivingReport:receive");
+  const canCheckReceivingReport = hasPermission(currentUser, roles, "receivingReport:check");
   const canPrintReceivingReport = hasPermission(currentUser, roles, "receivingReport:print");
   const canDeleteReceivingReport = hasPermission(currentUser, roles, "receivingReport:delete");
   const canManageAp = hasPermission(currentUser, roles, "ap:manage");
@@ -1355,7 +1356,7 @@ export default function App() {
               : effectiveNav === "storeDocuments"
               ? <StoreDocumentsPage company={company} currentUserId={currentUser.id} canCreate={canCreateMaterialRequisition} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canIssueStock={canAdjustStock} canRequestProductCode={canCreateProductRequest} initialDocument={storeDocumentDeepLink} onInitialDocumentConsumed={() => setStoreDocumentDeepLink(null)} />
               : effectiveNav === "receivingReport"
-              ? <ReceivingReportPage currentUserId={currentUser.id} canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
+              ? <ReceivingReportPage currentUserId={currentUser.id} canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canCheck={canCheckReceivingReport} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
               : effectiveNav === "vendorBills"
               ? <VendorBillPage currentUserId={currentUser.id} canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialVendorBillId={vendorBillDeepLinkId} onVendorBillIdConsumed={() => setVendorBillDeepLinkId(null)} />
               : effectiveNav === "productRequest"

@@ -5,6 +5,7 @@ import { StoreSlipPrint } from "./StoreSlipPrint";
 import { withKitChildRows } from "./storeSlipRows";
 import { useKitRecipes } from "../../hooks/useKitRecipes";
 import { STORE_RECEIPT_PRINT_TITLE } from "./storeSlipTitles";
+import { localIsoDate } from "../../lib/printFormat";
 
 /**
  * ใบพิมพ์ใบรับคืน / รับเข้าคลังของสโตร์ — ฟอร์ม "ใบรับคืนวัสดุ" ของโปรแกรมบัญชีเดิม (2026-09-23, ตัวอย่างจากเจ้าของ
@@ -46,6 +47,13 @@ export function StoreReceiptPrintDocument({ doc, unitCostByProduct, companyHeade
       remark={remark}
       extraRemark={kind === "return" && doc.sourceRequisitionNumber ? `คืนจากใบเบิก ${doc.sourceRequisitionNumber}` : ""}
       rows={rows}
+      // ช่องเซ็น (2026-10-08, Tuhmo #49): ผู้บันทึก = คนสร้างใบ · ผู้รับวัสดุ (สโตร์) = คนที่กดรับเข้าคลัง (ยังไม่รับเข้า = เว้นว่าง)
+      signers={{
+        recorder: doc.createdBy || doc.preparedBy ? { userId: doc.createdBy, name: (doc.preparedBy || "").trim(), date: doc.preparedAt } : null,
+        storeKeeper: doc.postedBy
+          ? { userId: doc.postedBy, name: (doc.receivedBy || doc.postedByName || "").trim(), date: localIsoDate(doc.postedAt) }
+          : null,
+      }}
     />
   );
 }

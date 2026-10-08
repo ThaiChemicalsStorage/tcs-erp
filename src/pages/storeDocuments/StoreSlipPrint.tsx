@@ -15,6 +15,7 @@
  */
 
 import { printDateShortBE } from "../../lib/printFormat";
+import { PrintSignatureLine } from "../../components/PrintSignature";
 
 export interface StoreSlipRow {
   key: string;
@@ -42,6 +43,19 @@ export interface StoreSlipProps {
   /** หมายเหตุเพิ่มเติม — ว่างได้ (ฟอร์มเดิมเว้นไว้ให้เขียนมือ) */
   extraRemark: string;
   rows: StoreSlipRow[];
+  /**
+   * คนที่ลงชื่อในช่องเซ็นแถวบนได้จากข้อมูลในระบบ (2026-10-08, Tuhmo #49 — เจ้าของ: "ลายเซ็นไม่ขึ้น … วันที่ไม่ขึ้นตรงลายเซ็น")
+   * `recorder` = ผู้บันทึกใบเบิก/ใบรับคืน · `storeKeeper` = ผู้จ่ายวัสดุ / ผู้รับวัสดุ (สโตร์) · ช่องอื่น (ผู้จัดวัสดุ ผู้รับ/ผู้คืนวัสดุ)
+   * ระบบไม่รู้ว่าเป็นใคร จึงเว้นให้เซ็นมือเหมือนเดิม · ไม่มีข้อมูล = ฟอร์มเหมือนเดิมทุกตัวอักษร
+   */
+  signers?: { recorder?: StoreSlipSigner | null; storeKeeper?: StoreSlipSigner | null };
+}
+
+export interface StoreSlipSigner {
+  userId: string;
+  name: string;
+  /** "YYYY-MM-DD…" */
+  date: string;
 }
 
 const STORE_SLIP_ROWS_PER_PAGE = 18;
@@ -66,7 +80,41 @@ const BODY_FONT = "13.3px";
 const mono = "'Courier New', 'Noto Sans Thai', monospace";
 const spaced = "'Noto Sans Thai', 'Tahoma', sans-serif";
 
-export function StoreSlipPrint({ variant, companyName, title, jobCode, documentNumber, date, remark, extraRemark, rows }: StoreSlipProps) {
+/**
+ * เส้นเซ็นของฟอร์มเดิม — ขีดยังพิมพ์ตามเดิมเป๊ะ (เป็นเส้นให้เซ็น) แล้ววางรูปลายเซ็นกับชื่อลอยเหนือขีด
+ * ไม่แทรกตัวอักษรเข้าไปในแถว ระยะทุกอย่างในแถวจึงเท่าฟอร์มเดิมไม่ว่าจะมีข้อมูลหรือไม่
+ */
+function SignBlank({ underscores, signer }: { underscores: string; signer?: StoreSlipSigner | null }) {
+  return (
+    <span style={{ position: "relative" }}>
+      {underscores}
+      {signer && (
+        <span style={{
+          position: "absolute", left: "50%", bottom: "100%", transform: "translateX(-50%)",
+          display: "flex", flexDirection: "column", alignItems: "center", whiteSpace: "nowrap",
+        }}>
+          <span style={{ display: "block", width: "40mm" }}><PrintSignatureLine userId={signer.userId} height={34} /></span>
+          <span style={{ fontSize: "0.85em", lineHeight: 1.2 }}>{signer.name}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** ช่องวันที่ของเส้นเซ็น — มีวันที่ = พิมพ์ทับตำแหน่งขีดวันที่ (ความกว้างเท่าเดิม) · ไม่มี = ขีดเดิม */
+function DateBlank({ underscores, signer }: { underscores: string; signer?: StoreSlipSigner | null }) {
+  const text = signer?.date ? printDateShortBE(signer.date) : "";
+  return (
+    <span style={{ position: "relative" }}>
+      <span style={{ visibility: text ? "hidden" : "visible" }}>{underscores}</span>
+      {text && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, textAlign: "center" }}>{text}</span>}
+    </span>
+  );
+}
+
+export function StoreSlipPrint({ variant, companyName, title, jobCode, documentNumber, date, remark, extraRemark, rows, signers }: StoreSlipProps) {
+  const recorder = signers?.recorder ?? null;
+  const storeKeeper = signers?.storeKeeper ?? null;
   const pages: StoreSlipRow[][] = [];
   for (let i = 0; i < rows.length; i += STORE_SLIP_ROWS_PER_PAGE) pages.push(rows.slice(i, i + STORE_SLIP_ROWS_PER_PAGE));
   if (pages.length === 0) pages.push([]);
@@ -171,9 +219,17 @@ export function StoreSlipPrint({ variant, companyName, title, jobCode, documentN
                     {`หมายเหตุเพิ่มเติม : ${extraRemark}`}
                   </div>
                   <div style={{ position: "absolute", top: "36.5mm", left: variant === "issue" ? "5.5mm" : "3mm", whiteSpace: "pre" }}>
-                    {variant === "issue"
-                      ? "ผู้บันทึกใบเบิก___________  __/___/___ผู้จัดวัสดุ__________ __/__/___ผู้จ่ายวัสดุ    __________ __/__/__"
-                      : "ผู้บันทึกใบรับคืน _______________ __/__/__          ผู้รับวัสดุ (สโตร์) ___________ __/__/__"}
+                    {variant === "issue" ? (
+                      <>
+                        {"ผู้บันทึกใบเบิก"}<SignBlank underscores="___________" signer={recorder} />{"  "}<DateBlank underscores="__/___/___" signer={recorder} />
+                        {"ผู้จัดวัสดุ__________ __/__/___ผู้จ่ายวัสดุ    "}<SignBlank underscores="__________" signer={storeKeeper} />{" "}<DateBlank underscores="__/__/__" signer={storeKeeper} />
+                      </>
+                    ) : (
+                      <>
+                        {"ผู้บันทึกใบรับคืน "}<SignBlank underscores="_______________" signer={recorder} />{" "}<DateBlank underscores="__/__/__" signer={recorder} />
+                        {"          ผู้รับวัสดุ (สโตร์) "}<SignBlank underscores="___________" signer={storeKeeper} />{" "}<DateBlank underscores="__/__/__" signer={storeKeeper} />
+                      </>
+                    )}
                   </div>
                   <div style={{ position: "absolute", top: "56mm", left: variant === "issue" ? "5.5mm" : "3mm", whiteSpace: "pre" }}>
                     {variant === "issue"

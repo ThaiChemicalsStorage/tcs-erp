@@ -1,7 +1,9 @@
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { batchTotals, batchLineDiscountAmt, billerOf, purchaseOrderNumbersOf, type ReceivingReport, type ReceivingReportPrintInfo } from "../../lib/receivingReport";
 import { bahtText } from "../../lib/bahtText";
-import { addDaysIso, printDateShortBE, splitAddressTwoLines } from "../../lib/printFormat";
+import { addDaysIso, localIsoDate, printDateShortBE, splitAddressTwoLines } from "../../lib/printFormat";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { useUserDirectory } from "../../lib/userDirectory";
 
 /**
  * ใบพิมพ์ใบรับสินค้า — **ฟอร์ม FM-ST-01 Rev.01 ของโปรแกรมบัญชีเดิม** (2026-09-23)
@@ -45,7 +47,21 @@ interface Slip {
   dueDate: string;
   remark: string;
   postedByName: string;
+  /**
+   * ช่องเซ็นท้ายใบ (2026-10-08, Tuhmo #49) — เดิมพิมพ์เส้นว่างอย่างเดียว เจ้าของ: *"รับสินค้าเข้าแล้วลายเซ็นไม่ขึ้น"*
+   * ผู้รับสินค้า = คนกดบันทึกรับของ (ลายเซ็นจากโปรไฟล์) + ชื่อที่กรอกตอนรับ + วันที่รับ ·
+   * ผู้ตรวจสอบ = บัญชีที่กด "ตรวจสอบแล้ว" · ใบที่ยังไม่รับของ/ยังไม่ตรวจ = เส้นว่างให้เซ็นมือเหมือนเดิม
+   */
+  receiver: SignSlot | null;
+  checker: SignSlot | null;
   lines: SlipLine[];
+}
+
+interface SignSlot {
+  userId: string;
+  name: string;
+  /** YYYY-MM-DD ตามเวลาเครื่อง */
+  date: string;
 }
 
 const ROWS_PER_PAGE = 12;
@@ -82,6 +98,8 @@ function slipsOf(doc: ReceivingReport, batchId?: string): Slip[] {
       key: b.id, seq: b.seq, receivedDate: b.receivedDate, invoiceNumber: b.invoiceNumber, invoiceDate: b.invoiceDate,
       vatRate: b.vatRate, subtotal: b.subtotal, vatAmt: b.vatAmt, total: b.total, remark: b.remark, postedByName: b.postedByName,
       creditDays: b.creditDays ?? null, dueDate: b.dueDate ?? "",
+      receiver: { userId: b.postedBy, name: (b.receivedBy || b.postedByName).trim(), date: b.receivedDate || localIsoDate(b.postedAt) },
+      checker: b.checkedBy ? { userId: b.checkedBy, name: (b.checkedByName ?? "").trim(), date: localIsoDate(b.checkedAt ?? "") } : null,
       lines: b.lines.map((bl) => ({
         key: bl.lineId, text: textOf(bl.lineId), qty: bl.qty, unit: lineById.get(bl.lineId)?.unit ?? "", unitPrice: bl.unitPrice, amount: bl.amount,
       })),
@@ -96,8 +114,34 @@ function slipsOf(doc: ReceivingReport, batchId?: string): Slip[] {
   const t = batchTotals(lines, doc.orderVatRate, { priceType: doc.priceType, discount: doc.orderDiscount, discountMode: doc.orderDiscountMode });
   return [{
     key: "ordered", seq: 0, receivedDate: "", invoiceNumber: "", invoiceDate: "", vatRate: t.vatRate,
-    subtotal: t.subtotal, vatAmt: t.vatAmt, total: t.total, creditDays: doc.creditDays ?? null, dueDate: "", remark: "", postedByName: "", lines,
+    subtotal: t.subtotal, vatAmt: t.vatAmt, total: t.total, creditDays: doc.creditDays ?? null, dueDate: "", remark: "", postedByName: "", receiver: null, checker: null, lines,
   }];
+}
+
+/**
+ * ช่องเซ็นหนึ่งช่อง — มีข้อมูล: รูปลายเซ็นลอยเหนือเส้น ชื่อพิมพ์บนเส้น วันที่พิมพ์ · ไม่มี: เส้นว่างแบบฟอร์มเดิมทุกตัวอักษร
+ * (เจ้าของ 2026-09-21y: ช่องที่ไม่มีชื่อให้เว้นว่าง ไม่ใช่ขีด)
+ */
+function SignatureSlot({ label, slot, left }: { label: string; slot: SignSlot | null; left: string }) {
+  return (
+    <>
+      <div style={{ position: "absolute", top: "6.2mm", left, display: "flex", alignItems: "flex-end", whiteSpace: "pre" }}>
+        <span>{`${label} `}</span>
+        {slot ? (
+          <span style={{ position: "relative", display: "inline-block", width: "46mm", borderBottom: "1px solid #000", textAlign: "center" }}>
+            {/* รูปลายเซ็นยกขึ้นเหนือเส้น ทับพื้นที่ว่างด้านบนของช่อง — ไม่ดันบรรทัดวันที่ลงมา */}
+            <span style={{ position: "absolute", left: 0, right: 0, bottom: "100%" }}>
+              <PrintSignatureLine userId={slot.userId} height={26} />
+            </span>
+            {slot.name}
+          </span>
+        ) : "____________________"}
+      </div>
+      <div style={{ position: "absolute", top: "12.2mm", left, whiteSpace: "pre" }}>
+        {`วันที่          ${slot?.date ? printDateShortBE(slot.date) : "___/___/___"}`}
+      </div>
+    </>
+  );
 }
 
 /** แบ่งหน้า — บรรทัดสินค้าหนึ่งตัว (รวมรายละเอียดย่อย) ไม่ถูกหั่นข้ามหน้า */
@@ -116,13 +160,17 @@ function paginate(lines: SlipLine[]): SlipLine[][] {
   return pages;
 }
 
-export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, batchId }: {
+export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, batchId, printedByUserId }: {
   doc: ReceivingReport;
   companyHeader: CompanyHeaderInfo;
   printInfo: ReceivingReportPrintInfo | null;
   /** พิมพ์เฉพาะรอบนี้ — ไม่ระบุ = ทุกรอบ */
   batchId?: string;
+  /** คนกดพิมพ์ — ช่อง "พิมพ์โดย" ของฟอร์มเดิม (เดิมพิมพ์แต่ป้ายเปล่า ๆ) */
+  printedByUserId?: string;
 }) {
+  const { byId } = useUserDirectory();
+  const printedByName = byId(printedByUserId)?.fullName ?? "";
   const info: ReceivingReportPrintInfo = printInfo ?? {
     printCount: 0, vendorCode: "", creditDays: null, purchaseOrderDate: "", shippingText: "", headerRemark: "",
     purchaseRequestNumber: "", purchaseRequestDate: "",
@@ -265,11 +313,9 @@ export function ReceivingReportPrintDocument({ doc, companyHeader, printInfo, ba
                   </div>
                   {/* ช่องเซ็น + ประวัติการพิมพ์ */}
                   <div style={{ position: "relative", height: "29mm" }}>
-                    <div style={{ position: "absolute", top: "6.2mm", left: "3mm", whiteSpace: "pre" }}>{"ชื่อผู้รับสินค้า ____________________"}</div>
-                    <div style={{ position: "absolute", top: "6.2mm", left: "98mm", whiteSpace: "pre" }}>{"ชื่อผู้ตรวจสอบ ____________________"}</div>
-                    <div style={{ position: "absolute", top: "12.2mm", left: "3mm", whiteSpace: "pre" }}>{"วันที่          ___/___/___"}</div>
-                    <div style={{ position: "absolute", top: "12.2mm", left: "98mm", whiteSpace: "pre" }}>{"วันที่          ___/___/___"}</div>
-                    <div style={{ position: "absolute", top: "18.4mm", left: "3mm", whiteSpace: "pre" }}>พิมพ์โดย</div>
+                    <SignatureSlot label="ชื่อผู้รับสินค้า" slot={slip.receiver} left="3mm" />
+                    <SignatureSlot label="ชื่อผู้ตรวจสอบ" slot={slip.checker} left="98mm" />
+                    <div style={{ position: "absolute", top: "18.4mm", left: "3mm", width: "56mm", whiteSpace: "pre", overflow: "hidden" }}>{`พิมพ์โดย  ${printedByName}`}</div>
                     <div style={{ position: "absolute", top: "18.4mm", left: "60.5mm", whiteSpace: "pre" }}>
                       {`วันที่      ${printedAtText}พิมพ์ครั้งที่      ${info.printCount || ""}      บันทึกโดย   ${slip.postedByName}`}
                     </div>

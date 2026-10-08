@@ -34,6 +34,7 @@ import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 const emptyCustomerSnapshot = { companyName: "", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" };
 
@@ -1010,13 +1011,13 @@ export function ServiceReportEditor({
                     <input value={form.serviceType} disabled={!isEditable} onChange={(e) => setField("serviceType", e.target.value)} className={fieldInput} />
                   </Field>
                   <Field label={t("service.form.inspectionDate")} required error={errorOf("inspectionDate")}>
-                    <input type="date" value={form.inspectionDate} disabled={!isEditable} onChange={(e) => setField("inspectionDate", e.target.value)} className={fieldInput} />
+                    <DateInput value={form.inspectionDate} disabled={!isEditable} onChange={(v) => setField("inspectionDate", v)} className={fieldInput} />
                   </Field>
                   <Field label={t("service.form.reportDate")} required error={errorOf("reportDate")}>
-                    <input type="date" value={form.reportDate} disabled={!isEditable} onChange={(e) => setField("reportDate", e.target.value)} className={fieldInput} />
+                    <DateInput value={form.reportDate} disabled={!isEditable} onChange={(v) => setField("reportDate", v)} className={fieldInput} />
                   </Field>
                   <Field label={t("service.form.nextPmDate")}>
-                    <input type="date" value={form.nextPmDate} disabled={!isEditable} onChange={(e) => setField("nextPmDate", e.target.value)} className={fieldInput} />
+                    <DateInput value={form.nextPmDate} disabled={!isEditable} onChange={(v) => setField("nextPmDate", v)} className={fieldInput} />
                   </Field>
                   <Field label={t("service.form.onSiteContactName")}>
                     <input value={form.onSiteContactName} disabled={!isEditable} onChange={(e) => setField("onSiteContactName", e.target.value)} className={fieldInput} />

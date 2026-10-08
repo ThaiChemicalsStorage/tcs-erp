@@ -31,6 +31,7 @@ import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
 import { DeliveryOrderDepartmentRouting } from "./DeliveryOrderDepartmentRouting";
+import { DateInput } from "../../components/DateInput";
 
 function toUpdateFields(d: DeliveryOrder): DeliveryOrderUpdateFields {
   return { installments: d.installments };
@@ -98,12 +99,11 @@ function InstallmentCard({ installment, index, total, items, onChange, disabled,
             />
           </Field>
           <Field label={t("deliveryOrderDoc.issueDate")} htmlFor={issueDateId}>
-            <input
+            <DateInput
               id={issueDateId}
               disabled={numbersDisabled}
-              type="date"
               value={installment.issueDate}
-              onChange={(e) => onChange({ ...installment, issueDate: e.target.value })}
+              onChange={(v) => onChange({ ...installment, issueDate: v })}
               className={`${field.input} w-full`}
             />
           </Field>

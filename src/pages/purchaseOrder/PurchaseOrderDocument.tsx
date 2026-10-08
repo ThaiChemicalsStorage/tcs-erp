@@ -43,6 +43,7 @@ import { DialogSummary, PurchaseOrderStatusPill, ReasonDialog } from "./purchasi
 import { useApprovalCommands } from "./purchasingHooks";
 import { formatDisplayDate } from "../../lib/displayDate";
 import { UnitCombobox } from "../../components/UnitCombobox";
+import { DateInput } from "../../components/DateInput";
 
 /** payload เดียวที่ใช้ทั้งกดบันทึกเอง บันทึกอัตโนมัติ ตรวจงานค้าง และเก็บร่างในเครื่อง */
 function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
@@ -635,10 +636,10 @@ export function PurchaseOrderDocument({
             <input id="po-number" className={`${field.input} w-full font-mono`} value={draft.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} />
           </Field>
           <Field label={t("purchaseOrderDoc.orderDate")} htmlFor="po-order-date">
-            <input id="po-order-date" type="date" className={`${field.input} w-full`} value={draft.orderDate} onChange={(e) => set("orderDate", e.target.value)} />
+            <DateInput id="po-order-date" className={`${field.input} w-full`} value={draft.orderDate} onChange={(v) => set("orderDate", v)} />
           </Field>
           <Field label={t("purchaseOrderDoc.neededByDate")} htmlFor="po-needed-by">
-            <input id="po-needed-by" type="date" className={`${field.input} w-full`} value={draft.neededByDate} onChange={(e) => set("neededByDate", e.target.value)} />
+            <DateInput id="po-needed-by" className={`${field.input} w-full`} value={draft.neededByDate} onChange={(v) => set("neededByDate", v)} />
           </Field>
           <Field label={t("purchaseOrderDoc.jobCode")} htmlFor="po-job-code">
             <input id="po-job-code" className={`${field.input} w-full font-mono`} value={draft.jobCode} onChange={(e) => set("jobCode", e.target.value)} />

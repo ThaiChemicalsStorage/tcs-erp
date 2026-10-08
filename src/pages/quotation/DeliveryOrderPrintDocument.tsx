@@ -3,6 +3,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { DeliveryOrder, DeliveryOrderInstallment } from "../../lib/deliveryOrder";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
 import { PrintSignatureLine } from "../../components/PrintSignature";
+import { useUserDirectory } from "../../lib/userDirectory";
 import { printText } from "../../lib/printFormat";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
 import { PaginatedPrintForm, type PrintFormRow } from "../../components/PaginatedPrintForm";
@@ -191,6 +192,7 @@ function InstallmentForm({
   breakAfterLast: boolean;
 }) {
   const items = deliveryOrder.items.filter((it) => installment.itemIds.includes(it.id));
+  const { byId } = useUserDirectory();
 
   // หนึ่งรายการ = แถวชื่อ + แถวสเปคที่ไม่ว่างบรรทัดละหนึ่ง — span บอกตัวจัดหน้าให้วางเป็นก้อนเดียว ไม่แยกคนละหน้า
   // เลขลำดับเดินต่อข้ามหน้า ไม่ใช่เริ่มนับ 1 ใหม่ทุกหน้า
@@ -250,10 +252,15 @@ function InstallmentForm({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "80px", marginTop: "10px", fontSize: "13px" }}>
         {/* ฝั่งบริษัทวางลายเซ็นจริงของคนที่ออกใบให้ (เจ้าของสั่ง 2026-09-02) — ฝั่งลูกค้าไม่มี
             บัญชีในระบบ จึงเว้นเส้นไว้ให้เซ็นรับของด้วยมือเหมือนเดิม */}
+        {/* ฝั่งบริษัทพิมพ์ชื่อในวงเล็บและวันที่ของงวดด้วย (2026-10-08, Tuhmo #49 — เจ้าของ: "วันที่ไม่ขึ้นตรงลายเซ็น")
+            วันที่ = วันที่บนหัวใบของงวดนี้ ซึ่งคือวันส่งมอบ · ฝั่งลูกค้าเว้นให้เขียนมือเหมือนเดิม */}
         {[
-          { heading: `ลงนาม ${deliveryOrder.customerCompanyName || "................................................"}`, role: "ผู้ตรวจรับสินค้าและงานบริการ", userId: "" },
-          { heading: `ลงนาม ${companyHeader.name}`, role: "ผู้ส่งสินค้าและงานบริการ", userId: deliveryOrder.createdBy },
-        ].map(({ heading, role, userId }) => (
+          { heading: `ลงนาม ${deliveryOrder.customerCompanyName || "................................................"}`, role: "ผู้ตรวจรับสินค้าและงานบริการ", userId: "", name: "", date: "" },
+          {
+            heading: `ลงนาม ${companyHeader.name}`, role: "ผู้ส่งสินค้าและงานบริการ", userId: deliveryOrder.createdBy,
+            name: byId(deliveryOrder.createdBy)?.fullName ?? "", date: installment.issueDate ? fmtNumericDate(installment.issueDate) : "",
+          },
+        ].map(({ heading, role, userId, name, date }) => (
           <div key={role}>
             <p style={{ textAlign: "center", fontWeight: 700, fontSize: "13.5px" }}>{heading}</p>
             <div style={{ display: "flex", alignItems: "flex-end", gap: "12px", marginTop: "18px" }}>
@@ -268,11 +275,11 @@ function InstallmentForm({
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", marginTop: "18px", marginLeft: "44px" }}>
               <p>(</p>
-              <div style={{ flex: 1, borderBottom: LINE }} />
+              <div style={{ flex: 1, borderBottom: LINE, textAlign: "center" }}>{name}</div>
               <p>)</p>
             </div>
             <p style={{ textAlign: "center", fontWeight: 700, marginTop: "2px", marginLeft: "44px" }}>{role}</p>
-            <p style={{ fontWeight: 700, marginTop: "10px" }}>วันที่</p>
+            <p style={{ fontWeight: 700, marginTop: "10px" }}>วันที่ <span style={{ fontWeight: 400, marginLeft: "8px" }}>{date}</span></p>
           </div>
         ))}
       </div>

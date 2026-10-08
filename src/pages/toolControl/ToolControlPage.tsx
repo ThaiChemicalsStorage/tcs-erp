@@ -19,6 +19,7 @@ import { btn, field, table } from "../../components/ui/styles";
 import { LoadErrorState } from "../receivingReport/receivingUi";
 import { Pill } from "../stock/inventoryUi";
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 /** "issue" (2026-09-03 รอบสอง) = หน้าตัดเบิกเครื่องมือที่เจ้าของสั่ง — จ่าย/รับคืนให้ทีมโดยตรง */
 type Tab = "issue" | "holdings" | "report";
@@ -197,9 +198,9 @@ export function ToolControlPage({ company, currentUserId, canIssue }: { company:
                   </SelectBox>
                   {tab === "report" && (
                     <span className="flex items-center gap-1.5">
-                      <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t("toolControl.filter.from")} className={`${field.input} w-[150px]`} />
+                      <DateInput value={from} onChange={(v) => setFrom(v)} ariaLabel={t("toolControl.filter.from")} className={`${field.input} w-[150px]`} />
                       <span className="text-[#8a97ad]" aria-hidden="true">–</span>
-                      <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("toolControl.filter.to")} className={`${field.input} w-[150px]`} />
+                      <DateInput value={to} onChange={(v) => setTo(v)} ariaLabel={t("toolControl.filter.to")} className={`${field.input} w-[150px]`} />
                     </span>
                   )}
                 </ListToolbar>

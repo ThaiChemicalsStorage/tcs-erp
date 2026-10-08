@@ -24,6 +24,9 @@ pre-redesign look.
   **Print documents and exported files keep Thai** (`formatQuoteDateThai`, `printDate`, `formatArDocDate`) — never pass a
   `formatDisplay*` string into a `*PrintDocument` prop (QuoteDocument keeps a separate `preparerDateDisplay` for this reason).
   Never hard-code `toLocaleDateString("th-TH")` in a screen component.
+- **Date fields (2026-10-08, Tuhmo #48):** never use `<input type="date">` — the browser shows it in the machine's locale
+  (month-first on English Chrome) and can't show พ.ศ. Use `DateInput` (`src/components/DateInput.tsx`): "วว/ดด/ปปปป", พ.ศ. in Thai
+  mode / ค.ศ. in English, typing + calendar, `value`/`onChange` are still ISO `YYYY-MM-DD` (`onChange` gets the string, not an event).
 - **Unit fields (2026-10-06):** every "หน่วย" input is `UnitCombobox` (`src/components/UnitCombobox.tsx`) — suggestions from the
   catalog's units via `UnitOptionsProvider` in App, free typing still allowed. Style it with `className` exactly like the `<input>` it replaces.
   It passes `searchHint={false}` — its hint line ("ใช้ใน N สินค้า") is description, not search data (2026-10-08).

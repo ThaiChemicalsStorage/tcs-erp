@@ -28,6 +28,7 @@ import { pickRowClass } from "../receivingReport/receivingFormat";
 import { WidePickerShell } from "../receivingReport/ReceivingReportCreateDialog";
 
 import { formatDisplayDate } from "../../lib/displayDate";
+import { DateInput } from "../../components/DateInput";
 
 function toUpdateFields(d: VendorBill): VendorBillUpdateFields {
   return { billDate: d.billDate, creditDays: d.creditDays, paymentDate: d.paymentDate, remarks: d.remarks, apEntryIds: d.apEntryIds };
@@ -289,14 +290,14 @@ export function VendorBillDocument({ vendorBillId, currentUserId, canEdit, canPr
                     {editable ? (
                       <>
                         <Field label={t("vendorBill.field.billDate")} htmlFor="vb-billDate">
-                          <input id="vb-billDate" type="date" value={draft.billDate} onChange={(e) => set({ billDate: e.target.value })} className={`${field.input} w-full`} />
+                          <DateInput id="vb-billDate" value={draft.billDate} onChange={(v) => set({ billDate: v })} className={`${field.input} w-full`} />
                         </Field>
                         <Field label={t("vendorBill.field.creditDays")} htmlFor="vb-credit">
                           <SuffixInput id="vb-credit" min={0} integer suffix={t("receivingReportDoc.daysUnit")} value={draft.creditDays ?? ""}
                             onChange={(v) => set({ creditDays: v === "" ? null : Math.max(0, Math.round(Number(v))) })} />
                         </Field>
                         <Field label={t("vendorBill.field.paymentDate")} htmlFor="vb-payDate">
-                          <input id="vb-payDate" type="date" value={draft.paymentDate} onChange={(e) => set({ paymentDate: e.target.value })} className={`${field.input} w-full`} />
+                          <DateInput id="vb-payDate" value={draft.paymentDate} onChange={(v) => set({ paymentDate: v })} className={`${field.input} w-full`} />
                         </Field>
                         <Field label={t("vendorBill.field.remarks")} htmlFor="vb-remarks" className="sm:col-span-3">
                           <textarea id="vb-remarks" rows={2} value={draft.remarks} onChange={(e) => set({ remarks: e.target.value })} className={`${field.textarea} w-full`} />

@@ -211,8 +211,9 @@ body {
     border-color: #1a5fb4;
     box-shadow: 0 0 0 3px rgba(26, 95, 180, 0.18);
   }
-  /* ช่องวันที่ที่กรอกไม่ได้และยังว่าง — ไม่ต้องโชว์ "mm/dd/yyyy" ซึ่งอ่านเหมือนช่องที่ยังต้องกรอก */
-  .doc-form input[type="date"]:is(:disabled, [readonly])[value=""] {
+  /* ช่องวันที่ที่กรอกไม่ได้และยังว่าง — ไม่ต้องโชว์ตัวอย่าง "วว/ดด/ปปปป" ซึ่งอ่านเหมือนช่องที่ยังต้องกรอก
+     (เดิมเป็นกฎของ input[type=date] — เปลี่ยนเป็น DateInput ทั้งแอป 2026-10-08, Tuhmo #48) */
+  .doc-form input[data-date-input]:is(:disabled, [readonly])::placeholder {
     color: transparent;
   }
   /* มุมลากขยายของช่องข้อความก็เป็นสัญญาณว่ากรอกได้ — ซ่อนเมื่อกรอกไม่ได้ */

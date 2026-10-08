@@ -33,6 +33,7 @@ import {
 import { useApprovalFlow } from "../purchaseRequest/useApprovalFlow";
 import { formatDisplayDate } from "../../lib/displayDate";
 import { UnitCombobox } from "../../components/UnitCombobox";
+import { DateInput } from "../../components/DateInput";
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
@@ -347,7 +348,7 @@ export function ProductionOrderDocument({
           <input id={`po-${key}`} value={draft[key].name} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], name: e.target.value } })} className={`${field.input} w-full min-w-0`} />
         </Field>
         <Field label={t("productionOrderDoc.field.date")} htmlFor={`po-${key}-date`}>
-          <input id={`po-${key}-date`} type="date" value={draft[key].date} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], date: e.target.value } })} className={`${field.input} w-full min-w-0 px-2`} />
+          <DateInput id={`po-${key}-date`} value={draft[key].date} onChange={(v) => setDraft({ ...draft, [key]: { ...draft[key], date: v } })} className={`${field.input} w-full min-w-0 px-2`} />
         </Field>
       </div>
     );
@@ -451,10 +452,10 @@ export function ProductionOrderDocument({
                         <input id="po-productName" value={draft.productName} onChange={(e) => setDraft({ ...draft, productName: e.target.value })} className={`${field.input} w-full`} />
                       </Field>
                       <Field label={t("productionOrderDoc.field.startDate")} htmlFor="po-startDate">
-                        <input id="po-startDate" type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value })} className={`${field.input} w-full`} />
+                        <DateInput id="po-startDate" value={draft.startDate} onChange={(v) => setDraft({ ...draft, startDate: v })} className={`${field.input} w-full`} />
                       </Field>
                       <Field label={t("productionOrderDoc.field.dueDate")} htmlFor="po-dueDate">
-                        <input id="po-dueDate" type="date" value={draft.dueDate} onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })} className={`${field.input} w-full`} />
+                        <DateInput id="po-dueDate" value={draft.dueDate} onChange={(v) => setDraft({ ...draft, dueDate: v })} className={`${field.input} w-full`} />
                       </Field>
                     </div>
                   ) : (

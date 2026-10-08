@@ -137,6 +137,7 @@ export type Permission =
   | "receivingReport:edit"
   | "receivingReport:receive"
   | "receivingReport:print"
+  | "receivingReport:check"
   | "receivingReport:delete"
   // ทะเบียนเจ้าหนี้ / ภาษีซื้อ (2026-09-03) — ฝั่งบัญชี อ่านจากหนี้ที่ใบรับสินค้าตั้งไว้
   | "ap:view"
@@ -304,6 +305,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "receivingReport:edit",
   "receivingReport:receive",
   "receivingReport:print",
+  "receivingReport:check",
   "receivingReport:delete",
   "ap:view",
   "ap:manage",
@@ -459,6 +461,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "receivingReport:edit": "แก้ไขหัวใบรับสินค้า",
   "receivingReport:receive": "บันทึกรับของ / ยกเลิกรอบการรับ (เขียนสต๊อกและตั้งหนี้)",
   "receivingReport:print": "พิมพ์ / ส่งออกใบรับสินค้า",
+  "receivingReport:check": "ตรวจสอบรอบการรับของ (ผู้ตรวจสอบบนใบรับสินค้า — ปกติคือบัญชี)",
   "receivingReport:delete": "ลบใบรับสินค้า",
   "ap:view": "ดูทะเบียนเจ้าหนี้และทะเบียนภาษีซื้อ",
   "ap:manage": "บันทึกการจ่ายเงินในทะเบียนเจ้าหนี้",
@@ -614,6 +617,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "receivingReport:edit": "permission.receivingReportEdit",
   "receivingReport:receive": "permission.receivingReportReceive",
   "receivingReport:print": "permission.receivingReportPrint",
+  "receivingReport:check": "permission.receivingReportCheck",
   "receivingReport:delete": "permission.receivingReportDelete",
   "ap:view": "permission.apView",
   "ap:manage": "permission.apManage",
@@ -690,7 +694,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "productRequest:view", "productRequest:viewAll", "productRequest:create", "productRequest:review",
       // ใบรับสินค้าอยู่กลุ่มคลังสินค้า ไม่ใช่จัดซื้อ — สโตร์เป็นคนรับของและเป็นเจ้าของใบ (2026-09-03)
       "receivingReport:view", "receivingReport:viewAll", "receivingReport:create", "receivingReport:edit",
-      "receivingReport:receive", "receivingReport:print", "receivingReport:delete",
+      "receivingReport:receive", "receivingReport:print", "receivingReport:check", "receivingReport:delete",
     ],
   },
   {
