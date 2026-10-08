@@ -306,6 +306,8 @@ before real use** (the still-open hardware questions below are exactly what's ne
   AR/IV/RE and at the top of the BI customer box. **Salesperson** (`ArDocument.salesperson`, from
   `scope.quotationSalesperson`) prints in the "ผู้ขาย / Sale" box — AR/IV only; the real RE leaves it
   blank. Documents issued before this date have neither (snapshot, no backfill).
+  The IV/AR/RE code box was 10 mm (≈5 characters — "C-0001" printed as "C-000"); widened to 40 mm
+  2026-10-08. The row is empty up to the doc-number column, so nothing overlaps.
 - **สถานที่ส่งสินค้า** is not a separate field: the old program uses that row as the 3rd address line,
   so the address now wraps to up to 3 lines.
 - **Long text wraps instead of being clipped** — description, sub-detail and remark rows wrap at the

@@ -536,7 +536,10 @@ shared pieces in `DepartmentWidgets.tsx`, colours/icons in `tabMeta.ts`). See "D
   from 2 tracked categories (Created/Edited) to all 5 an independent review flagged as required —
   Created, Edited, Status Changed, Approval Requested, Approval Completed — via
   `categoryForAction()` in `api/dashboard/index.ts`, mapping every audit action
-  `writeQuoteAuditEntry()` can write. **2026-07-13, eighth pass**: the "rolling trend, not limited
+  `writeQuoteAuditEntry()` can write — **except it didn't until 2026-10-08**: "Created" matched only
+  `"Quotation Created"` (written by *duplicate*), while the create wizard writes `"Quotation Created
+  (Blank)"` / `"Quotation Created from Template"`, so most new quotes were never counted. Now
+  `CREATED_ACTIONS` lists all three (CHANGELOG 2026-10-08). **2026-07-13, eighth pass**: the "rolling trend, not limited
   by the filter's start date" caption now also states the actual anchor date it ends on
   ("— ending [date]") — an `anchorDate` prop computed in `DashboardPage.tsx` (`stats.filters.to`,
   or today via the new `todayIsoBangkok()` in `dateRanges.ts`) and formatted via the new

@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../lib/i18n";
+import { filterComboboxOptions } from "../lib/comboboxFilter";
 
 /**
  * ช่องพิมพ์ที่มีรายการให้เลือก แต่ **พิมพ์อะไรเองก็ได้** (2026-08-31)
@@ -47,12 +48,6 @@ function optionLabel(o: ComboboxOption): string {
   return o.label ?? o.value;
 }
 
-/** ตรงกับคำค้นแบบไม่สนตัวพิมพ์ ดูทั้งค่า ป้าย และบรรทัดรอง */
-function matches(o: ComboboxOption, q: string): boolean {
-  if (q === "") return true;
-  return [o.value, o.label ?? "", o.hint ?? ""].some((f) => f.toLowerCase().includes(q));
-}
-
 export function Combobox({
   value,
   onChange,
@@ -65,6 +60,7 @@ export function Combobox({
   className = "",
   emptyMessage,
   maxLength,
+  searchHint = true,
 }: {
   value: string;
   /** เรียกทุกครั้งที่พิมพ์ และตอนเลือกจากรายการ — ข้อความที่พิมพ์ไม่เคยถูกกลืน */
@@ -86,6 +82,8 @@ export function Combobox({
    * ให้เบราว์เซอร์กันตั้งแต่ตอนพิมพ์ ดีกว่าปล่อยไปโดน 400 ตอนกดบันทึกแล้วไม่รู้ว่าเพราะอะไร
    */
   maxLength?: number;
+  /** ค้นในบรรทัดรอง (`hint`) ด้วยไหม — ปิดเมื่อบรรทัดรองเป็นแค่คำอธิบาย ไม่ใช่ข้อมูลที่ผู้ใช้จะพิมพ์หา (ดู `lib/comboboxFilter.ts`) */
+  searchHint?: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -96,10 +94,10 @@ export function Combobox({
   const listboxId = useId();
   const optionIdPrefix = `${listboxId}-opt`;
 
-  const visible = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    return options.filter((o) => matches(o, q)).slice(0, MAX_VISIBLE);
-  }, [options, value]);
+  const visible = useMemo(
+    () => filterComboboxOptions(options, value, { searchHint, limit: MAX_VISIBLE }),
+    [options, value, searchHint],
+  );
 
   // ดัชนีที่เลือกอยู่ต้องไม่ค้างเกินรายการหลังผู้ใช้พิมพ์จนตัวเลือกเหลือน้อยลง — บีบตอนเรนเดอร์
   // ไม่ใช่ใน effect เพราะการ setState ใน effect ทำให้เกิดการเรนเดอร์ซ้อน (eslint จับได้ถูกแล้ว)

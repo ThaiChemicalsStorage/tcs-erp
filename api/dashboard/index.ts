@@ -827,13 +827,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // "Quotation Rejected" and the generic "Status Changed" (every other workflow transition —
     // Sent to Customer, Customer Accepted/Rejected, Won, Lost, Cancelled) both bucket into
     // `statusChanged` since they're all "the quote's status field changed," not a content edit.
+    //
+    // "สร้างใหม่" ต้องนับ action การสร้างทั้ง 3 แบบ (แก้ 2026-10-08): หน้าสร้างใบเสนอราคาบันทึกเป็น
+    // "Quotation Created (Blank)" / "Quotation Created from Template" (api/handlers/quotes.ts) มีแค่การคัดลอกที่ใช้
+    // "Quotation Created" เฉย ๆ — เดิมนับแต่ตัวหลัง กราฟจึงเห็นแค่ใบที่คัดลอก ใบส่วนใหญ่หายจากกราฟ
+    const CREATED_ACTIONS = ["Quotation Created", "Quotation Created (Blank)", "Quotation Created from Template"] as const;
     const ACTIVITY_ACTIONS = [
-      "Quotation Created", "Quotation Updated",
+      ...CREATED_ACTIONS, "Quotation Updated",
       "Quotation Submitted", "Quotation Approved", "Quotation Rejected", "Status Changed",
     ] as const;
     type ActivityCategory = "created" | "edited" | "statusChanged" | "approvalRequested" | "approvalCompleted";
     const categoryForAction = (action: string): ActivityCategory => {
-      if (action === "Quotation Created") return "created";
+      if ((CREATED_ACTIONS as readonly string[]).includes(action)) return "created";
       if (action === "Quotation Updated") return "edited";
       if (action === "Quotation Submitted") return "approvalRequested";
       if (action === "Quotation Approved") return "approvalCompleted";

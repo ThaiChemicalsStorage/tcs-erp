@@ -26,6 +26,7 @@ pre-redesign look.
   Never hard-code `toLocaleDateString("th-TH")` in a screen component.
 - **Unit fields (2026-10-06):** every "หน่วย" input is `UnitCombobox` (`src/components/UnitCombobox.tsx`) — suggestions from the
   catalog's units via `UnitOptionsProvider` in App, free typing still allowed. Style it with `className` exactly like the `<input>` it replaces.
+  It passes `searchHint={false}` — its hint line ("ใช้ใน N สินค้า") is description, not search data (2026-10-08).
 - **Dialogs return focus:** `useDialogA11y` restores focus to whatever opened the dialog when it closes — new dialogs get this by using the hook.
 - **Screen kit (phase 2, 2026-09-30):** build list pages, document pages, side panels and pickers from `src/components/ui/`
   (`ListPage`, `DocumentLayout`, `Overlays`, `MoreMenu`, `Field`, `SectionCard`, `styles`) — see CHANGELOG 2026-09-30b for the pieces.
@@ -403,6 +404,9 @@ Contract worth knowing: blur and Escape never discard what was typed; Enter with
 falls through so an unregistered value submits; the dropdown is portalled to `document.body` with
 fixed coordinates so it survives `overflow-x-auto` table wrappers; full listbox ARIA and arrow-key
 navigation are built in. Empty state uses the shared `combobox.noResults` string.
+Matching lives in `src/lib/comboboxFilter.ts` and searches value, label **and hint** by default; pass
+`searchHint={false}` when every option's hint is the same kind of descriptive text (e.g. a usage count) —
+otherwise one letter that appears in that text matches every option (the 2026-10-08 unit-field bug).
 
 It differs from **Search-and-Pick Autofill** (below) on purpose: that pattern picks an existing
 record and fills a form from it, and `CustomerSelector` deliberately does not let free text through.

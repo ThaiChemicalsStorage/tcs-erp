@@ -160,4 +160,21 @@ describe("GET /api/dashboard — ส่วนที่เพิ่มสำห�
     expect(s.quotations!.map((q) => q.id).sort()).toEqual(["Q-3", "Q-4"]);
     expect(s.statusBySalesperson.map((r) => r.salesperson)).toEqual(["บี"]);
   });
+
+  // กราฟกิจกรรมขาย "สร้างใหม่" เดิมนับแค่ action "Quotation Created" (การคัดลอก) ใบที่สร้างผ่านหน้าสร้างใบ
+  // ("(Blank)" / "from Template") หายจากกราฟทั้งหมด — เจอตอนทดสอบบนจอจริง 2026-10-08
+  it("salesActivity นับการสร้างใบทั้ง 3 แบบเป็น 'สร้างใหม่'", async () => {
+    const at = "2026-09-15T03:00:00.000Z";
+    await db.collection("audit_log").insertMany([
+      { userId: adminUserId, userName: "Admin", roleName: "Super Admin", module: "ใบเสนอราคา", action: "Quotation Created (Blank)", details: "", createdAt: at },
+      { userId: adminUserId, userName: "Admin", roleName: "Super Admin", module: "ใบเสนอราคา", action: "Quotation Created from Template", details: "", createdAt: at },
+      { userId: adminUserId, userName: "Admin", roleName: "Super Admin", module: "ใบเสนอราคา", action: "Quotation Created", details: "", createdAt: at },
+      { userId: adminUserId, userName: "Admin", roleName: "Super Admin", module: "ใบเสนอราคา", action: "Quotation Updated", details: "", createdAt: at },
+    ] as never[]);
+    const s = (await dashboard("/api/dashboard")) as unknown as { salesActivity: { monthly: { period: string; created: number; edited: number }[] } };
+    const sep = s.salesActivity.monthly.find((m) => m.period.startsWith("2026-09"));
+    expect(sep, JSON.stringify(s.salesActivity.monthly.map((m) => m.period))).toBeDefined();
+    expect(sep!.created).toBe(3);
+    expect(sep!.edited).toBe(1);
+  });
 });
