@@ -187,6 +187,10 @@ later; `DESIGN.md` is explicit that the paper form is the authority on a print l
 design system, so it is a plain bordered table that holds the right fields rather than an invented
 FM-PU-xx layout. It hardcodes Thai and never calls `useI18n`, like every other print document.
 `PrintLetterhead` is deliberately not used until a real form shows a company letterhead.
+**2026-10-08**: the form code is now known even though the paper layout still is not — the owner's ISO
+code list gives ใบสั่งซื้อ = **`FM-PU-06 Rev.03 : 08/01/69`**, printed bottom-right on every page via
+`pageFooter` (CHANGELOG 2026-10-08f). The same list confirms ใบขอซื้อ uses FM-PU-05 for **every**
+department (store included), so no per-department code is needed.
 
 ### Signature block (2026-09-21)
 

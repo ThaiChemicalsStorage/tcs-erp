@@ -17,7 +17,9 @@ but is a separate set of records. Per the owner's spec:
 | ใบขอซื้อ | Existing Purchase Request, `ownerDepartment: "production"` | Same form, separate records |
 | ใบส่งมอบงาน | The existing **Delivery Order** module | Deliberately not rebuilt — confirmed 2026-08-20 that ใบส่งมอบงาน *is* the Delivery Order (FM-SL-05); see the coordination note in [`../CLAUDE.md`](../CLAUDE.md) |
 
-## ใบสั่งผลิต (Production Order, FM-PD-02 Rev.00 : 01/11/64)
+## ใบสั่งผลิต (Production Order, FM-PD-02 Rev.00 : 21/07/68)
+
+> **2026-10-08**: วันที่ท้ายรหัสฟอร์มเปลี่ยนจาก `01/11/64` เป็น `21/07/68` ตามรายการรหัส ISO ที่เจ้าของส่งมา (CHANGELOG 2026-10-08f) — ข้อความเก่าด้านล่างที่อ้าง `01/11/64` เป็นบันทึกประวัติ
 
 Transcribed from `reference/company/ใบสั่งผลิต(Production Order).pdf`. That file is a **scanned
 image** (one embedded bitmap, no text layer) and is gitignored, so the field mapping in

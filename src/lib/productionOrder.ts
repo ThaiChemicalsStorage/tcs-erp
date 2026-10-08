@@ -1,5 +1,5 @@
 /**
- * ใบสั่งผลิต (Production Order, FM-PD-02 Rev.00 : 01/11/64) — added 2026-08-20 for the Production
+ * ใบสั่งผลิต (Production Order, FM-PD-02 Rev.00 : 21/07/68 — was 01/11/64 until 2026-10-08) — added 2026-08-20 for the Production
  * (ผลิต) department. Transcribed from `reference/company/ใบสั่งผลิต(Production Order).pdf`, which is
  * a scanned form (gitignored, so the field mapping below is the durable record of its structure).
  *

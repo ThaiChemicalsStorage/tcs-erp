@@ -21,6 +21,10 @@ import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
  * ภาษาไทยฮาร์ดโค้ดเสมอ ห้ามเรียก `useI18n` — เอกสารธุรกิจที่พิมพ์ออกไปต้องไม่เปลี่ยนภาษา
  * ตามการตั้งค่าของคนกดพิมพ์ (ดู docs/CLAUDE.md)
  */
+
+/** รหัสฟอร์ม ISO — เจ้าของส่งรายการรหัสมา 2026-10-08 (จัดซื้อ: ใบสั่งซื้อ = FM-PU-06 Rev 03) ใส่ไว้ก่อนแม้เลย์เอาต์ยังเป็นแบบชั่วคราว */
+const FORM_CODE = "FM-PU-06 Rev.03 : 08/01/69";
+
 export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
   // ยอดทุกตัวมาจากตัวคิดตัวเดียวกับหน้าแก้ไข (purchaseOrderTotals) — เดิมสูตรถูกเขียนซ้ำสองที่
   const totals = purchaseOrderTotals(doc);
@@ -211,6 +215,7 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
       rows={bodyRows}
       blankRow={blankRow}
       footer={footer}
+      pageFooter={<p style={{ textAlign: "right", margin: "6px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>}
     />
   );
 }

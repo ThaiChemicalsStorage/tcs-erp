@@ -22,7 +22,7 @@ const LETTERHEAD = {
   tel: "+66(2)-583-3615-6",
   email: "sales@thaichemicals.com",
 };
-const FORM_CODE = "FM-SL-05 Rev.01: 11/09/67";
+const FORM_CODE = "FM-SL-05 Rev.01 : 11/09/67";
 
 const DOC_FONT = "'Times New Roman', 'Noto Serif Thai', serif";
 const LINE = "1px solid #000";

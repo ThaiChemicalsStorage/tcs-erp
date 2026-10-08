@@ -6,7 +6,7 @@ import { printText, printTextOrBlank, printNumber } from "../../lib/printFormat"
 import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
 
 /**
- * ฟอร์มพิมพ์ใบสั่งผลิต — คัดตามฟอร์มจริง FM-PD-02 Rev.00 : 01/11/64
+ * ฟอร์มพิมพ์ใบสั่งผลิต — คัดตามฟอร์มจริง FM-PD-02 Rev.00 (กระดาษเดิมลงวันที่ 01/11/64 · รหัสปัจจุบันดู FORM_CODE)
  * (reference/company/ใบสั่งผลิต(Production Order).pdf ซึ่ง gitignore ไว้)
  *
  * **2026-08-31: ทาบกับกระดาษตัวจริงแล้ว** ไฟล์อ้างอิงเป็น PDF ภาพสแกนไม่มีชั้นข้อความ เอกสาร
@@ -32,7 +32,8 @@ import { PaginatedPrintForm } from "../../components/PaginatedPrintForm";
  */
 
 
-const FORM_CODE = "FM-PD-02 Rev.00 : 01/11/64";
+// วันที่ท้ายรหัสเปลี่ยนจาก 01/11/64 (กระดาษเก่า) เป็น 21/07/68 ตามรายการรหัส ISO ที่เจ้าของส่งมา 2026-10-08
+const FORM_CODE = "FM-PD-02 Rev.00 : 21/07/68";
 
 /**
  * ตารางกว้าง 100% + `border-collapse: collapse` ทำให้เส้นขอบขวาสุดถูกวาดเลยขอบพื้นที่พิมพ์ของ A4

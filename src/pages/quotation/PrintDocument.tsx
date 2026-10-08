@@ -9,6 +9,9 @@ import { BrandMark } from "../../components/BrandMark";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
 import { PaginatedPrintForm, type PrintFormRow } from "../../components/PaginatedPrintForm";
 
+// รหัสฟอร์ม ISO ท้ายกระดาษทุกหน้า — ตามรายการรหัสที่เจ้าของส่งมา 2026-10-08 (ฝ่ายขาย: ใบเสนอราคา = FM-SL-02 Rev.03)
+const FORM_CODE = "FM-SL-02 Rev.03 : 21/05/68";
+
 // ตรวจว่าหัวข้อหมวดมีรายการตามหลังหรือไม่ ถ้าไม่มีจะไม่พิมพ์หัวข้อนั้นออกมา
 // Checks whether a section header has an item right after it, so empty headers are skipped when printing
 function sectionHeaderHasItems(lines: QuoteLine[], headerIdx: number): boolean {
@@ -318,6 +321,7 @@ export function PrintDocument({
       // ตารางไม่มีเส้น — แถวว่างจึงเป็นแค่ที่ว่าง ทำให้ยอดรวม/ช่องลายเซ็นไปอยู่ก้นหน้าสุดท้าย
       blankRow={(key) => <tr key={key}><td colSpan={7} style={{ height: "18px" }} /></tr>}
       footer={footer}
+      pageFooter={<p style={{ textAlign: "right", margin: "6px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>}
     />
   );
 }
